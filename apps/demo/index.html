@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inpector demo</title>
+    <script>
+      // Read by the library's auto entry before React loads.
+      window.__REACT_INP_OPTIONS__ = { threshold: 40, walkBudget: 100000, debugGlobal: true, devtoolsTrack: true };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

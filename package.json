@@ -1,0 +1,27 @@
+{
+  "name": "inpector-monorepo",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Interaction attribution for INP: joins Event Timing and Long Animation Frames to the React fiber tree",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "apps/demo",
+    "apps/demo-react*",
+    "apps/next-demo"
+  ],
+  "scripts": {
+    "build": "npm run build -w packages/core",
+    "dev": "npm run dev -w apps/demo",
+    "test": "npm run test -w apps/demo",
+    "test:prod": "npm run test:prod -w apps/demo",
+    "fix-lock": "node scripts/fix-lock.mjs"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "devDependencies": {
+    "baseline-browser-mapping": "2.11.22"
+  }
+}

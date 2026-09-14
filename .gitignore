@@ -1,0 +1,11 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.report/
+.DS_Store
+*.log
+traces/
+.next/
+next-env.d.ts
+apps/demo-react*/
