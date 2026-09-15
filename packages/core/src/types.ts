@@ -1,3 +1,5 @@
+import type { Fiber } from './fiber.ts';
+
 export interface RenderedComponent {
   name: string;
   /** How many fibers of this component rendered in the commit. */
@@ -23,7 +25,7 @@ export interface InputRecord extends InputStamp {
   press: string | number | undefined;
   target: any;
   /** The React fiber on the target at dispatch time. React drops it from the node on unmount, so a clicked row that was deleted still gets a component name. */
-  fiber: any;
+  fiber: Fiber | null;
 }
 
 export interface CommitSummary {
@@ -52,12 +54,57 @@ export interface CommitSummary {
   hotPath: string[];
   /** Per-component aggregates, heaviest first. */
   components: RenderedComponent[];
-  /** Whether the React build recorded per-fiber durations (dev or profiling builds). */
+  /** Whether React measured render durations for this tree: its root is in ProfileMode, or part of it was measured anyway (under a `<Profiler>`). Only development and profiling builds measure. */
   hasDurations: boolean;
   /** Total render time of the commit in ms when durations exist, else 0. */
   total: number;
   /** Cost of the fiber walk itself, ms. */
   walkMs: number;
+  /**
+   * The Scheduler priority React passed with the commit: 1 (immediate) to 5 (idle) on React 18
+   * and 19, React's own 99 to 95 on React 17. Production react-dom passes `undefined`, so
+   * anything built on it works in development and profiling builds only.
+   */
+  priority: number | undefined;
+  /** Whether the root captured an error in this render, as React passed it. */
+  didError: boolean;
+}
+
+/** What a React renderer handed the DevTools hook's `inject()` when it loaded. */
+export interface RendererInfo {
+  /** The id `inject()` returned; React passes it back with every commit. */
+  id: number;
+  /** e.g. '19.3.0'; null when the renderer did not say. */
+  version: string | null;
+  /** 1 for a development build, 0 for production and profiling builds; null when the renderer did not say. */
+  bundleType: number | null;
+  /** 'react-dom', or another renderer such as '@react-three/fiber'. Only react-dom commits are walked. */
+  rendererPackageName: string | null;
+}
+
+export interface Stats {
+  /**
+   * 'shim': this library created the DevTools hook. 'chained': it wraps a hook that was already
+   * there. 'none': no hook in use (on the server, or `hook: 'chain'` found none), so reports
+   * carry no React commits. 'unsupported': the browser has no Event Timing `interactionId` and
+   * nothing was installed, or react-dom is outside React 17 to 19 or its fiber tree is not the
+   * expected shape, and reports carry no React commits.
+   */
+  mode: 'shim' | 'chained' | 'none' | 'unsupported';
+  /** Who owns the hook: this library, or the keys of the hook it chained onto. */
+  owner: string;
+  /** Every renderer known to have registered with the hook: the ones seen registering, plus earlier ones React DevTools' hook kept. */
+  renderers: RendererInfo[];
+  /**
+   * True when something replaced `window.__REACT_DEVTOOLS_GLOBAL_HOOK__` after React had
+   * registered with this library's shim: that React keeps reporting to the shim, and whatever
+   * replaced it (React DevTools, typically) never hears from it.
+   */
+  devtoolsLockedOut: boolean;
+  walks: number;
+  walkTotalMs: number;
+  reports: number;
+  commitsRecorded: number;
 }
 
 export interface ScriptSummary {
@@ -157,9 +204,10 @@ export interface InteractionReport {
   commits: CommitSummary[];
   /** Commits that landed after that paint but still belong to this input (effects, transitions, cascades). INP does not count them; the user still waits for them. */
   followUps: CommitSummary[];
-  frames: FrameSummary[];
-  /** Long animation frames overlapping the later renders. */
-  laterFrames: FrameSummary[];
+  /** Long animation frames overlapping the interaction. Null where the browser has no Long Animation Frames API (only Chromium has it), so forced layout and scripts are unknown, not absent. */
+  frames: FrameSummary[] | null;
+  /** Long animation frames overlapping the later renders; null like `frames`. */
+  laterFrames: FrameSummary[] | null;
   /** Bumped every time a later render, frame or Event Timing entry attaches to this report after it was first built. */
   revision: number;
   explanation: Explanation;
@@ -196,4 +244,13 @@ export interface InstallOptions {
   /** Expose the API on window (true = window.__REACT_INP__, or give a name). */
   debugGlobal?: boolean | string;
   onReport?: (report: InteractionReport) => void;
+  /**
+   * How to hear about React commits. `'chain'` wraps a `window.__REACT_DEVTOOLS_GLOBAL_HOOK__`
+   * that already exists (React DevTools, Fast Refresh in dev) and never creates one, so a
+   * production page without either gets Event Timing and Long Animation Frames only. `'shim'`
+   * creates a minimal hook, and React DevTools loading after it will not install over it; when a
+   * hook is already there it chains instead and warns. `'auto'` chains when a hook exists and
+   * shims otherwise. Default 'auto'.
+   */
+  hook?: 'auto' | 'chain' | 'shim';
 }

@@ -1,7 +1,9 @@
 import { defineConfig } from '@playwright/test';
 
 const prod = process.env.INP_MODE === 'prod';
+const mode = prod ? 'prod' : 'dev';
 const port = Number(process.env.INP_PORT) || (prod ? 5178 : 5177);
+const crossBrowser = /cross-browser\.spec\.ts$/;
 
 export default defineConfig({
   testDir: './e2e',
@@ -22,5 +24,11 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
-  projects: [{ name: `${process.env.INP_LABEL || 'chromium'}-${prod ? 'prod' : 'dev'}`, use: {} }],
+  projects: [
+    // Every spec runs in Chromium; most need it (Long Animation Frames, the Chrome trace).
+    { name: `${process.env.INP_LABEL || 'chromium'}-${mode}`, use: { browserName: 'chromium' } },
+    // Firefox and WebKit have Event Timing but no Long Animation Frames, so only the checks written for any browser run there.
+    { name: `firefox-${mode}`, use: { browserName: 'firefox' }, testMatch: crossBrowser },
+    { name: `webkit-${mode}`, use: { browserName: 'webkit' }, testMatch: crossBrowser },
+  ],
 });

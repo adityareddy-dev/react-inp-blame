@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { InteractionReport } from 'react-inp-blame';
+import type { InteractionReport, Stats } from 'react-inp-blame';
 
 const prod = process.env.INP_MODE === 'prod';
 
@@ -20,9 +20,9 @@ async function interact(page: Page, scenario: string, act: () => Promise<void>):
 test('hook is installed before React registers', async ({ page }) => {
   await page.goto('/#fine');
   await page.waitForSelector('[data-test=trigger]');
-  const stats = await page.evaluate(() => (window as any).__REACT_INP__.stats());
+  const stats: Stats = await page.evaluate(() => (window as any).__REACT_INP__.stats());
   expect(stats.mode).toBe('shim');
-  expect(stats.renderers).toBeGreaterThanOrEqual(1);
+  expect(stats.renderers.map((r) => r.rendererPackageName)).toContain('react-dom');
 });
 
 test('context storm: blames the OrderSummary subtree, LineItem x800', async ({ page }) => {
@@ -56,7 +56,8 @@ test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
   expect(r.commits.length).toBeGreaterThanOrEqual(1);
   const names = r.commits[0].components.map((x) => x.name);
   expect(names).toContain('PriceTicker');
-  const forced = r.frames.reduce((a, f) => a + f.forcedLayout, 0);
+  expect(r.frames, 'Chromium reports long animation frames').not.toBeNull();
+  const forced = r.frames!.reduce((a, f) => a + f.forcedLayout, 0);
   expect(forced).toBeGreaterThan(4);
   expect(r.verdict).toContain('recalculating layout');
 });

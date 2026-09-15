@@ -60,7 +60,7 @@ const click = (duration: number) => [
 ];
 
 function commit(at: number, rendered: number, total: number, components: CommitSummary['components']): CommitSummary {
-  return { at, sinceInput: at - 1000, inputTs: 1000, gestureTs: 1000, inputType: 'click', rendered, truncated: false, roots: ['CascadingEffect'], hotPath: ['CascadingEffect'], components, hasDurations: true, total, walkMs: 0.3 };
+  return { at, sinceInput: at - 1000, inputTs: 1000, gestureTs: 1000, inputType: 'click', rendered, truncated: false, roots: ['CascadingEffect'], hotPath: ['CascadingEffect'], components, hasDurations: true, total, walkMs: 0.3, priority: 1, didError: false };
 }
 
 test('a first click that paints under the 16 ms floor still gets its later render reported', () => {

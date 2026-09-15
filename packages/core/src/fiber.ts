@@ -3,13 +3,62 @@ import type { CommitSummary, InputStamp, RenderedComponent } from './types.ts';
 // React work tags, stable across 17, 18 and 19.
 const FunctionComponent = 0;
 const ClassComponent = 1;
+const HostRoot = 3;
 const ForwardRef = 11;
 const MemoComponent = 14;
 const SimpleMemoComponent = 15;
 // Fiber flag React sets on every component fiber that actually rendered in a commit.
 const PerformedWork = 0b1;
 
-export type Fiber = any;
+/**
+ * A React fiber, reduced to the fields this library reads. They are React internals, the same
+ * from 17 to 19; `rootShapeProblem` checks the root once before the first walk.
+ */
+export interface Fiber {
+  tag: number;
+  flags: number;
+  /** Mode bits, inherited from the root. */
+  mode: number;
+  /** The component as written: a function, a class, or the memo or forwardRef object around one. */
+  elementType: unknown;
+  /** What React renders; differs from `elementType` for memo without a compare function. */
+  type: unknown;
+  memoizedProps: Record<string, unknown> | null;
+  return: Fiber | null;
+  child: Fiber | null;
+  sibling: Fiber | null;
+  /** The same fiber in the other tree: current if this is work in progress, and the reverse. */
+  alternate: Fiber | null;
+  /** ms React spent rendering this fiber's subtree in the commit; absent in production builds. */
+  actualDuration?: number;
+}
+
+/**
+ * The ProfileMode bit of `fiber.mode`, set on trees whose render durations React measures:
+ * 8 on React 17, 2 on 18 and 19, which renumbered the mode flags.
+ */
+export function profileModeBit(reactMajor: number): number {
+  return reactMajor === 17 ? 0b1000 : 0b10;
+}
+
+/**
+ * Why `root.current` is not a fiber this library can walk, or null when it is: a HostRoot with
+ * numeric flags and mode, tree links that are fibers or null, and `actualDuration` a number or
+ * absent. A React release that changes any of these fails here once, instead of every walk.
+ */
+export function rootShapeProblem(current: unknown): string | null {
+  if (!current || typeof current !== 'object') return 'root.current is not an object';
+  const f = current as Record<string, unknown>;
+  if (f.tag !== HostRoot) return `root.current.tag is ${String(f.tag)}, not ${HostRoot} (HostRoot)`;
+  for (const key of ['flags', 'mode']) {
+    if (typeof f[key] !== 'number') return `root.current.${key} is not a number`;
+  }
+  for (const key of ['child', 'sibling', 'return', 'alternate']) {
+    if (f[key] !== null && typeof f[key] !== 'object') return `root.current.${key} is neither a fiber nor null`;
+  }
+  if (f.actualDuration !== undefined && typeof f.actualDuration !== 'number') return 'root.current.actualDuration is neither a number nor absent';
+  return null;
+}
 
 /** The fiber React stored on a DOM node, climbing to the nearest ancestor that has one. */
 export function fiberFromNode(node: any): Fiber | null {
@@ -38,13 +87,13 @@ export function componentName(f: Fiber): string | null {
   return typeName(f.elementType) || typeName(f.type);
 }
 
-function typeName(t: any): string | null {
-  if (!t) return null;
-  if (typeof t === 'function') return t.displayName || t.name || null;
-  if (typeof t === 'object') {
-    if (typeof t.displayName === 'string') return t.displayName;
-    if (t.render) return typeName(t.render); // forwardRef
-    if (t.type) return typeName(t.type); // memo
+function typeName(t: unknown): string | null {
+  if (typeof t === 'function') return (t as { displayName?: string }).displayName || t.name || null;
+  if (t && typeof t === 'object') {
+    const o = t as { displayName?: unknown; render?: unknown; type?: unknown };
+    if (typeof o.displayName === 'string') return o.displayName;
+    if (o.render) return typeName(o.render); // forwardRef
+    if (o.type) return typeName(o.type); // memo
   }
   return null;
 }
@@ -98,7 +147,7 @@ export function handlerOf(fiber: Fiber | null, eventType: string): string | null
       for (const key of props) {
         const fn = p[key];
         if (typeof fn === 'function') {
-          const name = fn.displayName || fn.name || '';
+          const name = (fn as { displayName?: string }).displayName || fn.name || '';
           // A minified name ("l") says nothing; the prop name at least says which handler.
           return name.length > 2 ? name : key;
         }
@@ -107,6 +156,14 @@ export function handlerOf(fiber: Fiber | null, eventType: string): string | null
     f = f.return;
   }
   return null;
+}
+
+/** What React passed with a commit besides the root, and how its build marks measured trees. */
+export interface CommitContext {
+  /** `profileModeBit` for the renderer's React major. */
+  profileMode: number;
+  priority: number | undefined;
+  didError: boolean;
 }
 
 interface Agg {
@@ -122,10 +179,10 @@ interface Agg {
  * A fiber whose alternate still points at the same child list bailed out, so nothing
  * under it rendered and its subtree is stale: that is the prune.
  */
-export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: InputStamp): CommitSummary {
+export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: InputStamp, context: CommitContext): CommitSummary {
   let visited = 0;
   let truncated = false;
-  const hasDurations = typeof rootFiber.actualDuration === 'number';
+  let measured = 0;
   const byName = new Map<string, RenderedComponent>();
   let rendered = 0;
 
@@ -152,41 +209,38 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       // path by name, so the hot path can say "the OrderSummary subtree".
       if (comp && kids.length) {
         const name = componentName(f) || '(anonymous)';
-        const total = hasDurations ? f.actualDuration || 0 : 0;
-        return [{ name, performed: false, rendered: kids.reduce((a, k) => a + k.rendered, 0), total, kids }];
+        return [{ name, performed: false, rendered: kids.reduce((a, k) => a + k.rendered, 0), total: f.actualDuration || 0, kids }];
       }
       return kids;
     }
     rendered++;
     const name = componentName(f) || '(anonymous)';
-    let total = 0;
-    let self = 0;
-    if (hasDurations) {
-      total = f.actualDuration || 0;
-      let childSum = 0;
-      if (!bailedOut) {
-        let c = f.child;
-        while (c !== null) {
-          childSum += c.actualDuration || 0;
-          c = c.sibling;
-        }
+    const total = f.actualDuration || 0;
+    let childSum = 0;
+    if (!bailedOut) {
+      let c = f.child;
+      while (c !== null) {
+        childSum += c.actualDuration || 0;
+        c = c.sibling;
       }
-      self = Math.max(0, total - childSum);
     }
+    const self = Math.max(0, total - childSum);
+    measured += self;
     const entry = byName.get(name);
     if (entry) {
       entry.count++;
-      if (hasDurations) {
-        entry.self = (entry.self || 0) + self;
-        entry.total = Math.max(entry.total || 0, total);
-      }
+      entry.self = (entry.self as number) + self;
+      entry.total = Math.max(entry.total as number, total);
     } else {
-      byName.set(name, { name, count: 1, self: hasDurations ? self : null, total: hasDurations ? total : null });
+      byName.set(name, { name, count: 1, self, total });
     }
     return [{ name, performed: true, rendered: 1 + kids.reduce((a, k) => a + k.rendered, 0), total, kids }];
   }
 
   const top = visit(rootFiber);
+  // React measures the trees in ProfileMode. A subtree under <Profiler> is measured even when
+  // its root is not, and shows up as nonzero time.
+  const hasDurations = (rootFiber.mode & context.profileMode) !== 0 || measured > 0;
   const metric = (a: Agg) => (hasDurations ? a.total : a.rendered);
 
   // Ancestors that were only cloned on the way down (App, layouts, providers) are not
@@ -214,9 +268,9 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     }
   }
 
-  const components = [...byName.values()].sort((a, b) =>
-    hasDurations ? (b.self || 0) - (a.self || 0) : b.count - a.count,
-  );
+  const components = [...byName.values()]
+    .map((c) => (hasDurations ? c : { ...c, self: null, total: null }))
+    .sort((a, b) => (hasDurations ? (b.self || 0) - (a.self || 0) : b.count - a.count));
 
   return {
     at,
@@ -232,6 +286,8 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     hasDurations,
     total: hasDurations ? performedRoots.reduce((a, t) => a + t.total, 0) : 0,
     walkMs: 0,
+    priority: context.priority,
+    didError: context.didError,
   };
 }
 

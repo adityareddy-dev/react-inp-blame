@@ -1,17 +1,57 @@
-import { fiberFromNode, walkCommit } from './fiber.ts';
-import type { CommitSummary, InputRecord } from './types.ts';
+import { fiberFromNode, profileModeBit, rootShapeProblem, walkCommit, type Fiber } from './fiber.ts';
+import type { CommitSummary, InputRecord, InstallOptions, RendererInfo, Stats } from './types.ts';
+import { warnOnce } from './warn.ts';
 
-export interface HookState {
-  mode: 'none' | 'shim' | 'chained';
-  commits: CommitSummary[];
-  renderers: number;
-  walkTotalMs: number;
-  walks: number;
+const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
+const MAX_COMMITS = 300;
+
+/** What React passes `onCommitFiberRoot`: the root of the tree it just committed. */
+interface FiberRoot {
+  current: Fiber;
 }
 
-const state: HookState = { mode: 'none', commits: [], renderers: 0, walkTotalMs: 0, walks: 0 };
-let hookRef: any = null;
-const MAX_COMMITS = 300;
+/** A `__REACT_DEVTOOLS_GLOBAL_HOOK__`, reduced to what this library calls or wraps. */
+interface DevtoolsHook {
+  /** What each renderer handed `inject()`, by id. React DevTools' hook fills it; Fast Refresh's stub does not. */
+  renderers?: Map<number, unknown>;
+  inject(internals: unknown): number;
+  onCommitFiberRoot(id: number, root: FiberRoot, priority?: number, didError?: boolean): void;
+  /** Marks the hook this library created. */
+  reactInpBlame?: true;
+}
+
+interface Renderer {
+  info: RendererInfo;
+  /** Only react-dom commits are walked: other renderers have no DOM behind their fibers. */
+  isReactDom: boolean;
+  /** `profileModeBit` for its React major. */
+  profileMode: number;
+  /** Why its commits cannot be read (a React outside 17 to 19, a root of another shape), or null. */
+  problem: string | null;
+  /** Its first commit has been checked. */
+  checked: boolean;
+}
+
+export interface HookOptions {
+  hook: NonNullable<InstallOptions['hook']>;
+  walkBudget: number;
+  inputWindow: number;
+  onSummary: (c: CommitSummary) => void;
+}
+
+let options: HookOptions | null = null;
+/** The hook commits are read from while installed. */
+let attached: DevtoolsHook | null = null;
+let detach: (() => void) | null = null;
+/** The hook this library created. React keeps the hook it registered with for the page's life, so a second install reuses it. */
+let shim: DevtoolsHook | null = null;
+let devtoolsLockedOut = false;
+let mode: Stats['mode'] = 'none';
+let commits: CommitSummary[] = [];
+let walks = 0;
+let walkTotalMs = 0;
+// Renderers per hook object, by the id that hook's inject() returned.
+const registries = new WeakMap<DevtoolsHook, Map<number, Renderer>>();
 
 // The events Event Timing gives an interactionId to. Derived events (input, change, keypress,
 // submit) are dispatched inside one of these, so a commit during them is stamped with the
@@ -76,96 +116,240 @@ function currentInput(): InputRecord | null {
   return last;
 }
 
-export function hookState(): HookState {
-  // React injects into whichever hook object exists; read the live count off it.
-  if (hookRef && hookRef.renderers && typeof hookRef.renderers.size === 'number') state.renderers = hookRef.renderers.size;
-  return state;
+/** Every commit walked so far, oldest first. Live array. */
+export function recordedCommits(): CommitSummary[] {
+  return commits;
 }
 
-/** Whether the hook was created here ('shim') or found already installed ('chained'), plus who else owns it. */
-export function hookOwner(): string {
-  if (!hookRef) return 'none';
-  if (hookRef.reactInpAttribution) return 'react-inp-blame';
-  const keys = Object.keys(hookRef);
+/** The hook's half of `stats()`. */
+export function hookStats(): Omit<Stats, 'reports'> {
+  if (attached && attached === shim && (window as any)[HOOK_KEY] !== shim) replaced(shim, (window as any)[HOOK_KEY]);
+  return {
+    mode,
+    owner: owner(),
+    renderers: attached ? [...registryOf(attached).values()].map((r) => r.info) : [],
+    devtoolsLockedOut,
+    walks,
+    walkTotalMs,
+    commitsRecorded: commits.length,
+  };
+}
+
+function owner(): string {
+  if (!attached) return 'none';
+  if (attached.reactInpBlame) return 'react-inp-blame';
+  const keys = Object.keys(attached);
   return keys.length ? `existing hook (${keys.slice(0, 8).join(', ')}${keys.length > 8 ? ', ...' : ''})` : 'existing hook';
 }
 
 /**
- * React tells the DevTools hook about every commit, in production builds too, but only
- * if the hook exists before react-dom evaluates. So this either creates a minimal hook or
- * chains onto the real React DevTools one.
+ * React tells the DevTools hook about every commit, in production builds too, but only if the
+ * hook exists before react-dom evaluates. So this chains onto the hook that is already there
+ * (React DevTools, Fast Refresh) or, unless told to only chain, creates a minimal one.
  */
-export function installHook(budget: number, windowMs: number, onSummary?: (c: CommitSummary) => void): void {
-  if (state.mode !== 'none') return;
+export function installHook(opts: HookOptions): void {
+  options = opts;
   const w = window as any;
+  const existing: DevtoolsHook | undefined = w[HOOK_KEY];
+  if (existing && existing === shim) {
+    attach(shim, 'shim');
+  } else if (existing) {
+    if (opts.hook === 'shim') {
+      warnOnce('shim-over-hook', "hook: 'shim' found a React DevTools hook already installed and chained onto it instead: replacing it would lock out whatever installed it.");
+    }
+    attach(existing, 'chained');
+  } else if (opts.hook === 'chain') {
+    mode = 'none';
+  } else {
+    shim = shim ?? createShim();
+    defineGlobal(w, shim);
+    attach(shim, 'shim');
+  }
+}
 
-  const onCommit = (id: number, root: any): void => {
-    const now = performance.now();
-    const input = currentInput();
-    // Outside an interaction window this is the whole cost: one subtraction.
-    if (!input || now - input.ts > windowMs) return;
-    const t0 = performance.now();
-    const summary = walkCommit(root.current, budget, now, input);
-    summary.walkMs = performance.now() - t0;
-    state.walkTotalMs += summary.walkMs;
-    state.walks++;
-    if (state.commits.length >= MAX_COMMITS) state.commits.shift();
-    state.commits.push(summary);
-    if (onSummary) onSummary(summary);
+/** Stops reading commits and puts a chained hook back the way it was. The shim stays: React still holds it. */
+export function uninstallHook(): void {
+  if (detach) detach();
+  detach = null;
+  attached = null;
+  options = null;
+  mode = 'none';
+  commits = [];
+  walks = 0;
+  walkTotalMs = 0;
+}
+
+function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
+  attached = hook;
+  mode = as;
+  detach = as === 'chained' ? chain(hook) : null;
+  for (const renderer of registryOf(hook).values()) admit(renderer);
+}
+
+function registryOf(hook: DevtoolsHook): Map<number, Renderer> {
+  let registry = registries.get(hook);
+  if (!registry) registries.set(hook, (registry = new Map()));
+  return registry;
+}
+
+/** Records what a renderer handed `inject()` and whether its commits can be read. */
+function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer {
+  const handed = (internals ?? {}) as { version?: unknown; bundleType?: unknown; rendererPackageName?: unknown };
+  const info: RendererInfo = {
+    id,
+    version: typeof handed.version === 'string' ? handed.version : null,
+    bundleType: typeof handed.bundleType === 'number' ? handed.bundleType : null,
+    rendererPackageName: typeof handed.rendererPackageName === 'string' ? handed.rendererPackageName : null,
   };
+  const major = info.version ? parseInt(info.version, 10) : NaN;
+  const supported = major >= 17 && major <= 19;
+  const isReactDom = info.rendererPackageName === 'react-dom';
+  const renderer: Renderer = {
+    info,
+    isReactDom,
+    profileMode: supported ? profileModeBit(major) : 0,
+    problem: isReactDom && !supported ? `react-dom ${info.version ?? 'without a version'} is outside React 17 to 19` : null,
+    checked: false,
+  };
+  registryOf(hook).set(id, renderer);
+  return renderer;
+}
 
-  const existing = w.__REACT_DEVTOOLS_GLOBAL_HOOK__;
-  if (existing) {
-    const prev = existing.onCommitFiberRoot;
-    existing.onCommitFiberRoot = function (this: any, id: number, root: any, ...rest: any[]) {
-      try {
-        onCommit(id, root);
-      } catch {
-        // never let attribution break React
-      }
-      return typeof prev === 'function' ? prev.call(this, id, root, ...rest) : undefined;
-    };
-    hookRef = existing;
-    state.mode = 'chained';
+function admit(renderer: Renderer): void {
+  if (renderer.isReactDom && renderer.problem) failClosed(renderer.problem);
+}
+
+/** A React this library does not know is not guessed at: stop reading commits and say why, once. */
+function failClosed(reason: string): void {
+  mode = 'unsupported';
+  warnOnce('unsupported-react', `${reason}, so React commits are not read. Interactions are still reported, without components.`);
+}
+
+function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: number | undefined, didError: boolean | undefined): void {
+  if (!options || hook !== attached || mode === 'unsupported') return;
+  // A renderer that registered before install() is unknown here, and its commits are not read.
+  const renderer = registryOf(hook).get(id);
+  if (!renderer || !renderer.isReactDom) return;
+  if (!renderer.checked) checkFirstCommit(renderer, root);
+  if (renderer.problem) return;
+  const now = performance.now();
+  const input = currentInput();
+  // Outside an interaction window this is the whole cost: a lookup and one subtraction.
+  if (!input || now - input.ts > options.inputWindow) return;
+  const t0 = performance.now();
+  const summary = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true });
+  summary.walkMs = performance.now() - t0;
+  walkTotalMs += summary.walkMs;
+  walks++;
+  if (commits.length >= MAX_COMMITS) commits.shift();
+  commits.push(summary);
+  options.onSummary(summary);
+}
+
+function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
+  renderer.checked = true;
+  const shape = rootShapeProblem(root && root.current);
+  if (shape) {
+    renderer.problem = `the fiber tree of react-dom ${renderer.info.version} is not the shape this library reads (${shape})`;
+    failClosed(renderer.problem);
     return;
   }
+  // A root's first commit replaces the empty fiber createRoot made. A rendered tree behind the
+  // first commit seen here means the root rendered before install(), and those commits were missed.
+  if (root.current.alternate?.child) {
+    warnOnce('late-install', "install() ran after a React root had already rendered, so its earlier commits were missed. Make `import 'react-inp-blame/auto'` the first import of your entry module.");
+  }
+}
 
-  const renderers = new Map<number, any>();
+/** React calls the hook inside its commit; nothing here may throw into it. */
+function guarded(hook: DevtoolsHook, id: number, root: FiberRoot, priority?: number, didError?: boolean): void {
+  try {
+    onCommit(hook, id, root, priority, didError);
+  } catch (error) {
+    failClosed(`reading a React commit threw (${String(error)})`);
+  }
+}
+
+/** Wraps a hook someone else installed; returns the undo. */
+function chain(hook: DevtoolsHook): () => void {
+  const prevInject = hook.inject;
+  const prevCommit = hook.onCommitFiberRoot;
+  const inject = function (this: unknown, ...args: Parameters<DevtoolsHook['inject']>): number {
+    const id = prevInject.apply(this, args);
+    const renderer = register(hook, id, args[0]);
+    if (hook === attached) admit(renderer);
+    return id;
+  };
+  const onCommitFiberRoot = function (this: unknown, ...args: Parameters<DevtoolsHook['onCommitFiberRoot']>): void {
+    guarded(hook, ...args);
+    if (typeof prevCommit === 'function') prevCommit.apply(this, args);
+  };
+  if (typeof prevInject === 'function') hook.inject = inject;
+  hook.onCommitFiberRoot = onCommitFiberRoot;
+  // Renderers that registered before install(): React DevTools' hook kept what they handed it.
+  if (hook.renderers instanceof Map) {
+    const registry = registryOf(hook);
+    for (const [id, internals] of hook.renderers) if (!registry.has(id)) register(hook, id, internals);
+  }
+  return () => {
+    // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through.
+    if (hook.inject === inject) hook.inject = prevInject;
+    if (hook.onCommitFiberRoot === onCommitFiberRoot) hook.onCommitFiberRoot = prevCommit;
+  };
+}
+
+/**
+ * The least React needs to register and report commits. React checks for every other hook
+ * method before calling it (17.0.2, 18.3.1 and 19.3.0 alike), and there is deliberately no
+ * `checkDCE`: react-dom reads that as React DevTools being present.
+ */
+function createShim(): DevtoolsHook {
   let nextId = 0;
-  const hook = {
+  const renderers = new Map<number, unknown>();
+  const hook: DevtoolsHook & { supportsFiber: true } = {
     renderers,
     supportsFiber: true,
-    inject(renderer: any) {
+    inject(internals) {
       const id = ++nextId;
-      renderers.set(id, renderer);
-      state.renderers = renderers.size;
+      // Kept the way React DevTools keeps them, for tools that chain on later (Fast Refresh reads them).
+      renderers.set(id, internals);
+      const renderer = register(hook, id, internals);
+      if (hook === attached) admit(renderer);
       return id;
     },
-    checkDCE() {},
-    onCommitFiberRoot(id: number, root: any) {
-      try {
-        onCommit(id, root);
-      } catch {
-        // never let attribution break React
-      }
+    onCommitFiberRoot(id, root, priority, didError) {
+      guarded(hook, id, root, priority, didError);
     },
-    onCommitFiberUnmount() {},
-    onPostCommitFiberRoot() {},
-    setStrictMode() {},
-    on() {},
-    off() {},
-    emit() {},
-    sub() {
-      return () => {};
-    },
-    reactInpAttribution: true,
+    reactInpBlame: true,
   };
-  Object.defineProperty(w, '__REACT_DEVTOOLS_GLOBAL_HOOK__', {
-    value: hook,
+  return hook;
+}
+
+/**
+ * Makes the shim the global through an accessor rather than a plain value, so that another tool
+ * assigning its own hook later is noticed instead of silently winning or losing.
+ */
+function defineGlobal(w: any, hook: DevtoolsHook): void {
+  let current: unknown = hook;
+  Object.defineProperty(w, HOOK_KEY, {
     configurable: true,
     enumerable: false,
-    writable: true,
+    get: () => current,
+    set(next: unknown) {
+      current = next;
+      if (next !== hook) replaced(hook, next);
+    },
   });
-  hookRef = hook;
-  state.mode = 'shim';
+}
+
+function replaced(hook: DevtoolsHook, next: unknown): void {
+  if (hook !== attached) return;
+  if (registryOf(hook).size) {
+    // React holds on to the hook it registered with, so it keeps reporting to the shim.
+    devtoolsLockedOut = true;
+    warnOnce('locked-out', "__REACT_DEVTOOLS_GLOBAL_HOOK__ was replaced after React registered with react-inp-blame's hook, so whatever replaced it (React DevTools, typically) will not see this React. Load that first, or install with hook: 'chain'.");
+  } else if (next && typeof next === 'object') {
+    // Nothing has registered yet, so React will register with the replacement: follow it.
+    attach(next as DevtoolsHook, 'chained');
+  }
 }

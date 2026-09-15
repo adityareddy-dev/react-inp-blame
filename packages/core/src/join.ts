@@ -85,7 +85,7 @@ const summarize = (e: any): EventEntrySummary => ({
  * `inputs` is the ring of recent inputs, used to tell whose commit is whose and to recover
  * the target when the entry's is gone.
  */
-export function buildReport(entries: any[], commits: CommitSummary[], frames: FrameSummary[], inputs: InputRecord[] = []): InteractionReport {
+export function buildReport(entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): InteractionReport {
   let longest = entries[0];
   for (const e of entries) if (e.duration > longest.duration) longest = e;
   const group = groupByRenderTime(entries).find((g) => g.entries.includes(longest))!;
@@ -149,7 +149,7 @@ export function buildReport(entries: any[], commits: CommitSummary[], frames: Fr
       inWindow.push(c);
     }
   }
-  const overlapping = frames.filter((f) => f.start < end && f.start + f.duration > start);
+  const overlapping = frames && frames.filter((f) => f.start < end && f.start + f.duration > start);
 
   const report: InteractionReport = {
     interactionId: longest.interactionId,
@@ -166,7 +166,7 @@ export function buildReport(entries: any[], commits: CommitSummary[], frames: Fr
     commits: inWindow,
     followUps,
     frames: overlapping,
-    laterFrames: framesForLater(followUps, frames),
+    laterFrames: frames && framesForLater(followUps, frames),
     revision: 0,
     explanation: null as any,
     verdict: '',
@@ -187,7 +187,7 @@ function claimedElsewhere(c: CommitSummary, inputs: InputRecord[], stamps: numbe
  * held pointerdown, the keyup after a keydown). Rebuild it in place so listeners keep the
  * same object, bump the revision, and say whether the headline moved.
  */
-export function refreshReport(r: InteractionReport, entries: any[], commits: CommitSummary[], frames: FrameSummary[], inputs: InputRecord[] = []): boolean {
+export function refreshReport(r: InteractionReport, entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): boolean {
   const fresh = buildReport(entries, commits, frames, inputs);
   const headlineChanged = fresh.duration !== r.duration || fresh.start !== r.start || fresh.type !== r.type;
   Object.assign(r, fresh, { revision: r.revision + 1 });
@@ -210,7 +210,7 @@ function framesInWindow(r: InteractionReport, frames: FrameSummary[]): FrameSumm
 export function refreshFrames(r: InteractionReport, frames: FrameSummary[]): boolean {
   const inWindow = framesInWindow(r, frames);
   const later = framesForLater(r.followUps, frames);
-  if (inWindow.length === r.frames.length && later.length === r.laterFrames.length) return false;
+  if (inWindow.length === r.frames?.length && later.length === r.laterFrames?.length) return false;
   r.frames = inWindow;
   r.laterFrames = later;
   r.explanation = explain(r);
@@ -225,12 +225,12 @@ export function isLaterRender(r: InteractionReport, c: CommitSummary): boolean {
 }
 
 /** Attach a later render to an already emitted report. Returns false if it was there already. */
-export function attachLaterRender(r: InteractionReport, c: CommitSummary, frames: FrameSummary[]): boolean {
+export function attachLaterRender(r: InteractionReport, c: CommitSummary, frames: FrameSummary[] | null): boolean {
   if (r.followUps.includes(c)) return false;
   c.joinedBy = 'exact';
   r.followUps.push(c);
   r.overheadMs += c.walkMs;
-  r.laterFrames = framesForLater(r.followUps, frames);
+  r.laterFrames = frames && framesForLater(r.followUps, frames);
   r.explanation = explain(r);
   r.verdict = toVerdict(r.explanation);
   r.revision++;
@@ -337,7 +337,7 @@ export function explain(r: InteractionReport): Explanation {
   const outsideName = handler || `code outside React (the ${kind} handler or other scripts)`;
   const scriptName = (s: FrameSummary['scripts'][number]) => handler || `a script (${s.invoker || s.name || 'unknown'}${s.source ? `, ${s.source}` : ''})`;
 
-  const forced = r.frames.reduce((a, f) => a + f.forcedLayout, 0);
+  const forced = r.frames ? r.frames.reduce((a, f) => a + f.forcedLayout, 0) : 0;
   const c = r.commits.length ? heaviest(r.commits) : null;
   const renderTotal = r.commits.reduce((a, x) => a + x.total, 0);
   const hasDurations = !!c && c.hasDurations;
@@ -351,8 +351,8 @@ export function explain(r: InteractionReport): Explanation {
   const processingEnd = r.start + r.inputDelay + r.processing;
   // A change handler runs on the input event, after the key event was processed, so its
   // cost shows up between the handlers and the paint. Look for it there.
-  const lateScript = longestScript(r.frames, processingEnd - 5, r.end);
-  const anyScript = longestScript(r.frames, r.start, r.end);
+  const lateScript = r.frames && longestScript(r.frames, processingEnd - 5, r.end);
+  const anyScript = r.frames && longestScript(r.frames, r.start, r.end);
 
   // The sentence and the data version of it are decided together, so a UI that shows the
   // short form never disagrees with the long one.
@@ -381,10 +381,16 @@ export function explain(r: InteractionReport): Explanation {
     const small = c ? `React's render was small (${renderPhrase(c)})` : `React didn't render anything`;
     cause = `${small}; ${scriptName(anyScript)} ran for ${ms(anyScript.duration)}.`;
     blame = { kind: 'script', name: handlerName || anyScript.invoker || anyScript.name || null, detail: component, ms: anyScript.duration };
-  } else {
+  } else if (r.frames) {
     cause = c
       ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
       : `React didn't render anything and no long task was recorded, so the time went to waiting and painting.`;
+    blame = { kind: 'none', name: null, detail: null, ms: null };
+  } else {
+    // Without Long Animation Frames there is no record to say no long task ran.
+    cause = c
+      ? `React's render was small (${renderPhrase(c)}); this browser does not report long tasks, so what else ran is unknown.`
+      : `React didn't render anything; this browser does not report long tasks, so what ran instead is unknown.`;
     blame = { kind: 'none', name: null, detail: null, ms: null };
   }
 
@@ -401,7 +407,7 @@ export function explain(r: InteractionReport): Explanation {
   if (r.followUps.length) {
     const f = heaviest(r.followUps);
     const what = f.hasDurations ? `${ms(f.total)} ${renderPhrase(f)}` : renderPhrase(f);
-    const laterForced = r.laterFrames.reduce((a, x) => a + x.forcedLayout, 0);
+    const laterForced = r.laterFrames ? r.laterFrames.reduce((a, x) => a + x.forcedLayout, 0) : 0;
     const layout = laterForced >= 4 ? `, and it made the browser recalculate layout for ${ms(laterForced)} on the way` : '';
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated: ${what}${layout}. INP doesn't count it, but people still wait for it.`);
   }

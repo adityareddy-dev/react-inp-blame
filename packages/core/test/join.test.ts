@@ -24,6 +24,8 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
     hasDurations: true,
     total: 30,
     walkMs: 0.2,
+    priority: 1,
+    didError: false,
     ...opts,
   };
 }

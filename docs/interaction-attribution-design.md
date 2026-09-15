@@ -38,7 +38,7 @@ Every line below comes out of `apps/demo/e2e/attribution.spec.ts`, run headless 
 
 Overhead inside the interaction window: 0.4 to 0.9ms per commit for the fiber walk in dev with
 an unlimited budget on trees of 400 to 1500 components. Outside an interaction the per-commit
-cost is one subtraction.
+cost is a renderer lookup and one subtraction.
 
 One finding worth its own line: React runs the `useEffect` from a click after the paint,
 observed on 17.0.2, 18.3.1 and 19.3.0 alike. Event Timing closes the interaction at that
@@ -48,17 +48,54 @@ distinction today.
 
 The same suite runs unchanged against React 18.3.1 and 17.0.2 (`scripts/react-matrix.mjs`
 generates the pinned variants); fiber tags, the `PerformedWork` flag and the hook protocol
-are identical across the three majors, and so are the verdicts.
+are identical across the three majors, and so are the verdicts. The one internal the library
+reads that moved is the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19.
+
+Since 2026-09-14 `apps/demo/e2e/cross-browser.spec.ts` also runs in Firefox 148 and WebKit
+26.4 (Playwright's builds, checked on Windows): reports appear and name the component, with
+`frames: null`, and a page whose `PerformanceObserver.supportedEntryTypes` lacks `event` gets
+nothing installed.
 
 ## How it works
 
 Four sources, one join.
 
 **React commits.** React calls `__REACT_DEVTOOLS_GLOBAL_HOOK__.onCommitFiberRoot` after every
-commit, in production builds too, provided the hook exists before `react-dom` evaluates. The
-library either creates a minimal hook or chains onto the real React DevTools one. Because the
-hook exists at root creation, dev and profiling builds also turn on `ProfileMode`, which is
-what populates `actualDuration` on fibers. That is the same trick React DevTools relies on.
+commit, in production builds too, provided the hook exists before `react-dom` evaluates.
+`install({ hook })` decides where commits come from. `'chain'` wraps a hook that is already
+there (React DevTools, or Fast Refresh's stub in dev) and never creates one, so a production
+page without either gets Event Timing and LoAF only. `'shim'` creates a minimal hook, and
+`'auto'`, the default, chains when a hook exists and shims otherwise. The shim holds only what
+React uses (`inject`, `onCommitFiberRoot`, the `renderers` map; React checks for every other
+method before calling it). It has no `checkDCE`: react-dom reads that as the real React
+DevTools being present, and in development builds it silenced React's "Download the React
+DevTools" message. React DevTools does not install over an existing hook, so a shim that loads
+first locks the extension out without a trace. The shim is an accessor on `window`, so a tool
+that assigns its own hook later is noticed: before React has registered, the library follows the
+new hook; after, React keeps reporting to the shim, `stats().devtoolsLockedOut` turns true and
+one warning says so. `dispose()` puts a chained hook's `inject` and `onCommitFiberRoot` back.
+
+Durations come from `ProfileMode` on the root, which is what makes React fill `actualDuration`:
+bit 8 on React 17, bit 2 on 18 and 19, chosen by the version react-dom hands `inject()`. React
+17 and 18 development builds, and 19 profiling builds, set it when a hook existed as react-dom
+evaluated; React 19.3 development builds set it on every root; production builds have no
+`actualDuration` at all. Measured time under a root outside ProfileMode, as under a
+`<Profiler>`, counts too.
+
+**Failing closed.** `install()` checks the browser first. Without `event` in
+`PerformanceObserver.supportedEntryTypes` and `interactionId` on `PerformanceEventTiming` (Chrome
+96, Firefox 144, Safari 26.2) it installs nothing, returns an API whose `stats().mode` is
+`'unsupported'`, and warns once. What each renderer hands `inject()` (version, bundleType,
+rendererPackageName) is kept in `stats().renderers`, and only `react-dom` commits are walked, so
+a react-three-fiber canvas is never read as a DOM tree. A renderer that registered before
+`install()` is not walked either when the hook kept nothing about it (Fast Refresh's stub keeps
+nothing; React DevTools' hook keeps everything). A react-dom outside React 17 to 19, a
+`root.current` that fails the shape check at its first commit (tag 3, numeric `flags` and
+`mode`, `child`, `sibling`, `return` and `alternate` fibers or null, `actualDuration` a number or
+absent), or a walk that throws turns the walk off for good, with one warning and
+`stats().mode === 'unsupported'`; Event Timing reports carry on without components. A first
+commit with a rendered tree already behind it means `install()` ran after that root rendered,
+and a warning says so once.
 
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
@@ -105,7 +142,9 @@ a follow-up.
 **Long Animation Frames.** Overlapping `long-animation-frame` entries supply the script
 attribution and `forcedStyleAndLayoutDuration`. LoAF can only say "React's event dispatch ran
 for 80ms"; the fiber walk is what turns that into a component. Together they separate "your
-render was slow" from "your layout effect forced layout 400 times".
+render was slow" from "your layout effect forced layout 400 times". Only Chromium has LoAF. In
+Firefox and Safari a report's `frames` and `laterFrames` are `null`, and the explanation leaves
+out the forced-layout and script sentences rather than implying none happened.
 
 **Follow-ups.** Commits that land after the paint but within 1.5 s, stamped with the same
 input, with no newer input in between. Effects, transitions and data-driven re-renders show

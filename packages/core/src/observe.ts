@@ -1,5 +1,19 @@
 import type { FrameSummary, ScriptSummary } from './types.ts';
 
+function supportedEntryTypes(): readonly string[] {
+  return typeof PerformanceObserver !== 'undefined' ? PerformanceObserver.supportedEntryTypes || [] : [];
+}
+
+/** Event Timing with `interactionId`, which groups entries into interactions: Chrome 96, Firefox 144, Safari 26.2. */
+export function supportsInteractions(): boolean {
+  return supportedEntryTypes().includes('event') && typeof PerformanceEventTiming !== 'undefined' && 'interactionId' in PerformanceEventTiming.prototype;
+}
+
+/** Long Animation Frames, the source of script and forced-layout attribution: Chromium 123+ only. */
+export function supportsLongAnimationFrames(): boolean {
+  return supportedEntryTypes().includes('long-animation-frame');
+}
+
 /**
  * Hands over Event Timing entries grouped by interactionId, one call per id per observer
  * batch. Entries of one interaction arrive with the paint that presented them: a pointerdown
@@ -31,15 +45,12 @@ export function observeEventTiming(threshold: number, onGroup: (id: number, entr
   } catch {
     return () => {};
   }
-  const types = (PerformanceObserver as any).supportedEntryTypes as string[] | undefined;
-  if (types && types.includes('first-input')) po.observe({ type: 'first-input', buffered: true });
+  if (supportedEntryTypes().includes('first-input')) po.observe({ type: 'first-input', buffered: true });
   return () => po.disconnect();
 }
 
 export function observeFrames(store: FrameSummary[], max = 60, onFrame?: (f: FrameSummary) => void): () => void {
-  if (typeof PerformanceObserver === 'undefined') return () => {};
-  const types = (PerformanceObserver as any).supportedEntryTypes as string[] | undefined;
-  if (!types || !types.includes('long-animation-frame')) return () => {};
+  if (!supportsLongAnimationFrames()) return () => {};
   const po = new PerformanceObserver((list) => {
     for (const e of list.getEntries() as any[]) {
       const f = summarizeFrame(e);
