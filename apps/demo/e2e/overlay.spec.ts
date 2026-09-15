@@ -38,7 +38,9 @@ test('overlay: the badge shows the page INP and the panel blames the right thing
   const rows = panel.locator('.row');
   expect(await rows.count()).toBeGreaterThanOrEqual(3);
   const first = rows.first();
-  await expect(first).toContainText('Log in');
+  // The row is titled by the button's label: its text in a development build, and in production,
+  // where labels come from attributes only, its data-test.
+  await expect(first).toContainText(prod ? 'login' : 'Log in');
   if (!prod) await expect(first).toContainText('handleLogin');
   console.log(`  first row: ${((await first.textContent()) || '').replace(/\s+/g, ' ').trim()}`);
   await first.click();

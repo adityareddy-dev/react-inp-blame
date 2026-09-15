@@ -47,7 +47,7 @@ async function interaction(page: Page, name: string, act: () => Promise<void>): 
   // in Chromium's headless mode an idle callback without a limit sometimes never ran on this page.
   await page.evaluate(() => new Promise<void>((resolve) => requestIdleCallback(() => resolve(), { timeout: 1000 })));
   const { vitals, library } = await page.evaluate(() => {
-    const inp = (window as any).__REACT_INP__.inp();
+    const inp = (window as any).__REACT_INP_BLAME__.inp();
     const reports = (window as any).__inpCheck.reports;
     return { vitals: reports[reports.length - 1] ?? null, library: inp && { value: inp.value, interactionId: inp.interactionId, interactionCount: inp.interactionCount } };
   });

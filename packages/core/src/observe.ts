@@ -1,4 +1,4 @@
-import type { FrameSummary, ScriptSummary } from './types.ts';
+import type { FrameSummary, ScriptSummary } from './types.js';
 
 /** An Event Timing entry with the `interactionId` that TypeScript's DOM lib does not declare yet. */
 export interface InteractionTiming extends PerformanceEventTiming {
@@ -81,22 +81,26 @@ export function observeFrames(store: FrameSummary[], max = 60, onFrame?: (f: Fra
   return () => po.disconnect();
 }
 
+/** A frame summary is frozen: reports hold the same object from the revision it joins onwards. */
 function summarizeFrame(e: PerformanceLongAnimationFrameTiming): FrameSummary {
-  const scripts: ScriptSummary[] = (e.scripts || []).map((s) => ({
-    invoker: s.invoker || '',
-    name: s.sourceFunctionName || '',
-    source: shortSource(s.sourceURL || ''),
-    start: s.startTime,
-    duration: s.duration,
-    forcedLayout: s.forcedStyleAndLayoutDuration || 0,
-  }));
-  return {
+  const scripts = (e.scripts || []).map(
+    (s): ScriptSummary =>
+      Object.freeze({
+        invoker: s.invoker || '',
+        name: s.sourceFunctionName || '',
+        source: shortSource(s.sourceURL || ''),
+        start: s.startTime,
+        duration: s.duration,
+        forcedLayout: s.forcedStyleAndLayoutDuration || 0,
+      }),
+  );
+  return Object.freeze({
     start: e.startTime,
     duration: e.duration,
     blocking: e.blockingDuration || 0,
     forcedLayout: scripts.reduce((a, s) => a + s.forcedLayout, 0),
-    scripts,
-  };
+    scripts: Object.freeze(scripts),
+  });
 }
 
 function shortSource(url: string): string {

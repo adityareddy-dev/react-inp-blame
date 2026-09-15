@@ -1,41 +1,28 @@
-import { createTimeline } from './devtools.ts';
-import { hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.ts';
-import type { InpEstimate } from './inp.ts';
-import { FOLLOW_UP_WINDOW } from './join.ts';
-import { createLifecycle } from './lifecycle.ts';
-import { observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.ts';
-import type { OverlayHandle } from './overlay.ts';
-import { overlayRequested } from './overlay-host.ts';
-import type { CommitSummary, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, Stats } from './types.ts';
-import { warnOnce } from './warn.ts';
+import { createTimeline } from './devtools.js';
+import { clearCommits, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.js';
+import { inertApi } from './inert.js';
+import { FOLLOW_UP_WINDOW, type LabelSource } from './join.js';
+import { createLifecycle } from './lifecycle.js';
+import { observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
+import type { OverlayHandle } from './overlay.js';
+import { overlayRequested } from './overlay-host.js';
+import { incompatibleCopy, shared } from './session.js';
+import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, RendererInfo } from './types.js';
+import { warnOnce } from './warn.js';
 
-export type * from './types.ts';
-export type { InpEstimate } from './inp.ts';
-export type { Fiber } from './fiber.ts';
-export { fiberFromNode, ownerChain, handlerName } from './fiber.ts';
-export type { OverlayHandle } from './overlay.ts';
+export type * from './types.js';
+export type { InpEstimate } from './inp.js';
+export type { Fiber } from './fiber.js';
+export { fiberFromNode, ownerChain, handlerName } from './fiber.js';
+export type { OverlayHandle } from './overlay.js';
 
-export interface Api {
-  reports(): InteractionReport[];
-  last(): InteractionReport | null;
-  /**
-   * The page's INP so far, the estimate web-vitals makes: the interaction at index
-   * floor(count / 50) among the 10 longest. It agrees with web-vitals' `onINP` given
-   * `durationThreshold: 16`, on the value and on the interaction; the design doc lists where the
-   * two part (web-vitals' default 40 ms threshold, back/forward cache restores, `clear()`).
-   */
-  inp(): InpEstimate | null;
-  clear(): void;
-  onInteraction(fn: (r: InteractionReport) => void): () => void;
-  stats(): Stats;
-  /** Every commit walked so far, in or out of an interaction window. Debugging aid. */
-  allCommits(): CommitSummary[];
-  /** Undoes install(): listeners, observers, the overlay, the debug global and any wrapping of a chained hook. A later install() starts fresh. */
-  dispose(): void;
-}
+/** Where `debugGlobal: true` puts the API on window. */
+const DEBUG_GLOBAL = '__REACT_INP_BLAME__';
+
+type Listener = (report: InteractionReport) => void;
 
 /** The options only a first install() can set; a later call that changes one is warned about. */
-type Settings = Required<Pick<InstallOptions, 'threshold' | 'devtoolsTrack' | 'walkBudget' | 'inputWindow' | 'debugGlobal' | 'hook' | 'sampleRate'>>;
+type Settings = Required<Pick<InstallOptions, 'threshold' | 'devtoolsTrack' | 'walkBudget' | 'inputWindow' | 'debugGlobal' | 'hook' | 'sampleRate' | 'labels'>>;
 
 interface Installation {
   api: Api;
@@ -43,23 +30,34 @@ interface Installation {
   reapply(opts: InstallOptions): void;
 }
 
+interface InstallState {
+  installed: Installation | null;
+  /** The API of a page that lost the `sampleRate` roll. Later calls get it back rather than rolling again, which would raise the share. */
+  sampledOut: Api | null;
+  /** Everyone hearing reports, `onReport` included: reports have one way out. */
+  listeners: Set<Listener>;
+  /** The badge and panel, from the moment they are asked for: their code arrives by dynamic import. */
+  overlay: Promise<OverlayHandle | null> | null;
+  installMs: number;
+}
+
+/** One for the page, whichever copy of the library installs (see session.ts). */
+const page = shared<InstallState>('install', () => ({ installed: null, sampledOut: null, listeners: new Set(), overlay: null, installMs: 0 }));
+
 /** `performance.interactionCount`, which TypeScript's DOM lib does not declare yet. */
 interface InteractionCounting {
   readonly interactionCount: number;
 }
 
-const listeners = new Set<(r: InteractionReport) => void>();
-let installed: Installation | null = null;
-/** The API of a page that lost the `sampleRate` roll. Later calls get it back rather than rolling again, which would raise the share. */
-let sampledOut: Api | null = null;
-/** The badge and panel, from the moment they are asked for: their code arrives by dynamic import. */
-let overlay: Promise<OverlayHandle | null> | null = null;
-let installMs = 0;
+/** The window as a bag of properties, for the debug global. */
+const globals = () => window as unknown as Record<string, unknown>;
+const installTime = () => page.installMs;
 
 /**
  * Must run before react-dom evaluates. The simplest way is
  * `import 'react-inp-blame/auto'` as the first import of your entry module. Calling it again
- * while installed applies `overlay` and `onReport` and returns the same API.
+ * while installed, from this or any other copy of the library on the page, applies `overlay` and
+ * `onReport` and returns the same API.
  */
 export function install(opts: InstallOptions = {}): Api {
   // Timed because it runs before the app does: Next.js warns when instrumentation-client takes over 16 ms.
@@ -67,34 +65,40 @@ export function install(opts: InstallOptions = {}): Api {
   try {
     return installNow(opts);
   } finally {
-    installMs += performance.now() - started;
+    page.installMs += performance.now() - started;
   }
 }
 
 function installNow(opts: InstallOptions): Api {
-  if (typeof window === 'undefined') return noop('none');
-  if (installed) {
-    installed.reapply(opts);
-    return installed.api;
+  if (typeof window === 'undefined') return inertApi('none');
+  if (incompatibleCopy) {
+    const message = 'a copy of react-inp-blame from an incompatible version is already on this page, so this one installed nothing. Load a single version (`npm ls react-inp-blame` lists them).';
+    warnOnce('another-copy', message);
+    return inertApi('unsupported', { unsupportedReason: { kind: 'another-copy', message } });
   }
-  if (sampledOut) return sampledOut;
+  if (page.installed) {
+    page.installed.reapply(opts);
+    return page.installed.api;
+  }
+  if (page.sampledOut) return page.sampledOut;
   if (!supportsInteractions()) {
-    warnOnce('unsupported-browser', 'this browser has no Event Timing interactionId (Chrome 96, Firefox 144, Safari 26.2), so nothing was installed.');
+    const message = 'this browser has no Event Timing interactionId (Chrome 96, Firefox 144, Safari 26.2), so nothing was installed.';
+    warnOnce('unsupported-browser', message);
     // Exposed anyway, so stats() on the page says why nothing is reported.
-    return expose(noop('unsupported'), opts.debugGlobal);
+    return expose(inertApi('unsupported', { unsupportedReason: { kind: 'browser', message }, installMs: installTime }), opts.debugGlobal);
   }
   if (!(Math.random() < (opts.sampleRate ?? 1))) {
     const name = debugGlobalName(opts.debugGlobal);
-    const api: Api = {
-      ...noop('sampled-out'),
+    const api = inertApi('sampled-out', {
+      installMs: installTime,
       dispose: () => {
-        if (sampledOut !== api) return;
-        sampledOut = null;
-        if (name && (window as any)[name] === api) delete (window as any)[name];
-        installMs = 0;
+        if (page.sampledOut !== api) return;
+        page.sampledOut = null;
+        if (name && globals()[name] === api) delete globals()[name];
+        page.installMs = 0;
       },
-    };
-    sampledOut = api;
+    });
+    page.sampledOut = api;
     return expose(api, opts.debugGlobal);
   }
 
@@ -106,31 +110,30 @@ function installNow(opts: InstallOptions): Api {
     debugGlobal: opts.debugGlobal ?? false,
     hook: opts.hook ?? 'auto',
     sampleRate: opts.sampleRate ?? 1,
+    labels: opts.labels ?? 'auto',
   };
-  let onReport = opts.onReport;
+  // Asked at each report, because react-dom registers with the hook after install() has run.
+  const labels = (): LabelSource => (settings.labels === 'auto' ? (knownRenderers().some(isDevelopmentReactDom) ? 'text' : 'attributes') : settings.labels);
   // Null where the browser has no Long Animation Frames: reports then say so rather than showing none.
   const frames: FrameSummary[] | null = supportsLongAnimationFrames() ? [] : null;
 
   // Performance panel entries are drawn once the page is idle: their tooltip is the verdict, and
   // building it does not belong in the callbacks that can delay the next input.
   const timeline = settings.devtoolsTrack ? createTimeline(knownRenderers) : null;
-  const undrawn = new Set<InteractionReport>();
+  // The newest revision of each report not drawn yet.
+  const undrawn = new Map<number, InteractionReport>();
   let cancelDraw: (() => void) | null = null;
   let drawMs = 0;
   const drawWhenIdle = (r: InteractionReport) => {
     if (!timeline) return;
-    undrawn.add(r);
+    undrawn.set(r.interactionId, r);
     if (cancelDraw) return;
     cancelDraw = whenIdle(() => {
       cancelDraw = null;
-      for (const pending of undrawn) {
-        const started = performance.now();
-        timeline.draw(pending);
-        const spent = performance.now() - started;
-        drawMs += spent;
-        pending.overheadMs += spent;
-      }
+      const started = performance.now();
+      for (const pending of undrawn.values()) timeline.draw(pending);
       undrawn.clear();
+      drawMs += performance.now() - started;
     });
   };
 
@@ -140,19 +143,20 @@ function installNow(opts: InstallOptions): Api {
     inputs: recentInputs,
     frames,
     interactionCount: 'interactionCount' in performance ? () => (performance as Performance & InteractionCounting).interactionCount : null,
+    labels,
     now: () => performance.now(),
     publish: (r) => {
       drawWhenIdle(r);
-      for (const fn of listeners) {
+      for (const fn of page.listeners) {
         try {
           fn(r);
         } catch {
-          // listener errors are theirs
+          // A listener's error is its own; the others still hear the report.
         }
       }
-      if (onReport) onReport(r);
     },
   });
+  let stopOnReport = opts.onReport ? listen(opts.onReport) : null;
 
   installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit });
   for (const t of INPUT_TYPES) window.addEventListener(t, noteInput, { capture: true, passive: true });
@@ -163,8 +167,8 @@ function installNow(opts: InstallOptions): Api {
   const stopEvents = observeEventTiming(16, lifecycle.onEntries);
 
   const noRendererCheck = setTimeout(() => {
-    const h = hookStats();
-    if ((h.mode === 'shim' || h.mode === 'chained') && !h.renderers.some((r) => r.rendererPackageName === 'react-dom')) {
+    const { mode } = hookStats();
+    if ((mode === 'shim' || mode === 'chained') && !knownRenderers().some((r) => r.rendererPackageName === 'react-dom')) {
       warnOnce(
         'no-renderer',
         'no react-dom registered with the DevTools hook within 3s. install() has to run before react-dom loads: ' +
@@ -180,13 +184,16 @@ function installNow(opts: InstallOptions): Api {
     inp: lifecycle.inp,
     clear: () => {
       lifecycle.clear();
-      recordedCommits().length = 0;
+      clearCommits();
     },
     onInteraction,
-    stats: () => ({ ...hookStats(), reportTotalMs: lifecycle.spentMs() + drawMs, reports: lifecycle.reports().length, installMs }),
-    allCommits: () => recordedCommits().slice(),
+    stats: () => ({ ...hookStats(), reportTotalMs: lifecycle.spentMs() + drawMs, installMs: page.installMs }),
+    debug: {
+      commits: () => recordedCommits().slice(),
+      hook: hookInfo,
+    },
     dispose: () => {
-      if (installed?.api !== api) return;
+      if (page.installed?.api !== api) return;
       clearTimeout(noRendererCheck);
       if (cancelDraw) cancelDraw();
       stopFrames();
@@ -194,10 +201,10 @@ function installNow(opts: InstallOptions): Api {
       for (const t of INPUT_TYPES) window.removeEventListener(t, noteInput, { capture: true });
       uninstallHook();
       hideOverlay();
-      listeners.clear();
-      if (debugName && (window as any)[debugName] === api) delete (window as any)[debugName];
-      installed = null;
-      installMs = 0;
+      page.listeners.clear();
+      if (debugName && globals()[debugName] === api) delete globals()[debugName];
+      page.installed = null;
+      page.installMs = 0;
     },
   };
 
@@ -207,10 +214,13 @@ function installNow(opts: InstallOptions): Api {
     const wanted = option === true || (option === 'query' && overlayRequested()) || (!!option && typeof option === 'object');
     if (wanted) showOverlay(api, typeof option === 'object' ? option : {});
   };
-  installed = {
+  page.installed = {
     api,
     reapply: (next) => {
-      if (next.onReport !== undefined) onReport = next.onReport;
+      if (next.onReport !== undefined) {
+        stopOnReport?.();
+        stopOnReport = listen(next.onReport);
+      }
       applyOverlay(next.overlay);
       const kept = (Object.keys(settings) as (keyof Settings)[]).filter((k) => next[k] !== undefined && next[k] !== settings[k]);
       if (kept.length) {
@@ -232,13 +242,22 @@ export function mountOverlay(opts: OverlayOptions = {}): Promise<OverlayHandle |
   if (typeof window === 'undefined') return Promise.resolve(null);
   const api = install();
   // Nothing was installed in a browser without Event Timing, or on a page the sample left out.
-  if (!installed) return Promise.resolve(null);
-  return overlay ?? showOverlay(api, opts);
+  if (!page.installed) return Promise.resolve(null);
+  return page.overlay ?? showOverlay(api, opts);
 }
 
-export function onInteraction(fn: (r: InteractionReport) => void): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
+/** Calls `fn` with each report when it is published, and again with every later revision of it. Returns the unsubscribe. */
+export function onInteraction(fn: Listener): () => void {
+  // A server renders no interactions, and a listener added during a render there would outlive the request.
+  if (typeof window === 'undefined') return () => {};
+  return listen(fn);
+}
+
+function listen(fn: Listener): () => void {
+  page.listeners.add(fn);
+  return () => {
+    page.listeners.delete(fn);
+  };
 }
 
 /**
@@ -248,20 +267,20 @@ export function onInteraction(fn: (r: InteractionReport) => void): () => void {
  */
 function showOverlay(api: Api, opts: OverlayOptions): Promise<OverlayHandle | null> {
   const shown: Promise<OverlayHandle | null> = new Promise<void>((resolve) => setTimeout(resolve, 0))
-    .then(() => (overlay === shown ? import('./overlay.ts') : null))
+    .then(() => (page.overlay === shown ? import('./overlay.js') : null))
     // Asked again on arrival: hidden or replaced while the code was on its way.
-    .then((code) => (code && overlay === shown ? code.createOverlay(api, opts) : null))
+    .then((code) => (code && page.overlay === shown ? code.createOverlay(api, opts) : null))
     .catch((error: unknown) => {
       warnOnce('overlay-failed', `the badge and panel could not be shown (${String(error)}).`);
       return null;
     });
-  overlay = shown;
+  page.overlay = shown;
   return shown;
 }
 
 function hideOverlay(): void {
-  const shown = overlay;
-  overlay = null;
+  const shown = page.overlay;
+  page.overlay = null;
   if (shown) shown.then((handle) => handle?.dispose());
 }
 
@@ -275,27 +294,19 @@ function whenIdle(task: () => void): () => void {
   return () => clearTimeout(id);
 }
 
+/** A development build of react-dom, which says so with `bundleType` 1. */
+function isDevelopmentReactDom(renderer: RendererInfo): boolean {
+  return renderer.rendererPackageName === 'react-dom' && renderer.bundleType === 1;
+}
+
 function debugGlobalName(option: InstallOptions['debugGlobal']): string | null {
   if (!option) return null;
-  return typeof option === 'string' ? option : '__REACT_INP__';
+  return typeof option === 'string' ? option : DEBUG_GLOBAL;
 }
 
 /** Puts the API on window under the name `debugGlobal` asks for, if any. */
 function expose(api: Api, option: InstallOptions['debugGlobal']): Api {
   const name = debugGlobalName(option);
-  if (name) (window as any)[name] = api;
+  if (name) globals()[name] = api;
   return api;
-}
-
-function noop(mode: 'none' | 'unsupported' | 'sampled-out'): Api {
-  return {
-    reports: () => [],
-    last: () => null,
-    inp: () => null,
-    clear: () => {},
-    onInteraction: () => () => {},
-    stats: () => ({ mode, owner: 'none', renderers: [], devtoolsLockedOut: false, walks: 0, walkTotalMs: 0, reportTotalMs: 0, reports: 0, commitsRecorded: 0, installMs }),
-    allCommits: () => [],
-    dispose: () => {},
-  };
 }

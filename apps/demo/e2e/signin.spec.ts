@@ -4,14 +4,14 @@ import type { InteractionReport } from 'react-inp-blame';
 const prod = process.env.INP_MODE === 'prod';
 
 async function reports(page: Page): Promise<InteractionReport[]> {
-  return page.evaluate(() => (window as any).__REACT_INP__.reports());
+  return page.evaluate(() => (window as any).__REACT_INP_BLAME__.reports());
 }
 
 test('sign-in flow: email, password, log in, profile, each attributed to what took the time', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('[data-test=email]');
   await page.waitForTimeout(400);
-  await page.evaluate(() => (window as any).__REACT_INP__.clear());
+  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
 
   await page.locator('[data-test=email]').pressSequentially('ada@example.com', { delay: 60 });
   await page.locator('[data-test=password]').pressSequentially('Hunter2!', { delay: 60 });

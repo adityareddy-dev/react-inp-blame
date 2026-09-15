@@ -19,7 +19,7 @@ test('tour', async ({ page }) => {
   await page.click('[data-test=login]');
   await page.waitForSelector('[data-test=photos]', { timeout: 10_000 });
   await page.waitForTimeout(1200);
-  for (const r of await page.evaluate(() => (window as any).__REACT_INP__.reports())) console.log(`  ${r.verdict}`);
+  for (const r of await page.evaluate(() => (window as any).__REACT_INP_BLAME__.reports())) console.log(`  ${r.verdict}`);
   await page.waitForTimeout(9000);
 
   const lab: Array<[string, string]> = [
@@ -35,11 +35,11 @@ test('tour', async ({ page }) => {
     await page.goto(`/#lab/${scenario}`);
     await page.waitForSelector('[data-test=trigger]');
     await page.waitForTimeout(1500);
-    await page.evaluate(() => (window as any).__REACT_INP__.clear());
+    await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
     if (action === 'click') await page.click('[data-test=trigger]');
     else await page.type('[data-test=trigger]', action.slice(5), { delay: 500 });
-    await page.waitForFunction(() => (window as any).__REACT_INP__.last() != null, null, { timeout: 8_000 }).catch(() => {});
-    const r = await page.evaluate(() => (window as any).__REACT_INP__.last());
+    await page.waitForFunction(() => (window as any).__REACT_INP_BLAME__.last() != null, null, { timeout: 8_000 }).catch(() => {});
+    const r = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
     console.log(`  [${scenario}] ${r ? r.verdict : 'no report, the interaction stayed under the threshold'}`);
     await page.waitForTimeout(4500);
   }

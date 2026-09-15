@@ -1,4 +1,4 @@
-import type { InteractionReport } from './types.ts';
+import type { InteractionReport } from './types.js';
 
 /** The page's INP so far, estimated the way web-vitals does it. */
 export interface InpEstimate {

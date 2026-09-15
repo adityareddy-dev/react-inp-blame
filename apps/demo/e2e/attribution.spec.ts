@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { CommitSummary, InteractionReport, Stats } from 'react-inp-blame';
+import type { CommitSummary, HookInfo, InteractionReport, Stats } from 'react-inp-blame';
 
 const prod = process.env.INP_MODE === 'prod';
 // A render blamed from React's durations is measured; production builds have only counts to go on.
@@ -9,11 +9,11 @@ async function interact(page: Page, scenario: string, act: () => Promise<void>):
   await page.goto(`/#${scenario}`);
   await page.waitForSelector('[data-test=trigger]');
   await page.waitForTimeout(300);
-  await page.evaluate(() => (window as any).__REACT_INP__.clear());
+  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
   await act();
-  await page.waitForFunction(() => (window as any).__REACT_INP__.last() != null, null, { timeout: 8_000 });
-  const r: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP__.last());
-  const all: CommitSummary[] = await page.evaluate(() => (window as any).__REACT_INP__.allCommits());
+  await page.waitForFunction(() => (window as any).__REACT_INP_BLAME__.last() != null, null, { timeout: 8_000 });
+  const r: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
+  const all: CommitSummary[] = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.debug.commits());
   console.log(`  [${scenario}] ${r.verdict}  (overhead ${r.overheadMs.toFixed(2)}ms)`);
   console.log(`    window 0..${Math.round(r.duration)}ms; in window ${r.commits.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')} | follow-ups ${r.followUps.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')} | all ${all.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')}`);
   return r;
@@ -22,9 +22,12 @@ async function interact(page: Page, scenario: string, act: () => Promise<void>):
 test('hook is installed before React registers', async ({ page }) => {
   await page.goto('/#fine');
   await page.waitForSelector('[data-test=trigger]');
-  const stats: Stats = await page.evaluate(() => (window as any).__REACT_INP__.stats());
+  const { stats, hook }: { stats: Stats; hook: HookInfo } = await page.evaluate(() => {
+    const api = (window as any).__REACT_INP_BLAME__;
+    return { stats: api.stats(), hook: api.debug.hook() };
+  });
   expect(stats.mode).toBe('shim');
-  expect(stats.renderers.map((r) => r.rendererPackageName)).toContain('react-dom');
+  expect(hook.renderers.map((r) => r.rendererPackageName)).toContain('react-dom');
 });
 
 test('install() costs the page under 2 ms, the badge and panel loading after it', async ({ page }) => {
@@ -33,7 +36,7 @@ test('install() costs the page under 2 ms, the badge and panel loading after it'
     // A new query string, so each goto loads the page rather than moving to its hash.
     await page.goto(`/?load=${i}#fine`);
     await page.waitForSelector('#react-inp-blame .badge');
-    const stats: Stats = await page.evaluate(() => (window as any).__REACT_INP__.stats());
+    const stats: Stats = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.stats());
     loads.push(stats.installMs);
   }
   // Both calls the demo makes: the /auto import, then install({ overlay }) in main.tsx. The median
@@ -72,7 +75,7 @@ test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
     await page
       .waitForFunction(
         () => {
-          const last = (window as any).__REACT_INP__.last();
+          const last = (window as any).__REACT_INP_BLAME__.last();
           return last && last.frames.reduce((a: number, f: any) => a + f.forcedLayout, 0) > 4;
         },
         null,
@@ -142,10 +145,10 @@ test('control: the well-built version stays cheap', async ({ page }) => {
   await page.goto('/#fine');
   await page.waitForSelector('[data-test=trigger]');
   await page.waitForTimeout(300);
-  await page.evaluate(() => (window as any).__REACT_INP__.clear());
+  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
   await page.click('[data-test=trigger]');
   await page.waitForTimeout(600);
-  const r: InteractionReport | null = await page.evaluate(() => (window as any).__REACT_INP__.last());
+  const r: InteractionReport | null = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
   if (r) {
     console.log(`  [fine] ${r.verdict}`);
     expect(r.duration).toBeLessThan(100);

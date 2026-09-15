@@ -1,7 +1,7 @@
-import type { InpEstimate } from './inp.ts';
-import { carriesWork, heaviest, kindOf } from './join.ts';
-import { OVERLAY_ID } from './overlay-host.ts';
-import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types.ts';
+import type { InpEstimate } from './inp.js';
+import { carriesWork, heaviest, kindOf } from './join.js';
+import { OVERLAY_ID } from './overlay-host.js';
+import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types.js';
 
 /**
  * The on-page badge and panel. Plain DOM inside a shadow root: no React, so it renders even

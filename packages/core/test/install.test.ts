@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { test, type TestContext } from 'node:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, mountOverlay, onInteraction } from '../src/index.ts';
-import type { InteractionReport } from '../src/types.ts';
+import type { InstallOptions, InteractionReport } from '../src/types.ts';
 
 const HOOK = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 
@@ -87,13 +91,13 @@ function existingHook() {
     inject(_internals: unknown): number {
       return ++nextId;
     },
-    onCommitFiberRoot(id: number): void {
+    onCommitFiberRoot(id: number, _root?: unknown): void {
       calls.push(id);
     },
   };
 }
 
-const reactDom = (version: string) => ({ version, bundleType: 1, rendererPackageName: 'react-dom' });
+const reactDom = (version: string, bundleType = 1) => ({ version, bundleType, rendererPackageName: 'react-dom' });
 
 /** A committed root as React hands it to the hook: one component rendered, measured at `ms` when the build measures. */
 function committedRoot(mode: number, ms: number | undefined) {
@@ -102,19 +106,53 @@ function committedRoot(mode: number, ms: number | undefined) {
   return { current: { tag: 3, flags: 0, mode, elementType: null, type: null, memoizedProps: null, return: null, child: counter, sibling: null, alternate: null, actualDuration: ms } };
 }
 
+/** A committed root whose one component counts how often it is named, which a walk does once. */
+function countingRoot() {
+  const root = committedRoot(0b11, 4);
+  const component = root.current.child;
+  const type = component.elementType;
+  let named = 0;
+  Object.defineProperty(component, 'elementType', {
+    get() {
+      named++;
+      return type;
+    },
+  });
+  return { root, walks: () => named };
+}
+
 const slowClick = (duration: number) => ({ entryType: 'event', name: 'click', interactionId: 7, startTime: 1000, duration, processingStart: 1002, processingEnd: 1000 + duration - 8, target: null });
 
-test('a browser without Event Timing interactionId gets nothing installed and one warning', async (t) => {
+/** A button that shows a person's name and carries a data-testid, as a detached DOM node. */
+function saveButton() {
+  const button: Record<string, unknown> = { nodeType: 1, tagName: 'BUTTON', id: '', classList: { length: 0 }, parentNode: null, parentElement: null, getAttribute: (name: string) => (name === 'data-testid' ? 'save' : null) };
+  button.firstChild = { nodeType: 3, nodeValue: 'Save for Ada Lovelace', parentNode: button, nextSibling: null, firstChild: null };
+  return button;
+}
+
+const librarySource = fileURLToPath(new URL('../src/', import.meta.url));
+
+/** Another copy of the library, the way a duplicated package puts one on a page: the same source at another path, sharing no module with this one. */
+async function copyOfLibrary(t: TestContext): Promise<typeof import('../src/index.ts')> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'react-inp-blame-copy-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.cpSync(librarySource, path.join(dir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'package.json'), '{ "type": "module" }\n');
+  return import(pathToFileURL(path.join(dir, 'src', 'index.ts')).href);
+}
+
+test('a browser without Event Timing interactionId gets nothing installed, one warning, and the reason in stats()', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   const overlays: Promise<unknown>[] = [];
   for (const browser of [{ entryTypes: ['first-input'] }, { interactionId: false }]) {
     inBrowser((page) => {
       const api = install({ debugGlobal: true });
       assert.equal(api.stats().mode, 'unsupported');
+      assert.equal(api.stats().unsupportedReason?.kind, 'browser');
       assert.equal(HOOK in page.window, false, 'the DevTools hook was created');
       assert.equal(page.listening.size, 0, 'input listeners were added');
       // Exposed anyway, so stats() on the page says why nothing is reported.
-      assert.equal(page.window.__REACT_INP__, api);
+      assert.equal(page.window.__REACT_INP_BLAME__, api);
       overlays.push(mountOverlay());
     }, browser);
   }
@@ -128,7 +166,7 @@ test("hook: 'auto' creates a hook when there is none, and it does not claim to b
     const api = install();
     const hook = page.window[HOOK];
     assert.equal(api.stats().mode, 'shim');
-    assert.equal(api.stats().owner, 'react-inp-blame');
+    assert.equal(api.debug.hook().owner, 'react-inp-blame');
     assert.equal(hook.reactInpBlame, true);
     // react-dom reads checkDCE as the real React DevTools being present.
     assert.equal('checkDCE' in hook, false);
@@ -156,7 +194,7 @@ test("hook: 'chain' never creates the global hook", () => {
   });
 });
 
-test("hook: 'chain' reads commits through the existing hook and puts it back on dispose", () => {
+test("hook: 'chain' reads commits through the existing hook, records them frozen, and puts the hook back on dispose", () => {
   inBrowser((page) => {
     const existing = existingHook();
     const { inject, onCommitFiberRoot } = existing;
@@ -164,13 +202,14 @@ test("hook: 'chain' reads commits through the existing hook and puts it back on 
     const api = install({ hook: 'chain' });
 
     const id = existing.inject(reactDom('19.3.0'));
-    assert.deepEqual(api.stats().renderers, [{ id, version: '19.3.0', bundleType: 1, rendererPackageName: 'react-dom' }]);
+    assert.deepEqual(api.debug.hook().renderers, [{ id, version: '19.3.0', bundleType: 1, rendererPackageName: 'react-dom' }]);
     page.duringClick(() => existing.onCommitFiberRoot(id, committedRoot(0b11, 4) as any, 1, false));
     assert.deepEqual(existing.calls, [id], 'the hook it wrapped no longer hears about commits');
-    const [commit] = api.allCommits();
+    const [commit] = api.debug.commits();
     assert.equal(commit.rendered, 1);
     assert.equal(commit.priority, 1);
     assert.equal(commit.didError, false);
+    assert.ok(Object.isFrozen(commit) && Object.isFrozen(commit.components), 'a recorded commit can be changed');
 
     api.dispose();
     assert.equal(existing.inject, inject);
@@ -210,7 +249,7 @@ test('durations come from the ProfileMode bit of the React version that register
     for (const [version, mode, ms, hasDurations] of cases) {
       const id = existing.inject(reactDom(version));
       page.duringClick(() => existing.onCommitFiberRoot(id, committedRoot(mode, ms) as any));
-      assert.equal(api.allCommits().at(-1)!.hasDurations, hasDurations, `React ${version}, mode ${mode}`);
+      assert.equal(api.debug.commits().at(-1)!.hasDurations, hasDurations, `React ${version}, mode ${mode}`);
     }
     api.dispose();
   });
@@ -225,15 +264,16 @@ test('only react-dom from React 17 to 19 is walked; any other react-dom turns th
 
     const canvas = existing.inject({ version: '9.1.0', bundleType: 1, rendererPackageName: '@react-three/fiber' });
     page.duringClick(() => existing.onCommitFiberRoot(canvas, committedRoot(0b11, 4) as any));
-    assert.equal(api.allCommits().length, 0);
+    assert.equal(api.debug.commits().length, 0);
     assert.equal(api.stats().mode, 'chained');
 
     const old = existing.inject(reactDom('16.14.0'));
     assert.equal(api.stats().mode, 'unsupported');
+    assert.equal(api.stats().unsupportedReason?.kind, 'react-version');
     assert.equal(warn.mock.callCount(), 1);
     assert.match(warn.mock.calls[0].arguments[0], /react-dom 16\.14\.0 is outside React 17 to 19/);
     page.duringClick(() => existing.onCommitFiberRoot(old, committedRoot(0b11, 4) as any));
-    assert.equal(api.allCommits().length, 0);
+    assert.equal(api.debug.commits().length, 0);
     api.dispose();
   });
 });
@@ -248,10 +288,52 @@ test('a root of an unexpected shape turns the walk off for good at the first com
     delete (changed.current as Record<string, unknown>).flags;
     page.duringClick(() => existing.onCommitFiberRoot(id, changed as any));
     assert.equal(api.stats().mode, 'unsupported');
+    assert.equal(api.stats().unsupportedReason?.kind, 'fiber-shape');
     page.duringClick(() => existing.onCommitFiberRoot(id, committedRoot(0b11, 4) as any));
-    assert.equal(api.allCommits().length, 0);
+    assert.equal(api.debug.commits().length, 0);
     api.dispose();
   });
+});
+
+test('a walk that throws turns the walk off for good, and stats() carries what it threw', (t) => {
+  t.mock.method(console, 'warn', () => {});
+  inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = committedRoot(0b11, 4);
+    Object.defineProperty(root.current.child, 'flags', {
+      get() {
+        throw new Error('flags moved');
+      },
+    });
+    page.duringClick(() => existing.onCommitFiberRoot(id, root as any));
+    assert.equal(api.stats().mode, 'unsupported');
+    assert.equal(api.stats().unsupportedReason?.kind, 'walk-threw');
+    assert.match(api.stats().unsupportedReason!.message, /reading a React commit threw \(Error: flags moved\)/);
+    api.dispose();
+  });
+});
+
+test("a label names an element by its attributes under a production React, and by its text under a development React or when asked", () => {
+  const labelUnder = (bundleType: number, labels?: InstallOptions['labels']) => {
+    let label: string | null | undefined;
+    inBrowser((page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', devtoolsTrack: false, labels });
+      existing.inject(reactDom('19.3.0', bundleType));
+      page.paint([{ ...slowClick(120), target: saveButton() }]);
+      label = api.last()?.target?.label;
+      api.dispose();
+    });
+    return label;
+  };
+  assert.equal(labelUnder(0), 'button "save"');
+  assert.equal(labelUnder(1), 'button "Save for Ada Lovelace"');
+  assert.equal(labelUnder(0, 'text'), 'button "Save for Ada Lovelace"');
+  assert.equal(labelUnder(1, 'attributes'), 'button "save"');
 });
 
 test('dispose() drops every listener, and the next install() takes its own options', () => {
@@ -271,7 +353,7 @@ test('dispose() drops every listener, and the next install() takes its own optio
   });
 });
 
-test('install() while installed applies onReport and warns once about options it cannot change', (t) => {
+test('install() while installed replaces onReport and warns once about options it cannot change', (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   inBrowser((page) => {
     const heard: string[] = [];
@@ -295,17 +377,79 @@ test('sampleRate rolls once per page, and a page that loses gets nothing install
     assert.equal(out.stats().mode, 'sampled-out');
     assert.equal(HOOK in page.window, false, 'the DevTools hook was created');
     assert.equal(page.listening.size, 0, 'input listeners were added');
-    assert.equal(page.window.__REACT_INP__, out);
+    assert.equal(page.window.__REACT_INP_BLAME__, out);
     // Rolling again on a later call would raise the share of pages that install.
     assert.equal(install({ sampleRate: 1 }), out);
     assert.equal(roll.mock.callCount(), 1);
 
     out.dispose();
-    assert.equal('__REACT_INP__' in page.window, false);
+    assert.equal('__REACT_INP_BLAME__' in page.window, false);
     const won = install({ sampleRate: 0.6 });
     assert.equal(won.stats().mode, 'shim');
     won.dispose();
   });
+});
+
+test('two copies of the library on one page share one installation: one hook wrapper, one walk per commit, one set of listeners', async (t) => {
+  const [a, b] = await Promise.all([copyOfLibrary(t), copyOfLibrary(t)]);
+  assert.notEqual(a.install, b.install, 'the copies share their modules');
+  inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const first = a.install({ hook: 'chain', devtoolsTrack: false });
+    const wrapper = existing.onCommitFiberRoot;
+    const second = b.install({ hook: 'chain', devtoolsTrack: false });
+    assert.equal(second, first);
+    assert.equal(existing.onCommitFiberRoot, wrapper, 'the second copy wrapped the hook again');
+    assert.equal(Observer.live.size, 1, 'each copy observes Event Timing');
+
+    const { root, walks } = countingRoot();
+    const id = existing.inject(reactDom('19.3.0'));
+    page.duringClick(() => existing.onCommitFiberRoot(id, root));
+    assert.equal(walks(), 1);
+
+    const heard: string[] = [];
+    a.onInteraction(() => heard.push('first copy'));
+    b.onInteraction(() => heard.push('second copy'));
+    page.paint([slowClick(120)]);
+    assert.deepEqual(heard, ['first copy', 'second copy']);
+
+    // Disposing through either copy ends the one installation for both.
+    second.dispose();
+    assert.equal(page.listening.size, 0);
+    assert.equal(Observer.live.size, 0);
+  });
+  // The shim one copy made is the other copy's own hook, not someone else's to chain onto.
+  inBrowser(() => {
+    a.install({ devtoolsTrack: false }).dispose();
+    const api = b.install({ devtoolsTrack: false });
+    assert.equal(api.stats().mode, 'shim');
+    api.dispose();
+  });
+});
+
+test('a copy of an incompatible version installs nothing beside the one already on the page, and says why', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const key = Symbol.for('react-inp-blame');
+  const holder = globalThis as Record<symbol, unknown>;
+  const session = holder[key];
+  holder[key] = { layout: 0, slots: {} };
+  let other: Awaited<ReturnType<typeof copyOfLibrary>>;
+  try {
+    other = await copyOfLibrary(t);
+  } finally {
+    holder[key] = session;
+  }
+  inBrowser((page) => {
+    const api = other.install({ debugGlobal: true });
+    assert.equal(api.stats().mode, 'unsupported');
+    assert.equal(api.stats().unsupportedReason?.kind, 'another-copy');
+    assert.equal(HOOK in page.window, false, 'the DevTools hook was created');
+    assert.equal(page.listening.size, 0, 'input listeners were added');
+    assert.equal('__REACT_INP_BLAME__' in page.window, false, 'it took the debug global');
+  });
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments[0], /incompatible version is already on this page/);
 });
 
 // Last: the shim this library creates outlives dispose(), the way React holds on to it.
@@ -316,7 +460,7 @@ test('the shim follows a hook that replaces it before React registers, and repor
     const replacement = existingHook();
     page.window[HOOK] = replacement;
     assert.equal(api.stats().mode, 'chained');
-    assert.equal(api.stats().devtoolsLockedOut, false);
+    assert.equal(api.debug.hook().devtoolsLockedOut, false);
     api.dispose();
   });
   inBrowser((page) => {
@@ -325,7 +469,7 @@ test('the shim follows a hook that replaces it before React registers, and repor
     page.window[HOOK] = existingHook();
     // React keeps reporting to the shim it registered with; the replacement never hears from it.
     assert.equal(api.stats().mode, 'shim');
-    assert.equal(api.stats().devtoolsLockedOut, true);
+    assert.equal(api.debug.hook().devtoolsLockedOut, true);
     assert.equal(warn.mock.callCount(), 1);
     assert.match(warn.mock.calls[0].arguments[0], /will not see this React/);
     api.dispose();

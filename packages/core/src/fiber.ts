@@ -1,4 +1,4 @@
-import type { CommitSummary, InputStamp, RenderedComponent } from './types.ts';
+import type { CommitSummary, InputStamp, RenderedComponent } from './types.js';
 
 // React work tags, stable across 17, 18 and 19.
 const FunctionComponent = 0;
@@ -191,18 +191,30 @@ interface Agg {
   kids: Agg[];
 }
 
+/** A component's figures while the walk adds them up. */
+interface Tally {
+  name: string;
+  count: number;
+  self: number;
+  total: number;
+}
+
+/** A commit as its walk reads it: everything but the time the walk took, which only the caller can measure. */
+export type CommitWalk = Omit<CommitSummary, 'walkMs' | 'joinedBy'>;
+
 /**
  * Summarise one commit from the fiber tree after it became current.
  * A fiber whose alternate still points at the same child list bailed out, so nothing
  * under it rendered and its subtree is stale: that is the prune.
  * `budget` caps the component fibers visited; DOM and text fibers do not count against it.
+ * The lists in the summary are frozen, like the commit the caller makes of it.
  */
-export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: InputStamp, context: CommitContext): CommitSummary {
+export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: InputStamp, context: CommitContext): CommitWalk {
   let componentsVisited = 0;
   let outOfBudget = false;
   let truncated = false;
   let measured = 0;
-  const byName = new Map<string, RenderedComponent>();
+  const byName = new Map<string, Tally>();
   let rendered = 0;
   // Rendered components with a time, and whether any time had a fraction of a millisecond.
   let timed = 0;
@@ -260,8 +272,8 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     const entry = byName.get(name);
     if (entry) {
       entry.count++;
-      entry.self = (entry.self as number) + self;
-      entry.total = Math.max(entry.total as number, total);
+      entry.self += self;
+      entry.total = Math.max(entry.total, total);
     } else {
       byName.set(name, { name, count: 1, self, total });
     }
@@ -305,8 +317,9 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // Summed over a whole commit, readings of a coarse clock come out close; one component's do not.
   const perComponentTimes = hasDurations && !coarseClock;
   const components = [...byName.values()]
-    .map((c) => (perComponentTimes ? c : { ...c, self: null, total: null }))
-    .sort((a, b) => (perComponentTimes ? (b.self || 0) - (a.self || 0) : b.count - a.count));
+    .sort((a, b) => (perComponentTimes ? b.self - a.self : b.count - a.count))
+    .slice(0, 12)
+    .map((c): RenderedComponent => Object.freeze({ name: c.name, count: c.count, self: perComponentTimes ? c.self : null, total: perComponentTimes ? c.total : null }));
 
   return {
     at,
@@ -316,13 +329,12 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     inputType: input.type,
     rendered,
     truncated,
-    roots: dedupe(performedRoots.map((a) => a.name)).slice(0, 5),
-    hotPath,
-    components: components.slice(0, 12),
+    roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, 5)),
+    hotPath: Object.freeze(hotPath),
+    components: Object.freeze(components),
     hasDurations,
     coarseClock,
     total: hasDurations ? renderTime : 0,
-    walkMs: 0,
     priority: context.priority,
     didError: context.didError,
   };

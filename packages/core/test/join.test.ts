@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { attachLaterRender, buildReport, isLaterRender, refreshReport } from '../src/join.ts';
+import { attachLaterRender, buildReport, isLaterRender, refreshReport, sealReport, type LabelSource } from '../src/join.ts';
 import type { CommitSummary, FrameSummary, InputRecord } from '../src/types.ts';
 
 // Hand-built PerformanceEventTiming-like entries. Durations are multiples of 8 the way the
@@ -65,10 +65,16 @@ function text(value: string): Record<string, unknown> {
   return { nodeType: 3, nodeValue: value, parentNode: null, parentElement: null, nextSibling: null, firstChild: null };
 }
 
+/** The report as it is published: the data these arguments build, sealed. */
+const report = (...args: Parameters<typeof buildReport>) => sealReport(buildReport(...args));
+
+/** A commit as a report holds it: the same commit, stamped with how it joined. */
+const joinedAs = (c: CommitSummary, joinedBy: 'exact' | 'overlap'): CommitSummary => ({ ...c, joinedBy });
+
 const longPress = [entry('pointerdown', 0, 32, 2, 6), entry('pointerup', 60, 16, 61, 62), entry('click', 61, 100, 62, 150)];
 
 test('headline is the longest single entry, not the span of the whole interaction', () => {
-  const r = buildReport(longPress, [], []);
+  const r = report(longPress, [], []);
   assert.equal(r.duration, 100);
   assert.equal(r.start, 61);
   assert.equal(r.end, 161);
@@ -108,9 +114,8 @@ test('an interaction with 150 ms of input delay still gets its commit and its fo
   const sync = commit(190, 0);
   const later = commit(500, 0, { total: 40 });
   const r = buildReport(entries, [sync, later], []);
-  assert.deepEqual(r.commits, [sync]);
-  assert.equal(sync.joinedBy, 'exact');
-  assert.deepEqual(r.followUps, [later]);
+  assert.deepEqual(r.commits, [joinedAs(sync, 'exact')]);
+  assert.deepEqual(r.followUps, [joinedAs(later, 'exact')]);
   assert.equal(r.inputDelay, 150);
   assert.equal(r.processing, 50);
   assert.equal(r.revision, 0);
@@ -122,21 +127,15 @@ test('two overlapping interactions never both claim one commit', () => {
   const c1 = commit(50, 0);
   const c2 = commit(185, 100, { inputType: 'keydown' });
   const ring = [input(0, 'click'), input(100, 'keydown')];
-  const ra = buildReport([a], [c1, c2], [], ring);
-  const rb = buildReport([b], [c1, c2], [], ring);
-  assert.deepEqual(ra.commits, [c1]);
-  assert.deepEqual(rb.commits, [c2]);
-  assert.equal(c1.joinedBy, 'exact');
-  assert.equal(c2.joinedBy, 'exact');
+  assert.deepEqual(buildReport([a], [c1, c2], [], ring).commits, [joinedAs(c1, 'exact')]);
+  assert.deepEqual(buildReport([b], [c1, c2], [], ring).commits, [joinedAs(c2, 'exact')]);
 });
 
 test('wall-clock overlap is only a flagged fallback for a commit no stamp explains', () => {
   const a = entry('click', 0, 200, 5, 180);
   // Stamped with an input the ring never saw; it ran between the handlers and the paint.
   const stray = commit(120, 999);
-  const r = buildReport([a], [stray], [], [input(0, 'click')]);
-  assert.deepEqual(r.commits, [stray]);
-  assert.equal(stray.joinedBy, 'overlap');
+  assert.deepEqual(buildReport([a], [stray], [], [input(0, 'click')]).commits, [joinedAs(stray, 'overlap')]);
   // A commit that ran during the input delay is what delayed us, not ours.
   const early = commit(3, 999);
   assert.deepEqual(buildReport([a], [early], [], [input(0, 'click')]).commits, []);
@@ -146,9 +145,7 @@ test('a commit stamped with the click joins the pointerdown report through the p
   // Only the pointerdown was slow enough to be observed; the click's own entry never arrives.
   const pressed = [entry('pointerdown', 0, 40, 2, 30)];
   const afterClick = commit(400, 80, { gestureTs: 0, total: 40 });
-  const r = buildReport(pressed, [afterClick], []);
-  assert.deepEqual(r.followUps, [afterClick]);
-  assert.equal(afterClick.joinedBy, 'exact');
+  assert.deepEqual(buildReport(pressed, [afterClick], []).followUps, [joinedAs(afterClick, 'exact')]);
 });
 
 test('a null entry target falls back to the node and fiber the ring kept at dispatch', () => {
@@ -158,8 +155,8 @@ test('a null entry target falls back to the node and fiber the ring kept at disp
   const fiber = { tag: 0, elementType: CloseButton, memoizedProps: { onClick: handleClose }, return: { tag: 0, elementType: Dialog, memoizedProps: {}, return: null } };
   // A detached element: no parent, and React has already deleted its fiber expando.
   const node = element('button', [text(' Close ')]);
-  const ring = [input(0, 'click', { target: node, fiber })];
-  const r = buildReport([entry('click', 0, 120, 3, 100)], [], [], ring);
+  const ring = [input(0, 'click', { target: node as unknown as Node, fiber: fiber as unknown as InputRecord['fiber'] })];
+  const r = report([entry('click', 0, 120, 3, 100)], [], [], ring, 'text');
   assert.ok(r.target);
   assert.equal(r.target.selector, 'button');
   assert.equal(r.target.label, 'button "Close"');
@@ -169,24 +166,26 @@ test('a null entry target falls back to the node and fiber the ring kept at disp
   assert.equal(r.verdict.startsWith('120 ms click on button "Close" in CloseButton.'), true);
 });
 
-test('a late entry of a long press merges into the emitted report with a revision bump', () => {
-  const r = buildReport(longPress.slice(0, 1), [], []);
-  assert.equal(r.duration, 32);
-  assert.equal(r.type, 'pointerdown');
-  assert.equal(r.revision, 0);
+test('a late entry of a long press makes the next revision, rebuilt from every entry, and leaves the one before as it was', () => {
+  const first = buildReport(longPress.slice(0, 1), [], []);
+  assert.equal(first.duration, 32);
+  assert.equal(first.type, 'pointerdown');
+  assert.equal(first.revision, 0);
   const sync = commit(140, 61);
-  refreshReport(r, longPress, [sync], []);
-  assert.equal(r.duration, 100);
-  assert.equal(r.type, 'click');
-  assert.equal(r.revision, 1);
-  assert.equal(r.entries.length, 3);
-  assert.deepEqual(r.commits, [sync]);
-  assert.equal(r.explanation.headline, '100 ms click');
-  // A keyup that changes nothing else still bumps the revision, so listeners see the entry list grow.
-  refreshReport(r, longPress.concat(entry('keyup', 200, 16, 201, 202)), [sync], []);
-  assert.equal(r.duration, 100);
-  assert.equal(r.entries.length, 4);
-  assert.equal(r.revision, 2);
+  const second = refreshReport(first, longPress, [sync], []);
+  assert.equal(second.duration, 100);
+  assert.equal(second.type, 'click');
+  assert.equal(second.revision, 1);
+  assert.equal(second.entries.length, 3);
+  assert.deepEqual(second.commits, [joinedAs(sync, 'exact')]);
+  assert.equal(sealReport(second).explanation.headline, '100 ms click');
+  assert.equal(first.duration, 32);
+  assert.equal(first.entries.length, 1);
+  // A keyup that changes nothing else is still a revision, so listeners see the entry list grow.
+  const third = refreshReport(second, longPress.concat(entry('keyup', 200, 16, 201, 202)), [sync], []);
+  assert.equal(third.duration, 100);
+  assert.equal(third.entries.length, 4);
+  assert.equal(third.revision, 2);
 });
 
 test("processing leaves out this library's own walk during the handlers, and the explanation says so", () => {
@@ -194,7 +193,7 @@ test("processing leaves out this library's own walk during the handlers, and the
   // took 3 ms; the later render's 2 ms walk came after the paint, outside the interaction.
   const sync = commit(50, 0, { walkMs: 3 });
   const later = commit(400, 0, { walkMs: 2, total: 40 });
-  const r = buildReport([entry('click', 0, 120, 5, 100)], [sync, later], []);
+  const r = report([entry('click', 0, 120, 5, 100)], [sync, later], []);
   assert.equal(r.walkMs, 3);
   assert.equal(r.processing, 92);
   assert.equal(r.inputDelay + r.processing + r.walkMs + r.presentation, r.duration);
@@ -204,8 +203,11 @@ test("processing leaves out this library's own walk during the handlers, and the
   assert.equal(buildReport([entry('click', 0, 120, 5, 100)], [commit(98, 0, { walkMs: 4 })], []).walkMs, 2);
 });
 
-test('the label is the aria-label or the first run of text, at most 40 characters, never the whole textContent', () => {
-  const label = (target: Record<string, unknown>) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], []).target!.label;
+/** The label of a click on `target`, with labels from `labels`. */
+const labelOf = (target: Record<string, unknown>, labels: LabelSource) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], [], [], labels).target!.label;
+
+test('with text allowed, the label is the aria-label or the first run of text, at most 40 characters, never the whole textContent', () => {
+  const label = (target: Record<string, unknown>) => labelOf(target, 'text');
   // React renders `Add to cart ({count})` as three adjacent text nodes.
   assert.equal(label(element('button', [text('Add to cart ('), text('3'), text(')')])), 'button "Add to cart (3)"');
   assert.equal(label(element('button', [element('svg', []), text('  Close  ')])), 'button "Close"');
@@ -216,13 +218,30 @@ test('the label is the aria-label or the first run of text, at most 40 character
   assert.equal(label(element('tbody', rows)), 'tbody "Row 0"');
 });
 
-test('the verdict is built on first read and again after a later render attaches', () => {
-  const r = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
-  assert.doesNotMatch(r.verdict, /after the screen updated/);
-  attachLaterRender(r, commit(400, 0, { total: 40 }), []);
-  assert.match(r.verdict, /A second React render landed 280 ms after the screen updated/);
+test("with attributes only, the label comes from what the page's code wrote on the element, never from the text it shows", () => {
+  const label = (target: Record<string, unknown>) => labelOf(target, 'attributes');
+  // What a button shows can be a person's name.
+  assert.equal(label(element('button', [text('Remove Ada Lovelace')])), 'button');
+  assert.equal(label(element('button', [text('Remove Ada Lovelace')], { 'data-testid': 'remove-member' })), 'button "remove-member"');
+  assert.equal(label(element('td', [text('ada@example.com')], { 'data-test': 'email-cell' })), 'td "email-cell"');
+  assert.equal(label(element('button', [text('×')], { 'aria-label': 'Remove member', 'data-test': 'remove' })), 'button "Remove member"');
+  assert.equal(label(element('input', [], { placeholder: 'Search members', 'data-test': 'search' })), 'input "Search members"');
+  assert.equal(label(element('div', [], { 'aria-label': 'B'.repeat(60) })), `div "${'B'.repeat(40)}"`);
+});
+
+test('each revision is explained on first read, and a later render makes a new revision with its own verdict', () => {
+  const data = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
+  const later = commit(400, 0, { total: 40 });
+  const next = attachLaterRender(data, later, [])!;
+  const before = sealReport(data);
+  const after = sealReport(next);
+  assert.doesNotMatch(before.verdict, /after the screen updated/);
+  assert.match(after.verdict, /A second React render landed 280 ms after the screen updated/);
+  assert.equal(after.revision, 1);
+  // The same render again is no revision at all.
+  assert.equal(attachLaterRender(next, later, []), null);
   // A copy of the report carries the explanation like any other field.
-  assert.equal(JSON.parse(JSON.stringify(r)).verdict, r.verdict);
+  assert.equal(JSON.parse(JSON.stringify(after)).verdict, after.verdict);
 });
 
 test('later renders attach only by an exact stamp', () => {
@@ -234,9 +253,9 @@ test('later renders attach only by an exact stamp', () => {
 });
 
 test('the rating follows the INP thresholds', () => {
-  assert.equal(buildReport([entry('click', 0, 200, 1, 2)], [], []).explanation.rating, 'good');
-  assert.equal(buildReport([entry('click', 0, 208, 1, 2)], [], []).explanation.rating, 'needs-work');
-  assert.equal(buildReport([entry('click', 0, 504, 1, 2)], [], []).explanation.rating, 'poor');
+  assert.equal(report([entry('click', 0, 200, 1, 2)], [], []).explanation.rating, 'good');
+  assert.equal(report([entry('click', 0, 208, 1, 2)], [], []).explanation.rating, 'needs-work');
+  assert.equal(report([entry('click', 0, 504, 1, 2)], [], []).explanation.rating, 'poor');
 });
 
 /** The ring after a click on a "Log in" button whose onClick is `handler`, owned by SignInPage. */
@@ -250,7 +269,7 @@ test('a blame says whether it was measured or inferred', () => {
   // Handlers ran from 3 to 100 ms and the screen updated at 120.
   const slowClick = [entry('click', 0, 120, 3, 100)];
   const blame = (commits: CommitSummary[], frames: FrameSummary[] | null = [], inputs: InputRecord[] = [input(0, 'click')]) => {
-    const { kind, confidence } = buildReport(slowClick, commits, frames, inputs).explanation.blame;
+    const { kind, confidence } = report(slowClick, commits, frames, inputs).explanation.blame;
     return `${kind} ${confidence}`;
   };
   // React's own durations, for a commit joined by the click's stamp and walked in full.
@@ -263,19 +282,19 @@ test('a blame says whether it was measured or inferred', () => {
   // A production build that re-rendered two components beside a named handler.
   assert.equal(blame([commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick(function handleLogin() {})), 'handler inferred');
   // The browser measured waiting and painting itself; with no commit and no Long Animation Frames, nothing rules scripts out.
-  assert.equal(buildReport([entry('click', 0, 120, 80, 100)], [], []).explanation.blame.confidence, 'measured');
-  assert.equal(buildReport([entry('click', 0, 40, 5, 10)], [], []).explanation.blame.confidence, 'measured');
-  assert.equal(buildReport([entry('click', 0, 40, 5, 10)], [], null).explanation.blame.confidence, 'inferred');
+  assert.equal(report([entry('click', 0, 120, 80, 100)], [], []).explanation.blame.confidence, 'measured');
+  assert.equal(report([entry('click', 0, 40, 5, 10)], [], []).explanation.blame.confidence, 'measured');
+  assert.equal(report([entry('click', 0, 40, 5, 10)], [], null).explanation.blame.confidence, 'inferred');
 });
 
 test('a render under 1 ms reads "under 1 ms", and a handler known by its prop name reads "the onClick handler"', () => {
   const slowClick = [entry('click', 0, 120, 3, 100)];
-  const development = buildReport(slowClick, [commit(50, 0, { total: 0.3, rendered: 2 })], [], loginClick(function handleLogin() {}));
+  const development = report(slowClick, [commit(50, 0, { total: 0.3, rendered: 2 })], [], loginClick(function handleLogin() {}));
   assert.equal(development.explanation.cause, "The click handler handleLogin ran for about 97 ms; React's own render took under 1 ms.");
   // A minifier leaves the handler a one-letter name, so the name reported is the prop's.
   const minified = () => {};
   Object.defineProperty(minified, 'name', { value: 'l' });
-  const production = buildReport(slowClick, [commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick(minified));
+  const production = report(slowClick, [commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick(minified));
   assert.equal(production.target?.handler, 'onClick');
   assert.equal(production.explanation.cause, 'The onClick handler most likely took the 97 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.');
 });
@@ -289,7 +308,7 @@ test('a commit timed by a clock too coarse for its components is blamed on its t
     hotPath: ['ContextStorm', 'OrderSummary'],
     components: [{ name: 'LineItem', count: 800, self: null, total: null }],
   });
-  const r = buildReport([entry('click', 0, 456, 3, 440)], [coarse], null);
+  const r = report([entry('click', 0, 456, 3, 440)], [coarse], null);
   assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'OrderSummary', detail: 'LineItem ×800', ms: 417, confidence: 'inferred' });
   assert.equal(r.explanation.cause, 'React spent 417 ms re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them).');
   assert.ok(r.explanation.notes.some((note) => note.includes('clock steps in whole milliseconds')));

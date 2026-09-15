@@ -1,9 +1,15 @@
-import { fiberFromNode, profileModeBit, rootShapeProblem, walkCommit, type Fiber } from './fiber.ts';
-import type { CommitSummary, InputRecord, InstallOptions, RendererInfo, Stats } from './types.ts';
-import { warnOnce } from './warn.ts';
+import { fiberFromNode, profileModeBit, rootShapeProblem, walkCommit, type Fiber } from './fiber.js';
+import { shared } from './session.js';
+import type { CommitSummary, HookInfo, InputRecord, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
+import { warnOnce } from './warn.js';
 
 const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 const MAX_COMMITS = 300;
+
+/** Where React and every devtool look for the hook: `window`. */
+interface HookHolder {
+  [HOOK_KEY]?: unknown;
+}
 
 /** What React passes `onCommitFiberRoot`: the root of the tree it just committed. */
 interface FiberRoot {
@@ -20,6 +26,12 @@ interface DevtoolsHook {
   reactInpBlame?: true;
 }
 
+/** Why React's commits cannot be read: the kind `stats().unsupportedReason` reports, and the reason in words. */
+interface Problem {
+  kind: Extract<UnsupportedReason['kind'], 'react-version' | 'fiber-shape' | 'walk-threw'>;
+  reason: string;
+}
+
 interface Renderer {
   info: RendererInfo;
   /** Only react-dom commits are walked: other renderers have no DOM behind their fibers. */
@@ -27,9 +39,19 @@ interface Renderer {
   /** `profileModeBit` for its React major. */
   profileMode: number;
   /** Why its commits cannot be read (a React outside 17 to 19, a root of another shape), or null. */
-  problem: string | null;
+  problem: Problem | null;
   /** Its first commit has been checked. */
   checked: boolean;
+}
+
+/** The fields of a pointer or key event the ring reads. */
+interface DispatchedInput {
+  readonly isTrusted: boolean;
+  readonly type: string;
+  readonly timeStamp: number;
+  readonly target: EventTarget | null;
+  readonly pointerId?: number;
+  readonly code?: string;
 }
 
 export interface HookOptions {
@@ -39,32 +61,55 @@ export interface HookOptions {
   onSummary: (c: CommitSummary) => void;
 }
 
-let options: HookOptions | null = null;
-/** The hook commits are read from while installed. */
-let attached: DevtoolsHook | null = null;
-let detach: (() => void) | null = null;
-/** The hook this library created. React keeps the hook it registered with for the page's life, so a second install reuses it. */
-let shim: DevtoolsHook | null = null;
-let devtoolsLockedOut = false;
-let mode: Stats['mode'] = 'none';
-let commits: CommitSummary[] = [];
-let walks = 0;
-let walkTotalMs = 0;
-// Renderers per hook object, by the id that hook's inject() returned.
-const registries = new WeakMap<DevtoolsHook, Map<number, Renderer>>();
+interface HookState {
+  options: HookOptions | null;
+  /** The hook commits are read from while installed. */
+  attached: DevtoolsHook | null;
+  /** Puts a chained hook back the way it was. */
+  detach: (() => void) | null;
+  /** The hook this library created. React keeps the hook it registered with for the page's life, so a second install reuses it. */
+  shim: DevtoolsHook | null;
+  devtoolsLockedOut: boolean;
+  mode: Stats['mode'];
+  /** Set with the first reason React's commits stopped being read. */
+  unsupported: UnsupportedReason | null;
+  /** Every commit walked so far, oldest first. */
+  commits: CommitSummary[];
+  walks: number;
+  walkTotalMs: number;
+  /** Renderers per hook object, by the id that hook's inject() returned. */
+  registries: WeakMap<DevtoolsHook, Map<number, Renderer>>;
+  /** The last 8 inputs seen, oldest first. */
+  inputs: InputRecord[];
+}
+
+/** One for the page, whichever copy of the library installed (see session.ts). */
+const state = shared<HookState>('hook', () => ({
+  options: null,
+  attached: null,
+  detach: null,
+  shim: null,
+  devtoolsLockedOut: false,
+  mode: 'none',
+  unsupported: null,
+  commits: [],
+  walks: 0,
+  walkTotalMs: 0,
+  registries: new WeakMap(),
+  inputs: [],
+}));
 
 // The events Event Timing gives an interactionId to. Derived events (input, change, keypress,
 // submit) are dispatched inside one of these, so a commit during them is stamped with the
 // newest ring entry, which is the key or pointer that caused them.
 export const INPUT_TYPES = ['pointerdown', 'pointerup', 'click', 'keydown', 'keyup'];
 const RING_SIZE = 8;
-const inputs: InputRecord[] = [];
 // A press can be held this long and its release still counts as the same gesture.
 const PRESS_WINDOW = 5000;
 
 /** The last 8 inputs seen, oldest first. Live array, do not mutate. */
 export function recentInputs(): InputRecord[] {
-  return inputs;
+  return state.inputs;
 }
 
 /** Capture-phase listener for INPUT_TYPES: keeps the ring current. */
@@ -73,26 +118,28 @@ export function noteInput(e: Event): void {
   record(e);
 }
 
-function record(e: any): InputRecord {
+function record(e: DispatchedInput): InputRecord {
   const isKey = e.type === 'keydown' || e.type === 'keyup';
+  const target = e.target as Node | null;
   const rec: InputRecord = {
     ts: e.timeStamp,
     type: e.type,
     gestureTs: gestureOf(e, isKey),
     press: isKey ? e.code : e.pointerId,
-    target: e.target,
-    fiber: fiberFromNode(e.target),
+    target,
+    fiber: fiberFromNode(target),
   };
-  inputs.push(rec);
-  if (inputs.length > RING_SIZE) inputs.shift();
+  state.inputs.push(rec);
+  if (state.inputs.length > RING_SIZE) state.inputs.shift();
   return rec;
 }
 
 /** The pointerdown or keydown this event releases, by pointerId or key code; the newest press as a fallback. */
-function gestureOf(e: any, isKey: boolean): number {
+function gestureOf(e: DispatchedInput, isKey: boolean): number {
   if (e.type === 'pointerdown' || e.type === 'keydown') return e.timeStamp;
   const want = isKey ? 'keydown' : 'pointerdown';
   const press = isKey ? e.code : e.pointerId;
+  const inputs = state.inputs;
   let fallback = -1;
   for (let i = inputs.length - 1; i >= 0; i--) {
     const r = inputs[i];
@@ -110,7 +157,8 @@ function gestureOf(e: any, isKey: boolean): number {
  * newest input seen.
  */
 function currentInput(): InputRecord | null {
-  const ev: any = typeof window !== 'undefined' ? window.event : undefined;
+  const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
+  const inputs = state.inputs;
   const last = inputs.length ? inputs[inputs.length - 1] : null;
   if (ev && ev.isTrusted && INPUT_TYPES.indexOf(ev.type) >= 0) return last && last.ts === ev.timeStamp ? last : record(ev);
   return last;
@@ -118,29 +166,40 @@ function currentInput(): InputRecord | null {
 
 /** Every commit walked so far, oldest first. Live array. */
 export function recordedCommits(): CommitSummary[] {
-  return commits;
+  return state.commits;
+}
+
+export function clearCommits(): void {
+  state.commits.length = 0;
 }
 
 /** The hook's half of `stats()`. */
-export function hookStats(): Omit<Stats, 'reports' | 'reportTotalMs' | 'installMs'> {
-  if (attached && attached === shim && (window as any)[HOOK_KEY] !== shim) replaced(shim, (window as any)[HOOK_KEY]);
-  return {
-    mode,
-    owner: owner(),
-    renderers: knownRenderers(),
-    devtoolsLockedOut,
-    walks,
-    walkTotalMs,
-    commitsRecorded: commits.length,
-  };
+export function hookStats(): Pick<Stats, 'mode' | 'unsupportedReason' | 'walks' | 'walkTotalMs'> {
+  noticeReplacement();
+  return { mode: state.mode, unsupportedReason: state.unsupported, walks: state.walks, walkTotalMs: state.walkTotalMs };
+}
+
+/** `api.debug.hook()`. */
+export function hookInfo(): HookInfo {
+  noticeReplacement();
+  return { owner: owner(), renderers: knownRenderers(), devtoolsLockedOut: state.devtoolsLockedOut };
 }
 
 /** What each renderer known to the hook in use handed `inject()`. */
 export function knownRenderers(): RendererInfo[] {
-  return attached ? [...registryOf(attached).values()].map((r) => r.info) : [];
+  return state.attached ? [...registryOf(state.attached).values()].map((r) => r.info) : [];
+}
+
+/** The shim's accessor sees an assignment; a tool that redefined or deleted the property is only found by looking. */
+function noticeReplacement(): void {
+  const { attached, shim } = state;
+  if (!attached || attached !== shim) return;
+  const current = (window as unknown as HookHolder)[HOOK_KEY];
+  if (current !== shim) replaced(shim, current);
 }
 
 function owner(): string {
+  const { attached } = state;
   if (!attached) return 'none';
   if (attached.reactInpBlame) return 'react-inp-blame';
   const keys = Object.keys(attached);
@@ -153,59 +212,61 @@ function owner(): string {
  * (React DevTools, Fast Refresh) or, unless told to only chain, creates a minimal one.
  */
 export function installHook(opts: HookOptions): void {
-  options = opts;
-  const w = window as any;
-  const existing: DevtoolsHook | undefined = w[HOOK_KEY];
-  if (existing && existing === shim) {
-    attach(shim, 'shim');
+  state.options = opts;
+  const holder = window as unknown as HookHolder;
+  const existing = holder[HOOK_KEY] as DevtoolsHook | undefined;
+  if (existing && existing === state.shim) {
+    attach(existing, 'shim');
   } else if (existing) {
     if (opts.hook === 'shim') {
       warnOnce('shim-over-hook', "hook: 'shim' found a React DevTools hook already installed and chained onto it instead: replacing it would lock out whatever installed it.");
     }
     attach(existing, 'chained');
   } else if (opts.hook === 'chain') {
-    mode = 'none';
+    state.mode = 'none';
   } else {
-    shim = shim ?? createShim();
-    defineGlobal(w, shim);
+    const shim = (state.shim ??= createShim());
+    defineGlobal(holder, shim);
     attach(shim, 'shim');
   }
 }
 
 /** Stops reading commits and puts a chained hook back the way it was. The shim stays: React still holds it. */
 export function uninstallHook(): void {
-  if (detach) detach();
-  detach = null;
-  attached = null;
-  options = null;
-  mode = 'none';
-  commits = [];
-  walks = 0;
-  walkTotalMs = 0;
+  state.detach?.();
+  state.detach = null;
+  state.attached = null;
+  state.options = null;
+  state.mode = 'none';
+  state.unsupported = null;
+  state.commits = [];
+  state.walks = 0;
+  state.walkTotalMs = 0;
 }
 
 function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
-  attached = hook;
-  mode = as;
-  detach = as === 'chained' ? chain(hook) : null;
+  state.attached = hook;
+  state.mode = as;
+  state.unsupported = null;
+  state.detach = as === 'chained' ? chain(hook) : null;
   for (const renderer of registryOf(hook).values()) admit(renderer);
 }
 
 function registryOf(hook: DevtoolsHook): Map<number, Renderer> {
-  let registry = registries.get(hook);
-  if (!registry) registries.set(hook, (registry = new Map()));
+  let registry = state.registries.get(hook);
+  if (!registry) state.registries.set(hook, (registry = new Map()));
   return registry;
 }
 
 /** Records what a renderer handed `inject()` and whether its commits can be read. */
 function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer {
   const handed = (internals ?? {}) as { version?: unknown; bundleType?: unknown; rendererPackageName?: unknown };
-  const info: RendererInfo = {
+  const info: RendererInfo = Object.freeze({
     id,
     version: typeof handed.version === 'string' ? handed.version : null,
     bundleType: typeof handed.bundleType === 'number' ? handed.bundleType : null,
     rendererPackageName: typeof handed.rendererPackageName === 'string' ? handed.rendererPackageName : null,
-  };
+  });
   const major = info.version ? parseInt(info.version, 10) : NaN;
   const supported = major >= 17 && major <= 19;
   const isReactDom = info.rendererPackageName === 'react-dom';
@@ -213,7 +274,7 @@ function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer 
     info,
     isReactDom,
     profileMode: supported ? profileModeBit(major) : 0,
-    problem: isReactDom && !supported ? `react-dom ${info.version ?? 'without a version'} is outside React 17 to 19` : null,
+    problem: isReactDom && !supported ? { kind: 'react-version', reason: `react-dom ${info.version ?? 'without a version'} is outside React 17 to 19` } : null,
     checked: false,
   };
   registryOf(hook).set(id, renderer);
@@ -225,13 +286,16 @@ function admit(renderer: Renderer): void {
 }
 
 /** A React this library does not know is not guessed at: stop reading commits and say why, once. */
-function failClosed(reason: string): void {
-  mode = 'unsupported';
-  warnOnce('unsupported-react', `${reason}, so React commits are not read. Interactions are still reported, without components.`);
+function failClosed({ kind, reason }: Problem): void {
+  const message = `${reason}, so React commits are not read. Interactions are still reported, without components.`;
+  state.mode = 'unsupported';
+  state.unsupported ??= { kind, message };
+  warnOnce('unsupported-react', message);
 }
 
 function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: number | undefined, didError: boolean | undefined): void {
-  if (!options || hook !== attached || mode === 'unsupported') return;
+  const { options } = state;
+  if (!options || hook !== state.attached || state.mode === 'unsupported') return;
   // A renderer that registered before install() is unknown here, and its commits are not read.
   const renderer = registryOf(hook).get(id);
   if (!renderer || !renderer.isReactDom) return;
@@ -242,12 +306,12 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   // Outside an interaction window this is the whole cost: a lookup and one subtraction.
   if (!input || now - input.ts > options.inputWindow) return;
   const t0 = performance.now();
-  const summary = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true });
-  summary.walkMs = performance.now() - t0;
-  walkTotalMs += summary.walkMs;
-  walks++;
-  if (commits.length >= MAX_COMMITS) commits.shift();
-  commits.push(summary);
+  const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true });
+  const summary: CommitSummary = Object.freeze({ ...walk, walkMs: performance.now() - t0 });
+  state.walkTotalMs += summary.walkMs;
+  state.walks++;
+  if (state.commits.length >= MAX_COMMITS) state.commits.shift();
+  state.commits.push(summary);
   options.onSummary(summary);
 }
 
@@ -255,7 +319,7 @@ function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
   renderer.checked = true;
   const shape = rootShapeProblem(root && root.current);
   if (shape) {
-    renderer.problem = `the fiber tree of react-dom ${renderer.info.version} is not the shape this library reads (${shape})`;
+    renderer.problem = { kind: 'fiber-shape', reason: `the fiber tree of react-dom ${renderer.info.version} is not the shape this library reads (${shape})` };
     failClosed(renderer.problem);
     return;
   }
@@ -271,7 +335,7 @@ function guarded(hook: DevtoolsHook, id: number, root: FiberRoot, priority?: num
   try {
     onCommit(hook, id, root, priority, didError);
   } catch (error) {
-    failClosed(`reading a React commit threw (${String(error)})`);
+    failClosed({ kind: 'walk-threw', reason: `reading a React commit threw (${String(error)})` });
   }
 }
 
@@ -282,7 +346,7 @@ function chain(hook: DevtoolsHook): () => void {
   const inject = function (this: unknown, ...args: Parameters<DevtoolsHook['inject']>): number {
     const id = prevInject.apply(this, args);
     const renderer = register(hook, id, args[0]);
-    if (hook === attached) admit(renderer);
+    if (hook === state.attached) admit(renderer);
     return id;
   };
   const onCommitFiberRoot = function (this: unknown, ...args: Parameters<DevtoolsHook['onCommitFiberRoot']>): void {
@@ -319,7 +383,7 @@ function createShim(): DevtoolsHook {
       // Kept the way React DevTools keeps them, for tools that chain on later (Fast Refresh reads them).
       renderers.set(id, internals);
       const renderer = register(hook, id, internals);
-      if (hook === attached) admit(renderer);
+      if (hook === state.attached) admit(renderer);
       return id;
     },
     onCommitFiberRoot(id, root, priority, didError) {
@@ -336,9 +400,9 @@ function createShim(): DevtoolsHook {
  * never assigns: its installHook returns as soon as `window` has the property, without a read or a
  * write the accessor could see, so a shim that got there first locks it out unnoticed.
  */
-function defineGlobal(w: any, hook: DevtoolsHook): void {
+function defineGlobal(holder: HookHolder, hook: DevtoolsHook): void {
   let current: unknown = hook;
-  Object.defineProperty(w, HOOK_KEY, {
+  Object.defineProperty(holder, HOOK_KEY, {
     configurable: true,
     enumerable: false,
     get: () => current,
@@ -350,10 +414,10 @@ function defineGlobal(w: any, hook: DevtoolsHook): void {
 }
 
 function replaced(hook: DevtoolsHook, next: unknown): void {
-  if (hook !== attached) return;
+  if (hook !== state.attached) return;
   if (registryOf(hook).size) {
     // React holds on to the hook it registered with, so it keeps reporting to the shim.
-    devtoolsLockedOut = true;
+    state.devtoolsLockedOut = true;
     warnOnce('locked-out', "__REACT_DEVTOOLS_GLOBAL_HOOK__ was replaced after React registered with react-inp-blame's hook, so the tool that replaced it will not see this React. Load that tool before react-inp-blame, or install with hook: 'chain'.");
   } else if (next && typeof next === 'object') {
     // Nothing has registered yet, so React will register with the replacement: follow it.

@@ -28,18 +28,22 @@ demo gets it.)
 
     // next.config.ts
     import { withInpBlame } from 'react-inp-blame/next';
-    export default withInpBlame({ /* your config */ });
+    export default withInpBlame({ /* your config */ }, { enabled: true });
 
     // instrumentation-client.ts
     import 'react-inp-blame/auto';
 
 `withInpBlame` adds the loader that keeps component names through the production minifier,
-under Turbopack and under `next build --webpack`. The import installs the hook before
+under Turbopack and under `next build --webpack`. Its `enabled` option picks the runs that get
+it: `'development'` (the default, so a production build gets nothing from the wrapper),
+`'production'`, `true` for both or `false`. The import installs the hook before
 react-dom loads, so the very first interaction is attributed. Read reports with
 `onInteraction(report => ...)` from `react-inp-blame`, or open the Performance panel and
 look for the `react-inp-blame` tracks. Build on `report.explanation.blame` (what, which
 component or handler, how many ms, and whether that was measured or inferred) and the report's
-numbers; `verdict` and the other sentences are display text, reworded in any version.
+numbers; `verdict` and the other sentences are display text, reworded in any version. The API in
+brief, the report contract and the bundle sizes are in the
+[package README](packages/core/README.md).
 
 ## The badge and panel
 
@@ -69,8 +73,9 @@ a promise of its handle. Clicks on the badge itself are not counted.
   same demo pinned to older React.
 - `apps/next-demo` - the Next.js 16 check. `instrumentation-client.ts` calls `install()`
   and runs before react-dom in production (in dev, Fast Refresh's hook stub is already there
-  and the library chains onto it). `next.config.ts` adds one Turbopack rule that runs
-  `react-inp-blame/display-names-loader` on client components, so the production report says
+  and the library chains onto it). `next.config.ts` wraps its config in
+  `withInpBlame(config, { enabled: true })`, which runs `react-inp-blame/display-names-loader` on
+  client components under Turbopack and webpack, so the production report says
   `Sidebar > NavItem` instead of the minifier's `n`. The test asserts that in both builds.
 - `docs/` - design notes.
 

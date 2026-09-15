@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Stats } from 'react-inp-blame';
+import type { HookInfo, Stats } from 'react-inp-blame';
 
 const prod = process.env.INP_MODE === 'prod';
 
@@ -11,17 +11,20 @@ test('instrumentation-client wires the hook early enough to see React commits', 
   await page.goto('/');
   await page.waitForSelector('[data-test=trigger]');
   await page.waitForTimeout(500);
-  const stats: Stats = await page.evaluate(() => (window as any).__REACT_INP__?.stats());
-  console.log(`  [${prod ? 'prod' : 'dev'}] stats after load: ${JSON.stringify(stats)}`);
-  expect(stats, 'library not installed: instrumentation-client did not run').toBeTruthy();
+  const installed: { stats: Stats; hook: HookInfo } | null = await page.evaluate(() => {
+    const api = (window as any).__REACT_INP_BLAME__;
+    return api ? { stats: api.stats(), hook: api.debug.hook() } : null;
+  });
+  console.log(`  [${prod ? 'prod' : 'dev'}] after load: ${JSON.stringify(installed)}`);
+  expect(installed, 'library not installed: instrumentation-client did not run').toBeTruthy();
   // The library records what react-dom hands inject(), on its own hook and through one it chains
   // onto, so react-dom showing up here means install() ran before react-dom registered.
-  expect(stats.renderers.map((r) => r.rendererPackageName), 'react-dom registered before install() ran').toContain('react-dom');
+  expect(installed!.hook.renderers.map((r) => r.rendererPackageName), 'react-dom registered before install() ran').toContain('react-dom');
 
-  await page.evaluate(() => (window as any).__REACT_INP__.clear());
+  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
   await page.type('[data-test=trigger]', 'a');
-  await page.waitForFunction(() => (window as any).__REACT_INP__.last() != null, null, { timeout: 8_000 });
-  const r = await page.evaluate(() => (window as any).__REACT_INP__.last());
+  await page.waitForFunction(() => (window as any).__REACT_INP_BLAME__.last() != null, null, { timeout: 8_000 });
+  const r = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
   console.log(`  [${prod ? 'prod' : 'dev'}] ${r.verdict}`);
   const all = [...r.commits, ...r.followUps];
   expect(all.length, 'no React commit recorded for the interaction').toBeGreaterThanOrEqual(1);

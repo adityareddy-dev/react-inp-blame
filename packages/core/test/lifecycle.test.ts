@@ -32,6 +32,15 @@ function commit(at: number, inputTs: number): CommitSummary {
   };
 }
 
+/** A long animation frame with the click's 110 ms handler in it, frozen the way the observer hands frames over. */
+const slowFrame: FrameSummary = Object.freeze({
+  start: 6990,
+  duration: 140,
+  blocking: 90,
+  forcedLayout: 30,
+  scripts: Object.freeze([Object.freeze({ invoker: 'BUTTON.onclick', name: '', source: '', start: 7002, duration: 110, forcedLayout: 30 })]),
+});
+
 /** A lifecycle at the default 40 ms threshold on a stopped clock, with every report it publishes recorded in order. */
 function lifecycle(options: Partial<LifecycleOptions> = {}) {
   const commits: CommitSummary[] = [];
@@ -42,6 +51,7 @@ function lifecycle(options: Partial<LifecycleOptions> = {}) {
     inputs: () => [],
     frames: null,
     interactionCount: null,
+    labels: () => 'attributes',
     now: () => 0,
     publish: (r) => published.push(r),
     ...options,
@@ -64,12 +74,13 @@ test('a quiet interaction is held back, and published once a render it caused la
   render(later);
   assert.equal(published.length, 1);
   const [r] = published;
+  assert.equal(r.schemaVersion, 1);
   assert.equal(r.duration, 24);
-  assert.deepEqual(r.followUps, [later]);
+  assert.deepEqual(r.followUps, [{ ...later, joinedBy: 'exact' }]);
   assert.deepEqual(life.reports(), [r]);
 });
 
-test('a late entry that changes the headline rebuilds the same report and publishes it', () => {
+test('a late entry publishes the next revision as a new report, and the revision before stays as it was', () => {
   const { life, published } = lifecycle();
   // A press held down: the pointerdown painted on its own, quick enough to stay quiet.
   life.onEntries([entry(7, 'pointerdown', 32)]);
@@ -78,35 +89,46 @@ test('a late entry that changes the headline rebuilds the same report and publis
   // The click came with the paint after the release, and it was slow.
   life.onEntries([entry(7, 'click', 120, { startTime: 7080, processingStart: 7082, processingEnd: 7190 })]);
   assert.equal(published.length, 1);
-  const r = published[0];
-  assert.equal(r.type, 'click');
-  assert.equal(r.duration, 120);
-  assert.equal(r.revision, 1);
+  assert.equal(published[0].type, 'click');
+  assert.equal(published[0].duration, 120);
+  assert.equal(published[0].revision, 1);
 
-  // A published report that takes one more entry is published again as the same object.
   life.onEntries([entry(7, 'pointerup', 16, { startTime: 7079, processingStart: 7080, processingEnd: 7081 })]);
-  assert.equal(published.length, 2);
-  assert.equal(published[1], r);
-  assert.equal(r.entries.length, 3);
-  assert.equal(r.revision, 2);
+  const [before, after] = published;
+  assert.notEqual(after, before);
+  assert.equal(after.revision, 2);
+  assert.equal(after.entries.length, 3);
+  assert.equal(before.revision, 1);
+  assert.equal(before.entries.length, 2);
+  assert.equal(life.last(), after);
 });
 
-test('a long animation frame that lands after the report is folded in, and the report published again', () => {
+test('a long animation frame that lands after the report is published as the next revision', () => {
   const frames: FrameSummary[] = [];
   const { life, published } = lifecycle({ frames });
   life.onEntries([entry(7, 'click', 120)]);
-  const [r] = published;
-  assert.deepEqual(r.frames, []);
-
-  frames.push({ start: 6990, duration: 140, blocking: 90, forcedLayout: 30, scripts: [{ invoker: 'BUTTON.onclick', name: '', source: '', start: 7002, duration: 110, forcedLayout: 30 }] });
+  frames.push(slowFrame);
   life.onFrame();
-  assert.deepEqual(published, [r, r]);
-  assert.equal(r.frames?.length, 1);
-  assert.equal(r.revision, 1);
+  const [before, after] = published;
+  assert.deepEqual(before.frames, []);
+  assert.deepEqual(after.frames, [slowFrame]);
+  assert.equal(after.revision, 1);
 
   // The same frames again change nothing, so nothing is published.
   life.onFrame();
   assert.equal(published.length, 2);
+});
+
+test('every revision is frozen, down to its entries, commits, frames and explanation', () => {
+  const { life, published, render } = lifecycle({ frames: [slowFrame] });
+  life.onEntries([entry(7, 'click', 120)]);
+  render(commit(7300, 7000));
+  const r = published[1];
+  const parts = { report: r, entries: r.entries, entry: r.entries[0], followUps: r.followUps, followUp: r.followUps[0], frames: r.frames, laterFrames: r.laterFrames, explanation: r.explanation, blame: r.explanation.blame, phases: r.explanation.phases, notes: r.explanation.notes };
+  for (const [name, part] of Object.entries(parts)) assert.ok(Object.isFrozen(part), `${name} can be changed`);
+  assert.throws(() => {
+    (r as { duration: number }).duration = 1;
+  }, TypeError);
 });
 
 test("a click on the library's own badge or panel is never reported, though INP counts it as web-vitals does", () => {

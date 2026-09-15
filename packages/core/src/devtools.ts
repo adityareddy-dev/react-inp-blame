@@ -1,4 +1,4 @@
-import type { CommitSummary, InteractionReport, RendererInfo } from './types.ts';
+import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 
 /**
  * Entries the Chrome Performance panel draws as custom tracks (Chrome 128+), in a group beside
@@ -23,6 +23,10 @@ interface TrackConsole {
 // deferred values and updates from effects or timers all arrive at normal priority or lower.
 const BLOCKING_PRIORITIES = [1, 2, 98, 99];
 
+// Interactions whose drawn headline is remembered: more than the lifecycle can still revise (50
+// published, 20 quiet), so a revision of a report is never drawn as if it were new.
+const REMEMBERED_HEADLINES = 100;
+
 const ms = (n: number): string => `${Math.round(n)} ms`;
 
 export interface Timeline {
@@ -34,7 +38,9 @@ export interface Timeline {
 export function createTimeline(renderers: () => RendererInfo[]): Timeline {
   // Found out at the first draw rather than here, because install() creates the timeline before the app has loaded.
   let timeStampTracks: boolean | null = null;
-  const drawnHeadlines = new WeakMap<InteractionReport, string>();
+  // By interactionId, because every revision of a report is a new object.
+  const drawnHeadlines = new Map<number, string>();
+  // A commit is the same object in every revision and report that holds it.
   const drawnCommits = new WeakSet<CommitSummary>();
   return {
     draw(r) {
@@ -43,8 +49,11 @@ export function createTimeline(renderers: () => RendererInfo[]): Timeline {
       const reactDrawsRenders = timeStampTracks && renderers().some(drawsComponentsTrack);
       try {
         const headline = `${r.start} ${r.end} ${r.type}`;
-        if (drawnHeadlines.get(r) !== headline) {
-          drawnHeadlines.set(r, headline);
+        if (drawnHeadlines.get(r.interactionId) !== headline) {
+          // Re-inserted, so the limit forgets the interaction drawn longest ago.
+          drawnHeadlines.delete(r.interactionId);
+          drawnHeadlines.set(r.interactionId, headline);
+          if (drawnHeadlines.size > REMEMBERED_HEADLINES) drawnHeadlines.delete(drawnHeadlines.keys().next().value as number);
           drawInteraction(r, reactDrawsRenders);
         }
         if (reactDrawsRenders) return;

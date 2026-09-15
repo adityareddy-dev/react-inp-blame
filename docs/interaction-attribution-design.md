@@ -112,9 +112,31 @@ each other.
   its entries, not only the walks. Drawing is about half a millisecond of it per report: with
   `devtoolsTrack: false` the library's time outside the walks fell from 1.1 to 0.6 ms p50 on
   both scenarios in production, while the Event Timing callback stayed where it was (1.0 / 1.5
-  and 1.0 / 1.7), because the entries are drawn when the page is idle, not in it.
+  and 1.0 / 1.7), because the entries are drawn when the page is idle, not in it. Reports are
+  frozen since 0.1.0, so drawing, which happens after a report exists, is no longer added to its
+  `overheadMs` and is counted only in `stats().reportTotalMs`; the `overheadMs` rows above still
+  include it.
 
 Outside an interaction the per-commit cost is a renderer lookup and one subtraction.
+
+**Size.** Measured 2026-09-15 on 0.1.0 with the rolldown 1.2.8 in the repo's `node_modules`
+(minified ESM, gzip at zlib's default level), by a throwaway script that is not in the repo:
+
+| Bundle | Minified | Gzip |
+| --- | --- | --- |
+| `react-inp-blame/auto`: everything that loads with the page | 31.8 KB | 12.0 KB |
+| The badge and panel, a chunk loaded by dynamic `import()` only when shown | 11.1 KB | 4.1 KB |
+| Before hydration: `hook`, `fiber`, `observe`, `session` and `warn` alone | 9.3 KB | 4.0 KB |
+
+The badge and panel were already behind the dynamic import and stay there. The explanation prose
+(`join.ts`), the report lifecycle, the INP estimate and the Performance panel drawing still load
+with the entry, which is why it is about three times the part that has to run before hydration.
+The figures in `road-to-acceptance.md` (29 KB minified and 10.6 KB gzipped for `/auto`, badge and
+panel included) predate the passes that added the lifecycle, the INP estimate and the version
+gates, so the two sets do not compare line for line. `withInpBlame` adds its loader to `next dev`
+only unless `enabled` says otherwise, so a production Next build with the default gets no
+`displayName` stamps from it; the runtime is still in any build whose `instrumentation-client.ts`
+imports it.
 
 ## How it works
 
@@ -133,7 +155,7 @@ DevTools" message. `dispose()` puts a chained hook's `inject` and `onCommitFiber
 
 React DevTools never installs over an existing hook: its `installHook` returns as soon as
 `window` has the property, reading and writing nothing. So a shim that loads before it locks
-React DevTools out without a trace, and `stats().devtoolsLockedOut` cannot see that happen. The
+React DevTools out without a trace, and `api.debug.hook().devtoolsLockedOut` cannot see that happen. The
 flag catches only a tool that assigns its own hook later, which the shim notices because it is an
 accessor on `window`: before React has registered, the library follows the new hook; after, React
 keeps reporting to the shim, the flag turns true and one warning says so. The browser extension
@@ -147,6 +169,17 @@ production bundle): React's commits reach the library in every order, `stats().m
 `'chained'` when the tool came first and `'shim'` when it came after, and each tool's own record
 of mounted roots follows the app as it mounts and unmounts, except React DevTools loaded after the
 library, which installed nothing and never hears from React.
+
+**One installation per page.** A page can load the library twice: a package duplicated in
+`node_modules`, or the same module in two chunks. While its state lived in module variables, the
+second copy found the first copy's hook and chained onto it, so every commit was walked twice and
+listeners were split between two installations. Since 0.1.0 the state lives on `globalThis` under
+`Symbol.for('react-inp-blame')`, so the page has one installation whichever copy installs, and a
+call from the other copy returns the same API. A copy whose version lays that state out
+differently installs nothing, warns, and says so in `stats().unsupportedReason` (`kind:
+'another-copy'`) rather than read state it would misunderstand. `packages/core/test/install.test.ts`
+loads two copies of the source from separate directories and checks for one hook wrapper, one
+walk per commit and one set of listeners.
 
 Durations come from `ProfileMode` on the root, which is what makes React fill `actualDuration`:
 bit 8 on React 17, bit 2 on 18 and 19, chosen by the version react-dom hands `inject()`. React
@@ -173,16 +206,18 @@ their times, since a millisecond of rounding moves them by a quarter at most.
 `PerformanceObserver.supportedEntryTypes` and `interactionId` on `PerformanceEventTiming` (Chrome
 96, Firefox 144, Safari 26.2) it installs nothing, returns an API whose `stats().mode` is
 `'unsupported'`, and warns once. What each renderer hands `inject()` (version, bundleType,
-rendererPackageName) is kept in `stats().renderers`, and only `react-dom` commits are walked, so
-a react-three-fiber canvas is never read as a DOM tree. A renderer that registered before
+rendererPackageName) is kept in `api.debug.hook().renderers`, and only `react-dom` commits are
+walked, so a react-three-fiber canvas is never read as a DOM tree. A renderer that registered before
 `install()` is not walked either when the hook kept nothing about it (Fast Refresh's stub keeps
 nothing; React DevTools' hook keeps everything). A react-dom outside React 17 to 19, a
 `root.current` that fails the shape check at its first commit (tag 3, numeric `flags` and
 `mode`, `child`, `sibling`, `return` and `alternate` fibers or null, `actualDuration` a number or
 absent), or a walk that throws turns the walk off for good, with one warning and
-`stats().mode === 'unsupported'`; Event Timing reports carry on without components. A first
-commit with a rendered tree already behind it means `install()` ran after that root rendered,
-and a warning says so once.
+`stats().mode === 'unsupported'`; Event Timing reports carry on without components. Since 0.1.0
+`stats().unsupportedReason` says which of these it was, as data (`kind` is `'browser'`,
+`'react-version'`, `'fiber-shape'` or `'walk-threw'`) beside the warning's sentence; before, the
+reason was only in the console. A first commit with a rendered tree already behind it means
+`install()` ran after that root rendered, and a warning says so once.
 
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
@@ -210,9 +245,14 @@ and stays off the headline (since 2026-09-14; before that the headline was the w
 The target element resolves to its component through the `__reactFiber$` expando, and the
 React handler prop for the event type is looked up on the same chain, so "no React render;
 120ms in the click handler computeChecksum" is possible without a profile. The element's label
-is its aria-label, a form field's placeholder, or its first run of text, at most 40
-characters; its whole `textContent` is never read, because a click can land on a list of 3000
-rows. When the entry's
+is at most 40 characters, and its whole `textContent` is never read, because a click can land on
+a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
+form field's placeholder, name or type, or its data-testid or data-test), and, where text is
+allowed, from the first run of text of an element with no aria-label that is not a form field.
+Text is allowed under a development build of React and wherever `install({ labels: 'text' })`
+asks for it, not by default under a production build: an element's text can be a person's name
+or email (a clicked table cell), and production reports are the ones forwarded to Sentry, Faro
+or an OpenTelemetry collector. Selectors still carry ids and classes. When the entry's
 target is null because the node left the DOM before the observer ran (a close button, a
 deleted row), the input ring below still holds the node and the fiber it carried at
 dispatch, which React deletes from the node on unmount.
@@ -303,14 +343,16 @@ round down in 20 runs.
 
 **Late arrivals.** A profile that renders 500 ms after the click, once the server answers,
 lands long after the report was first emitted. Such renders attach to the existing report
-(same input stamp, no newer input since, within 1.5 s), the explanation is rebuilt, and
-listeners receive the same report again with a bumped `revision`. Long animation frames that
+(same input stamp, no newer input since, within 1.5 s), and listeners receive the next
+revision: a new frozen report with `revision` bumped and its own explanation, the earlier one
+left as it was (before 0.1.0 the same object was changed and handed over again). Long animation
+frames that
 arrive for those later renders fold in the same way. So do late Event Timing entries: an
 interaction's entries arrive with the paint that presented them, the pointerdown in one
 frame and the pointerup and click in a later one when the pointer was held, a keydown before
 its keyup. There is no settle timer any more (a 150 ms one used to split a long press into
-two reports): the report is built from the first batch, rebuilt in place when the rest
-arrive with the revision bumped, and a quiet 30 ms tap that turns out to be a 100 ms click
+two reports): the report is built from the first batch, rebuilt as its next revision when the
+rest arrive, and a quiet 30 ms tap that turns out to be a 100 ms click
 is published at that point. Waiting for an interaction to be "complete" was never possible
 anyway, because entries under the observer's 16 ms floor never arrive at all.
 
@@ -322,6 +364,16 @@ unit-tested one by one; `install()` only wires it to the observers, the DevTools
 **Output.** An `InteractionReport` object, a listener API, and entries the Chrome Performance
 panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's own
 "Scheduler ⚛" and "Components ⚛".
+
+- The report is a contract from 0.1.0. It carries `schemaVersion: 1`, which changes when a field
+  is removed or changes meaning, and it is frozen down to its commits, frames and explanation.
+  Each commit a report holds is a frozen copy stamped with how it joined that report
+  (`joinedBy`), so a commit in two reports no longer carries whichever join came last.
+  `onInteraction` is the one way to hear reports; the `onReport` option is deprecated and only
+  adds a listener there. What is there for debugging (every commit walked, the hook's owner, its
+  renderers and the lockout flag) is under `api.debug`, outside the contract, while `stats()`
+  keeps the mode, why a page is unsupported and the costs. `debugGlobal: true` puts the API on
+  `window.__REACT_INP_BLAME__`.
 
 - Each report is one entry in an "Interaction blame" track (not "Interactions", which is
   Chrome's own track), from the input to the paint, in `warning` like React's event spans, with
@@ -494,7 +546,9 @@ runtime has already installed a hook stub by the time instrumentation-client run
 library chains onto it, and attribution works there too, with durations. No beforeInteractive
 shim is needed. Setup is two lines: `withInpBlame()` around the config in `next.config.ts`
 (`react-inp-blame/next`, adds the displayName loader as a Turbopack rule and as a webpack
-`enforce: 'pre'` rule, merging with whatever rules the app already has) and
+`enforce: 'pre'` rule, merging with whatever rules the app already has; since 0.1.0 only under
+`next dev` unless `enabled` is `'production'` or `true`, which `apps/next-demo` sets because its
+test checks names in production builds) and
 `import 'react-inp-blame/auto'` in `instrumentation-client.ts`. That is the shape Sentry uses
 (`withSentryConfig` + `Sentry.init` in the same file), so it is what Next users expect. Proven
 2026-09-14 in dev, Turbopack production and `next build --webpack` production; before the

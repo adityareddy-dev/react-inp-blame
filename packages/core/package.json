@@ -1,20 +1,64 @@
 {
   "name": "react-inp-blame",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Which React component made this interaction slow. Joins Event Timing + Long Animation Frames to the fiber tree, emits Chrome Performance panel tracks.",
   "license": "MIT",
+  "author": "Aditya Reddy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adityareddy-dev/react-inp-blame.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/adityareddy-dev/react-inp-blame#readme",
+  "bugs": {
+    "url": "https://github.com/adityareddy-dev/react-inp-blame/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./auto": { "types": "./dist/auto.d.ts", "import": "./dist/auto.js" },
-    "./display-names-loader": { "types": "./display-names-loader.d.cts", "default": "./display-names-loader.cjs" },
-    "./next": { "types": "./next.d.cts", "default": "./next.cjs" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-server": "./dist/react-server.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./auto": {
+      "types": "./dist/auto.d.ts",
+      "react-server": "./dist/react-server.js",
+      "import": "./dist/auto.js",
+      "default": "./dist/auto.js"
+    },
+    "./next": {
+      "types": "./next.d.cts",
+      "import": "./next.cjs",
+      "default": "./next.cjs"
+    },
+    "./display-names-loader": {
+      "types": "./display-names-loader.d.cts",
+      "import": "./display-names-loader.cjs",
+      "default": "./display-names-loader.cjs"
+    },
+    "./package.json": "./package.json"
   },
   "sideEffects": ["./dist/auto.js", "./src/auto.ts"],
-  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "README.md"],
-  "scripts": { "build": "tsc -p tsconfig.json", "test:unit": "node --test test/*.test.ts" },
+  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "test:unit": "node --import ./test/ts-imports.ts --test test/*.test.ts"
+  },
   "keywords": ["react", "inp", "web-vitals", "performance", "event-timing", "long-animation-frames", "devtools"],
+  "peerDependencies": {
+    "react": ">=17",
+    "react-dom": ">=17"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "react-dom": { "optional": true }
+  },
   "devDependencies": { "typescript": "^5.6.0" }
 }

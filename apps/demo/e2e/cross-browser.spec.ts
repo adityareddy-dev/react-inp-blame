@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { InteractionReport, Stats } from 'react-inp-blame';
+import type { HookInfo, InteractionReport, Stats } from 'react-inp-blame';
 
 const prod = process.env.INP_MODE === 'prod';
 
@@ -9,14 +9,17 @@ const prod = process.env.INP_MODE === 'prod';
 test('reports name the component in any browser, with frames null where Long Animation Frames are missing', async ({ page, browserName }) => {
   await page.goto('/#context-storm');
   await page.waitForSelector('[data-test=trigger]');
-  const stats: Stats = await page.evaluate(() => (window as any).__REACT_INP__.stats());
+  const { stats, hook }: { stats: Stats; hook: HookInfo } = await page.evaluate(() => {
+    const api = (window as any).__REACT_INP_BLAME__;
+    return { stats: api.stats(), hook: api.debug.hook() };
+  });
   expect(stats.mode).toBe('shim');
-  expect(stats.renderers.map((r) => r.rendererPackageName)).toContain('react-dom');
+  expect(hook.renderers.map((r) => r.rendererPackageName)).toContain('react-dom');
 
-  await page.evaluate(() => (window as any).__REACT_INP__.clear());
+  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
   await page.click('[data-test=trigger]');
-  await page.waitForFunction(() => (window as any).__REACT_INP__.last() != null, null, { timeout: 8_000 });
-  const r: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP__.last());
+  await page.waitForFunction(() => (window as any).__REACT_INP_BLAME__.last() != null, null, { timeout: 8_000 });
+  const r: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
   console.log(`  [${browserName}] ${r.verdict}`);
   expect(r.commits.length).toBeGreaterThanOrEqual(1);
   const c = r.commits[0];
@@ -56,7 +59,7 @@ test('a browser that reports no event entries gets nothing installed', async ({ 
   await page.waitForSelector('[data-test=trigger]');
 
   const installed = await page.evaluate(() => ({
-    mode: (window as any).__REACT_INP__.stats().mode,
+    mode: (window as any).__REACT_INP_BLAME__.stats().mode,
     hook: '__REACT_DEVTOOLS_GLOBAL_HOOK__' in window,
     overlay: document.getElementById('react-inp-blame') != null,
   }));

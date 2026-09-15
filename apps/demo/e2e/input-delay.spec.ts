@@ -14,7 +14,7 @@ test('a click that waits over 150 ms to be handled still gets its later render',
   await page.waitForTimeout(300);
   const box = (await page.locator('[data-test=trigger]').boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.evaluate(() => (window as any).__REACT_INP__.clear());
+  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
 
   const blocking = page.evaluate(
     () =>
@@ -33,8 +33,8 @@ test('a click that waits over 150 ms to be handled still gets its later render',
   await page.mouse.up();
   await blocking;
 
-  await page.waitForFunction(() => ((window as any).__REACT_INP__.last()?.followUps.length ?? 0) > 0, null, { timeout: 8_000 });
-  const click: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP__.last());
+  await page.waitForFunction(() => ((window as any).__REACT_INP_BLAME__.last()?.followUps.length ?? 0) > 0, null, { timeout: 8_000 });
+  const click: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
   console.log(`  ${click.verdict}`);
   console.log(
     `  input delay ${Math.round(click.inputDelay)} ms, commits ${click.commits.map((c) => `${Math.round(c.at - click.start)}ms/${c.rendered}/${c.joinedBy}`).join(' ')}, follow-ups ${click.followUps.map((c) => `${Math.round(c.at - click.start)}ms/${c.rendered}/${c.joinedBy}`).join(' ')}`,

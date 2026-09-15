@@ -60,7 +60,7 @@ async function traceSlowClick(browser: Browser, page: Page, file?: string): Prom
     ],
   });
   await page.click('[data-test=trigger]');
-  await page.waitForFunction(() => (window as any).__REACT_INP__.last() != null);
+  await page.waitForFunction(() => (window as any).__REACT_INP_BLAME__.last() != null);
   // The library draws once the page is idle. An idle callback queued now runs after the one it queued with the report.
   await page.evaluate(() => new Promise<void>((resolve) => requestIdleCallback(() => resolve())));
   const trace = JSON.parse((await browser.stopTracing()).toString('utf8'));

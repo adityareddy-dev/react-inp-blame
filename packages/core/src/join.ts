@@ -1,7 +1,7 @@
-import { fiberFromNode, handlerOf, ownersOf, type Fiber } from './fiber.ts';
-import { rateInp } from './inp.ts';
-import type { InteractionTiming } from './observe.ts';
-import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, InputRecord, InteractionReport, ScriptSummary, TargetInfo } from './types.ts';
+import { fiberFromNode, handlerOf, ownersOf, type Fiber } from './fiber.js';
+import { rateInp } from './inp.js';
+import type { InteractionTiming } from './observe.js';
+import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, InputRecord, InteractionReport, Phase, ScriptSummary, TargetInfo } from './types.js';
 
 export const FOLLOW_UP_WINDOW = 1500;
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
@@ -47,8 +47,8 @@ const PRESENTATION_NOTE_MS = 100;
 const HOLD_NOTE_MS = 100;
 
 // A label names the clicked element; it is not a copy of it. The element can be a list of 3000
-// rows, and reading all of its text would cost more than the rest of the report, so only the
-// aria-label, a form field's placeholder or the first run of text is read, up to 40 characters.
+// rows, and reading all of its text would cost more than the rest of the report, so at most its
+// first run of text is read, and at most 40 characters of any label are kept.
 const LABEL_CHARS = 40;
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
@@ -68,8 +68,14 @@ const FRIENDLY: Record<string, string> = {
   change: 'typing',
 };
 
-/** A report's fields apart from the explanation and verdict, which are built on first read. */
-type ReportData = Omit<InteractionReport, 'explanation' | 'verdict'>;
+/** Where a target's label may come from, once `InstallOptions.labels` is settled for the page's React build. */
+export type LabelSource = 'text' | 'attributes';
+
+/**
+ * A report's fields apart from the explanation and verdict. The functions below take and return
+ * these and never change one; the lifecycle seals each revision into the report it publishes.
+ */
+export type ReportData = Omit<InteractionReport, 'explanation' | 'verdict'>;
 
 interface PaintGroup {
   renderTime: number;
@@ -93,7 +99,7 @@ export const carriesWork = (c: CommitSummary) => (c.hasDurations ? c.total >= RE
 const measuredCommit = (c: CommitSummary) => c.hasDurations && !c.coarseClock && c.joinedBy === 'exact' && !c.truncated;
 
 /** Entries whose paint landed within 8 ms of each other were presented by one frame. */
-function groupByRenderTime(entries: InteractionTiming[]): PaintGroup[] {
+function groupByRenderTime(entries: readonly InteractionTiming[]): PaintGroup[] {
   const groups: PaintGroup[] = [];
   for (const e of entries) {
     const renderTime = e.startTime + e.duration;
@@ -128,27 +134,40 @@ const rank = (name: string) => {
   return i < 0 ? PREFERRED.length : i;
 };
 
-const summarize = (e: InteractionTiming): EventEntrySummary => ({
-  name: e.name,
-  startTime: e.startTime,
-  duration: e.duration,
-  processingStart: e.processingStart,
-  processingEnd: e.processingEnd,
-});
+const summarize = (e: InteractionTiming): EventEntrySummary =>
+  Object.freeze({
+    name: e.name,
+    startTime: e.startTime,
+    duration: e.duration,
+    processingStart: e.processingStart,
+    processingEnd: e.processingEnd,
+  });
 
-const walked = (commits: CommitSummary[]): number => commits.reduce((a, c) => a + c.walkMs, 0);
+const walked = (commits: readonly CommitSummary[]): number => commits.reduce((a, c) => a + c.walkMs, 0);
+
+/** Each commit's copy per way of joining, so every report and revision holding a commit holds the same frozen object. */
+const joinedCopies = new WeakMap<CommitSummary, { exact?: CommitSummary; overlap?: CommitSummary }>();
+
+/** The commit as a report holds it: stamped with how it joined that report. */
+function joined(c: CommitSummary, by: 'exact' | 'overlap'): CommitSummary {
+  let copies = joinedCopies.get(c);
+  if (!copies) joinedCopies.set(c, (copies = {}));
+  return (copies[by] ??= Object.freeze({ ...c, joinedBy: by }));
+}
 
 /**
- * One report from every Event Timing entry seen for an interactionId. The headline is the
+ * One report's data from every Event Timing entry seen for an interactionId. The headline is the
  * longest single entry, which is the number web-vitals reports as INP for the interaction;
  * `inputs` is the ring of recent inputs, used to tell whose commit is whose and to recover
  * the target when the entry's is gone.
  */
-export function buildReport(entries: InteractionTiming[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): InteractionReport {
-  return Object.defineProperties(reportData(entries, commits, frames, inputs), EXPLAINED_ON_READ) as InteractionReport;
-}
-
-function reportData(entries: InteractionTiming[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[]): ReportData {
+export function buildReport(
+  entries: readonly InteractionTiming[],
+  commits: readonly CommitSummary[],
+  frames: readonly FrameSummary[] | null,
+  inputs: readonly InputRecord[] = [],
+  labels: LabelSource = 'attributes',
+): ReportData {
   let longest = entries[0];
   for (const e of entries) if (e.duration > longest.duration) longest = e;
   const group = groupByRenderTime(entries).find((g) => g.entries.includes(longest))!;
@@ -196,48 +215,51 @@ function reportData(entries: InteractionTiming[], commits: CommitSummary[], fram
   const followUps: CommitSummary[] = [];
   for (const c of commits) {
     if (stampMatches(c, stamps)) {
-      c.joinedBy = 'exact';
       // Work before the headline entry's own input (a press held before a click) is not
       // part of what INP measured for it; `holdMs` covers that time.
       if (c.at < start - STAMP_TOLERANCE) continue;
-      if (c.at <= paintBound) inWindow.push(c);
-      else if (c.at - start <= FOLLOW_UP_WINDOW && worthMentioning(c)) followUps.push(c);
+      if (c.at <= paintBound) inWindow.push(joined(c, 'exact'));
+      else if (c.at - start <= FOLLOW_UP_WINDOW && worthMentioning(c)) followUps.push(joined(c, 'exact'));
     } else if (c.at >= processingStart - STAMP_TOLERANCE && c.at <= paintBound && !claimedElsewhere(c, inputs, stamps)) {
       // No stamp matched, but it ran between this interaction's handlers and its paint.
-      c.joinedBy = c.joinedBy || 'overlap';
-      inWindow.push(c);
+      inWindow.push(joined(c, 'overlap'));
     }
   }
   // The walk runs inside React's commit, so the walk of a commit during the handlers sits inside
   // the processing time the browser measured. That time is this library's, not the page's.
   let walkMs = 0;
   for (const c of inWindow) walkMs += Math.max(0, Math.min(c.at + c.walkMs, processingEnd) - Math.max(c.at, processingStart));
-  const overlapping = frames && frames.filter((f) => f.start < end && f.start + f.duration > start);
 
   return {
+    schemaVersion: 1,
     interactionId: longest.interactionId,
     type: sorted[0].name,
     start,
     end,
     duration,
     holdMs,
-    entries: entries.map(summarize),
+    entries: Object.freeze(entries.map(summarize)),
     inputDelay: processingStart - start,
     processing: processingEnd - processingStart - walkMs,
     walkMs,
     presentation: end - processingEnd,
-    target: targetNode ? describeTarget(targetNode, fiber, handler) : null,
-    commits: inWindow,
-    followUps,
-    frames: overlapping,
+    target: targetNode ? describeTarget(targetNode, fiber, handler, labels) : null,
+    commits: Object.freeze(inWindow),
+    followUps: Object.freeze(followUps),
+    frames: frames && Object.freeze(frames.filter((f) => f.start < end && f.start + f.duration > start)),
     laterFrames: frames && framesForLater(followUps, frames),
     revision: 0,
     overheadMs: walked(inWindow) + walked(followUps),
   };
 }
 
-/** Explanations built so far, by report. A report that changes is dropped from here and explained again when next read. */
-const explanations = new WeakMap<ReportData, { explanation: Explanation; verdict: string }>();
+/** The report a revision is published as: frozen, with its explanation and verdict built on first read. */
+export function sealReport(data: ReportData): InteractionReport {
+  return Object.freeze(Object.defineProperties({ ...data }, EXPLAINED_ON_READ)) as InteractionReport;
+}
+
+/** Explanations built so far, by report. Reports are frozen, so each is explained at most once. */
+const explanations = new WeakMap<InteractionReport, { explanation: Explanation; verdict: string }>();
 
 function explained(r: InteractionReport): { explanation: Explanation; verdict: string } {
   let built = explanations.get(r);
@@ -270,73 +292,70 @@ const EXPLAINED_ON_READ: PropertyDescriptorMap = {
 };
 
 /** The commit's stamp names another input the ring knows, one that is not part of this interaction. */
-function claimedElsewhere(c: CommitSummary, inputs: InputRecord[], stamps: number[]): boolean {
+function claimedElsewhere(c: CommitSummary, inputs: readonly InputRecord[], stamps: number[]): boolean {
   return inputs.some((i) => near(i.ts, c.inputTs) && !stamps.some((s) => near(s, i.ts)));
 }
 
 /**
- * More entries arrived for an interaction whose report already exists (the click after a
- * held pointerdown, the keyup after a keydown). Rebuild it in place so listeners keep the
- * same object, and bump the revision.
+ * The next revision of a report more entries arrived for (the click after a held pointerdown, the
+ * keyup after a keydown): rebuilt from every entry so far.
  */
-export function refreshReport(r: InteractionReport, entries: InteractionTiming[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): void {
+export function refreshReport(
+  r: ReportData,
+  entries: readonly InteractionTiming[],
+  commits: readonly CommitSummary[],
+  frames: readonly FrameSummary[] | null,
+  inputs: readonly InputRecord[] = [],
+  labels: LabelSource = 'attributes',
+): ReportData {
   // Time already spent building the report stays counted; the walks are recounted for the commits it now holds.
   const building = r.overheadMs - walked(r.commits) - walked(r.followUps);
-  const fresh = reportData(entries, commits, frames, inputs);
-  Object.assign(r, fresh, { revision: r.revision + 1, overheadMs: fresh.overheadMs + building });
-  explanations.delete(r);
+  const fresh = buildReport(entries, commits, frames, inputs, labels);
+  return { ...fresh, revision: r.revision + 1, overheadMs: fresh.overheadMs + building };
 }
 
-function framesForLater(later: CommitSummary[], frames: FrameSummary[]): FrameSummary[] {
-  return frames.filter((f) => later.some((c) => f.start <= c.at && f.start + f.duration >= c.at - Math.max(c.total, 16)));
+function framesForLater(later: readonly CommitSummary[], frames: readonly FrameSummary[]): readonly FrameSummary[] {
+  return Object.freeze(frames.filter((f) => later.some((c) => f.start <= c.at && f.start + f.duration >= c.at - Math.max(c.total, 16))));
 }
 
-function framesInWindow(r: InteractionReport, frames: FrameSummary[]): FrameSummary[] {
-  return frames.filter((f) => f.start < r.end && f.start + f.duration > r.start);
+function framesInWindow(r: ReportData, frames: readonly FrameSummary[]): readonly FrameSummary[] {
+  return Object.freeze(frames.filter((f) => f.start < r.end && f.start + f.duration > r.start));
 }
 
 /**
- * A long animation frame can arrive after the report was built (there is no settle timer),
- * so its forced layout and scripts were missing from the first explanation. Fold in any that
- * overlap the interaction's window or its later renders, and re-explain if anything changed.
+ * A long animation frame can arrive after the report was built (there is no settle timer), so its
+ * forced layout and scripts were missing from the explanation. The next revision folds in any that
+ * overlap the interaction's window or its later renders; null when they are the frames it has.
  */
-export function refreshFrames(r: InteractionReport, frames: FrameSummary[]): boolean {
+export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): ReportData | null {
   const inWindow = framesInWindow(r, frames);
   const later = framesForLater(r.followUps, frames);
-  if (inWindow.length === r.frames?.length && later.length === r.laterFrames?.length) return false;
-  r.frames = inWindow;
-  r.laterFrames = later;
-  explanations.delete(r);
-  r.revision++;
-  return true;
+  if (inWindow.length === r.frames?.length && later.length === r.laterFrames?.length) return null;
+  return { ...r, frames: inWindow, laterFrames: later, revision: r.revision + 1 };
 }
 
 /** Does this commit belong to the report's input, landing after its paint? */
-export function isLaterRender(r: InteractionReport, c: CommitSummary): boolean {
+export function isLaterRender(r: ReportData, c: CommitSummary): boolean {
   return c.at > r.end && c.at - r.start <= FOLLOW_UP_WINDOW && stampMatches(c, r.entries.map((e) => e.startTime)) && worthMentioning(c);
 }
 
-/** Attach a later render to an already emitted report. Returns false if it was there already. */
-export function attachLaterRender(r: InteractionReport, c: CommitSummary, frames: FrameSummary[] | null): boolean {
-  if (r.followUps.includes(c)) return false;
-  c.joinedBy = 'exact';
-  r.followUps.push(c);
-  r.overheadMs += c.walkMs;
-  r.laterFrames = frames && framesForLater(r.followUps, frames);
-  explanations.delete(r);
-  r.revision++;
-  return true;
+/** The next revision of a report, with a later render attached; null when it holds that render already. */
+export function attachLaterRender(r: ReportData, c: CommitSummary, frames: readonly FrameSummary[] | null): ReportData | null {
+  const commit = joined(c, 'exact');
+  if (r.followUps.includes(commit)) return null;
+  const followUps = Object.freeze([...r.followUps, commit]);
+  return { ...r, followUps, laterFrames: frames && framesForLater(followUps, frames), overheadMs: r.overheadMs + c.walkMs, revision: r.revision + 1 };
 }
 
-function describeTarget(node: Node, fiber: Fiber | null, handler: string | null): TargetInfo {
+function describeTarget(node: Node, fiber: Fiber | null, handler: string | null, labels: LabelSource): TargetInfo {
   const owners = ownersOf(fiber);
-  return {
+  return Object.freeze({
     selector: selector(node),
-    label: labelOf(node),
+    label: labelOf(node, labels),
     component: owners[0] || null,
-    owners,
+    owners: Object.freeze(owners),
     handler,
-  };
+  });
 }
 
 function elementOf(node: Node): Element | null {
@@ -354,14 +373,25 @@ function selector(node: Node): string | null {
   return s;
 }
 
-function labelOf(node: Node): string | null {
+/**
+ * 'button "Add to cart"': the element's kind and what names it. The name comes from what the page's
+ * code wrote on the element: its aria-label, a form field's placeholder, name or type, or its
+ * data-testid or data-test. Where `labels` is 'text', an element with no aria-label that is not a
+ * form field is named by its first run of text before those data attributes are tried.
+ */
+function labelOf(node: Node, labels: LabelSource): string | null {
   const el = elementOf(node);
   if (!el) return null;
   const tag = el.tagName.toLowerCase();
   const word = tag === 'a' ? 'link' : tag;
   const field = tag === 'input' || tag === 'textarea' || tag === 'select';
-  const text = el.getAttribute('aria-label') || (field ? el.getAttribute('placeholder') || el.getAttribute('name') || el.getAttribute('type') : firstText(el));
-  const label = text ? clip(text) : '';
+  const written = (name: string) => el.getAttribute(name);
+  const name =
+    written('aria-label') ||
+    (field ? written('placeholder') || written('name') || written('type') : labels === 'text' ? firstText(el) : null) ||
+    written('data-testid') ||
+    written('data-test');
+  const label = name ? clip(name) : '';
   return label ? `${word} "${label}"` : word;
 }
 
@@ -404,7 +434,7 @@ function handlerPhrase(name: string, kind: string): string {
   return /^on[A-Z]/.test(name) ? `the ${name} handler` : `the ${kind} handler ${name}`;
 }
 
-export function heaviest(list: CommitSummary[]): CommitSummary {
+export function heaviest(list: readonly CommitSummary[]): CommitSummary {
   return list.reduce((a, b) => (score(b) > score(a) ? b : a));
 }
 
@@ -438,7 +468,7 @@ function renderPhrase(c: CommitSummary): string {
 }
 
 /** Longest script in frames overlapping [from, to], if it is long enough to matter. */
-function longestScript(frames: FrameSummary[], from: number, to: number): ScriptSummary | null {
+function longestScript(frames: readonly FrameSummary[], from: number, to: number): ScriptSummary | null {
   let best: ScriptSummary | null = null;
   for (const f of frames) {
     for (const s of f.scripts) {
@@ -449,6 +479,7 @@ function longestScript(frames: FrameSummary[], from: number, to: number): Script
   return best && best.duration >= SCRIPT_MIN_MS ? best : null;
 }
 
+/** The report in plain words. Frozen, like the report it explains. */
 export function explain(r: InteractionReport): Explanation {
   const rating = rateInp(r.duration);
   const kind = kindOf(r.type);
@@ -546,12 +577,20 @@ export function explain(r: InteractionReport): Explanation {
     notes.push(`The ${ms(r.duration)} includes ${ms(r.walkMs)} that react-inp-blame itself spent reading what React rendered; it is not counted as working time.`);
   }
 
-  const phases = [
+  const phases: Phase[] = [
     { label: 'Waiting', ms: r.inputDelay, hint: 'Before the handler could start. The main thread was busy.' },
     { label: 'Working', ms: r.processing, hint: 'Event handlers and React rendering.' },
     { label: 'Updating the screen', ms: r.presentation, hint: 'From the end of the handlers to the next painted frame.' },
   ];
-  return { headline, blame, rating, where, cause, notes, phases };
+  return Object.freeze({
+    headline,
+    blame: Object.freeze(blame),
+    rating,
+    where,
+    cause,
+    notes: Object.freeze(notes),
+    phases: Object.freeze(phases.map((p) => Object.freeze(p))),
+  });
 }
 
 export function toVerdict(x: Explanation): string {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildReport } from '../src/join.ts';
+import { buildReport, sealReport } from '../src/join.ts';
 import { observeEventTiming } from '../src/observe.ts';
 import type { CommitSummary } from '../src/types.ts';
 
@@ -79,9 +79,9 @@ test('a first click that paints under the 16 ms floor still gets its later rende
   // The click's own commit, then the render its effect set off 100 ms later, both stamped with the click.
   const own = commit(1003, 1, 0.5, [{ name: 'CascadingEffect', count: 1, self: 0.5, total: 0.5 }]);
   const later = commit(1100, 401, 82, [{ name: 'Detail', count: 400, self: 81, total: 0.3 }]);
-  const r = buildReport(entries, [own, later], []);
-  assert.deepEqual(r.commits, [own]);
-  assert.deepEqual(r.followUps, [later]);
+  const r = sealReport(buildReport(entries, [own, later], []));
+  assert.deepEqual(r.commits, [{ ...own, joinedBy: 'exact' }]);
+  assert.deepEqual(r.followUps, [{ ...later, joinedBy: 'exact' }]);
   assert.match(r.verdict, /A second React render landed 92 ms after the screen updated: 82 ms re-rendering 401 components inside CascadingEffect, mostly Detail/);
 });
 

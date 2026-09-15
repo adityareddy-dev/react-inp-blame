@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createTimeline } from '../src/devtools.ts';
-import { attachLaterRender, buildReport } from '../src/join.ts';
+import { attachLaterRender, buildReport, sealReport } from '../src/join.ts';
 import type { CommitSummary, RendererInfo } from '../src/types.ts';
 
 const CHROME_147 = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
@@ -61,6 +61,9 @@ const reactDom = (version: string, bundleType: number): RendererInfo => ({ id: 1
 // A 200 ms click whose handlers ran from 2 to 180 ms.
 const click = { name: 'click', interactionId: 7, startTime: 0, duration: 200, processingStart: 2, processingEnd: 180, target: null };
 
+/** The click's report, as published, with these commits joined to it. */
+const report = (commits: CommitSummary[]) => sealReport(buildReport([click], commits, null));
+
 /** The context storm's commit, stamped with the click, without durations. */
 function commit(at: number, opts: Partial<CommitSummary> = {}): CommitSummary {
   return {
@@ -85,7 +88,7 @@ function commit(at: number, opts: Partial<CommitSummary> = {}): CommitSummary {
 }
 
 test("beside a development build of React 19.2 or later only the interaction is drawn, because React draws every render itself", () => {
-  const r = buildReport([click], [commit(150, { priority: 1 })], null);
+  const r = report([commit(150, { priority: 1 })]);
   const { drawn, left } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 1)]).draw(r));
   assert.deepEqual(
     drawn.map(({ via, label, track, group, color }) => ({ via, label, track, group, color })),
@@ -96,7 +99,7 @@ test("beside a development build of React 19.2 or later only the interaction is 
 });
 
 test('development builds before React 19.2 draw no Components track, so the renders are drawn beside them', () => {
-  const r = buildReport([click], [commit(150, { priority: 1 })], null);
+  const r = report([commit(150, { priority: 1 })]);
   const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(r));
   assert.deepEqual(
     drawn.map((d) => `${d.via} ${d.track}`),
@@ -107,10 +110,9 @@ test('development builds before React 19.2 draw no Components track, so the rend
 test("in production and profiling builds the renders go to console.timeStamp in Chrome 134+, in React's colours", () => {
   const renderers = [reactDom('19.3.0', 0)];
   // A profiling build passes the priority: the click's blocking render, a transition it started, a render that threw.
-  const profiled = buildReport([click], [commit(150, { priority: 1 }), commit(160, { priority: 3 }), commit(170, { priority: 1, didError: true })], null);
-  // A production build passes none, so the paint decides: the click's own render, then a later one.
-  const production = buildReport([click], [commit(150)], null);
-  attachLaterRender(production, commit(400), null);
+  const profiled = report([commit(150, { priority: 1 }), commit(160, { priority: 3 }), commit(170, { priority: 1, didError: true })]);
+  // A production build passes none, so the paint decides: another click's own render, then a later one.
+  const production = sealReport(attachLaterRender(buildReport([{ ...click, interactionId: 14 }], [commit(150)], null), commit(400), null)!);
 
   const { drawn, left } = recording(CHROME_147, () => {
     const timeline = createTimeline(() => renderers);
@@ -134,7 +136,7 @@ test("in production and profiling builds the renders go to console.timeStamp in 
 
 test('before Chrome 134, and in other browsers, every entry is a performance.measure, taken out of the buffer once drawn', () => {
   for (const userAgent of [CHROME_133, FIREFOX]) {
-    const r = buildReport([click], [commit(150, { priority: 1 })], null);
+    const r = report([commit(150, { priority: 1 })]);
     // Even beside React 19.3 in development: its Components track needs the console.timeStamp these browsers lack.
     const { drawn, left } = recording(userAgent, () => createTimeline(() => [reactDom('19.3.0', 1)]).draw(r));
     assert.deepEqual(
@@ -146,14 +148,14 @@ test('before Chrome 134, and in other browsers, every entry is a performance.mea
   }
 });
 
-test('drawing a report again adds only what is new about it', () => {
-  const r = buildReport([click], [commit(150)], null);
+test('drawing a report again, or its next revision, adds only what is new about it', () => {
+  const data = buildReport([click], [commit(150)], null);
+  const first = sealReport(data);
   const { drawn } = recording(CHROME_147, () => {
     const timeline = createTimeline(() => [reactDom('19.3.0', 0)]);
-    timeline.draw(r);
-    timeline.draw(r);
-    attachLaterRender(r, commit(400), null);
-    timeline.draw(r);
+    timeline.draw(first);
+    timeline.draw(first);
+    timeline.draw(sealReport(attachLaterRender(data, commit(400), null)!));
   });
   assert.deepEqual(
     drawn.map((d) => d.label),
