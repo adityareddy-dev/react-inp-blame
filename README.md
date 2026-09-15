@@ -16,10 +16,10 @@ them. This does.
 ## Where it's headed
 
 The goal is for this to ship as part of Next.js, so any Next app gets component-level INP
-attribution with nothing extra to install. Three things have to exist before that's a fair
-ask: a displayName transform that survives Next's SWC minifier, a `next` entry that wires
-`instrumentation-client.ts` for you, and a `useReportWebVitals` adapter so INP reports carry
-component names. Nothing has been proposed to the Next.js team yet.
+attribution with nothing extra to install. Two things still have to exist before that's a
+fair ask: a `next` entry that wires `instrumentation-client.ts` and the names loader for you,
+and a `useReportWebVitals` adapter so INP reports carry component names. Nothing has been
+proposed to the Next.js team yet.
 
 ## Layout
 
@@ -33,9 +33,11 @@ component names. Nothing has been proposed to the Next.js team yet.
   the fix" note. Playwright tests assert the tool blames the right thing in both.
   `scripts/react-matrix.mjs` generates `apps/demo-react18` and `apps/demo-react17`, the
   same demo pinned to older React.
-- `apps/next-demo` - answers one question: does `instrumentation-client.ts` run before
-  react-dom registers with the DevTools hook? (Yes in production; in dev Fast Refresh's hook
-  stub is already there and the library chains onto it.)
+- `apps/next-demo` - the Next.js 16 check. `instrumentation-client.ts` calls `install()`
+  and runs before react-dom in production (in dev, Fast Refresh's hook stub is already there
+  and the library chains onto it). `next.config.ts` adds one Turbopack rule that runs
+  `react-inp-blame/display-names-loader` on client components, so the production report says
+  `Sidebar > NavItem` instead of the minifier's `n`. The test asserts that in both builds.
 - `docs/` - design notes.
 
 Quick start:

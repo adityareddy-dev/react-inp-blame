@@ -138,10 +138,18 @@ What works with a plain production React build, no profiling build, no DevTools:
 What needs help:
 
 - **Names.** Minifiers rename functions. Vite 8 minifies with Oxc and ignores esbuild's
-  `keepNames`. The demo ships a 20-line Vite plugin that appends
-  `Foo.displayName = "Foo"` to every component; string literals survive any minifier and
-  React DevTools honours the same property. The same transform as a Babel or SWC plugin is
-  the Next.js answer. Handler names are a different problem: LoAF's `sourceFunctionName`
+  `keepNames`. The fix is to append `Foo.displayName = "Foo"` to every component file:
+  string literals survive any minifier and React DevTools honours the same property. It
+  ships as `react-inp-blame/display-names-loader`, a webpack-style loader that only needs
+  the source string, so it runs under Turbopack (`turbopack.rules`, the Next 16 default,
+  where a `webpack()` hook never runs) and under webpack (`module.rules`). The Vite plugin
+  in the demo is a thin wrapper around the same function. Proven on Next 16.3.5 in
+  production, 2026-09-14. Cost is about 30 bytes per component; the alternatives are worse:
+  `next build --no-mangling` keeps every name (+9.6% gzip on react-dom alone), and an SWC
+  plugin has to be rebuilt against each Next release's swc_core. The regex handles
+  top-level `function Foo(`, `export default function Foo(` and `const Foo = memo(` or
+  `forwardRef(`; anything else needs a real parser. Handler names are a different problem:
+  LoAF's `sourceFunctionName`
   plus `sourceURL` and character position can be resolved through source maps offline, which
   is a RUM-side feature, not a browser-side one.
 - **Durations.** Only `react-dom/profiling` records them. Counts and the hot path are
@@ -173,9 +181,9 @@ this labels the interaction.
 one React registers with, and the first keystroke is attributed. In dev, React Fast Refresh's
 runtime has already installed a hook stub by the time instrumentation-client runs, so the
 library chains onto it, and attribution works there too, with durations. No beforeInteractive
-shim is needed. What Next still lacks is the displayName transform: its SWC minifier renames
-components in production, so the verdict reads "602 components re-rendered under n" until the
-transform exists as an SWC or Babel plugin. A `useReportWebVitals` adapter would attach the
+shim is needed. Production names come from the displayName loader above, one rule in
+`next.config.ts`; before it the verdict read "602 components re-rendered under n". A
+`useReportWebVitals` adapter would attach the
 report to web-vitals' INP attribution object so Vercel Speed Insights, or anything else
 consuming it, gets component names for free. The aim is inclusion in Next.js itself rather
 than a plugin people have to find; those three pieces are what make that a reasonable ask.
@@ -196,15 +204,16 @@ None of the following has been done, and nothing here should be described as if 
 - no issue, PR or RFC opened with Chrome DevTools, React, Next.js, Vercel, OpenTelemetry or any RUM vendor
 - no human look at the Performance panel tracks yet (the trace file exists, the panel has not been opened on it)
 - no run against a real application, only the synthetic demo
-- no displayName transform for Next.js, so production names in Next are minified
 
 ## Next steps, in order
 
-1. Open `apps/demo/traces/context-storm-dev.json` in the Performance panel and check the
-   two tracks read well; adjust names, colours and tooltip text.
-2. The displayName transform for Next (SWC plugin, or Babel as the fallback) and a `next`
-   package that wires instrumentation-client for you.
+1. A `next` entry that wires instrumentation-client and the loader rule in one line.
+2. An on-page overlay: a corner badge with the page's INP, and a panel that lists each slow
+   interaction, the component to blame and a waiting / working / painting bar. Same look in
+   the Vite demo and in Next.
 3. The production-mode overhead measurement on a real tree of several thousand fibers.
-4. Package split: `core`, `vite-plugin`, `next`, and an OpenTelemetry exporter.
-5. Then, and only then, the first outside conversation: one issue on
+4. Open `apps/demo/traces/context-storm-dev.json` in the Performance panel and check the
+   two tracks read well; adjust names, colours and tooltip text.
+5. Package split: `core`, `vite-plugin`, `next`, and an OpenTelemetry exporter.
+6. Then, and only then, the first outside conversation: one issue on
    `open-telemetry/opentelemetry-js-contrib` proposing interaction-attribution attributes.

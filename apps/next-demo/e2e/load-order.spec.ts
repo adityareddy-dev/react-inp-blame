@@ -29,12 +29,10 @@ test('instrumentation-client wires the hook early enough to see React commits', 
   expect(all.length, 'no React commit recorded for the interaction').toBeGreaterThanOrEqual(1);
   const c = all[0];
   expect(c.rendered).toBeGreaterThanOrEqual(600);
-  if (prod) {
-    // Next's SWC minifier renames components; the displayName transform is not wired in here yet.
-    console.log(`  [prod] names as seen: hot path ${c.hotPath.join(' > ')}, top ${c.components[0].name}`);
-  } else {
-    expect(c.hasDurations).toBe(true);
-    expect(c.hotPath.join(' > ')).toContain('Sidebar');
-    expect(c.components[0].name).toBe('NavItem');
-  }
+  console.log(`  [${prod ? 'prod' : 'dev'}] hot path ${c.hotPath.join(' > ')}, top ${c.components[0].name}`);
+  // Names must survive the production minifier: the displayName loader in next.config.ts
+  // stamps them as string literals. Without it the prod report reads "n".
+  expect(c.hotPath.join(' > ')).toContain('Sidebar');
+  expect(c.components[0].name).toBe('NavItem');
+  if (!prod) expect(c.hasDurations).toBe(true);
 });
