@@ -1,5 +1,5 @@
 import { handlerName, ownerChain } from './fiber';
-import type { CommitSummary, Explanation, FrameSummary, InteractionReport, TargetInfo } from './types';
+import type { Blame, CommitSummary, Explanation, FrameSummary, InteractionReport, TargetInfo } from './types';
 
 export const FOLLOW_UP_WINDOW = 1500;
 // A later render has to be worth a sentence. Tiny ones (a status pill, a panel updating)
@@ -170,9 +170,21 @@ function score(c: CommitSummary): number {
   return c.hasDurations ? c.total : c.rendered;
 }
 
+function leafOf(c: CommitSummary): string {
+  return c.hotPath[c.hotPath.length - 1] || c.roots[0] || 'the app';
+}
+
+/** "LineItem ×800", or the component count when no single component dominates. */
+function mostlyOf(c: CommitSummary): string | null {
+  if (c.rendered === 1) return null;
+  const top = c.components[0];
+  if (top && top.count > 1) return `${top.name} \u00d7${top.count}`;
+  return plural(c.rendered, 'component');
+}
+
 /** "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)" */
 function renderPhrase(c: CommitSummary): string {
-  const leaf = c.hotPath[c.hotPath.length - 1] || c.roots[0] || 'the app';
+  const leaf = leafOf(c);
   const top = c.components[0];
   if (c.rendered === 1) return `re-rendering ${leaf}`;
   let mostly = '';
@@ -220,31 +232,47 @@ export function explain(r: InteractionReport): Explanation {
   // itself, or other scripts in the same task.
   const outside = Math.max(0, r.processing - renderTotal - forced);
   const outsideMatters = hasDurations && outside >= 25 && outside >= 0.25 * r.processing;
-  const renderMatters = !!c && (hasDurations ? renderTotal >= 5 : c.rendered >= 10);
+  // Without durations (production builds) a render only earns the blame when it is big; a
+  // click that re-rendered 10 components and took 260 ms was slow in its handler.
+  const renderMatters = !!c && (hasDurations ? renderTotal >= 5 : c.rendered >= (r.target?.handler ? 50 : 10));
   const processingEnd = r.start + r.inputDelay + r.processing;
   // A change handler runs on the input event, after the key event was processed, so its
   // cost shows up between the handlers and the paint. Look for it there.
   const lateScript = longestScript(r.frames, processingEnd - 5, r.end);
   const anyScript = longestScript(r.frames, r.start, r.end);
 
+  // The sentence and the data version of it are decided together, so a UI that shows the
+  // short form never disagrees with the long one.
   let cause: string;
+  let blame: Blame;
+  const handlerName = r.target?.handler ?? null;
+  const component = r.target?.component ?? null;
   if (c && outsideMatters && outside > renderTotal) {
     const rest = renderTotal >= 10 ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render was only ${ms(renderTotal)}`;
     cause = `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.`;
+    blame = { kind: 'handler', name: handlerName, detail: component, ms: outside };
   } else if (c && renderMatters) {
     cause = hasDurations ? `React spent ${ms(c.total)} ${renderPhrase(c)}.` : `React was ${renderPhrase(c)}.`;
     if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
+    blame = { kind: 'render', name: leafOf(c), detail: mostlyOf(c), ms: hasDurations ? c.total : null };
+  } else if (c && !hasDurations && handlerName && r.processing >= 50 && r.processing >= r.inputDelay && r.processing >= r.presentation) {
+    cause = `The ${kind} handler ${handlerName} most likely took the ${ms(r.processing)}: React re-rendered only ${plural(c.rendered, 'component')}. A profiling build of React would give exact numbers.`;
+    blame = { kind: 'handler', name: handlerName, detail: component, ms: null };
   } else if (r.inputDelay > 50 && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
     cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
+    blame = { kind: 'waiting', name: null, detail: null, ms: r.inputDelay };
   } else if (r.presentation > 50 && r.presentation > r.processing) {
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update` + (lateScript ? `, mostly because ${scriptName(lateScript)} ran for ${ms(lateScript.duration)} before the next frame.` : '.');
+    blame = { kind: 'painting', name: lateScript ? handlerName || lateScript.invoker || lateScript.name || null : null, detail: null, ms: r.presentation };
   } else if (anyScript) {
     const small = c ? `React's render was small (${renderPhrase(c)})` : `React didn't render anything`;
     cause = `${small}; ${scriptName(anyScript)} ran for ${ms(anyScript.duration)}.`;
+    blame = { kind: 'script', name: handlerName || anyScript.invoker || anyScript.name || null, detail: component, ms: anyScript.duration };
   } else {
     cause = c
       ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
       : `React didn't render anything and no long task was recorded, so the time went to waiting and painting.`;
+    blame = { kind: 'none', name: null, detail: null, ms: null };
   }
 
   if (c) {
@@ -273,7 +301,7 @@ export function explain(r: InteractionReport): Explanation {
     { label: 'Working', ms: r.processing, hint: 'Event handlers and React rendering.' },
     { label: 'Updating the screen', ms: r.presentation, hint: 'From the end of the handlers to the next painted frame.' },
   ];
-  return { headline, rating, where, cause, notes, phases };
+  return { headline, blame, rating, where, cause, notes, phases };
 }
 
 export function toVerdict(x: Explanation): string {

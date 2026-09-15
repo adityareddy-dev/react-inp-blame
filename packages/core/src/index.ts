@@ -2,10 +2,12 @@ import { emitRender, emitTrack } from './devtools';
 import { hookOwner, hookState, installHook, noteInput } from './hook';
 import { attachLaterRender, buildReport, isLaterRender, refreshLaterFrames } from './join';
 import { observeEventTiming, observeFrames } from './observe';
-import type { CommitSummary, FrameSummary, InstallOptions, InteractionReport } from './types';
+import { createOverlay, overlayRequested, OVERLAY_ID, type OverlayHandle } from './overlay';
+import type { CommitSummary, FrameSummary, InstallOptions, InteractionReport, OverlayOptions } from './types';
 
 export type * from './types';
 export { fiberFromNode, ownerChain, handlerName } from './fiber';
+export type { OverlayHandle } from './overlay';
 
 export interface Api {
   reports(): InteractionReport[];
@@ -23,6 +25,7 @@ const reports: InteractionReport[] = [];
 const quiet: InteractionReport[] = [];
 const listeners = new Set<(r: InteractionReport) => void>();
 let installed: Api | null = null;
+let overlay: OverlayHandle | null = null;
 const INPUT_TYPES = ['pointerdown', 'pointerup', 'click', 'keydown', 'keyup', 'input'];
 const FOLLOW_UP_WINDOW_MS = 1500;
 
@@ -87,6 +90,8 @@ export function install(opts: InstallOptions = {}): Api {
   // are not lost; everything else under the threshold stays quiet.
   const stopEvents = observeEventTiming(16, (entries) => {
     const r = buildReport(entries, hookState().commits, frames);
+    // Clicks on our own badge and panel are not the app's interactions.
+    if (r.target?.selector?.includes('#' + OVERLAY_ID)) return;
     if (r.duration < threshold && !r.followUps.length) {
       quiet.push(r);
       if (quiet.length > 20) quiet.shift();
@@ -121,6 +126,8 @@ export function install(opts: InstallOptions = {}): Api {
       stopFrames();
       stopEvents();
       for (const t of INPUT_TYPES) window.removeEventListener(t, noteInput, { capture: true } as any);
+      if (overlay) overlay.dispose();
+      overlay = null;
       installed = null;
     },
   };
@@ -138,7 +145,22 @@ export function install(opts: InstallOptions = {}): Api {
     }
   }, 3000);
   installed = api;
+  const ov = opts.overlay;
+  if (ov === true || (ov === 'query' && overlayRequested()) || (ov && typeof ov === 'object')) {
+    overlay = createOverlay(api, typeof ov === 'object' ? ov : {});
+  }
   return api;
+}
+
+/**
+ * Show the badge and panel for an already installed library (for example after
+ * `import 'react-inp-blame/auto'`). Installs with defaults if nothing has yet.
+ */
+export function mountOverlay(opts: OverlayOptions = {}): OverlayHandle | null {
+  if (typeof window === 'undefined') return null;
+  const api = installed ?? install();
+  if (!overlay) overlay = createOverlay(api, opts);
+  return overlay;
 }
 
 export function onInteraction(fn: (r: InteractionReport) => void): () => void {

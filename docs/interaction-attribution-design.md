@@ -113,6 +113,25 @@ the `devtools` detail that the Chrome Performance panel (128+) renders as custom
 Chrome shows the same measures in the Timings track. Not yet verified visually in a real
 profile, only that the measures are emitted without throwing.
 
+**The badge and panel** (`overlay: true`, or `'query'` for production pages, 2026-09-14).
+A corner badge with the page's INP so far, coloured by the INP thresholds, and a panel that
+lists interactions newest first: title ("Click on Log in"), duration, one blame line, and the
+waiting / working / updating bar. Consecutive key presses in one field collapse into a row
+that shows the slowest and the typical. A row opens into the cause sentence, the notes, and
+the components that rendered before and after the paint. It is plain DOM in a shadow root
+(no React, so it renders while React is busy and never adds a commit), about 3 ms of work per
+report, and the page's own clicks on it are dropped before they become reports. The blame
+line comes from `explanation.blame`, a data twin of the cause sentence decided in the same
+branch, so the short and the long form never disagree. Page INP is the worst interaction, or
+the 98th percentile once there are 50 or more, the way web-vitals estimates it.
+
+**Production builds and small renders.** Without durations, a 10-component render can win
+the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
+is large (50 components when a handler is named, 10 otherwise), and a named handler with a
+small render is blamed as "most likely", with the note that a profiling build would give exact
+numbers. LoAF cannot separate the two: the handler and React's sync render run inside the
+same script entry.
+
 ## The demo
 
 Two demos in one Vite app. The default page is a sign-in flow, an Instagram-style layout

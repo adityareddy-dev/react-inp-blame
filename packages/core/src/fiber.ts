@@ -87,7 +87,11 @@ export function handlerName(node: any, eventType: string): string | null {
     if (p) {
       for (const key of props) {
         const fn = p[key];
-        if (typeof fn === 'function') return fn.displayName || fn.name || '(anonymous)';
+        if (typeof fn === 'function') {
+          const name = fn.displayName || fn.name || '';
+          // A minified name ("l") says nothing; the prop name at least says which handler.
+          return name.length > 2 ? name : key;
+        }
       }
     }
     f = f.return;

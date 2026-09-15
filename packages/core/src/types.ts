@@ -66,10 +66,24 @@ export interface Phase {
   hint: string;
 }
 
+/** Who is to blame, as data: the same call the cause sentence makes, for UIs to render short. */
+export interface Blame {
+  /** Where the time mostly went. */
+  kind: 'render' | 'handler' | 'waiting' | 'painting' | 'script' | 'none';
+  /** The subtree that re-rendered, the handler that ran, or the script; null when unknown. */
+  name: string | null;
+  /** For a render, what it was mostly made of ("LineItem ×800"); for a handler, its component. */
+  detail: string | null;
+  /** How much of the interaction it accounts for, in ms; null when the build records no durations. */
+  ms: number | null;
+}
+
 /** The report in plain words, for people and for UIs. */
 export interface Explanation {
   /** e.g. "216 ms click" */
   headline: string;
+  /** The cause as data, for a one-line UI. */
+  blame: Blame;
   /** INP thresholds: good up to 200 ms, needs work up to 500 ms, poor beyond. */
   rating: 'good' | 'needs-work' | 'poor';
   /** e.g. 'button "Add to cart" in ContextStorm' */
@@ -108,7 +122,22 @@ export interface InteractionReport {
   overheadMs: number;
 }
 
+export interface OverlayOptions {
+  /** Which corner the badge sits in. Default 'bottom-right'. */
+  position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+  /** Start with the panel open. Default false. */
+  open?: boolean;
+  /** How many interactions the panel keeps, newest first. Default 20. */
+  max?: number;
+}
+
 export interface InstallOptions {
+  /**
+   * Show the on-page badge and panel. `true` always; `'query'` only when the URL carries
+   * `?inp-blame` / `#inp-blame` or localStorage has `react-inp-blame=overlay`, which is how you
+   * open it on a production page without shipping UI to users. Default false.
+   */
+  overlay?: boolean | 'query' | OverlayOptions;
   /** Report interactions at or above this duration (ms), plus shorter ones that trigger a later render. Default 40. */
   threshold?: number;
   /** Emit User Timing measures that the Chrome Performance panel renders as custom tracks. Default true. */

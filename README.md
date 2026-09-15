@@ -39,6 +39,19 @@ react-dom loads, so the very first interaction is attributed. Read reports with
 `onInteraction(report => ...)` from `react-inp-blame`, or open the Performance panel and
 look for the `react-inp-blame` tracks.
 
+## The badge and panel
+
+    // instrumentation-client.ts, instead of the /auto import
+    import { install } from 'react-inp-blame';
+    install({ overlay: true });          // or 'query': only with ?inp-blame in the URL
+
+A small badge in a corner shows the page's INP so far, green, amber or red. Click it for a
+panel that lists each slow interaction with the component (or handler) to blame and a bar
+split into waiting, working and updating the screen; click a row for the full explanation and
+the components that rendered. It is plain DOM in a shadow root, so it never causes a React
+render and takes no styles from the page. `mountOverlay()` from `react-inp-blame` adds it
+after an `/auto` import. Clicks on the badge itself are not counted.
+
 ## Layout
 
 - `packages/core` - the library (`react-inp-blame`). Zero dependencies.

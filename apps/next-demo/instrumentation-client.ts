@@ -4,4 +4,4 @@
 // right shape for Next; the /auto entry is for bundlers where import order is explicit.
 import { install } from 'react-inp-blame';
 
-install({ threshold: 16, walkBudget: 100000, debugGlobal: true, devtoolsTrack: true });
+install({ threshold: 16, walkBudget: 100000, debugGlobal: true, devtoolsTrack: true, overlay: true });
