@@ -4,9 +4,9 @@ export interface RenderedComponent {
   name: string;
   /** How many fibers of this component rendered in the commit. */
   count: number;
-  /** Summed self time in ms, or null when the React build does not record durations. */
+  /** Summed self time in ms; null when the React build records no durations, or its clock is too coarse to time single components (`CommitSummary.coarseClock`). */
   self: number | null;
-  /** Largest subtree time in ms, or null without durations. */
+  /** Largest subtree time in ms; null like `self`. */
   total: number | null;
 }
 
@@ -23,7 +23,7 @@ export interface InputStamp {
 export interface InputRecord extends InputStamp {
   /** `pointerId` for pointer events, `code` for key events: how a pointerup or keyup finds its press. */
   press: string | number | undefined;
-  target: any;
+  target: Node | null;
   /** The React fiber on the target at dispatch time. React drops it from the node on unmount, so a clicked row that was deleted still gets a component name. */
   fiber: Fiber | null;
 }
@@ -56,6 +56,13 @@ export interface CommitSummary {
   components: RenderedComponent[];
   /** Whether React measured render durations for this tree: its root is in ProfileMode, or part of it was measured anyway (under a `<Profiler>`). Only development and profiling builds measure. */
   hasDurations: boolean;
+  /**
+   * React timed this commit with a clock that steps in whole milliseconds (Firefox and Safari
+   * without cross-origin isolation), and its components were too quick for that clock: each one read
+   * 0 or 1 ms whatever it took, so `components` carry no times. `total` is a sum of many such readings,
+   * close but not exact, and a blame built on it is `'inferred'`.
+   */
+  coarseClock: boolean;
   /** Total render time of the commit in ms when durations exist, else 0. */
   total: number;
   /**
@@ -101,9 +108,14 @@ export interface Stats {
   /** Every renderer known to have registered with the hook: the ones seen registering, plus earlier ones React DevTools' hook kept. */
   renderers: RendererInfo[];
   /**
-   * True when something replaced `window.__REACT_DEVTOOLS_GLOBAL_HOOK__` after React had
-   * registered with this library's shim: that React keeps reporting to the shim, and whatever
-   * replaced it (React DevTools, typically) never hears from it.
+   * True when a tool assigned its own `window.__REACT_DEVTOOLS_GLOBAL_HOOK__` over this library's
+   * shim after React had registered with the shim: that React keeps reporting to the shim, and the
+   * tool never hears from it.
+   *
+   * It cannot see React DevTools being locked out. React DevTools (the extension, the standalone
+   * app and `react-devtools-inline`) never replaces a hook: when the global already exists it
+   * installs nothing and says nothing, so a shim that loaded first leaves it without React while
+   * this flag stays false. Load React DevTools before this library, or install with `hook: 'chain'`.
    */
   devtoolsLockedOut: boolean;
   walks: number;
@@ -166,23 +178,38 @@ export interface Blame {
   detail: string | null;
   /** How much of the interaction it accounts for, in ms; null when the build records no durations. */
   ms: number | null;
+  /**
+   * 'measured': the blame follows from timings of this interaction. A render or handler blame
+   * rests on React's render durations for commits joined by their exact input stamp and walked in
+   * full; waiting and painting on the browser's own phases; a script on its Long Animation Frames
+   * entry; 'none' on Long Animation Frames showing no long script.
+   *
+   * 'inferred': it is the likeliest reading of weaker evidence. Render counts without durations
+   * (production builds, or a clock too coarse to time components), a commit that only overlapped
+   * the interaction in time, a walk cut short, or no Long Animation Frames to rule scripts out.
+   */
+  confidence: 'measured' | 'inferred';
 }
 
-/** The report in plain words, for people and for UIs. */
+/**
+ * The report in plain words, for people and for UIs. `blame`, `rating` and the phases' `ms` are
+ * data. `headline`, `where`, `cause`, `notes` and the phases' `label` and `hint` are display text:
+ * their wording may change in any version, so show them, never parse or compare them.
+ */
 export interface Explanation {
-  /** e.g. "216 ms click" */
+  /** e.g. "216 ms click". Display text. */
   headline: string;
   /** The cause as data, for a one-line UI. */
   blame: Blame;
   /** INP thresholds: good up to 200 ms, needs work up to 500 ms, poor beyond. */
   rating: 'good' | 'needs-work' | 'poor';
-  /** e.g. 'button "Add to cart" in ContextStorm' */
+  /** e.g. 'button "Add to cart" in ContextStorm'. Display text. */
   where: string | null;
-  /** The one sentence that says where the time went. */
+  /** The one sentence that says where the time went. Display text. */
   cause: string;
-  /** Extra sentences worth knowing: forced layout, a later render, waiting time, this library's own time. */
+  /** Extra sentences worth knowing: forced layout, a later render, waiting time, this library's own time. Display text. */
   notes: string[];
-  /** Waiting, working, updating the screen. With the report's `walkMs` they add up to the interaction's duration. */
+  /** Waiting, working, updating the screen. With the report's `walkMs` their `ms` add up to the interaction's duration. */
   phases: Phase[];
 }
 
@@ -232,7 +259,7 @@ export interface InteractionReport {
   revision: number;
   /** Built on first read, and again after the report changes, so a report nobody reads costs nothing to explain. */
   readonly explanation: Explanation;
-  /** The explanation as one line of text, built on first read like `explanation`. */
+  /** The explanation as one line of display text, built on first read like `explanation`. Its wording may change in any version. */
   readonly verdict: string;
   /**
    * What this library spent on this interaction, ms: walking the commits joined to it, building

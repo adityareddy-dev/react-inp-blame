@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { InteractionReport, Stats } from 'react-inp-blame';
 
+const prod = process.env.INP_MODE === 'prod';
+
 // Runs in Chromium, Firefox and WebKit. All three have Event Timing with interactionId (Chrome
 // 96, Firefox 144, Safari 26.2); only Chromium has Long Animation Frames, so elsewhere a report
 // says `frames: null` rather than an empty list that would read as "no long task".
@@ -17,13 +19,26 @@ test('reports name the component in any browser, with frames null where Long Ani
   const r: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP__.last());
   console.log(`  [${browserName}] ${r.verdict}`);
   expect(r.commits.length).toBeGreaterThanOrEqual(1);
-  expect(r.commits[0].hotPath).toContain('OrderSummary');
+  const c = r.commits[0];
+  expect(c.hotPath).toContain('OrderSummary');
   expect(r.target?.component).toBe('ContextStorm');
   if (browserName === 'chromium') {
     expect(Array.isArray(r.frames)).toBe(true);
   } else {
     expect(r.frames).toBeNull();
     expect(r.laterFrames).toBeNull();
+  }
+
+  // Firefox and WebKit step performance.now() by 1 ms on a page without cross-origin isolation, so a
+  // development build reads each of the 800 line items as a whole number of milliseconds. Those
+  // per-component times are left out, and the blame on the commit's total is inferred.
+  const coarse = !prod && browserName !== 'chromium';
+  expect(c.coarseClock).toBe(coarse);
+  expect(c.hasDurations).toBe(!prod);
+  if (coarse) {
+    expect(c.components[0]).toMatchObject({ name: 'LineItem', self: null, total: null });
+    expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'OrderSummary', confidence: 'inferred' });
+    expect(r.explanation.blame.ms).toBe(c.total);
   }
 });
 

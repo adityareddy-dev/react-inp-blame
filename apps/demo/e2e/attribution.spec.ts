@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { InteractionReport, Stats } from 'react-inp-blame';
+import type { CommitSummary, InteractionReport, Stats } from 'react-inp-blame';
 
 const prod = process.env.INP_MODE === 'prod';
+// A render blamed from React's durations is measured; production builds have only counts to go on.
+const renderConfidence = prod ? 'inferred' : 'measured';
 
 async function interact(page: Page, scenario: string, act: () => Promise<void>): Promise<InteractionReport> {
   await page.goto(`/#${scenario}`);
@@ -11,7 +13,7 @@ async function interact(page: Page, scenario: string, act: () => Promise<void>):
   await act();
   await page.waitForFunction(() => (window as any).__REACT_INP__.last() != null, null, { timeout: 8_000 });
   const r: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP__.last());
-  const all: any[] = await page.evaluate(() => (window as any).__REACT_INP__.allCommits());
+  const all: CommitSummary[] = await page.evaluate(() => (window as any).__REACT_INP__.allCommits());
   console.log(`  [${scenario}] ${r.verdict}  (overhead ${r.overheadMs.toFixed(2)}ms)`);
   console.log(`    window 0..${Math.round(r.duration)}ms; in window ${r.commits.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')} | follow-ups ${r.followUps.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')} | all ${all.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')}`);
   return r;
@@ -51,7 +53,15 @@ test('context storm: blames the OrderSummary subtree, LineItem x800', async ({ p
   expect(c.components[0].name).toBe('LineItem');
   expect(c.components[0].count).toBeGreaterThanOrEqual(800);
   expect(r.target?.component).toBe('ContextStorm');
-  expect(r.verdict).toContain('OrderSummary');
+  expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'OrderSummary', detail: `LineItem ×${c.components[0].count}`, confidence: renderConfidence });
+
+  // The phases are the report's own numbers, and with this library's walk they make up the duration.
+  const [waiting, working, updating] = r.explanation.phases.map((p) => p.ms);
+  expect([waiting, working, updating]).toEqual([r.inputDelay, r.processing, r.presentation]);
+  expect(waiting + working + r.walkMs + updating).toBeCloseTo(r.duration, 6);
+  if (!prod) expect(r.processing).toBeGreaterThanOrEqual(c.total);
+  // The one check on display text: there is a verdict to show.
+  expect(r.verdict).toBeTruthy();
 });
 
 test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
@@ -76,38 +86,40 @@ test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
   expect(r.frames, 'Chromium reports long animation frames').not.toBeNull();
   const forced = r.frames!.reduce((a, f) => a + f.forcedLayout, 0);
   expect(forced).toBeGreaterThan(4);
-  expect(r.verdict).toContain('recalculating layout');
+  expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'LayoutThrash', detail: 'PriceTicker ×400', confidence: renderConfidence });
 });
 
 test('handler hog: no React render, the click handler is named', async ({ page }) => {
   const r = await interact(page, 'handler-hog', () => page.click('[data-test=trigger]'));
   expect(r.commits.length).toBe(0);
-  expect(r.verdict).toContain("didn't render");
-  // Handlers are plain functions, so their names only survive in dev. Production needs
-  // source maps or a build transform; components get displayName stamped instead.
+  // Handlers are plain functions, so their names only survive in dev; a production build leaves
+  // the prop name. Components get displayName stamped instead.
   if (prod) expect(r.target?.handler).toBeTruthy();
-  else {
-    expect(r.target?.handler).toBe('computeChecksum');
-    expect(r.verdict).toContain('computeChecksum');
-  }
+  else expect(r.target?.handler).toBe('computeChecksum');
+  // Long Animation Frames timed the handler's script, so the blame is measured even without a render.
+  // The handler busy-waits 120 ms; its script's recorded duration rounds, so only half of that is required.
+  expect(r.explanation.blame).toMatchObject({ kind: 'script', name: r.target?.handler, confidence: 'measured' });
+  expect(r.explanation.blame.ms).toBeGreaterThanOrEqual(60);
 });
 
 test('big list: BigList re-renders thousands of Row', async ({ page }) => {
-  const r = await interact(page, 'big-list', () => page.type('[data-test=trigger]', '7'));
+  const r = await interact(page, 'big-list', () => page.locator('[data-test=trigger]').pressSequentially('7'));
   expect(r.commits.length).toBeGreaterThanOrEqual(1);
   const c = r.commits[0];
   expect(c.hotPath[0]).toBe('BigList');
   expect(c.components[0].name).toBe('Row');
   expect(c.components[0].count).toBeGreaterThanOrEqual(100);
+  expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'BigList', detail: `Row ×${c.components[0].count}`, confidence: renderConfidence });
 });
 
 test('lifted state: the unrelated Sidebar carries the cost', async ({ page }) => {
-  const r = await interact(page, 'lifted-state', () => page.type('[data-test=trigger]', 'a'));
+  const r = await interact(page, 'lifted-state', () => page.locator('[data-test=trigger]').pressSequentially('a'));
   expect(r.commits.length).toBeGreaterThanOrEqual(1);
   const c = r.commits[0];
   expect(c.hotPath).toContain('Sidebar');
   expect(c.components[0].name).toBe('NavItem');
   expect(c.components[0].count).toBeGreaterThanOrEqual(600);
+  expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'Sidebar', detail: `NavItem ×${c.components[0].count}`, confidence: renderConfidence });
 });
 
 test('cascading effect: the heavy second render is named, before or after the paint', async ({ page }) => {
@@ -120,9 +132,10 @@ test('cascading effect: the heavy second render is named, before or after the pa
   const heavy = all.reduce((a, b) => (b.rendered > a.rendered ? b : a));
   expect(heavy.components.map((x) => x.name)).toContain('Detail');
   expect(heavy.rendered).toBeGreaterThanOrEqual(400);
-  expect(r.verdict).toContain('Detail');
-  expect(r.followUps.length ? r.verdict.includes('after the screen updated') : r.verdict.includes('times before the screen updated')).toBe(true);
-  console.log(`    cascading effect landed ${r.followUps.length ? 'AFTER the paint (follow-up)' : 'BEFORE the paint (in window)'}`);
+  expect(heavy.joinedBy).toBe('exact');
+  if (r.followUps.includes(heavy)) expect(heavy.at).toBeGreaterThan(r.end);
+  else expect(heavy.at).toBeLessThanOrEqual(r.end);
+  console.log(`    cascading effect landed ${r.followUps.includes(heavy) ? 'AFTER the paint (follow-up)' : 'BEFORE the paint (in window)'}`);
 });
 
 test('control: the well-built version stays cheap', async ({ page }) => {

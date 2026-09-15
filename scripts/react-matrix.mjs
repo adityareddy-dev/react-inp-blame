@@ -15,7 +15,7 @@ const variants = [
   { name: 'demo-react18', react: '18.3.1', port: 5187, legacy: false, label: 'react18' },
   { name: 'demo-react17', react: '17.0.2', port: 5197, legacy: true, label: 'react17' },
 ];
-const copy = ['src', 'e2e', 'index.html', 'tsconfig.json', 'vite.config.ts', 'playwright.config.ts', 'vite-plugin-display-names.ts'];
+const copy = ['src', 'e2e', 'index.html', 'devtools-hook.html', 'tsconfig.json', 'vite.config.ts', 'playwright.config.ts', 'vite-plugin-display-names.ts'];
 
 for (const v of variants) {
   const dir = path.join(root, 'apps', v.name);

@@ -332,7 +332,9 @@ function createShim(): DevtoolsHook {
 
 /**
  * Makes the shim the global through an accessor rather than a plain value, so that another tool
- * assigning its own hook later is noticed instead of silently winning or losing.
+ * assigning its own hook later is noticed instead of silently winning or losing. React DevTools
+ * never assigns: its installHook returns as soon as `window` has the property, without a read or a
+ * write the accessor could see, so a shim that got there first locks it out unnoticed.
  */
 function defineGlobal(w: any, hook: DevtoolsHook): void {
   let current: unknown = hook;
@@ -352,7 +354,7 @@ function replaced(hook: DevtoolsHook, next: unknown): void {
   if (registryOf(hook).size) {
     // React holds on to the hook it registered with, so it keeps reporting to the shim.
     devtoolsLockedOut = true;
-    warnOnce('locked-out', "__REACT_DEVTOOLS_GLOBAL_HOOK__ was replaced after React registered with react-inp-blame's hook, so whatever replaced it (React DevTools, typically) will not see this React. Load that first, or install with hook: 'chain'.");
+    warnOnce('locked-out', "__REACT_DEVTOOLS_GLOBAL_HOOK__ was replaced after React registered with react-inp-blame's hook, so the tool that replaced it will not see this React. Load that tool before react-inp-blame, or install with hook: 'chain'.");
   } else if (next && typeof next === 'object') {
     // Nothing has registered yet, so React will register with the replacement: follow it.
     attach(next as DevtoolsHook, 'chained');

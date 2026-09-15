@@ -13,6 +13,19 @@ const PerformedWork = 0b1;
 // recurses once per level inside React's commit, so it stops descending here rather than risk
 // the stack.
 const MAX_DEPTH = 1000;
+// The hot path follows a child carrying at least this share of its parent's work. Over half means
+// no sibling carries as much; 60 rather than 50 keeps it from following a child that barely leads.
+const HOT_PATH_SHARE = 0.6;
+// A clock that steps in whole milliseconds (Firefox and Safari without cross-origin isolation) makes
+// every component's time a whole number. With this many components timed and every time whole, that
+// is the clock and not chance: Chromium steps in 0.1 ms, where eight whole values in a row are a
+// one-in-10^8 event.
+const COARSE_CLOCK_SAMPLES = 8;
+// Each reading on such a clock is off by up to a millisecond: a quarter or more of a component that
+// averaged under 4 ms, which is where per-component times stop saying anything.
+const COARSE_CLOCK_MEAN_MS = 4;
+
+const wholeMs = (ms: number) => Math.abs(ms - Math.round(ms)) < 1e-6;
 
 /**
  * A React fiber, reduced to the fields this library reads. They are React internals, the same
@@ -65,14 +78,14 @@ export function rootShapeProblem(current: unknown): string | null {
 }
 
 /** The fiber React stored on a DOM node, climbing to the nearest ancestor that has one. */
-export function fiberFromNode(node: any): Fiber | null {
+export function fiberFromNode(node: Node | null): Fiber | null {
   let n = node;
   let hops = 0;
   while (n && hops++ < 64) {
     const keys = Object.keys(n);
     for (let i = 0; i < keys.length; i++) {
       const k = keys[i];
-      if (k.charCodeAt(0) === 95 && k.startsWith('__reactFiber$')) return n[k];
+      if (k.charCodeAt(0) === 95 && k.startsWith('__reactFiber$')) return (n as unknown as Record<string, Fiber>)[k];
     }
     n = n.parentNode;
   }
@@ -103,7 +116,7 @@ function typeName(t: unknown): string | null {
 }
 
 /** Component names from the node outwards, nearest first. */
-export function ownerChain(node: any, limit = 8): string[] {
+export function ownerChain(node: Node | null, limit = 8): string[] {
   return ownersOf(fiberFromNode(node), limit);
 }
 
@@ -135,7 +148,7 @@ const handlerProp: Record<string, string[]> = {
 };
 
 /** Name of the first React handler prop for this event type on the target chain. */
-export function handlerName(node: any, eventType: string): string | null {
+export function handlerName(node: Node | null, eventType: string): string | null {
   return handlerOf(fiberFromNode(node), eventType);
 }
 
@@ -191,6 +204,9 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   let measured = 0;
   const byName = new Map<string, RenderedComponent>();
   let rendered = 0;
+  // Rendered components with a time, and whether any time had a fraction of a millisecond.
+  let timed = 0;
+  let fractional = false;
 
   function visit(f: Fiber, depth: number): Agg[] {
     const comp = isComponent(f);
@@ -227,6 +243,10 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     rendered++;
     const name = componentName(f) || '(anonymous)';
     const total = f.actualDuration || 0;
+    if (total > 0) {
+      timed++;
+      fractional ||= !wholeMs(total);
+    }
     let childSum = 0;
     if (!bailedOut) {
       let c = f.child;
@@ -249,10 +269,6 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   }
 
   const top = visit(rootFiber, 0);
-  // React measures the trees in ProfileMode. A subtree under <Profiler> is measured even when
-  // its root is not, and shows up as nonzero time.
-  const hasDurations = (rootFiber.mode & context.profileMode) !== 0 || measured > 0;
-  const metric = (a: Agg) => (hasDurations ? a.total : a.rendered);
 
   // Ancestors that were only cloned on the way down (App, layouts, providers) are not
   // roots. The roots are the outermost components that performed work.
@@ -263,6 +279,13 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       else collect(a.kids);
     }
   })(top);
+  const renderTime = performedRoots.reduce((a, t) => a + t.total, 0);
+
+  // React measures the trees in ProfileMode. A subtree under <Profiler> is measured even when
+  // its root is not, and shows up as nonzero time.
+  const hasDurations = (rootFiber.mode & context.profileMode) !== 0 || measured > 0;
+  const coarseClock = hasDurations && timed >= COARSE_CLOCK_SAMPLES && !fractional && renderTime / rendered < COARSE_CLOCK_MEAN_MS;
+  const metric = (a: Agg) => (hasDurations ? a.total : a.rendered);
 
   // Hot path: from the heaviest root, keep descending while one child carries most of
   // the work. Pass-through components inside a rendered subtree are named on the way.
@@ -273,15 +296,17 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     let depth = 0;
     while (cur.kids.length && depth++ < 12) {
       const next = cur.kids.reduce((a, b) => (metric(b) > metric(a) ? b : a));
-      if (metric(next) < 0.6 * metric(cur)) break;
+      if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
       if (next.name !== cur.name) hotPath.push(next.name);
       cur = next;
     }
   }
 
+  // Summed over a whole commit, readings of a coarse clock come out close; one component's do not.
+  const perComponentTimes = hasDurations && !coarseClock;
   const components = [...byName.values()]
-    .map((c) => (hasDurations ? c : { ...c, self: null, total: null }))
-    .sort((a, b) => (hasDurations ? (b.self || 0) - (a.self || 0) : b.count - a.count));
+    .map((c) => (perComponentTimes ? c : { ...c, self: null, total: null }))
+    .sort((a, b) => (perComponentTimes ? (b.self || 0) - (a.self || 0) : b.count - a.count));
 
   return {
     at,
@@ -295,7 +320,8 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     hotPath,
     components: components.slice(0, 12),
     hasDurations,
-    total: hasDurations ? performedRoots.reduce((a, t) => a + t.total, 0) : 0,
+    coarseClock,
+    total: hasDurations ? renderTime : 0,
     walkMs: 0,
     priority: context.priority,
     didError: context.didError,

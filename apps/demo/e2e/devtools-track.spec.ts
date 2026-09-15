@@ -70,6 +70,10 @@ async function traceSlowClick(browser: Browser, page: Page, file?: string): Prom
 
 const ours = (entries: TrackEntry[]) => entries.filter((e) => e.group === 'react-inp-blame');
 
+// The track group, the track names and the colours are what the README tells people to look for, so
+// they are checked exactly. Entry names and tooltips are display text like the verdict: they are only
+// checked for the component and the track they have to name.
+
 // The trace is kept under apps/demo/traces so it can be loaded into DevTools by hand.
 test("the click gets its own track beside React's, and its render is drawn only where React draws none", async ({ browser, page }) => {
   const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../traces');
@@ -82,7 +86,7 @@ test("the click gets its own track beside React's, and its render is drawn only 
   expect(clicks).toHaveLength(1);
   // Its tooltip is the verdict, which only a measure can carry.
   expect(clicks[0]).toMatchObject({ via: 'measure', color: 'warning' });
-  expect(clicks[0].name).toMatch(/^\d+ ms click · OrderSummary$/);
+  expect(clicks[0].name).toContain('OrderSummary');
   expect(clicks[0].tooltip).toContain('OrderSummary');
 
   const renders = ours(entries).filter((e) => e.track === 'React renders');
@@ -92,12 +96,12 @@ test("the click gets its own track beside React's, and its render is drawn only 
     expect(reactsOwn).toHaveLength(0);
     expect(renders.length).toBeGreaterThanOrEqual(1);
     expect(renders[0]).toMatchObject({ via: 'timeStamp', color: 'primary' });
-    expect(renders[0].name).toMatch(/^React render · OrderSummary \(\d+ components\)$/);
+    expect(renders[0].name).toContain('OrderSummary');
   } else {
     // React 19.3 in development draws every component render itself; a render track of ours would repeat it.
     expect(reactsOwn.length).toBeGreaterThan(0);
     expect(renders).toHaveLength(0);
-    expect(clicks[0].tooltip).toContain("React's own Components ⚛ track");
+    expect(clicks[0].tooltip).toContain('Components ⚛');
   }
   expect(measuresLeft.filter((name) => clicks.some((e) => e.name === name))).toEqual([]);
   console.log(`  trace: ${file}  (Chrome DevTools > Performance > Load profile)`);

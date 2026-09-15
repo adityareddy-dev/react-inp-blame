@@ -90,6 +90,46 @@ test('outside ProfileMode a development tree reports render counts, not a 0 ms r
   assert.deepEqual(c.components, [{ name: 'Row', count: 1, self: null, total: null }]);
 });
 
+/** A rendered component React timed at `ms` for itself, in ProfileMode as on React 18 and 19. */
+function timed(component: () => void, ms: number, ...children: Record<string, unknown>[]): Record<string, unknown> {
+  const f = rendered(component, ...children);
+  f.mode = 0b10;
+  f.actualDuration = children.reduce((a, child) => a + (child.actualDuration as number), ms);
+  return f;
+}
+const profiledRoot = (child: Record<string, unknown>) => Object.assign(root(child), { mode: 0b10, actualDuration: child.actualDuration });
+
+test('a clock in whole milliseconds that timed quick components keeps the commit total and drops the per-component times', () => {
+  // Firefox and Safari step performance.now() by 1 ms without cross-origin isolation: a component that
+  // works for a fraction of a millisecond reads 0 or 1 ms there, so no single time says anything,
+  // while a sum over many of them still comes out close.
+  function OrderSummary() {}
+  function LineItem() {}
+  const tree = profiledRoot(timed(OrderSummary, 1, ...Array.from({ length: 12 }, () => timed(LineItem, 1))));
+  const c = walkCommit(tree as any, 5000, 100, click, development);
+  assert.equal(c.coarseClock, true);
+  assert.equal(c.hasDurations, true);
+  assert.equal(c.total, 13);
+  assert.deepEqual(c.components, [
+    { name: 'LineItem', count: 12, self: null, total: null },
+    { name: 'OrderSummary', count: 1, self: null, total: null },
+  ]);
+});
+
+test('whole milliseconds long enough to mean something keep their per-component times, and so does a clock in tenths', () => {
+  function Chart() {}
+  function Series() {}
+  const slow = walkCommit(profiledRoot(timed(Chart, 20, ...Array.from({ length: 12 }, () => timed(Series, 20)))) as any, 5000, 100, click, development);
+  assert.equal(slow.coarseClock, false);
+  assert.equal(slow.total, 260);
+  assert.deepEqual(slow.components[0], { name: 'Series', count: 12, self: 240, total: 20 });
+  // Chromium's clock steps in 0.1 ms.
+  const quick = walkCommit(profiledRoot(timed(Chart, 0.1, ...Array.from({ length: 12 }, () => timed(Series, 0.1)))) as any, 5000, 100, click, development);
+  assert.equal(quick.coarseClock, false);
+  assert.equal(quick.components[0].name, 'Series');
+  assert.notEqual(quick.components[0].self, null);
+});
+
 test('time React measured under a root outside ProfileMode still counts, as under <Profiler>', () => {
   // <Profiler> puts its own subtree in ProfileMode whatever the root's mode.
   function Chart() {}

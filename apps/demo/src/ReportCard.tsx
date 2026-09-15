@@ -51,13 +51,29 @@ export function Components({ commit }: { commit: CommitSummary }) {
   );
 }
 
+const TYPING = ['keydown', 'keyup', 'keypress', 'input', 'change'];
+
+/** A key press or typing, from the event the report is named after. */
+export function isTyping(report: InteractionReport): boolean {
+  return TYPING.includes(report.type);
+}
+
+/** "handler handleLogin", and "onClick handler" for the prop name a minified build leaves. */
+function handlerLabel(name: string): string {
+  return /^on[A-Z]/.test(name) ? `${name} handler` : `handler ${name}`;
+}
+
+/** "1.2 ms", and "under 0.1 ms" rather than a 0.0 that reads as free. */
+function costText(ms: number): string {
+  return ms < 0.05 ? 'under 0.1 ms' : `${ms.toFixed(1)} ms`;
+}
+
 /** "Typing in Password" / "Click on Log in", from the report's target. */
 export function titleFor(report: InteractionReport): { title: string; subtitle?: string } {
   const t = report.target;
   const label = t?.label ? t.label.replace(/^\w+ /, '') : (t?.selector ?? '');
-  const kind = report.explanation.headline.replace(/^\d+ ms /, '');
-  const verb = kind === 'key press' || kind === 'typing' ? 'Typing in' : kind === 'click' || kind === 'tap' ? 'Click on' : kind;
-  const subtitle = t?.component ? `in ${t.component}${t.handler ? ` · handler ${t.handler}` : ''}` : undefined;
+  const verb = isTyping(report) ? 'Typing in' : 'Click on';
+  const subtitle = t?.component ? `in ${t.component}${t.handler ? ` · ${handlerLabel(t.handler)}` : ''}` : undefined;
   return { title: `${verb} ${label}`.trim(), subtitle };
 }
 
@@ -95,7 +111,7 @@ export function Entry({ report, title, subtitle, compact }: { report: Interactio
       ))}
       {!compact && main && <Components commit={main} />}
       {!compact && <Raw report={report} />}
-      <div className="foot">Measuring this cost {report.overheadMs.toFixed(1)} ms.</div>
+      <div className="foot">Measuring this cost {costText(report.overheadMs)}.</div>
     </div>
   );
 }

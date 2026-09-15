@@ -8,10 +8,10 @@ which scripts ran and how much forced layout happened. React's fiber tree knows 
 components rendered and (in dev and profiling builds) how long each took. Nothing joins
 them. This does.
 
-    264 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
-    about 261 ms; React's own render was only 0 ms. A second React render landed 547 ms
-    after the screen updated: 92 ms re-rendering 256 components inside ProfilePage, mostly
-    PhotoTile (240 of them, 72 ms). INP doesn't count it, but people still wait for it.
+    408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
+    about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
+    after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
+    PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
 
 ## Where it's headed
 
@@ -37,7 +37,9 @@ demo gets it.)
 under Turbopack and under `next build --webpack`. The import installs the hook before
 react-dom loads, so the very first interaction is attributed. Read reports with
 `onInteraction(report => ...)` from `react-inp-blame`, or open the Performance panel and
-look for the `react-inp-blame` tracks.
+look for the `react-inp-blame` tracks. Build on `report.explanation.blame` (what, which
+component or handler, how many ms, and whether that was measured or inferred) and the report's
+numbers; `verdict` and the other sentences are display text, reworded in any version.
 
 ## The badge and panel
 

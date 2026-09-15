@@ -1,6 +1,7 @@
-import { fiberFromNode, handlerOf, ownersOf } from './fiber.ts';
+import { fiberFromNode, handlerOf, ownersOf, type Fiber } from './fiber.ts';
 import { rateInp } from './inp.ts';
-import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, InputRecord, InteractionReport, TargetInfo } from './types.ts';
+import type { InteractionTiming } from './observe.ts';
+import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, InputRecord, InteractionReport, ScriptSummary, TargetInfo } from './types.ts';
 
 export const FOLLOW_UP_WINDOW = 1500;
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
@@ -9,17 +10,49 @@ const STAMP_TOLERANCE = 1;
 // Entries presented in the same frame share a render time to within 8 ms, the rounding
 // Event Timing applies to durations. Same rule as web-vitals' groupEntriesByRenderTime.
 const RENDER_GROUP_MS = 8;
-// A later render has to be worth a sentence. Tiny ones (a status pill, a panel updating)
-// are noise, and the page's own reporting UI would otherwise show up in every report.
-const MIN_LATER_MS = 10;
-const MIN_LATER_COUNT = 25;
-const worthMentioning = (c: CommitSummary) => (c.hasDurations ? c.total >= MIN_LATER_MS : c.rendered >= MIN_LATER_COUNT);
+
+// What the explanation blames and says is decided by the thresholds below. Each is a judgement of
+// what is worth naming; the reasons were checked against the demo's scenarios on React 17, 18 and
+// 19, development and production builds, with this library's own walk left out of `processing`.
+
+// Working time outside React's render names the handler from 25 ms: shorter, it does not make an
+// interaction slow on its own (it is under two frames at 60 Hz).
+const HANDLER_MIN_MS = 25;
+// It also has to be a quarter of the working time: committing a large render (DOM writes, effects)
+// is outside React's render durations too, and took a fifth of it on the demo's 1441-row list.
+const HANDLER_MIN_SHARE = 0.25;
+// A render with durations earns the blame from 5 ms, a third of a frame; less made nothing slow.
+const RENDER_MIN_MS = 5;
+// A render known only by its counts earns it from 10 components; fewer is a small update, a counter or a status line.
+const RENDER_MIN_COMPONENTS = 10;
+// From 50 when a handler is named, since counts cannot weigh a render against a slow handler: the
+// demo's password field re-renders 2 components beside a handler that runs for 110 ms.
+const RENDER_MIN_COMPONENTS_BESIDE_HANDLER = 50;
+// A Long Animation Frames script is named from 20 ms: the API lists scripts from 5 ms, and one
+// under 20 did not make its frame long by itself (a long frame is over 50 ms).
+const SCRIPT_MIN_MS = 20;
+// Waiting, the screen update, and working time without durations are blamed from 50 ms, the length
+// of a long task: the least the browser itself calls long.
+const LONG_TASK_MS = 50;
+// A later render is worth a sentence from 10 ms or 25 components. The page's own reporting UI
+// re-renders after every report (the demo's "What took time" panel: 6 to 14 components, under 2 ms)
+// and would otherwise be in every report.
+const LATER_MIN_MS = 10;
+const LATER_MIN_COMPONENTS = 25;
+// Forced layout is worth a sentence from 4 ms, a quarter of a frame.
+const FORCED_LAYOUT_MIN_MS = 4;
+// The screen update gets a note of its own from 100 ms, half of INP's 200 ms budget for "good".
+const PRESENTATION_NOTE_MS = 100;
+// A press held around the interaction is worth a note from 100 ms; an ordinary click is shorter.
+const HOLD_NOTE_MS = 100;
+
 // A label names the clicked element; it is not a copy of it. The element can be a list of 3000
 // rows, and reading all of its text would cost more than the rest of the report, so only the
 // aria-label, a form field's placeholder or the first run of text is read, up to 40 characters.
 const LABEL_CHARS = 40;
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
+const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
 const FRIENDLY: Record<string, string> = {
@@ -42,11 +75,25 @@ interface PaintGroup {
   renderTime: number;
   processingStart: number;
   processingEnd: number;
-  entries: any[];
+  entries: InteractionTiming[];
 }
 
+/** What a person would call the interaction: "click", "tap", "key press" or "typing", from the event type. */
+export function kindOf(type: string): string {
+  return FRIENDLY[type] || type;
+}
+
+/** A later render worth a sentence, rather than the page's own reporting UI updating. */
+const worthMentioning = (c: CommitSummary) => (c.hasDurations ? c.total >= LATER_MIN_MS : c.rendered >= LATER_MIN_COMPONENTS);
+
+/** A render with real work in it, the kind the blame and the "rendered N times" note count; a status pill updating is not one. */
+export const carriesWork = (c: CommitSummary) => (c.hasDurations ? c.total >= RENDER_MIN_MS : c.rendered >= RENDER_MIN_COMPONENTS);
+
+/** A commit whose numbers stand on their own: durations measured on a clock fine enough for them, joined by its exact input stamp, walked in full. */
+const measuredCommit = (c: CommitSummary) => c.hasDurations && !c.coarseClock && c.joinedBy === 'exact' && !c.truncated;
+
 /** Entries whose paint landed within 8 ms of each other were presented by one frame. */
-function groupByRenderTime(entries: any[]): PaintGroup[] {
+function groupByRenderTime(entries: InteractionTiming[]): PaintGroup[] {
   const groups: PaintGroup[] = [];
   for (const e of entries) {
     const renderTime = e.startTime + e.duration;
@@ -81,7 +128,7 @@ const rank = (name: string) => {
   return i < 0 ? PREFERRED.length : i;
 };
 
-const summarize = (e: any): EventEntrySummary => ({
+const summarize = (e: InteractionTiming): EventEntrySummary => ({
   name: e.name,
   startTime: e.startTime,
   duration: e.duration,
@@ -97,21 +144,21 @@ const walked = (commits: CommitSummary[]): number => commits.reduce((a, c) => a 
  * `inputs` is the ring of recent inputs, used to tell whose commit is whose and to recover
  * the target when the entry's is gone.
  */
-export function buildReport(entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): InteractionReport {
+export function buildReport(entries: InteractionTiming[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): InteractionReport {
   return Object.defineProperties(reportData(entries, commits, frames, inputs), EXPLAINED_ON_READ) as InteractionReport;
 }
 
-function reportData(entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[]): ReportData {
+function reportData(entries: InteractionTiming[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[]): ReportData {
   let longest = entries[0];
   for (const e of entries) if (e.duration > longest.duration) longest = e;
   const group = groupByRenderTime(entries).find((g) => g.entries.includes(longest))!;
   // The same clamps web-vitals applies: processing cannot start before this entry's input,
   // and cannot run past the paint that closed it (a sync modal can make it look that way).
-  const start: number = longest.startTime;
+  const start = longest.startTime;
   const processingStart = Math.max(group.processingStart, start);
   const end = Math.max(start + longest.duration, processingStart);
   const processingEnd = Math.min(group.processingEnd, end);
-  const duration: number = longest.duration;
+  const duration = longest.duration;
   let first = Infinity;
   let lastPaint = -Infinity;
   for (const e of entries) {
@@ -123,11 +170,11 @@ function reportData(entries: any[], commits: CommitSummary[], frames: FrameSumma
   // A click arrives as pointerdown, pointerup and click entries sharing one interactionId.
   // Name the interaction by the most meaningful entry painted with the headline.
   const sorted = group.entries.slice().sort((a, b) => rank(a.name) - rank(b.name));
-  const stamps: number[] = entries.map((e) => e.startTime);
+  const stamps = entries.map((e) => e.startTime);
   const ring = inputs.find((i) => stamps.some((s) => near(s, i.ts))) || null;
   // The entry's target is null when the node left the DOM before the observer ran (a close
   // button, a deleted row); the ring kept the node, and the fiber React has since detached.
-  let targetNode: any = null;
+  let targetNode: Node | null = null;
   for (const e of entries) {
     if (e.target) {
       targetNode = e.target;
@@ -232,7 +279,7 @@ function claimedElsewhere(c: CommitSummary, inputs: InputRecord[], stamps: numbe
  * held pointerdown, the keyup after a keydown). Rebuild it in place so listeners keep the
  * same object, and bump the revision.
  */
-export function refreshReport(r: InteractionReport, entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): void {
+export function refreshReport(r: InteractionReport, entries: InteractionTiming[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): void {
   // Time already spent building the report stays counted; the walks are recounted for the commits it now holds.
   const building = r.overheadMs - walked(r.commits) - walked(r.followUps);
   const fresh = reportData(entries, commits, frames, inputs);
@@ -281,7 +328,7 @@ export function attachLaterRender(r: InteractionReport, c: CommitSummary, frames
   return true;
 }
 
-function describeTarget(node: any, fiber: any, handler: string | null): TargetInfo {
+function describeTarget(node: Node, fiber: Fiber | null, handler: string | null): TargetInfo {
   const owners = ownersOf(fiber);
   return {
     selector: selector(node),
@@ -292,28 +339,28 @@ function describeTarget(node: any, fiber: any, handler: string | null): TargetIn
   };
 }
 
-function elementOf(node: any): any {
-  return node.nodeType === 1 ? node : node.parentElement;
+function elementOf(node: Node): Element | null {
+  return node.nodeType === ELEMENT_NODE ? (node as Element) : node.parentElement;
 }
 
-function selector(node: any): string | null {
+function selector(node: Node): string | null {
   const el = elementOf(node);
   if (!el) return null;
   let s = el.tagName.toLowerCase();
   if (el.id) s += '#' + el.id;
-  const test = el.getAttribute && (el.getAttribute('data-test') || el.getAttribute('data-testid'));
+  const test = el.getAttribute('data-test') || el.getAttribute('data-testid');
   if (test) s += `[data-test=${test}]`;
-  else if (el.classList && el.classList.length) s += '.' + Array.from(el.classList as string[]).slice(0, 2).join('.');
+  else if (el.classList && el.classList.length) s += '.' + Array.from(el.classList).slice(0, 2).join('.');
   return s;
 }
 
-function labelOf(node: any): string | null {
+function labelOf(node: Node): string | null {
   const el = elementOf(node);
-  if (!el || !el.getAttribute) return null;
+  if (!el) return null;
   const tag = el.tagName.toLowerCase();
   const word = tag === 'a' ? 'link' : tag;
   const field = tag === 'input' || tag === 'textarea' || tag === 'select';
-  const text: string | null = el.getAttribute('aria-label') || (field ? el.getAttribute('placeholder') || el.getAttribute('name') || el.getAttribute('type') : firstText(el));
+  const text = el.getAttribute('aria-label') || (field ? el.getAttribute('placeholder') || el.getAttribute('name') || el.getAttribute('type') : firstText(el));
   const label = text ? clip(text) : '';
   return label ? `${word} "${label}"` : word;
 }
@@ -328,12 +375,12 @@ function clip(text: string): string {
  * the text nodes right after it (React renders `Add to cart ({n})` as three), stopping once 40
  * characters are in hand.
  */
-function firstText(el: any): string {
-  let node = el.firstChild;
+function firstText(el: Element): string {
+  let node: Node | null = el.firstChild;
   for (let looked = 0; node && looked < LABEL_NODES; looked++) {
-    if (node.nodeType === TEXT_NODE && /\S/.test(node.nodeValue)) {
-      let text: string = node.nodeValue;
-      for (let next = node.nextSibling; next && next.nodeType === TEXT_NODE && text.length < LABEL_CHARS; next = next.nextSibling) text += next.nodeValue;
+    if (node.nodeType === TEXT_NODE && /\S/.test(node.nodeValue ?? '')) {
+      let text = node.nodeValue ?? '';
+      for (let next = node.nextSibling; next && next.nodeType === TEXT_NODE && text.length < LABEL_CHARS; next = next.nextSibling) text += next.nodeValue ?? '';
       return text;
     }
     node = nextNode(node, el);
@@ -342,16 +389,22 @@ function firstText(el: any): string {
 }
 
 /** The node after `node` in document order, without leaving `root`. */
-function nextNode(node: any, root: any): any {
+function nextNode(node: Node, root: Node): Node | null {
   if (node.firstChild) return node.firstChild;
-  for (let n = node; n && n !== root; n = n.parentNode) if (n.nextSibling) return n.nextSibling;
+  for (let n: Node | null = node; n && n !== root; n = n.parentNode) if (n.nextSibling) return n.nextSibling;
   return null;
 }
 
 const ms = (n: number): string => `${Math.round(n)} ms`;
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-function heaviest(list: CommitSummary[]): CommitSummary {
+/** "the click handler handleLogin"; "the onClick handler" when the name is a prop's, which is all a minified build leaves. */
+function handlerPhrase(name: string, kind: string): string {
+  return /^on[A-Z]/.test(name) ? `the ${name} handler` : `the ${kind} handler ${name}`;
+}
+
+export function heaviest(list: CommitSummary[]): CommitSummary {
   return list.reduce((a, b) => (score(b) > score(a) ? b : a));
 }
 
@@ -385,39 +438,40 @@ function renderPhrase(c: CommitSummary): string {
 }
 
 /** Longest script in frames overlapping [from, to], if it is long enough to matter. */
-function longestScript(frames: FrameSummary[], from: number, to: number) {
-  let best: FrameSummary['scripts'][number] | null = null;
+function longestScript(frames: FrameSummary[], from: number, to: number): ScriptSummary | null {
+  let best: ScriptSummary | null = null;
   for (const f of frames) {
     for (const s of f.scripts) {
       if (s.start > to || s.start + s.duration < from) continue;
       if (!best || s.duration > best.duration) best = s;
     }
   }
-  return best && best.duration >= 20 ? best : null;
+  return best && best.duration >= SCRIPT_MIN_MS ? best : null;
 }
 
 export function explain(r: InteractionReport): Explanation {
   const rating = rateInp(r.duration);
-  const kind = FRIENDLY[r.type] || r.type;
+  const kind = kindOf(r.type);
   const headline = `${ms(r.duration)} ${kind}`;
   const where = r.target ? [r.target.label || r.target.selector, r.target.component ? `in ${r.target.component}` : ''].filter(Boolean).join(' ') || null : null;
   const notes: string[] = [];
-  const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
-  const handler = r.target?.handler ? `the ${kind} handler ${r.target.handler}` : null;
+  const handlerName = r.target?.handler ?? null;
+  const component = r.target?.component ?? null;
+  const handler = handlerName ? handlerPhrase(handlerName, kind) : null;
   const outsideName = handler || `code outside React (the ${kind} handler or other scripts)`;
-  const scriptName = (s: FrameSummary['scripts'][number]) => handler || `a script (${s.invoker || s.name || 'unknown'}${s.source ? `, ${s.source}` : ''})`;
+  const scriptName = (s: ScriptSummary) => handler || `a script (${s.invoker || s.name || 'unknown'}${s.source ? `, ${s.source}` : ''})`;
 
   const forced = r.frames ? r.frames.reduce((a, f) => a + f.forcedLayout, 0) : 0;
   const c = r.commits.length ? heaviest(r.commits) : null;
   const renderTotal = r.commits.reduce((a, x) => a + x.total, 0);
   const hasDurations = !!c && c.hasDurations;
-  // Working time that was neither React's render phase nor forced layout: the handler
-  // itself, or other scripts in the same task.
+  // Working time that was neither React's render phase nor forced layout: the handler itself,
+  // React committing what it rendered, or other scripts in the same task.
   const outside = Math.max(0, r.processing - renderTotal - forced);
-  const outsideMatters = hasDurations && outside >= 25 && outside >= 0.25 * r.processing;
+  const outsideMatters = hasDurations && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler.
-  const renderMatters = !!c && (hasDurations ? renderTotal >= 5 : c.rendered >= (r.target?.handler ? 50 : 10));
+  const renderMatters = !!c && (hasDurations ? renderTotal >= RENDER_MIN_MS : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS));
   const processingEnd = r.start + r.inputDelay + r.processing + r.walkMs;
   // A change handler runs on the input event, after the key event was processed, so its
   // cost shows up between the handlers and the paint. Look for it there.
@@ -428,64 +482,64 @@ export function explain(r: InteractionReport): Explanation {
   // short form never disagrees with the long one.
   let cause: string;
   let blame: Blame;
-  const handlerName = r.target?.handler ?? null;
-  const component = r.target?.component ?? null;
   if (c && outsideMatters && outside > renderTotal) {
-    const rest = renderTotal >= 10 ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render was only ${ms(renderTotal)}`;
+    const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
     cause = `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.`;
-    blame = { kind: 'handler', name: handlerName, detail: component, ms: outside };
+    blame = { kind: 'handler', name: handlerName, detail: component, ms: outside, confidence: r.commits.every(measuredCommit) ? 'measured' : 'inferred' };
   } else if (c && renderMatters) {
     cause = hasDurations ? `React spent ${ms(c.total)} ${renderPhrase(c)}.` : `React was ${renderPhrase(c)}.`;
     if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
-    blame = { kind: 'render', name: leafOf(c), detail: mostlyOf(c), ms: hasDurations ? c.total : null };
-  } else if (c && !hasDurations && handlerName && r.processing >= 50 && r.processing >= r.inputDelay && r.processing >= r.presentation) {
-    cause = `The ${kind} handler ${handlerName} most likely took the ${ms(r.processing)}: React re-rendered only ${plural(c.rendered, 'component')}. A profiling build of React would give exact numbers.`;
-    blame = { kind: 'handler', name: handlerName, detail: component, ms: null };
-  } else if (r.inputDelay > 50 && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
+    blame = { kind: 'render', name: leafOf(c), detail: mostlyOf(c), ms: hasDurations ? c.total : null, confidence: measuredCommit(c) ? 'measured' : 'inferred' };
+  } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
+    cause = `${cap(handler)} most likely took the ${ms(r.processing)}: React re-rendered only ${plural(c.rendered, 'component')}. A profiling build of React would give exact numbers.`;
+    blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
+  } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
     cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
-    blame = { kind: 'waiting', name: null, detail: null, ms: r.inputDelay };
-  } else if (r.presentation > 50 && r.presentation > r.processing) {
+    blame = { kind: 'waiting', name: null, detail: null, ms: r.inputDelay, confidence: 'measured' };
+  } else if (r.presentation > LONG_TASK_MS && r.presentation > r.processing) {
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update` + (lateScript ? `, mostly because ${scriptName(lateScript)} ran for ${ms(lateScript.duration)} before the next frame.` : '.');
-    blame = { kind: 'painting', name: lateScript ? handlerName || lateScript.invoker || lateScript.name || null : null, detail: null, ms: r.presentation };
+    blame = { kind: 'painting', name: lateScript ? handlerName || lateScript.invoker || lateScript.name || null : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (anyScript) {
     const small = c ? `React's render was small (${renderPhrase(c)})` : `React didn't render anything`;
     cause = `${small}; ${scriptName(anyScript)} ran for ${ms(anyScript.duration)}.`;
-    blame = { kind: 'script', name: handlerName || anyScript.invoker || anyScript.name || null, detail: component, ms: anyScript.duration };
+    blame = { kind: 'script', name: handlerName || anyScript.invoker || anyScript.name || null, detail: component, ms: anyScript.duration, confidence: 'measured' };
   } else if (r.frames) {
     cause = c
       ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
       : `React didn't render anything and no long task was recorded, so the time went to waiting and painting.`;
-    blame = { kind: 'none', name: null, detail: null, ms: null };
+    blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' };
   } else {
     // Without Long Animation Frames there is no record to say no long task ran.
     cause = c
       ? `React's render was small (${renderPhrase(c)}); this browser does not report long tasks, so what else ran is unknown.`
       : `React didn't render anything; this browser does not report long tasks, so what ran instead is unknown.`;
-    blame = { kind: 'none', name: null, detail: null, ms: null };
+    blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   }
 
   if (c) {
-    // Only renders that carry real work count here; a status pill or a panel updating does not.
-    const real = r.commits.filter((x) => (x.hasDurations ? x.total >= 5 : x.rendered >= 10)).length;
+    const real = r.commits.filter(carriesWork).length;
     if (real > 1) notes.push(`React rendered ${real} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
-    if (r.inputDelay > 50 && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
+    if (r.inputDelay > LONG_TASK_MS && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
     if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   }
-  if (forced >= 4) {
+  if (forced >= FORCED_LAYOUT_MIN_MS) {
     notes.push(`The browser also spent ${ms(forced)} recalculating layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
   }
   if (r.followUps.length) {
     const f = heaviest(r.followUps);
     const what = f.hasDurations ? `${ms(f.total)} ${renderPhrase(f)}` : renderPhrase(f);
     const laterForced = r.laterFrames ? r.laterFrames.reduce((a, x) => a + x.forcedLayout, 0) : 0;
-    const layout = laterForced >= 4 ? `, and it made the browser recalculate layout for ${ms(laterForced)} on the way` : '';
+    const layout = laterForced >= FORCED_LAYOUT_MIN_MS ? `, and it made the browser recalculate layout for ${ms(laterForced)} on the way` : '';
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated: ${what}${layout}. INP doesn't count it, but people still wait for it.`);
   }
-  if (r.presentation > 100 && r.presentation > r.processing && !cause.startsWith('After the')) {
+  if (r.presentation > PRESENTATION_NOTE_MS && r.presentation > r.processing && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update` + (lateScript ? `, mostly because ${scriptName(lateScript)} ran for ${ms(lateScript.duration)} before the next frame.` : '.'));
   }
-  if (r.holdMs >= 100) {
+  if (r.holdMs >= HOLD_NOTE_MS) {
     notes.push(`The whole ${kind}, from press to release, spanned ${ms(r.duration + r.holdMs)}; INP counts only its slowest part, so the rest is left out of the headline.`);
+  }
+  if (r.commits.some((x) => x.coarseClock) || r.followUps.some((x) => x.coarseClock)) {
+    notes.push("This browser's clock steps in whole milliseconds, too coarse to time each component, so no component's time is shown and React's total is a sum of whole-millisecond readings.");
   }
   // Rounded to whole milliseconds like every other number here, so anything under half of one is not worth the sentence.
   if (r.walkMs >= 0.5) {

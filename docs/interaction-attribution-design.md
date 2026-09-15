@@ -17,10 +17,10 @@ component name.
 
 This library does the join and answers in plain words:
 
-    264 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
-    about 261 ms; React's own render was only 0 ms. A second React render landed 547 ms
-    after the screen updated: 92 ms re-rendering 256 components inside ProfilePage, mostly
-    PhotoTile (240 of them, 72 ms). INP doesn't count it, but people still wait for it.
+    408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
+    about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
+    after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
+    PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
 
 ## What is proven so far
 
@@ -29,7 +29,7 @@ Every line below comes out of `apps/demo/e2e/attribution.spec.ts`, run headless 
 | Scenario (anti-pattern) | Dev build verdict | Production build |
 | --- | --- | --- |
 | Context storm: unstable context value | 163ms rendering the OrderSummary subtree, LineItem x800 | same names via displayName stamping, attribution by render counts |
-| Layout thrash: read after write in 400 layout effects | 14ms render plus 63ms forced style/layout, PriceTicker x400 | same |
+| Layout thrash: read after write in 400 layout effects | 49ms render plus 185ms forced style/layout, PriceTicker x400 | same |
 | Handler hog: 120ms in the click handler, no state change | no React render before the paint; 120ms in the click handler computeChecksum | handler name minified, component names intact |
 | Big list: 3000 unvirtualised rows filtered per keystroke | 157ms rendering the BigList subtree, Row x1440 | same |
 | Lifted state: unrelated heavy sibling re-renders per keystroke | 127ms rendering the Sidebar subtree, NavItem x600 | same |
@@ -52,7 +52,8 @@ reads that moved is the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19.
 Since 2026-09-14 `apps/demo/e2e/cross-browser.spec.ts` also runs in Firefox 148 and WebKit
 26.4 (Playwright's builds, checked on Windows): reports appear and name the component, with
 `frames: null`, and a page whose `PerformanceObserver.supportedEntryTypes` lacks `event` gets
-nothing installed.
+nothing installed. Both time React's components with a clock too coarse for the demo's (see
+"Coarse clocks" below), so their development reports carry counts and inferred blame.
 
 ## What it costs
 
@@ -128,11 +129,24 @@ page without either gets Event Timing and LoAF only. `'shim'` creates a minimal 
 React uses (`inject`, `onCommitFiberRoot`, the `renderers` map; React checks for every other
 method before calling it). It has no `checkDCE`: react-dom reads that as the real React
 DevTools being present, and in development builds it silenced React's "Download the React
-DevTools" message. React DevTools does not install over an existing hook, so a shim that loads
-first locks the extension out without a trace. The shim is an accessor on `window`, so a tool
-that assigns its own hook later is noticed: before React has registered, the library follows the
-new hook; after, React keeps reporting to the shim, `stats().devtoolsLockedOut` turns true and
-one warning says so. `dispose()` puts a chained hook's `inject` and `onCommitFiberRoot` back.
+DevTools" message. `dispose()` puts a chained hook's `inject` and `onCommitFiberRoot` back.
+
+React DevTools never installs over an existing hook: its `installHook` returns as soon as
+`window` has the property, reading and writing nothing. So a shim that loads before it locks
+React DevTools out without a trace, and `stats().devtoolsLockedOut` cannot see that happen. The
+flag catches only a tool that assigns its own hook later, which the shim notices because it is an
+accessor on `window`: before React has registered, the library follows the new hook; after, React
+keeps reporting to the shim, the flag turns true and one warning says so. The browser extension
+installs its hook at document start, before any page script, so beside it the library chains; the
+lockout needs the page itself to install React DevTools after the library, as a call to
+react-devtools-inline's `initialize()` after the library's import does.
+`apps/demo/e2e/devtools-hook.spec.ts` loads React DevTools' real hook (react-devtools-inline
+8.0.0) and the Fast Refresh runtime (react-refresh 0.19.0) before and after the library, in
+development and production builds (Fast Refresh in development only, its runtime throws in a
+production bundle): React's commits reach the library in every order, `stats().mode` is
+`'chained'` when the tool came first and `'shim'` when it came after, and each tool's own record
+of mounted roots follows the app as it mounts and unmounts, except React DevTools loaded after the
+library, which installed nothing and never hears from React.
 
 Durations come from `ProfileMode` on the root, which is what makes React fill `actualDuration`:
 bit 8 on React 17, bit 2 on 18 and 19, chosen by the version react-dom hands `inject()`. React
@@ -140,6 +154,20 @@ bit 8 on React 17, bit 2 on 18 and 19, chosen by the version react-dom hands `in
 evaluated; React 19.3 development builds set it on every root; production builds have no
 `actualDuration` at all. Measured time under a root outside ProfileMode, as under a
 `<Profiler>`, counts too.
+
+**Coarse clocks.** React times each component with `performance.now()`, which Chromium steps in
+0.1 ms and Firefox 148 and WebKit 26.4 step in whole milliseconds on a page without cross-origin
+isolation (measured 2026-09-15 in Playwright's builds). After a context-storm click in a
+development build, all 400 line items sampled read 1 or 2 ms in Firefox and 1 ms in WebKit,
+against 0.2 to 1.4 ms in Chromium, which is how reports there came to say "800 of them, 800 ms".
+That total was not inflated: the click itself took 832 to 840 ms there, because the demo's
+busy-wait stops on the same clock and so stretches each line item's 0.12 ms to the next
+millisecond. Work that does not wait on the clock reads 0 or 1 ms at random: no single
+component's time means anything, while a sum over many of them comes out close. So a commit is marked `coarseClock` when eight or more of its
+components carry a time, every one a whole millisecond, and they average under 4 ms. Its
+per-component `self` and `total` are left out, the commit's own `total` stays, and a blame built on
+its durations is `'inferred'`, with a note saying why. Components that average 4 ms or more keep
+their times, since a millisecond of rounding moves them by a quarter at most.
 
 **Failing closed.** `install()` checks the browser first. Without `event` in
 `PerformanceObserver.supportedEntryTypes` and `interactionId` on `PerformanceEventTiming` (Chrome
@@ -232,6 +260,22 @@ show up in every report. The `verdict` string is the explanation joined into one
 are built the first time something reads them, and again after the report changes, not in the
 Event Timing callback, where the time would come out of the next interaction.
 
+**How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
+it in `join.ts`: the handler is blamed from 25 ms of working time outside React's render, and only
+when that is a quarter of the working time (committing the demo's 1441-row list takes a fifth of
+it outside React's durations); a render from 5 ms with durations, or from 10 components by counts
+and 50 beside a named handler; a Long Animation Frames script from 20 ms; waiting, painting and
+working time known only by counts from 50 ms, the length of a long task. The hot path follows a
+child carrying 60% of its parent's work (`fiber.ts`). `explanation.blame.confidence` says what the
+call rests on. It is `'measured'` when the blame follows from timings of the interaction itself:
+React's durations for commits joined by their exact input stamp and walked in full, the browser's
+own phases, a script's Long Animation Frames entry. It is `'inferred'` when the blame is the
+likeliest reading of weaker evidence: render counts (production builds, coarse clocks), a commit
+that only overlapped the interaction, a walk cut short, or no Long Animation Frames to rule other
+scripts out. `verdict`, `cause`, `notes`, `headline` and `where` are display text that may be
+reworded in any version; `blame`, `rating`, the phases' milliseconds and the report's own fields
+are the data, and the demo's specs assert on those.
+
 The working time leaves out this library's own walk. A commit during the handlers is walked
 inside that commit, so the browser counts the walk as processing; the report takes it back out
 as `walkMs` (`inputDelay + processing + walkMs + presentation` is the duration), and the
@@ -269,6 +313,11 @@ two reports): the report is built from the first batch, rebuilt in place when th
 arrive with the revision bumped, and a quiet 30 ms tap that turns out to be a 100 ms click
 is published at that point. Waiting for an interaction to be "complete" was never possible
 anyway, because entries under the observer's 16 ms floor never arrive at all.
+
+All of this, from quiet interactions and publishing to late entries, late frames, later renders
+and the limits (50 published reports, 20 quiet ones, the entries of the 100 interactions heard
+from most recently), lives in `lifecycle.ts`. It reads no browser globals and its transitions are
+unit-tested one by one; `install()` only wires it to the observers, the DevTools hook and the page.
 
 **Output.** An `InteractionReport` object, a listener API, and entries the Chrome Performance
 panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's own
@@ -315,19 +364,45 @@ line comes from `explanation.blame`, a data twin of the cause sentence decided i
 branch, so the short and the long form never disagree. Page INP, on the badge, in the panel
 head and from `api.inp()`, is the web-vitals estimate computed in-library, with no web-vitals
 dependency: the interaction count is `performance.interactionCount` where the browser has
-it, else estimated from interactionId spacing (Chrome steps ids by 7); the 10 longest
-interactions are kept by their longest single entry; INP is the one at index
-`min(floor(count / 50), 9)`, longest first. It counts every interaction the observer sees at
-its 16 ms floor, plus the page's first input at any duration, so it is only exact when all
-interactions over 16 ms were observed. The demo's own "Page INP so far" line reads the same
-call, so the page never shows two INPs that disagree.
+it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
+(Chrome steps ids by 7); the 10 longest interactions are kept by their longest single entry;
+INP is the one at index `min(floor(count / 50), 9)`, longest first. It counts every interaction
+the observer sees at its 16 ms floor, plus the page's first input at any duration. The demo's
+own "Page INP so far" line reads the same call, so the page never shows two INPs that disagree.
+
+Three details make it name the same interaction as web-vitals, not only the same number. Each
+observer batch is taken sorted by the time its entries were presented, the order web-vitals
+processes them in, so interactions of equal latency rank alike; the id spacing counts `event`
+entries only, as web-vitals' polyfill does; and the interaction INP points at is chosen after each
+batch and kept while the value stays the same, since web-vitals moves `metric.entries` only when
+the value changes. `apps/demo/e2e/inp.spec.ts` runs web-vitals 6.2.2's `onINP` beside the library,
+with `reportAllChanges` and `durationThreshold: 16`, through a session of a quiet first click,
+typing, clicks and more than 50 interactions, and asserts after every interaction that both name
+the same value and the same interaction. It runs in Chromium's own headless mode, where a click
+that changes nothing paints within a frame: Playwright's default headless shell reports nearly
+every click at 16 ms or more, so the first input would seldom be quiet there. Even in that mode the
+first click waits for the page to settle. A few hundred ms after navigation the demo's start-up
+work ends in a long animation frame of 56 to 89 ms with no script attributed to it, and a click
+landing next to it waits for that frame: clicked as soon as the form appeared, 6 of 60 first clicks
+on a freshly launched browser read 16 to 72 ms. Once the badge was up and the page had had an idle
+period and painted two frames, all 120 read 0 or 8 ms.
+
+The two still part in four cases. web-vitals observes at 40 ms unless given `durationThreshold:
+16`; at its default, interactions of 16 to 40 ms are not its candidates, so the numbers differ
+when INP is under 40 ms or fewer than floor(count / 50) + 1 interactions reach 40 ms (Next.js's
+`useReportWebVitals` passes no threshold). web-vitals starts over after a back/forward cache
+restore, and at each soft navigation when asked to report them; the library does not. The
+library starts over on `clear()`, including the panel's Clear button; web-vitals does not. And
+web-vitals updates once the page is idle, so for a moment after an interaction the library's
+number is ahead.
 
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
 is large (50 components when a handler is named, 10 otherwise), and a named handler with a
 small render is blamed as "most likely", with the note that a profiling build would give exact
-numbers. LoAF cannot separate the two: the handler and React's sync render run inside the
-same script entry.
+numbers; its `confidence` is `'inferred'`. LoAF cannot separate the two: the handler and React's
+sync render run inside the same script entry. A minified handler keeps only the name of the prop
+it was found on, so production sentences say "the onClick handler".
 
 ## The demo
 
@@ -340,6 +415,24 @@ the grid in a layout effect. A "What took time" panel lists every step in the or
 happened, key presses grouped per field, the server wait shown between the click and the
 profile render, and the page's INP so far at the bottom. `#lab/...` keeps the six isolated
 anti-patterns with a "what's wrong / the fix" note each. Both have Playwright coverage.
+
+**Margins.** A demo test should pass because the library attributed the scenario, not because the
+timing fell right. On 2026-09-15 every scenario and the sign-in flow ran 12 times on the Windows PC
+in development and production builds, and the lab also on React 17 and 18, and each value a test
+rests on was set against its threshold. Five were within a factor of two. Layout thrash's render
+took 4.8 to 7.9 ms on React 17 and 18 against the 5 ms a render needs, and on React 17 some runs
+blamed the click's script instead; its rows now spend 0.05 ms each formatting a price, and the
+render takes 42 to 49 ms. The password field's handler worked 91 ms in production against the 50 ms
+a "most likely" handler needs; it now scores the password for 110 ms, and works 111 ms. The login
+click took 264 ms against the 200 ms that ends "good"; it now hashes for 400 ms (400 to 408 ms), and
+the server answers in 200 ms rather than 450, so the profile renders 687 to 704 ms after the click
+instead of 797 to 819 ms, inside the 1500 ms a later render may take by a factor of 2.1. The
+input-delay test's later render landed 1374 to 1395 ms after its click; the test now holds the main
+thread for 350 ms before a cascading-effect click, which waits 323 to 328 ms and whose later render
+lands 410 to 431 ms after it. Two values cannot reach a factor of two and do not have to: the hot
+path's share is 100% where one child carries all of its parent's work (60% is needed), and the
+cascading-effect click paints in 16 ms, on the observer's floor, but it is the page's first input,
+so it also arrives as a first-input entry at any duration.
 
 ## Production mode
 

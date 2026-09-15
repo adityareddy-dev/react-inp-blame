@@ -1,4 +1,5 @@
 import type { InpEstimate } from './inp.ts';
+import { carriesWork, heaviest, kindOf } from './join.ts';
 import { OVERLAY_ID } from './overlay-host.ts';
 import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types.ts';
 
@@ -129,7 +130,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     panel.innerHTML =
       `<div class="head">${head}<button class="x" type="button" aria-label="Close">&times;</button></div>` +
       (groups.length ? groups.map(row).join('') : `<div class="empty">Click or type. Anything slow shows up here, with the component to blame.</div>`) +
-      `<div class="foot"><span>react-inp-blame &middot; measuring cost ${cost.toFixed(1)} ms per interaction</span><button class="clear" type="button">Clear</button></div>`;
+      `<div class="foot"><span>react-inp-blame &middot; measuring cost ${costText(cost)} per interaction</span><button class="clear" type="button">Clear</button></div>`;
   }
 
   function row(g: Group): string {
@@ -159,7 +160,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const x = r.explanation;
     // Only a render with real work gets a component list; a status pill updating does not.
     const main = r.commits.length ? heaviest(r.commits) : null;
-    const before = main && (main.hasDurations ? main.total >= 5 : main.rendered >= 10) ? main : null;
+    const before = main && carriesWork(main) ? main : null;
     const later = laterRender(r);
     const legend = x.phases.map((p, i) => `<span title="${esc(p.hint)}"><i class="p${i}"></i>${esc(p.label)} ${Math.round(p.ms)} ms</span>`).join('');
     return (
@@ -169,7 +170,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       x.notes.map((n) => `<p class="note">${esc(n)}</p>`).join('') +
       (before ? comps('Rendered before the paint', before) : '') +
       (later ? comps('Rendered after the paint', later) : '') +
-      `<p class="cost">Measuring this cost ${r.overheadMs.toFixed(1)} ms.</p>` +
+      `<p class="cost">Measuring this cost ${costText(r.overheadMs)}.</p>` +
       `</div>`
     );
   }
@@ -272,7 +273,7 @@ function groupRows(reports: InteractionReport[]): Group[] {
 }
 
 function isTyping(r: InteractionReport): boolean {
-  const kind = r.explanation.headline.replace(/^\d+ ms /, '');
+  const kind = kindOf(r.type);
   return kind === 'key press' || kind === 'typing';
 }
 
@@ -289,15 +290,14 @@ function median(values: number[]): number {
   return s[Math.floor(s.length / 2)];
 }
 
-function heaviest(commits: CommitSummary[]): CommitSummary {
-  return commits.reduce((a, b) => ((b.hasDurations ? b.total : b.rendered) > (a.hasDurations ? a.total : a.rendered) ? b : a));
+/** The heaviest later render. A report only takes later renders with real work in them, so any one is worth a line. */
+function laterRender(r: InteractionReport): CommitSummary | null {
+  return r.followUps.length ? heaviest(r.followUps) : null;
 }
 
-/** A later render worth a line: real work, not the page's own status pill updating. */
-function laterRender(r: InteractionReport): CommitSummary | null {
-  if (!r.followUps.length) return null;
-  const c = heaviest(r.followUps);
-  return (c.hasDurations ? c.total >= 10 : c.rendered >= 25) ? c : null;
+/** "1.2 ms", and "under 0.1 ms" rather than a 0.0 that reads as free. */
+function costText(ms: number): string {
+  return ms < 0.05 ? 'under 0.1 ms' : `${ms.toFixed(1)} ms`;
 }
 
 function where(c: CommitSummary): string {
@@ -330,7 +330,7 @@ function blameLine(b: Blame): string {
 function titleFor(r: InteractionReport): { title: string } {
   const t = r.target;
   const label = t?.label ? t.label.replace(/^\w+ /, '') : (t?.selector ?? '');
-  const kind = r.explanation.headline.replace(/^\d+ ms /, '');
+  const kind = kindOf(r.type);
   const verb = kind === 'key press' || kind === 'typing' ? 'Typing in' : kind === 'click' || kind === 'tap' ? 'Click on' : kind;
   return { title: `${verb} ${label}`.trim() };
 }

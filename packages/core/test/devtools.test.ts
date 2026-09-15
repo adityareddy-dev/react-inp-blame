@@ -75,6 +75,7 @@ function commit(at: number, opts: Partial<CommitSummary> = {}): CommitSummary {
     hotPath: ['OrderSummary'],
     components: [{ name: 'LineItem', count: 800, self: null, total: null }],
     hasDurations: false,
+    coarseClock: false,
     total: 0,
     walkMs: 1,
     priority: undefined,

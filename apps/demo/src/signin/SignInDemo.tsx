@@ -2,7 +2,7 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { InteractionReport } from 'react-inp-blame';
 import { install, onInteraction } from 'react-inp-blame';
 import { burn } from '../burn';
-import { Entry, Pill, titleFor } from '../ReportCard';
+import { Entry, isTyping, Pill, titleFor } from '../ReportCard';
 import { journey, type Step } from './journey';
 
 // Installed by main.tsx's /auto import; this call returns that instance. Its inp() is the
@@ -18,7 +18,7 @@ interface Profile {
   photos: number[];
 }
 
-/** Pretends to be the server. 450 ms is a realistic round trip on a phone. */
+/** Pretends to be the server: a 200 ms round trip, a good one on a phone. */
 function fetchProfile(email: string): Promise<Profile> {
   const handle = (email.split('@')[0] || 'you').replace(/[^a-z0-9._]/gi, '').toLowerCase() || 'you';
   return new Promise((resolve) =>
@@ -32,14 +32,14 @@ function fetchProfile(email: string): Promise<Profile> {
           following: 312,
           photos: Array.from({ length: 240 }, (_, i) => (i * 47) % 360),
         }),
-      450,
+      200,
     ),
   );
 }
 
 /** Realistic mistake: a strength score computed synchronously on every keystroke. */
 function passwordStrength(pw: string): number {
-  burn(90);
+  burn(110);
   let s = 0;
   if (pw.length >= 8) s++;
   if (/[A-Z]/.test(pw)) s++;
@@ -50,7 +50,7 @@ function passwordStrength(pw: string): number {
 
 /** Realistic mistake: hashing the password on the main thread before sending it. */
 function hashPassword(pw: string): string {
-  burn(260);
+  burn(400);
   let h = 0;
   for (let i = 0; i < pw.length; i++) h = (h * 31 + pw.charCodeAt(i)) | 0;
   return h.toString(16);
@@ -248,8 +248,6 @@ function PhotoTile({ hue }: { hue: number }) {
 }
 
 type Row = { key: string; kind: 'group'; reports: InteractionReport[] } | { key: string; kind: 'wait'; label: string; ms: number };
-
-const isTyping = (r: InteractionReport) => /key press|typing/.test(r.explanation.headline);
 
 /** Consecutive key presses in the same field collapse into one row. */
 function toRows(steps: Step[]): Row[] {

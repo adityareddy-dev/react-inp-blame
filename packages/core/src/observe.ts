@@ -1,5 +1,29 @@
 import type { FrameSummary, ScriptSummary } from './types.ts';
 
+/** An Event Timing entry with the `interactionId` that TypeScript's DOM lib does not declare yet. */
+export interface InteractionTiming extends PerformanceEventTiming {
+  readonly interactionId: number;
+}
+
+/** Observer options for `event` entries; TypeScript's DOM lib leaves out `durationThreshold`. */
+interface EventTimingObserverInit extends PerformanceObserverInit {
+  durationThreshold: number;
+}
+
+/** The spec's `PerformanceLongAnimationFrameTiming`, which TypeScript's DOM lib does not declare: the fields read here. */
+interface PerformanceLongAnimationFrameTiming extends PerformanceEntry {
+  readonly blockingDuration: number;
+  readonly scripts: readonly PerformanceScriptTiming[];
+}
+
+/** The spec's `PerformanceScriptTiming`: one script that ran in a long animation frame. */
+interface PerformanceScriptTiming extends PerformanceEntry {
+  readonly invoker: string;
+  readonly sourceFunctionName: string;
+  readonly sourceURL: string;
+  readonly forcedStyleAndLayoutDuration: number;
+}
+
 function supportedEntryTypes(): readonly string[] {
   return typeof PerformanceObserver !== 'undefined' ? PerformanceObserver.supportedEntryTypes || [] : [];
 }
@@ -15,10 +39,10 @@ export function supportsLongAnimationFrames(): boolean {
 }
 
 /**
- * Hands over Event Timing entries grouped by interactionId, one call per id per observer
- * batch. Entries of one interaction arrive with the paint that presented them: a pointerdown
- * in one frame, the pointerup and click in a later one, a keydown before its keyup. Nothing
- * waits here; the caller merges a later batch into the report it already built.
+ * Hands over each observer batch of Event Timing entries that belong to an interaction, in the
+ * order the browser delivered them. Entries of one interaction arrive with the paint that
+ * presented them: a pointerdown in one frame, the pointerup and click in a later one, a keydown
+ * before its keyup. Nothing waits here; the caller merges a later batch into the report it built.
  *
  * The browser sends no `event` entry under 16 ms, so an interaction that paints faster is
  * never seen, and a heavy render its effect sets off after the paint has no report to join.
@@ -26,22 +50,16 @@ export function supportsLongAnimationFrames(): boolean {
  * duration, carrying its interactionId, so that type is observed too (web-vitals' onINP does
  * the same). At or over the floor the `event` entry exists as well, and the copy is dropped.
  */
-export function observeEventTiming(threshold: number, onGroup: (id: number, entries: any[]) => void): () => void {
+export function observeEventTiming(threshold: number, onBatch: (entries: InteractionTiming[]) => void): () => void {
   if (typeof PerformanceObserver === 'undefined') return () => {};
   const floor = Math.max(16, threshold);
   const po = new PerformanceObserver((list) => {
-    const byId = new Map<number, any[]>();
-    for (const e of list.getEntries() as any[]) {
-      const id = e.interactionId;
-      if (!id || (e.entryType === 'first-input' && e.duration >= floor)) continue;
-      let g = byId.get(id);
-      if (!g) byId.set(id, (g = []));
-      g.push(e);
-    }
-    for (const [id, entries] of byId) onGroup(id, entries);
+    const batch = (list.getEntries() as InteractionTiming[]).filter((e) => e.interactionId && !(e.entryType === 'first-input' && e.duration >= floor));
+    if (batch.length) onBatch(batch);
   });
+  const events: EventTimingObserverInit = { type: 'event', buffered: true, durationThreshold: floor };
   try {
-    po.observe({ type: 'event', buffered: true, durationThreshold: floor } as any);
+    po.observe(events);
   } catch {
     return () => {};
   }
@@ -52,7 +70,7 @@ export function observeEventTiming(threshold: number, onGroup: (id: number, entr
 export function observeFrames(store: FrameSummary[], max = 60, onFrame?: (f: FrameSummary) => void): () => void {
   if (!supportsLongAnimationFrames()) return () => {};
   const po = new PerformanceObserver((list) => {
-    for (const e of list.getEntries() as any[]) {
+    for (const e of list.getEntries() as PerformanceLongAnimationFrameTiming[]) {
       const f = summarizeFrame(e);
       store.push(f);
       if (store.length > max) store.splice(0, store.length - max);
@@ -63,8 +81,8 @@ export function observeFrames(store: FrameSummary[], max = 60, onFrame?: (f: Fra
   return () => po.disconnect();
 }
 
-function summarizeFrame(e: any): FrameSummary {
-  const scripts: ScriptSummary[] = (e.scripts || []).map((s: any) => ({
+function summarizeFrame(e: PerformanceLongAnimationFrameTiming): FrameSummary {
+  const scripts: ScriptSummary[] = (e.scripts || []).map((s) => ({
     invoker: s.invoker || '',
     name: s.sourceFunctionName || '',
     source: shortSource(s.sourceURL || ''),

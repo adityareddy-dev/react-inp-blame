@@ -60,19 +60,22 @@ const click = (duration: number) => [
 ];
 
 function commit(at: number, rendered: number, total: number, components: CommitSummary['components']): CommitSummary {
-  return { at, sinceInput: at - 1000, inputTs: 1000, gestureTs: 1000, inputType: 'click', rendered, truncated: false, roots: ['CascadingEffect'], hotPath: ['CascadingEffect'], components, hasDurations: true, total, walkMs: 0.3, priority: 1, didError: false };
+  return { at, sinceInput: at - 1000, inputTs: 1000, gestureTs: 1000, inputType: 'click', rendered, truncated: false, roots: ['CascadingEffect'], hotPath: ['CascadingEffect'], components, hasDurations: true, coarseClock: false, total, walkMs: 0.3, priority: 1, didError: false };
 }
 
 test('a first click that paints under the 16 ms floor still gets its later render reported', () => {
-  const handed: Array<[number, any[]]> = [];
+  const handed: any[][] = [];
   inBrowser((paint) => {
-    observeEventTiming(16, (id, entries) => handed.push([id, entries]));
+    observeEventTiming(16, (entries) => handed.push(entries));
     // Painted 8 ms after the press: no event entry reaches the observer, only the first-input one.
     paint(click(8));
   });
   assert.equal(handed.length, 1, 'nothing was handed over for the click');
-  const [id, entries] = handed[0];
-  assert.equal(id, 7);
+  const [entries] = handed;
+  assert.deepEqual(
+    entries.map((e) => `${e.entryType} ${e.name} ${e.interactionId}`),
+    ['first-input pointerdown 7'],
+  );
   // The click's own commit, then the render its effect set off 100 ms later, both stamped with the click.
   const own = commit(1003, 1, 0.5, [{ name: 'CascadingEffect', count: 1, self: 0.5, total: 0.5 }]);
   const later = commit(1100, 401, 82, [{ name: 'Detail', count: 400, self: 81, total: 0.3 }]);
@@ -83,9 +86,9 @@ test('a first click that paints under the 16 ms floor still gets its later rende
 });
 
 test('a first click that also cleared the 16 ms floor is handed over once, not twice', () => {
-  const handed: Array<[number, any[]]> = [];
+  const handed: any[][] = [];
   inBrowser((paint) => {
-    observeEventTiming(16, (id, entries) => handed.push([id, entries]));
+    observeEventTiming(16, (entries) => handed.push(entries));
     const [down, up, clicked, copy] = click(16);
     paint([down, up, clicked]);
     // The copy on its own must not reach the caller: it would rebuild the report for nothing.
@@ -93,7 +96,7 @@ test('a first click that also cleared the 16 ms floor is handed over once, not t
   });
   assert.equal(handed.length, 1);
   assert.deepEqual(
-    handed[0][1].map((e) => `${e.entryType} ${e.name}`),
+    handed[0].map((e) => `${e.entryType} ${e.name}`),
     ['event pointerdown', 'event pointerup', 'event click'],
   );
 });

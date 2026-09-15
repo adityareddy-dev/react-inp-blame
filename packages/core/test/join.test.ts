@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { attachLaterRender, buildReport, isLaterRender, refreshReport } from '../src/join.ts';
-import type { CommitSummary, InputRecord } from '../src/types.ts';
+import type { CommitSummary, FrameSummary, InputRecord } from '../src/types.ts';
 
 // Hand-built PerformanceEventTiming-like entries. Durations are multiples of 8 the way the
 // browser rounds them, except where the case under test says otherwise.
@@ -22,6 +22,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
     hotPath: ['List'],
     components: [{ name: 'Row', count: 30, self: 20, total: 20 }],
     hasDurations: true,
+    coarseClock: false,
     total: 30,
     walkMs: 0,
     priority: 1,
@@ -236,4 +237,60 @@ test('the rating follows the INP thresholds', () => {
   assert.equal(buildReport([entry('click', 0, 200, 1, 2)], [], []).explanation.rating, 'good');
   assert.equal(buildReport([entry('click', 0, 208, 1, 2)], [], []).explanation.rating, 'needs-work');
   assert.equal(buildReport([entry('click', 0, 504, 1, 2)], [], []).explanation.rating, 'poor');
+});
+
+/** The ring after a click on a "Log in" button whose onClick is `handler`, owned by SignInPage. */
+function loginClick(handler: () => void): InputRecord[] {
+  function SignInPage() {}
+  const fiber = { tag: 0, elementType: SignInPage, memoizedProps: { onClick: handler }, return: null };
+  return [input(0, 'click', { target: element('button', [text('Log in')]) as unknown as Node, fiber: fiber as unknown as InputRecord['fiber'] })];
+}
+
+test('a blame says whether it was measured or inferred', () => {
+  // Handlers ran from 3 to 100 ms and the screen updated at 120.
+  const slowClick = [entry('click', 0, 120, 3, 100)];
+  const blame = (commits: CommitSummary[], frames: FrameSummary[] | null = [], inputs: InputRecord[] = [input(0, 'click')]) => {
+    const { kind, confidence } = buildReport(slowClick, commits, frames, inputs).explanation.blame;
+    return `${kind} ${confidence}`;
+  };
+  // React's own durations, for a commit joined by the click's stamp and walked in full.
+  assert.equal(blame([commit(50, 0, { total: 90 })]), 'render measured');
+  assert.equal(blame([commit(50, 0, { total: 2 })]), 'handler measured');
+  // The same render judged by counts, by overlapping the handlers, or from a walk cut short.
+  assert.equal(blame([commit(50, 0, { hasDurations: false, total: 0, rendered: 800 })]), 'render inferred');
+  assert.equal(blame([commit(50, 999, { total: 90 })]), 'render inferred');
+  assert.equal(blame([commit(50, 0, { total: 90, truncated: true })]), 'render inferred');
+  // A production build that re-rendered two components beside a named handler.
+  assert.equal(blame([commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick(function handleLogin() {})), 'handler inferred');
+  // The browser measured waiting and painting itself; with no commit and no Long Animation Frames, nothing rules scripts out.
+  assert.equal(buildReport([entry('click', 0, 120, 80, 100)], [], []).explanation.blame.confidence, 'measured');
+  assert.equal(buildReport([entry('click', 0, 40, 5, 10)], [], []).explanation.blame.confidence, 'measured');
+  assert.equal(buildReport([entry('click', 0, 40, 5, 10)], [], null).explanation.blame.confidence, 'inferred');
+});
+
+test('a render under 1 ms reads "under 1 ms", and a handler known by its prop name reads "the onClick handler"', () => {
+  const slowClick = [entry('click', 0, 120, 3, 100)];
+  const development = buildReport(slowClick, [commit(50, 0, { total: 0.3, rendered: 2 })], [], loginClick(function handleLogin() {}));
+  assert.equal(development.explanation.cause, "The click handler handleLogin ran for about 97 ms; React's own render took under 1 ms.");
+  // A minifier leaves the handler a one-letter name, so the name reported is the prop's.
+  const minified = () => {};
+  Object.defineProperty(minified, 'name', { value: 'l' });
+  const production = buildReport(slowClick, [commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick(minified));
+  assert.equal(production.target?.handler, 'onClick');
+  assert.equal(production.explanation.cause, 'The onClick handler most likely took the 97 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.');
+});
+
+test('a commit timed by a clock too coarse for its components is blamed on its total, as inferred, with no per-component milliseconds', () => {
+  const coarse = commit(430, 0, {
+    coarseClock: true,
+    total: 417,
+    rendered: 801,
+    roots: ['ContextStorm'],
+    hotPath: ['ContextStorm', 'OrderSummary'],
+    components: [{ name: 'LineItem', count: 800, self: null, total: null }],
+  });
+  const r = buildReport([entry('click', 0, 456, 3, 440)], [coarse], null);
+  assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'OrderSummary', detail: 'LineItem ×800', ms: 417, confidence: 'inferred' });
+  assert.equal(r.explanation.cause, 'React spent 417 ms re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them).');
+  assert.ok(r.explanation.notes.some((note) => note.includes('clock steps in whole milliseconds')));
 });
