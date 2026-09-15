@@ -18,6 +18,7 @@ export default function Page() {
       <input data-test="trigger" value={name} onChange={(e) => setName(e.target.value)} placeholder="type here" />
       <p>Hello {name || 'stranger'}</p>
       <Sidebar />
+      <Memoised />
     </main>
   );
 }
@@ -37,6 +38,8 @@ function NavItem({ index }: { index: number }) {
   return <li>Item {index}</li>;
 }
 
-export const Memoised = memo(function Memoised() {
+// Exercises the `const X = memo(` case of the displayName loader. Not exported: a page file
+// may only export what Next expects, and the webpack build's type check enforces that.
+const Memoised = memo(function Memoised() {
   return null;
 });

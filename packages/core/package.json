@@ -9,10 +9,11 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./auto": { "types": "./dist/auto.d.ts", "import": "./dist/auto.js" },
-    "./display-names-loader": { "types": "./display-names-loader.d.cts", "default": "./display-names-loader.cjs" }
+    "./display-names-loader": { "types": "./display-names-loader.d.cts", "default": "./display-names-loader.cjs" },
+    "./next": { "types": "./next.d.cts", "default": "./next.cjs" }
   },
   "sideEffects": ["./dist/auto.js", "./src/auto.ts"],
-  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "README.md"],
+  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "README.md"],
   "scripts": { "build": "tsc -p tsconfig.json" },
   "keywords": ["react", "inp", "web-vitals", "performance", "event-timing", "long-animation-frames", "devtools"],
   "devDependencies": { "typescript": "^5.6.0" }

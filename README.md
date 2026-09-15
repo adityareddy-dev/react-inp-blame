@@ -21,6 +21,24 @@ fair ask: a `next` entry that wires `instrumentation-client.ts` and the names lo
 and a `useReportWebVitals` adapter so INP reports carry component names. Nothing has been
 proposed to the Next.js team yet.
 
+## In a Next.js app
+
+Two lines, the same shape as Sentry's setup. (Not on npm yet; the workspace link is how the
+demo gets it.)
+
+    // next.config.ts
+    import { withInpBlame } from 'react-inp-blame/next';
+    export default withInpBlame({ /* your config */ });
+
+    // instrumentation-client.ts
+    import 'react-inp-blame/auto';
+
+`withInpBlame` adds the loader that keeps component names through the production minifier,
+under Turbopack and under `next build --webpack`. The import installs the hook before
+react-dom loads, so the very first interaction is attributed. Read reports with
+`onInteraction(report => ...)` from `react-inp-blame`, or open the Performance panel and
+look for the `react-inp-blame` tracks.
+
 ## Layout
 
 - `packages/core` - the library (`react-inp-blame`). Zero dependencies.

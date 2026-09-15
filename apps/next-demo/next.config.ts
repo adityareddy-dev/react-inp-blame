@@ -1,18 +1,6 @@
-import type { NextConfig } from 'next';
+import { withInpBlame } from 'react-inp-blame/next';
 
-const nextConfig: NextConfig = {
-  transpilePackages: ['react-inp-blame'],
-  turbopack: {
-    rules: {
-      // Keep component names in production: the loader appends `Foo.displayName = "Foo"` to
-      // every component file on the client side, so the minifier can rename the function and
-      // the report still says "Sidebar". Restricted to app code; node_modules is left alone.
-      '*.{tsx,jsx}': {
-        condition: { all: ['browser', { not: 'foreign' }] },
-        loaders: ['react-inp-blame/display-names-loader'],
-      },
-    },
-  },
-};
-
-export default nextConfig;
+// withInpBlame adds the displayName loader (Turbopack rule + webpack rule), so the production
+// report says "Sidebar > NavItem" instead of the minifier's "n". The runtime half is the one
+// import in instrumentation-client.ts.
+export default withInpBlame({});

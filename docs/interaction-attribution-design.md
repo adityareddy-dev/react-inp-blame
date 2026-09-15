@@ -181,8 +181,15 @@ this labels the interaction.
 one React registers with, and the first keystroke is attributed. In dev, React Fast Refresh's
 runtime has already installed a hook stub by the time instrumentation-client runs, so the
 library chains onto it, and attribution works there too, with durations. No beforeInteractive
-shim is needed. Production names come from the displayName loader above, one rule in
-`next.config.ts`; before it the verdict read "602 components re-rendered under n". A
+shim is needed. Setup is two lines: `withInpBlame()` around the config in `next.config.ts`
+(`react-inp-blame/next`, adds the displayName loader as a Turbopack rule and as a webpack
+`enforce: 'pre'` rule, merging with whatever rules the app already has) and
+`import 'react-inp-blame/auto'` in `instrumentation-client.ts`. That is the shape Sentry uses
+(`withSentryConfig` + `Sentry.init` in the same file), so it is what Next users expect. Proven
+2026-09-14 in dev, Turbopack production and `next build --webpack` production; before the
+loader the verdict read "602 components re-rendered under n". One lesson from the webpack
+run: its type check rejects a page file that exports anything Next does not expect, which
+Turbopack's does not, so the demo's `memo()` component is no longer exported. A
 `useReportWebVitals` adapter would attach the
 report to web-vitals' INP attribution object so Vercel Speed Insights, or anything else
 consuming it, gets component names for free. The aim is inclusion in Next.js itself rather
@@ -207,13 +214,12 @@ None of the following has been done, and nothing here should be described as if 
 
 ## Next steps, in order
 
-1. A `next` entry that wires instrumentation-client and the loader rule in one line.
-2. An on-page overlay: a corner badge with the page's INP, and a panel that lists each slow
+1. An on-page overlay: a corner badge with the page's INP, and a panel that lists each slow
    interaction, the component to blame and a waiting / working / painting bar. Same look in
    the Vite demo and in Next.
-3. The production-mode overhead measurement on a real tree of several thousand fibers.
-4. Open `apps/demo/traces/context-storm-dev.json` in the Performance panel and check the
+2. The production-mode overhead measurement on a real tree of several thousand fibers.
+3. Open `apps/demo/traces/context-storm-dev.json` in the Performance panel and check the
    two tracks read well; adjust names, colours and tooltip text.
-5. Package split: `core`, `vite-plugin`, `next`, and an OpenTelemetry exporter.
-6. Then, and only then, the first outside conversation: one issue on
+4. Package split: `core`, `vite-plugin`, `next`, and an OpenTelemetry exporter.
+5. Then, and only then, the first outside conversation: one issue on
    `open-telemetry/opentelemetry-js-contrib` proposing interaction-attribution attributes.
