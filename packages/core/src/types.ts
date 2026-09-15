@@ -29,7 +29,7 @@ export interface InputRecord extends InputStamp {
 }
 
 export interface CommitSummary {
-  /** performance.now() at the end of the commit. */
+  /** performance.now() at the end of the commit, when the walk started. */
   at: number;
   /** ms from the stamped input to this commit. */
   sinceInput: number;
@@ -46,7 +46,7 @@ export interface CommitSummary {
   joinedBy?: 'exact' | 'overlap';
   /** Component fibers that performed work in this commit. */
   rendered: number;
-  /** Fiber visits stopped at the walk budget; counts are partial. */
+  /** The walk stopped early, at `walkBudget` component fibers or at a subtree deeper than it follows, so the counts are partial. */
   truncated: boolean;
   /** Top-most components that rendered. */
   roots: string[];
@@ -58,7 +58,11 @@ export interface CommitSummary {
   hasDurations: boolean;
   /** Total render time of the commit in ms when durations exist, else 0. */
   total: number;
-  /** Cost of the fiber walk itself, ms. */
+  /**
+   * How long this library took to walk the commit, ms. The walk runs inside React's commit, so
+   * for a commit during an interaction's handlers it is part of the processing time the browser
+   * measured; the report takes it back out (`InteractionReport.walkMs`).
+   */
   walkMs: number;
   /**
    * The Scheduler priority React passed with the commit: 1 (immediate) to 5 (idle) on React 18
@@ -88,9 +92,10 @@ export interface Stats {
    * there. 'none': no hook in use (on the server, or `hook: 'chain'` found none), so reports
    * carry no React commits. 'unsupported': the browser has no Event Timing `interactionId` and
    * nothing was installed, or react-dom is outside React 17 to 19 or its fiber tree is not the
-   * expected shape, and reports carry no React commits.
+   * expected shape, and reports carry no React commits. 'sampled-out': the page lost the
+   * `sampleRate` roll and nothing was installed.
    */
-  mode: 'shim' | 'chained' | 'none' | 'unsupported';
+  mode: 'shim' | 'chained' | 'none' | 'unsupported' | 'sampled-out';
   /** Who owns the hook: this library, or the keys of the hook it chained onto. */
   owner: string;
   /** Every renderer known to have registered with the hook: the ones seen registering, plus earlier ones React DevTools' hook kept. */
@@ -102,9 +107,18 @@ export interface Stats {
    */
   devtoolsLockedOut: boolean;
   walks: number;
+  /** Time spent walking React's commits, ms, inside those commits. */
   walkTotalMs: number;
+  /**
+   * The rest of this library's own time, ms: building and updating reports (in the Event Timing
+   * and Long Animation Frames callbacks, and inside React's commit when a later render attaches)
+   * and drawing Performance panel entries when the page is idle.
+   */
+  reportTotalMs: number;
   reports: number;
   commitsRecorded: number;
+  /** Time spent inside install() calls since the page loaded or dispose() ran, ms. The badge and panel load afterwards and are not part of it. */
+  installMs: number;
 }
 
 export interface ScriptSummary {
@@ -126,7 +140,7 @@ export interface FrameSummary {
 
 export interface TargetInfo {
   selector: string | null;
-  /** Human label for the element, e.g. 'button "Add to cart"' or 'input "filter rows"'. */
+  /** Human label for the element: its aria-label, a form field's placeholder, or its first run of text, at most 40 characters. e.g. 'button "Add to cart"' or 'input "filter rows"'. */
   label: string | null;
   /** Nearest component owning the event target. */
   component: string | null;
@@ -166,9 +180,9 @@ export interface Explanation {
   where: string | null;
   /** The one sentence that says where the time went. */
   cause: string;
-  /** Extra sentences worth knowing: forced layout, a later render, waiting time. */
+  /** Extra sentences worth knowing: forced layout, a later render, waiting time, this library's own time. */
   notes: string[];
-  /** Waiting, working, updating the screen. Sums to the interaction's duration. */
+  /** Waiting, working, updating the screen. With the report's `walkMs` they add up to the interaction's duration. */
   phases: Phase[];
 }
 
@@ -196,8 +210,14 @@ export interface InteractionReport {
   /** Every entry seen for the id so far, in arrival order. */
   entries: EventEntrySummary[];
   inputDelay: number;
-  /** Handlers and React rendering, clamped to the paint the way web-vitals clamps it. */
+  /** Handlers and React rendering, clamped to the paint the way web-vitals clamps it, less `walkMs`. */
   processing: number;
+  /**
+   * This library's walks of the commits that ran during the handlers, ms. The browser counts them
+   * as processing; they are taken out of `processing`, so `inputDelay + processing + walkMs +
+   * presentation` is `duration`, and the explanation says so when it rounds to 1 ms or more.
+   */
+  walkMs: number;
   presentation: number;
   target: TargetInfo | null;
   /** React commits between the input and the next paint: what INP measures. */
@@ -210,10 +230,15 @@ export interface InteractionReport {
   laterFrames: FrameSummary[] | null;
   /** Bumped every time a later render, frame or Event Timing entry attaches to this report after it was first built. */
   revision: number;
-  explanation: Explanation;
-  /** The explanation as one line of text. */
-  verdict: string;
-  /** What this library itself cost inside the interaction window, ms. */
+  /** Built on first read, and again after the report changes, so a report nobody reads costs nothing to explain. */
+  readonly explanation: Explanation;
+  /** The explanation as one line of text, built on first read like `explanation`. */
+  readonly verdict: string;
+  /**
+   * What this library spent on this interaction, ms: walking the commits joined to it, building
+   * and updating the report, and drawing its Performance panel entries (which builds the
+   * explanation for their tooltip). Only `walkMs` of it ran inside the interaction itself.
+   */
   overheadMs: number;
 }
 
@@ -230,14 +255,15 @@ export interface InstallOptions {
   /**
    * Show the on-page badge and panel. `true` always; `'query'` only when the URL carries
    * `?inp-blame` / `#inp-blame` or localStorage has `react-inp-blame=overlay`, which is how you
-   * open it on a production page without shipping UI to users. Default false.
+   * open it on a production page without shipping UI to users. Their code is loaded with a
+   * dynamic import after install() returns. Default false.
    */
   overlay?: boolean | 'query' | OverlayOptions;
   /** Report interactions at or above this duration (ms), plus shorter ones that trigger a later render. Default 40. */
   threshold?: number;
-  /** Emit User Timing measures that the Chrome Performance panel renders as custom tracks. Default true. */
+  /** Draw each report in the Chrome Performance panel, in a "react-inp-blame" track group, once the page is idle. Default true. */
   devtoolsTrack?: boolean;
-  /** Maximum fibers visited per commit walk. Default 5000. */
+  /** Maximum component fibers (function, class, memo and forwardRef components) visited per commit walk; DOM and text fibers do not count. Default 5000. */
   walkBudget?: number;
   /** Commits later than this many ms after the last input are not walked. Default 1500. */
   inputWindow?: number;
@@ -253,4 +279,10 @@ export interface InstallOptions {
    * shims otherwise. Default 'auto'.
    */
   hook?: 'auto' | 'chain' | 'shim';
+  /**
+   * Share of page loads that install anything, from 0 to 1. The first install() on a page rolls
+   * once; a page that loses gets an API with nothing behind it (`stats().mode === 'sampled-out'`):
+   * no hook, no listeners, no observers. Later calls return that API until dispose(). Default 1.
+   */
+  sampleRate?: number;
 }

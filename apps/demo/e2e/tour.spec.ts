@@ -47,7 +47,7 @@ test('tour', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('[data-test=email]');
   console.log('\n  Browser stays open. In it: Cmd+Opt+I, Performance tab, Record, sign in again, Stop.');
-  console.log('  Look for the "react-inp-blame" group with Interactions and React renders tracks.');
+  console.log('  Look for the "react-inp-blame" group and its Interaction blame track, beside React\'s own Scheduler and Components tracks.');
   console.log('  Close the browser or press Resume in the Playwright Inspector to end the tour.\n');
   await page.pause();
 });

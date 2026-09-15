@@ -104,8 +104,9 @@ function committedRoot(mode: number, ms: number | undefined) {
 
 const slowClick = (duration: number) => ({ entryType: 'event', name: 'click', interactionId: 7, startTime: 1000, duration, processingStart: 1002, processingEnd: 1000 + duration - 8, target: null });
 
-test('a browser without Event Timing interactionId gets nothing installed and one warning', (t) => {
+test('a browser without Event Timing interactionId gets nothing installed and one warning', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
+  const overlays: Promise<unknown>[] = [];
   for (const browser of [{ entryTypes: ['first-input'] }, { interactionId: false }]) {
     inBrowser((page) => {
       const api = install({ debugGlobal: true });
@@ -114,11 +115,12 @@ test('a browser without Event Timing interactionId gets nothing installed and on
       assert.equal(page.listening.size, 0, 'input listeners were added');
       // Exposed anyway, so stats() on the page says why nothing is reported.
       assert.equal(page.window.__REACT_INP__, api);
-      assert.equal(mountOverlay(), null);
+      overlays.push(mountOverlay());
     }, browser);
   }
   assert.equal(warn.mock.callCount(), 1);
   assert.match(warn.mock.calls[0].arguments[0], /no Event Timing interactionId/);
+  assert.deepEqual(await Promise.all(overlays), [null, null]);
 });
 
 test("hook: 'auto' creates a hook when there is none, and it does not claim to be React DevTools", () => {
@@ -283,6 +285,26 @@ test('install() while installed applies onReport and warns once about options it
     page.paint([slowClick(120)]);
     assert.deepEqual(heard, ['second']);
     api.dispose();
+  });
+});
+
+test('sampleRate rolls once per page, and a page that loses gets nothing installed until dispose()', (t) => {
+  const roll = t.mock.method(Math, 'random', () => 0.5);
+  inBrowser((page) => {
+    const out = install({ sampleRate: 0.4, debugGlobal: true });
+    assert.equal(out.stats().mode, 'sampled-out');
+    assert.equal(HOOK in page.window, false, 'the DevTools hook was created');
+    assert.equal(page.listening.size, 0, 'input listeners were added');
+    assert.equal(page.window.__REACT_INP__, out);
+    // Rolling again on a later call would raise the share of pages that install.
+    assert.equal(install({ sampleRate: 1 }), out);
+    assert.equal(roll.mock.callCount(), 1);
+
+    out.dispose();
+    assert.equal('__REACT_INP__' in page.window, false);
+    const won = install({ sampleRate: 0.6 });
+    assert.equal(won.stats().mode, 'shim');
+    won.dispose();
   });
 });
 

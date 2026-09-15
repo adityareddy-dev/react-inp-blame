@@ -122,17 +122,22 @@ export function recordedCommits(): CommitSummary[] {
 }
 
 /** The hook's half of `stats()`. */
-export function hookStats(): Omit<Stats, 'reports'> {
+export function hookStats(): Omit<Stats, 'reports' | 'reportTotalMs' | 'installMs'> {
   if (attached && attached === shim && (window as any)[HOOK_KEY] !== shim) replaced(shim, (window as any)[HOOK_KEY]);
   return {
     mode,
     owner: owner(),
-    renderers: attached ? [...registryOf(attached).values()].map((r) => r.info) : [],
+    renderers: knownRenderers(),
     devtoolsLockedOut,
     walks,
     walkTotalMs,
     commitsRecorded: commits.length,
   };
+}
+
+/** What each renderer known to the hook in use handed `inject()`. */
+export function knownRenderers(): RendererInfo[] {
+  return attached ? [...registryOf(attached).values()].map((r) => r.info) : [];
 }
 
 function owner(): string {

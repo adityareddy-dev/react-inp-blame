@@ -25,6 +25,23 @@ test('hook is installed before React registers', async ({ page }) => {
   expect(stats.renderers.map((r) => r.rendererPackageName)).toContain('react-dom');
 });
 
+test('install() costs the page under 2 ms, the badge and panel loading after it', async ({ page }) => {
+  const loads: number[] = [];
+  for (let i = 0; i < 5; i++) {
+    // A new query string, so each goto loads the page rather than moving to its hash.
+    await page.goto(`/?load=${i}#fine`);
+    await page.waitForSelector('#react-inp-blame .badge');
+    const stats: Stats = await page.evaluate(() => (window as any).__REACT_INP__.stats());
+    loads.push(stats.installMs);
+  }
+  // Both calls the demo makes: the /auto import, then install({ overlay }) in main.tsx. The median
+  // of five loads, because the first costs more than the reloads after it and any single one can
+  // land on a busy moment of the machine.
+  loads.sort((a, b) => a - b);
+  console.log(`  install() over five loads: ${loads.map((ms) => ms.toFixed(1)).join(', ')} ms`);
+  expect(loads[2]).toBeLessThan(2);
+});
+
 test('context storm: blames the OrderSummary subtree, LineItem x800', async ({ page }) => {
   const r = await interact(page, 'context-storm', () => page.click('[data-test=trigger]'));
   expect(r.commits.length).toBeGreaterThanOrEqual(1);

@@ -9,6 +9,10 @@ const MemoComponent = 14;
 const SimpleMemoComponent = 15;
 // Fiber flag React sets on every component fiber that actually rendered in a commit.
 const PerformedWork = 0b1;
+// Far deeper than any real UI; a tree this deep is a runaway recursion in the app. The walk
+// recurses once per level inside React's commit, so it stops descending here rather than risk
+// the stack.
+const MAX_DEPTH = 1000;
 
 /**
  * A React fiber, reduced to the fields this library reads. They are React internals, the same
@@ -178,30 +182,37 @@ interface Agg {
  * Summarise one commit from the fiber tree after it became current.
  * A fiber whose alternate still points at the same child list bailed out, so nothing
  * under it rendered and its subtree is stale: that is the prune.
+ * `budget` caps the component fibers visited; DOM and text fibers do not count against it.
  */
 export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: InputStamp, context: CommitContext): CommitSummary {
-  let visited = 0;
+  let componentsVisited = 0;
+  let outOfBudget = false;
   let truncated = false;
   let measured = 0;
   const byName = new Map<string, RenderedComponent>();
   let rendered = 0;
 
-  function visit(f: Fiber): Agg[] {
-    if (++visited > budget) {
+  function visit(f: Fiber, depth: number): Agg[] {
+    const comp = isComponent(f);
+    // Host and text fibers are most of any tree, and counting them cut every root-level update
+    // short on a page of 5000 DOM nodes. They cost the walk no more than they cost React: a
+    // subtree React did not re-render is pruned below, so the walk only follows React's own work.
+    if (comp && ++componentsVisited > budget) {
+      outOfBudget = true;
       truncated = true;
       return [];
     }
     const bailedOut = f.alternate !== null && f.alternate.child === f.child;
-    const comp = isComponent(f);
     const performed = comp && (f.flags & PerformedWork) !== 0;
     let kids: Agg[] = [];
-    if (!bailedOut) {
-      let c = f.child;
-      while (c !== null) {
-        const r = visit(c);
-        if (r.length) kids = kids.length ? kids.concat(r) : r;
-        if (truncated) break;
-        c = c.sibling;
+    if (!bailedOut && f.child !== null) {
+      if (depth >= MAX_DEPTH) {
+        truncated = true;
+      } else {
+        for (let c: Fiber | null = f.child; c !== null && !outOfBudget; c = c.sibling) {
+          const r = visit(c, depth + 1);
+          if (r.length) kids = kids.length ? kids.concat(r) : r;
+        }
       }
     }
     if (!performed) {
@@ -237,7 +248,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     return [{ name, performed: true, rendered: 1 + kids.reduce((a, k) => a + k.rendered, 0), total, kids }];
   }
 
-  const top = visit(rootFiber);
+  const top = visit(rootFiber, 0);
   // React measures the trees in ProfileMode. A subtree under <Profiler> is measured even when
   // its root is not, and shows up as nonzero time.
   const hasDurations = (rootFiber.mode & context.profileMode) !== 0 || measured > 0;

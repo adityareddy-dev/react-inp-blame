@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildReport, isLaterRender, refreshReport } from '../src/join.ts';
+import { attachLaterRender, buildReport, isLaterRender, refreshReport } from '../src/join.ts';
 import type { CommitSummary, InputRecord } from '../src/types.ts';
 
 // Hand-built PerformanceEventTiming-like entries. Durations are multiples of 8 the way the
@@ -23,7 +23,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
     components: [{ name: 'Row', count: 30, self: 20, total: 20 }],
     hasDurations: true,
     total: 30,
-    walkMs: 0.2,
+    walkMs: 0,
     priority: 1,
     didError: false,
     ...opts,
@@ -32,6 +32,36 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
 
 function input(ts: number, type: string, extra: Partial<InputRecord> = {}): InputRecord {
   return { ts, type, gestureTs: ts, press: undefined, target: null, fiber: null, ...extra };
+}
+
+/** A detached DOM element as the label reads it. Its textContent throws: a label must never need all of it. */
+function element(tag: string, children: Record<string, unknown>[], attributes: Record<string, string> = {}): Record<string, unknown> {
+  const el: Record<string, unknown> = {
+    nodeType: 1,
+    tagName: tag.toUpperCase(),
+    id: '',
+    classList: { length: 0 },
+    parentNode: null,
+    parentElement: null,
+    nextSibling: null,
+    firstChild: children[0] ?? null,
+    getAttribute: (name: string) => attributes[name] ?? null,
+  };
+  Object.defineProperty(el, 'textContent', {
+    get() {
+      throw new Error('the label read the whole textContent');
+    },
+  });
+  children.forEach((child, i) => {
+    child.parentNode = el;
+    child.parentElement = el;
+    child.nextSibling = children[i + 1] ?? null;
+  });
+  return el;
+}
+
+function text(value: string): Record<string, unknown> {
+  return { nodeType: 3, nodeValue: value, parentNode: null, parentElement: null, nextSibling: null, firstChild: null };
 }
 
 const longPress = [entry('pointerdown', 0, 32, 2, 6), entry('pointerup', 60, 16, 61, 62), entry('click', 61, 100, 62, 150)];
@@ -126,7 +156,7 @@ test('a null entry target falls back to the node and fiber the ring kept at disp
   function handleClose() {}
   const fiber = { tag: 0, elementType: CloseButton, memoizedProps: { onClick: handleClose }, return: { tag: 0, elementType: Dialog, memoizedProps: {}, return: null } };
   // A detached element: no parent, and React has already deleted its fiber expando.
-  const node = { nodeType: 1, tagName: 'BUTTON', id: '', classList: { length: 0 }, textContent: ' Close ', parentNode: null, parentElement: null, getAttribute: () => null };
+  const node = element('button', [text(' Close ')]);
   const ring = [input(0, 'click', { target: node, fiber })];
   const r = buildReport([entry('click', 0, 120, 3, 100)], [], [], ring);
   assert.ok(r.target);
@@ -144,16 +174,54 @@ test('a late entry of a long press merges into the emitted report with a revisio
   assert.equal(r.type, 'pointerdown');
   assert.equal(r.revision, 0);
   const sync = commit(140, 61);
-  const headlineChanged = refreshReport(r, longPress, [sync], []);
-  assert.equal(headlineChanged, true);
+  refreshReport(r, longPress, [sync], []);
   assert.equal(r.duration, 100);
   assert.equal(r.type, 'click');
   assert.equal(r.revision, 1);
   assert.equal(r.entries.length, 3);
   assert.deepEqual(r.commits, [sync]);
-  // A keyup that changes nothing still bumps the revision, so listeners see the entry list grow.
-  assert.equal(refreshReport(r, longPress.concat(entry('keyup', 200, 16, 201, 202)), [sync], []), false);
+  assert.equal(r.explanation.headline, '100 ms click');
+  // A keyup that changes nothing else still bumps the revision, so listeners see the entry list grow.
+  refreshReport(r, longPress.concat(entry('keyup', 200, 16, 201, 202)), [sync], []);
+  assert.equal(r.duration, 100);
+  assert.equal(r.entries.length, 4);
   assert.equal(r.revision, 2);
+});
+
+test("processing leaves out this library's own walk during the handlers, and the explanation says so", () => {
+  // Handlers ran from 5 to 100 ms and the paint came at 120. Walking the click's commit at 50 ms
+  // took 3 ms; the later render's 2 ms walk came after the paint, outside the interaction.
+  const sync = commit(50, 0, { walkMs: 3 });
+  const later = commit(400, 0, { walkMs: 2, total: 40 });
+  const r = buildReport([entry('click', 0, 120, 5, 100)], [sync, later], []);
+  assert.equal(r.walkMs, 3);
+  assert.equal(r.processing, 92);
+  assert.equal(r.inputDelay + r.processing + r.walkMs + r.presentation, r.duration);
+  assert.equal(r.overheadMs, 5);
+  assert.match(r.verdict, /The 120 ms includes 3 ms that react-inp-blame itself spent reading what React rendered; it is not counted as working time\./);
+  // A walk still running when the handlers ended counts only up to their end.
+  assert.equal(buildReport([entry('click', 0, 120, 5, 100)], [commit(98, 0, { walkMs: 4 })], []).walkMs, 2);
+});
+
+test('the label is the aria-label or the first run of text, at most 40 characters, never the whole textContent', () => {
+  const label = (target: Record<string, unknown>) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], []).target!.label;
+  // React renders `Add to cart ({count})` as three adjacent text nodes.
+  assert.equal(label(element('button', [text('Add to cart ('), text('3'), text(')')])), 'button "Add to cart (3)"');
+  assert.equal(label(element('button', [element('svg', []), text('  Close  ')])), 'button "Close"');
+  assert.equal(label(element('button', [text('×')], { 'aria-label': 'Remove item' })), 'button "Remove item"');
+  assert.equal(label(element('p', [text('A'.repeat(60))])), `p "${'A'.repeat(40)}"`);
+  // A click on a table body of 3000 rows reads the first row's text and stops.
+  const rows = Array.from({ length: 3000 }, (_, i) => element('tr', [text(`Row ${i}`)]));
+  assert.equal(label(element('tbody', rows)), 'tbody "Row 0"');
+});
+
+test('the verdict is built on first read and again after a later render attaches', () => {
+  const r = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
+  assert.doesNotMatch(r.verdict, /after the screen updated/);
+  attachLaterRender(r, commit(400, 0, { total: 40 }), []);
+  assert.match(r.verdict, /A second React render landed 280 ms after the screen updated/);
+  // A copy of the report carries the explanation like any other field.
+  assert.equal(JSON.parse(JSON.stringify(r)).verdict, r.verdict);
 });
 
 test('later renders attach only by an exact stamp', () => {

@@ -14,6 +14,13 @@ const RENDER_GROUP_MS = 8;
 const MIN_LATER_MS = 10;
 const MIN_LATER_COUNT = 25;
 const worthMentioning = (c: CommitSummary) => (c.hasDurations ? c.total >= MIN_LATER_MS : c.rendered >= MIN_LATER_COUNT);
+// A label names the clicked element; it is not a copy of it. The element can be a list of 3000
+// rows, and reading all of its text would cost more than the rest of the report, so only the
+// aria-label, a form field's placeholder or the first run of text is read, up to 40 characters.
+const LABEL_CHARS = 40;
+// Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
+const LABEL_NODES = 32;
+const TEXT_NODE = 3;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
 const FRIENDLY: Record<string, string> = {
   click: 'click',
@@ -27,6 +34,9 @@ const FRIENDLY: Record<string, string> = {
   input: 'typing',
   change: 'typing',
 };
+
+/** A report's fields apart from the explanation and verdict, which are built on first read. */
+type ReportData = Omit<InteractionReport, 'explanation' | 'verdict'>;
 
 interface PaintGroup {
   renderTime: number;
@@ -79,6 +89,8 @@ const summarize = (e: any): EventEntrySummary => ({
   processingEnd: e.processingEnd,
 });
 
+const walked = (commits: CommitSummary[]): number => commits.reduce((a, c) => a + c.walkMs, 0);
+
 /**
  * One report from every Event Timing entry seen for an interactionId. The headline is the
  * longest single entry, which is the number web-vitals reports as INP for the interaction;
@@ -86,6 +98,10 @@ const summarize = (e: any): EventEntrySummary => ({
  * the target when the entry's is gone.
  */
 export function buildReport(entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): InteractionReport {
+  return Object.defineProperties(reportData(entries, commits, frames, inputs), EXPLAINED_ON_READ) as InteractionReport;
+}
+
+function reportData(entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[]): ReportData {
   let longest = entries[0];
   for (const e of entries) if (e.duration > longest.duration) longest = e;
   const group = groupByRenderTime(entries).find((g) => g.entries.includes(longest))!;
@@ -126,10 +142,6 @@ export function buildReport(entries: any[], commits: CommitSummary[], frames: Fr
     if (handler) break;
   }
 
-  const inputDelay = processingStart - start;
-  const processing = processingEnd - processingStart;
-  const presentation = end - processingEnd;
-
   // Durations are rounded to 8 ms but processingEnd is exact, so a commit inside the
   // handlers is before the paint even when the rounded paint time says otherwise.
   const paintBound = Math.max(end, group.processingEnd);
@@ -149,9 +161,13 @@ export function buildReport(entries: any[], commits: CommitSummary[], frames: Fr
       inWindow.push(c);
     }
   }
+  // The walk runs inside React's commit, so the walk of a commit during the handlers sits inside
+  // the processing time the browser measured. That time is this library's, not the page's.
+  let walkMs = 0;
+  for (const c of inWindow) walkMs += Math.max(0, Math.min(c.at + c.walkMs, processingEnd) - Math.max(c.at, processingStart));
   const overlapping = frames && frames.filter((f) => f.start < end && f.start + f.duration > start);
 
-  const report: InteractionReport = {
+  return {
     interactionId: longest.interactionId,
     type: sorted[0].name,
     start,
@@ -159,23 +175,52 @@ export function buildReport(entries: any[], commits: CommitSummary[], frames: Fr
     duration,
     holdMs,
     entries: entries.map(summarize),
-    inputDelay,
-    processing,
-    presentation,
+    inputDelay: processingStart - start,
+    processing: processingEnd - processingStart - walkMs,
+    walkMs,
+    presentation: end - processingEnd,
     target: targetNode ? describeTarget(targetNode, fiber, handler) : null,
     commits: inWindow,
     followUps,
     frames: overlapping,
     laterFrames: frames && framesForLater(followUps, frames),
     revision: 0,
-    explanation: null as any,
-    verdict: '',
-    overheadMs: inWindow.reduce((a, c) => a + c.walkMs, 0) + followUps.reduce((a, c) => a + c.walkMs, 0),
+    overheadMs: walked(inWindow) + walked(followUps),
   };
-  report.explanation = explain(report);
-  report.verdict = toVerdict(report.explanation);
-  return report;
 }
+
+/** Explanations built so far, by report. A report that changes is dropped from here and explained again when next read. */
+const explanations = new WeakMap<ReportData, { explanation: Explanation; verdict: string }>();
+
+function explained(r: InteractionReport): { explanation: Explanation; verdict: string } {
+  let built = explanations.get(r);
+  if (!built) {
+    const explanation = explain(r);
+    built = { explanation, verdict: toVerdict(explanation) };
+    explanations.set(r, built);
+  }
+  return built;
+}
+
+/**
+ * Reports are built in the Event Timing callback, where every millisecond can delay the next
+ * input, and many are never read, so the explanation and verdict are built on first read. They
+ * are own enumerable getters: JSON, spreads and structured copies of a report still carry them.
+ */
+const EXPLAINED_ON_READ: PropertyDescriptorMap = {
+  explanation: {
+    enumerable: true,
+    get(this: InteractionReport) {
+      return explained(this).explanation;
+    },
+  },
+  verdict: {
+    enumerable: true,
+    get(this: InteractionReport) {
+      return explained(this).verdict;
+    },
+  },
+};
 
 /** The commit's stamp names another input the ring knows, one that is not part of this interaction. */
 function claimedElsewhere(c: CommitSummary, inputs: InputRecord[], stamps: number[]): boolean {
@@ -185,13 +230,14 @@ function claimedElsewhere(c: CommitSummary, inputs: InputRecord[], stamps: numbe
 /**
  * More entries arrived for an interaction whose report already exists (the click after a
  * held pointerdown, the keyup after a keydown). Rebuild it in place so listeners keep the
- * same object, bump the revision, and say whether the headline moved.
+ * same object, and bump the revision.
  */
-export function refreshReport(r: InteractionReport, entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): boolean {
-  const fresh = buildReport(entries, commits, frames, inputs);
-  const headlineChanged = fresh.duration !== r.duration || fresh.start !== r.start || fresh.type !== r.type;
-  Object.assign(r, fresh, { revision: r.revision + 1 });
-  return headlineChanged;
+export function refreshReport(r: InteractionReport, entries: any[], commits: CommitSummary[], frames: FrameSummary[] | null, inputs: InputRecord[] = []): void {
+  // Time already spent building the report stays counted; the walks are recounted for the commits it now holds.
+  const building = r.overheadMs - walked(r.commits) - walked(r.followUps);
+  const fresh = reportData(entries, commits, frames, inputs);
+  Object.assign(r, fresh, { revision: r.revision + 1, overheadMs: fresh.overheadMs + building });
+  explanations.delete(r);
 }
 
 function framesForLater(later: CommitSummary[], frames: FrameSummary[]): FrameSummary[] {
@@ -213,8 +259,7 @@ export function refreshFrames(r: InteractionReport, frames: FrameSummary[]): boo
   if (inWindow.length === r.frames?.length && later.length === r.laterFrames?.length) return false;
   r.frames = inWindow;
   r.laterFrames = later;
-  r.explanation = explain(r);
-  r.verdict = toVerdict(r.explanation);
+  explanations.delete(r);
   r.revision++;
   return true;
 }
@@ -231,8 +276,7 @@ export function attachLaterRender(r: InteractionReport, c: CommitSummary, frames
   r.followUps.push(c);
   r.overheadMs += c.walkMs;
   r.laterFrames = frames && framesForLater(r.followUps, frames);
-  r.explanation = explain(r);
-  r.verdict = toVerdict(r.explanation);
+  explanations.delete(r);
   r.revision++;
   return true;
 }
@@ -268,14 +312,40 @@ function labelOf(node: any): string | null {
   if (!el || !el.getAttribute) return null;
   const tag = el.tagName.toLowerCase();
   const word = tag === 'a' ? 'link' : tag;
-  const aria = el.getAttribute('aria-label');
-  if (aria) return `${word} "${aria.trim().slice(0, 40)}"`;
-  if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-    const p = el.getAttribute('placeholder') || el.getAttribute('name') || el.getAttribute('type');
-    return p ? `${word} "${p.slice(0, 40)}"` : word;
+  const field = tag === 'input' || tag === 'textarea' || tag === 'select';
+  const text: string | null = el.getAttribute('aria-label') || (field ? el.getAttribute('placeholder') || el.getAttribute('name') || el.getAttribute('type') : firstText(el));
+  const label = text ? clip(text) : '';
+  return label ? `${word} "${label}"` : word;
+}
+
+/** Whitespace collapsed, cut at 40 characters. */
+function clip(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, LABEL_CHARS).trimEnd();
+}
+
+/**
+ * The first run of text inside `el`: its first text node with more than whitespace, joined to
+ * the text nodes right after it (React renders `Add to cart ({n})` as three), stopping once 40
+ * characters are in hand.
+ */
+function firstText(el: any): string {
+  let node = el.firstChild;
+  for (let looked = 0; node && looked < LABEL_NODES; looked++) {
+    if (node.nodeType === TEXT_NODE && /\S/.test(node.nodeValue)) {
+      let text: string = node.nodeValue;
+      for (let next = node.nextSibling; next && next.nodeType === TEXT_NODE && text.length < LABEL_CHARS; next = next.nextSibling) text += next.nodeValue;
+      return text;
+    }
+    node = nextNode(node, el);
   }
-  const text = String(el.textContent || '').replace(/\s+/g, ' ').trim();
-  return text ? `${word} "${text.slice(0, 40)}"` : word;
+  return '';
+}
+
+/** The node after `node` in document order, without leaving `root`. */
+function nextNode(node: any, root: any): any {
+  if (node.firstChild) return node.firstChild;
+  for (let n = node; n && n !== root; n = n.parentNode) if (n.nextSibling) return n.nextSibling;
+  return null;
 }
 
 const ms = (n: number): string => `${Math.round(n)} ms`;
@@ -348,7 +418,7 @@ export function explain(r: InteractionReport): Explanation {
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler.
   const renderMatters = !!c && (hasDurations ? renderTotal >= 5 : c.rendered >= (r.target?.handler ? 50 : 10));
-  const processingEnd = r.start + r.inputDelay + r.processing;
+  const processingEnd = r.start + r.inputDelay + r.processing + r.walkMs;
   // A change handler runs on the input event, after the key event was processed, so its
   // cost shows up between the handlers and the paint. Look for it there.
   const lateScript = r.frames && longestScript(r.frames, processingEnd - 5, r.end);
@@ -399,7 +469,7 @@ export function explain(r: InteractionReport): Explanation {
     const real = r.commits.filter((x) => (x.hasDurations ? x.total >= 5 : x.rendered >= 10)).length;
     if (real > 1) notes.push(`React rendered ${real} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
     if (r.inputDelay > 50 && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
-    if (c.truncated) notes.push('The component count is partial: the walk hit its budget.');
+    if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   }
   if (forced >= 4) {
     notes.push(`The browser also spent ${ms(forced)} recalculating layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
@@ -416,6 +486,10 @@ export function explain(r: InteractionReport): Explanation {
   }
   if (r.holdMs >= 100) {
     notes.push(`The whole ${kind}, from press to release, spanned ${ms(r.duration + r.holdMs)}; INP counts only its slowest part, so the rest is left out of the headline.`);
+  }
+  // Rounded to whole milliseconds like every other number here, so anything under half of one is not worth the sentence.
+  if (r.walkMs >= 0.5) {
+    notes.push(`The ${ms(r.duration)} includes ${ms(r.walkMs)} that react-inp-blame itself spent reading what React rendered; it is not counted as working time.`);
   }
 
   const phases = [

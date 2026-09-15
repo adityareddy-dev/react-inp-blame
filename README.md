@@ -49,8 +49,9 @@ A small badge in a corner shows the page's INP so far, green, amber or red. Clic
 panel that lists each slow interaction with the component (or handler) to blame and a bar
 split into waiting, working and updating the screen; click a row for the full explanation and
 the components that rendered. It is plain DOM in a shadow root, so it never causes a React
-render and takes no styles from the page. `mountOverlay()` from `react-inp-blame` adds it
-after an `/auto` import. Clicks on the badge itself are not counted.
+render and takes no styles from the page. Its code loads on demand, after `install()` has
+returned. `mountOverlay()` from `react-inp-blame` adds it after an `/auto` import and hands back
+a promise of its handle. Clicks on the badge itself are not counted.
 
 ## Layout
 
@@ -86,6 +87,7 @@ Behind a package mirror that curates versions, `npm run fix-lock` rewrites lockf
 the public registry before committing; the `overrides` entry pins one transitive package to a
 version the mirror carries (a root devDependency, since npm ignores `overrides` for workspace dependencies).
 
-Open the demo, record a Performance profile in Chrome DevTools, sign in: the interactions and
-their React renders show up as a custom "react-inp-blame" track group. For a guided,
+Open the demo, record a Performance profile in Chrome DevTools, sign in: each interaction shows
+up in the "Interaction blame" track of a custom "react-inp-blame" group, beside React's own
+tracks (a production build, where React draws none, also gets a "React renders" track). For a guided,
 visible run: `INP_TOUR=1 npx playwright test tour --headed` from `apps/demo`.

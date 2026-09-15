@@ -1,4 +1,5 @@
 import type { InpEstimate } from './inp.ts';
+import { OVERLAY_ID } from './overlay-host.ts';
 import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types.ts';
 
 /**
@@ -20,8 +21,6 @@ export interface OverlayHandle {
   refresh(): void;
   dispose(): void;
 }
-
-export const OVERLAY_ID = 'react-inp-blame';
 
 const RATING = {
   good: { label: 'Good', color: '#22c55e' },
@@ -255,16 +254,6 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       host.remove();
     },
   };
-}
-
-/** True when the URL or localStorage asks for the overlay; the `'query'` mode of the option. */
-export function overlayRequested(): boolean {
-  try {
-    if (/[?&#]inp-blame(?:[=&#]|$)/.test(location.search + location.hash)) return true;
-    return localStorage.getItem('react-inp-blame') === 'overlay';
-  } catch {
-    return false;
-  }
 }
 
 interface Group {
