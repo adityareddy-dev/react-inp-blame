@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  # Daily as well, so the next@canary job goes red the day a Next.js or React canary breaks something,
+  # not at the next push.
+  schedule:
+    - cron: '23 5 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Build and unit tests, Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both strip TypeScript natively, which is how node --test runs packages/core/test/*.test.ts.
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:unit
+
+  e2e:
+    name: Vite demo, React 17 and 18, Next.js
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # The install() check in apps/demo/e2e/attribution.spec.ts defaults to 2 ms, set on a Windows PC
+      # where install() measured about 0.5 ms. Shared runners are slower and noisier, so the check runs
+      # here against a looser budget rather than being skipped.
+      INP_INSTALL_BUDGET_MS: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # `chromium` installs the full Chromium build beside the headless shell: e2e/inp.spec.ts runs in
+      # Chromium's own headless mode (channel: 'chromium'). Firefox and WebKit run cross-browser.spec.ts.
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Vite demo, development build
+        run: npm test
+      - name: Vite demo, production build
+        run: npm run test:prod
+      - name: Vite demo on React 18.3.1 and 17.0.2
+        run: |
+          node scripts/react-matrix.mjs
+          npm install
+          npm test -w apps/demo-react18
+          npm test -w apps/demo-react17
+      - name: Next.js, next dev
+        run: npm test -w apps/next-demo
+      - name: Next.js, Turbopack production build
+        run: npm run test:prod -w apps/next-demo
+      - name: Next.js, webpack production build
+        run: npm run test:prod:webpack -w apps/next-demo
+
+  next-canary:
+    name: Next.js canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Goes red the day a Next.js canary, or the React canary it vendors for the App Router, changes
+    # something the library relies on, without failing the run.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm install next@canary -w apps/next-demo
+      - run: npm ls next
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: next dev
+        run: npm test -w apps/next-demo
+      - name: Turbopack production build
+        run: npm run test:prod -w apps/next-demo
+      - name: webpack production build
+        run: npm run test:prod:webpack -w apps/next-demo

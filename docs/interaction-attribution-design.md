@@ -60,7 +60,7 @@ nothing installed. Both time React's components with a clock too coarse for the 
 Measured 2026-09-15 on the Windows PC, Chromium 147 headless under Playwright 1.59.1, with a
 throwaway harness that is not in the repo: each scenario loaded 30 times on a fresh page, one
 interaction each, at the demo's `walkBudget: 100000`. p50 / p95 in ms; `performance.now()` is
-coarsened to 0.1 ms there. "install()" is `stats().installMs`, both calls the demo makes (the
+coarsened to 0.1 ms there. "install()" is `stats().installMs`, both calls the demo made then (the
 `/auto` import, then `install({ overlay })`). "Walk" is `walkMs` of the commits joined to the
 report. "Event Timing callback" is the wall time of the library's observer callback, timed from
 outside by wrapping `PerformanceObserver`, so it includes the page's own listeners.
@@ -120,23 +120,29 @@ each other.
 Outside an interaction the per-commit cost is a renderer lookup and one subtraction.
 
 **Size.** Measured 2026-09-15 on 0.1.0 with the rolldown 1.2.8 in the repo's `node_modules`
-(minified ESM, gzip at zlib's default level), by a throwaway script that is not in the repo:
+(`platform: 'browser'`, minified ESM, every export of `hook`, `fiber` and `observe` kept for the
+last row, gzip at zlib's default level), by a throwaway script that is not in the repo:
 
 | Bundle | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 31.8 KB | 12.0 KB |
-| The badge and panel, a chunk loaded by dynamic `import()` only when shown | 11.1 KB | 4.1 KB |
-| Before hydration: `hook`, `fiber`, `observe`, `session` and `warn` alone | 9.3 KB | 4.0 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 34.3 KB | 12.9 KB |
+| The badge and panel, a chunk loaded by dynamic `import()` only when shown | 11.3 KB | 4.2 KB |
+| Before hydration: `hook`, `fiber`, `observe`, `session` and `warn` alone | 11.5 KB | 4.8 KB |
+
+The same script gives 32.6 KB / 12.3 KB, 11.3 KB / 4.2 KB and 11.3 KB / 4.7 KB for commit a41cd7e,
+before reports carried navigations, so those cost the entry 1.7 KB minified and 0.6 KB gzipped. An
+earlier script measured that commit at 31.8 / 12.0, 11.1 / 4.1 and 9.3 / 4.0 KB; its settings were
+not kept, so those figures do not compare with these line for line.
 
 The badge and panel were already behind the dynamic import and stay there. The explanation prose
 (`join.ts`), the report lifecycle, the INP estimate and the Performance panel drawing still load
 with the entry, which is why it is about three times the part that has to run before hydration.
 The figures in `road-to-acceptance.md` (29 KB minified and 10.6 KB gzipped for `/auto`, badge and
 panel included) predate the passes that added the lifecycle, the INP estimate and the version
-gates, so the two sets do not compare line for line. `withInpBlame` adds its loader to `next dev`
-only unless `enabled` says otherwise, so a production Next build with the default gets no
-`displayName` stamps from it; the runtime is still in any build whose `instrumentation-client.ts`
-imports it.
+gates, so the two sets do not compare line for line. `withInpBlame` adds its client module and its
+loader to `next dev` only unless `enabled` says otherwise, and `react-inp-blame/vite` adds its
+plugins to the dev server only, so a production build with the default carries nothing from the
+library unless the app imports it itself.
 
 ## How it works
 
@@ -179,7 +185,10 @@ call from the other copy returns the same API. A copy whose version lays that st
 differently installs nothing, warns, and says so in `stats().unsupportedReason` (`kind:
 'another-copy'`) rather than read state it would misunderstand. `packages/core/test/install.test.ts`
 loads two copies of the source from separate directories and checks for one hook wrapper, one
-walk per commit and one set of listeners.
+walk per commit and one set of listeners. In `apps/next-demo` a client component subscribes with
+`onInteraction` from its own import and writes each report's `interactionId` to `document.body`;
+the spec checks it hears the same reports as the debug global under `next dev` and both production
+builds, so the module Next.js injects and the application share one installation there too.
 
 Durations come from `ProfileMode` on the root, which is what makes React fill `actualDuration`:
 bit 8 on React 17, bit 2 on 18 and 19, chosen by the version react-dom hands `inject()`. React
@@ -356,6 +365,33 @@ rest arrive, and a quiet 30 ms tap that turns out to be a 100 ms click
 is published at that point. Waiting for an interaction to be "complete" was never possible
 anyway, because entries under the observer's 16 ms floor never arrive at all.
 
+**Navigations.** Every report carries `navigationURL` and `navigationType`, with web-vitals' names
+and values, so it lines up with the INP web-vitals reports for the same navigation. The page's
+navigations begin with the document's own, named from its navigation timing entry the way
+web-vitals names it (`navigate`, `reload`, `back-forward`, `prerender`, `restore`). A `pageshow`
+with `persisted` adds a `back-forward-cache` navigation, and `react-inp-blame/next` adds a
+`soft-navigation` for each App Router navigation, through the `onRouterTransitionStart` hook Next.js
+calls on the module it injects. A report is placed in the newest navigation that had begun when its
+first input did, so a click that starts a navigation belongs to the page it left. Next.js 16.3.5
+calls the hook synchronously inside the click's dispatch (a Link's click handler calls
+`startTransition`, whose callback dispatches the navigation, which calls the hook), so
+`window.event` is that click, and its `timeStamp` joins the navigation to the click's report with
+the same exact match commits use; the report names it in `startedNavigation`. Under
+`experimental.instrumentationClientRouterTransitionEvents` the hook also gets an event whose
+`timestamp` is a Unix epoch time (Next.js computes it as `performance.timeOrigin +
+performance.now()`); the library subtracts `timeOrigin` and takes it as the navigation's start, and
+without the flag reads `performance.now()` itself. A navigation started with no input being
+dispatched, a `router.push()` after an `await` or the browser's back button, is named on no report.
+At each soft navigation and back/forward cache restore the INP estimate starts over from the
+interactions that began after it, and quiet interactions held so far are let go, so renders of the
+new page stamped with an input from before it cannot publish them. The App Router announces a push
+or replace without `basePath`, so `withInpBlame` hands the module the app's `basePath` to put back.
+Next.js calls the hook only for the App Router. The Pages Router's client entry imports the injected
+modules too (read in Next.js 16.3.5's source, not run), which gives it attribution but no navigation
+join. `apps/next-demo/e2e/load-order.spec.ts` clicks a Link whose handler takes 60 ms and checks the
+click's report, the reset and a report on the page it opened, under `next dev` and both production
+builds.
+
 All of this, from quiet interactions and publishing to late entries, late frames, later renders
 and the limits (50 published reports, 20 quiet ones, the entries of the 100 interactions heard
 from most recently), lives in `lifecycle.ts`. It reads no browser globals and its transitions are
@@ -442,9 +478,12 @@ period and painted two frames, all 120 read 0 or 8 ms.
 The two still part in four cases. web-vitals observes at 40 ms unless given `durationThreshold:
 16`; at its default, interactions of 16 to 40 ms are not its candidates, so the numbers differ
 when INP is under 40 ms or fewer than floor(count / 50) + 1 interactions reach 40 ms (Next.js's
-`useReportWebVitals` passes no threshold). web-vitals starts over after a back/forward cache
-restore, and at each soft navigation when asked to report them; the library does not. The
-library starts over on `clear()`, including the panel's Clear button; web-vitals does not. And
+`useReportWebVitals` passes no threshold). Both start over after a back/forward cache restore, but
+web-vitals starts over at a soft navigation only when asked to report them, and learns of one from
+the browser's soft navigation entries where the library learns of it from the router (see
+Navigations above), so at a soft navigation the two can start over at different moments, or only
+one of them at all. The library starts over on `clear()`, including the panel's Clear button;
+web-vitals does not. And
 web-vitals updates once the page is idle, so for a moment after an interaction the library's
 number is ahead.
 
@@ -503,8 +542,8 @@ What needs help:
   string literals survive any minifier and React DevTools honours the same property. It
   ships as `react-inp-blame/display-names-loader`, a webpack-style loader that only needs
   the source string, so it runs under Turbopack (`turbopack.rules`, the Next 16 default,
-  where a `webpack()` hook never runs) and under webpack (`module.rules`). The Vite plugin
-  in the demo is a thin wrapper around the same function. Proven on Next 16.3.5 in
+  where a `webpack()` hook never runs) and under webpack (`module.rules`), and
+  `react-inp-blame/vite` runs the same function as a transform. Proven on Next 16.3.5 in
   production, 2026-09-14. Cost is about 30 bytes per component; the alternatives are worse:
   `next build --no-mangling` keeps every name (+9.6% gzip on react-dom alone), and an SWC
   plugin has to be rebuilt against each Next release's swc_core. The regex handles
@@ -539,28 +578,35 @@ commits is a feature request with a working reference implementation behind it. 
 own Performance tracks (Scheduler and Components) are complementary: they show React's work,
 this labels the interaction.
 
-**Next.js.** Tested on Next 16.3.5 (`apps/next-demo`). In a production build,
-`instrumentation-client.ts` runs before `react-dom` evaluates: the library's own hook is the
-one React registers with, and the first keystroke is attributed. In dev, React Fast Refresh's
-runtime has already installed a hook stub by the time instrumentation-client runs, so the
-library chains onto it, and attribution works there too, with durations. No beforeInteractive
-shim is needed. Setup is two lines: `withInpBlame()` around the config in `next.config.ts`
-(`react-inp-blame/next`, adds the displayName loader as a Turbopack rule and as a webpack
-`enforce: 'pre'` rule, merging with whatever rules the app already has; since 0.1.0 only under
-`next dev` unless `enabled` is `'production'` or `true`, which `apps/next-demo` sets because its
-test checks names in production builds) and
-`import 'react-inp-blame/auto'` in `instrumentation-client.ts`. That is the shape Sentry uses
-(`withSentryConfig` + `Sentry.init` in the same file), so it is what Next users expect. Proven
-2026-09-14 in dev, Turbopack production and `next build --webpack` production; before the
-loader the verdict read "602 components re-rendered under n". One lesson from the webpack
-run: its type check rejects a page file that exports anything Next does not expect, which
-Turbopack's does not, so the demo's `memo()` component is no longer exported. A
-`useReportWebVitals` adapter would attach the
-report to web-vitals' INP attribution object so Vercel Speed Insights, or anything else
-consuming it, gets component names for free. The aim is inclusion in Next.js itself rather
-than a plugin people have to find; those three pieces are what make that a reasonable ask.
+**Next.js.** Tested on Next 16.3.5 (`apps/next-demo`). Setup is one line: `withInpBlame()` around
+the config in `next.config.ts` (`react-inp-blame/next`). It appends `react-inp-blame/next-client` to
+`instrumentationClientInject`, the list of client modules Next.js 16.3 imports before
+`instrumentation-client` and before hydration, which Next.js documents for config wrappers of this
+kind. That module installs the library with the wrapper's `runtime` options, which reach it through
+`env` because Next.js inlines those at build time. The wrapper also adds the displayName loader as a
+Turbopack rule and as a webpack `enforce: 'pre'` rule, merging with whatever rules the app already
+has. Both are added only under `next dev` unless `enabled` is `'production'` or `true`, which
+`apps/next-demo` sets because its test checks names in production builds; `runtime: false` keeps the
+loader alone. That is the shape Sentry uses (`withSentryConfig`), so it is what Next users expect.
+In a production build the injected module runs before `react-dom` evaluates: the library's own hook
+is the one React registers with, and the first keystroke is attributed. In dev, React Fast Refresh's
+runtime has already installed a hook stub by then, so the library chains onto it, and attribution
+works there too, with durations. No beforeInteractive shim is needed. Until 2026-09-15 the runtime
+half was a hand-written `import 'react-inp-blame/auto'` in `instrumentation-client.ts`; the spec
+now checks the injected module under `next dev`, Turbopack production and `next build --webpack`
+production. The loader was proven 2026-09-14 in the same three runs; before it the verdict read
+"602 components re-rendered under n". One lesson from the webpack run: its type check rejects a page
+file that exports anything Next does not expect, which Turbopack's does not, so the demo's `memo()`
+component is no longer exported. A `useReportWebVitals` adapter would attach the report to
+web-vitals' INP attribution object so Vercel Speed Insights, or anything else consuming it, gets
+component names for free. The aim is inclusion in Next.js itself rather than a plugin people have to
+find; the wrapper and that adapter are what make that a reasonable ask.
 
-**Vite.** The displayName plugin plus an auto-import of the `auto` entry.
+**Vite.** `react-inp-blame/vite`: a module script ahead of the page's own that installs the
+library, so the order of imports in the entry module stops mattering, and the displayName transform.
+Vite runs a `transformIndexHtml` hook ordered `pre` before it reads the page's scripts, so the added
+script is served in development and bundled in production like the page's own, and module scripts
+run in document order. The demo and its React 17 and 18 variants install with it.
 
 **RUM vendors and OpenTelemetry.** The report maps cleanly onto span attributes:
 `interaction.id`, `interaction.type`, `react.component`, `react.hot_path`,

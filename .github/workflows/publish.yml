@@ -1,0 +1,50 @@
+name: Publish
+
+# Publishes packages/core to npm when a version tag, such as v0.1.0, is pushed.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  # The OIDC token GitHub issues to this run. Trusted publishing exchanges it for the right to publish,
+  # and --provenance signs the provenance statement with it (npm generates provenance only for public
+  # repositories).
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          # Trusted publishing needs npm 11.5.1 or later and Node 22.14 or later; npm's own example runs it on Node 24.
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          # A release installs from the lockfile alone, never from a cache.
+          package-manager-cache: false
+      - name: Check that the tag names the version being published
+        run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./packages/core/package.json').version")"
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:unit
+      # npm authenticates the publish in one of two ways.
+      #
+      # Trusted publishing, preferred, needs no secret. On npmjs.com, in the package's settings under
+      # Trusted publishing, choose GitHub Actions with organization or user adityareddy-dev, repository
+      # react-inp-blame and workflow filename publish.yml, and tick `npm publish` under Allowed actions:
+      # a configuration created after 2026-09-03 allows only `npm stage publish` unless it is ticked. npm
+      # configures trusted publishing only for a package that already exists on the registry, so it
+      # cannot make the first publish.
+      #
+      # An NPM_TOKEN repository secret, which setup-node's .npmrc hands to npm as NODE_AUTH_TOKEN: a
+      # granular access token with Read and write (publish and stage) on All Packages, since the package
+      # does not exist before its first publish, and Bypass two-factor authentication checked. npm has
+      # announced that publishing directly with a granular access token ends in January 2027. npm tries
+      # OIDC before a token, so once trusted publishing is configured the secret can be deleted and this
+      # step left as it is.
+      - run: npm publish --provenance --access public -w packages/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

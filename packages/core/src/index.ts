@@ -1,8 +1,9 @@
 import { createTimeline } from './devtools.js';
-import { clearCommits, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.js';
+import { clearCommits, dispatchedInput, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { FOLLOW_UP_WINDOW, type LabelSource } from './join.js';
 import { createLifecycle } from './lifecycle.js';
+import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
 import { observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
@@ -54,10 +55,10 @@ const globals = () => window as unknown as Record<string, unknown>;
 const installTime = () => page.installMs;
 
 /**
- * Must run before react-dom evaluates. The simplest way is
- * `import 'react-inp-blame/auto'` as the first import of your entry module. Calling it again
- * while installed, from this or any other copy of the library on the page, applies `overlay` and
- * `onReport` and returns the same API.
+ * Must run before react-dom evaluates. `react-inp-blame/vite` and `react-inp-blame/next` call it in
+ * a module that runs ahead of the app; without either, make `import 'react-inp-blame/auto'` the
+ * first import of your entry module. Calling it again while installed, from this or any other copy
+ * of the library on the page, applies `overlay` and `onReport` and returns the same API.
  */
 export function install(opts: InstallOptions = {}): Api {
   // Timed because it runs before the app does: Next.js warns when instrumentation-client takes over 16 ms.
@@ -137,10 +138,14 @@ function installNow(opts: InstallOptions): Api {
     });
   };
 
+  // Where reports happened: the document's own navigation, then each soft navigation a router
+  // announces and each restore from the back/forward cache, oldest first.
+  const navigations: PageNavigation[] = [documentNavigation()];
   const lifecycle = createLifecycle({
     threshold: settings.threshold,
     commits: recordedCommits,
     inputs: recentInputs,
+    navigations: () => navigations,
     frames,
     interactionCount: 'interactionCount' in performance ? () => (performance as Performance & InteractionCounting).interactionCount : null,
     labels,
@@ -158,8 +163,26 @@ function installNow(opts: InstallOptions): Api {
   });
   let stopOnReport = opts.onReport ? listen(opts.onReport) : null;
 
+  const navigated = (navigation: PageNavigation) => {
+    navigations.push(navigation);
+    if (navigations.length > MAX_NAVIGATIONS) navigations.shift();
+    lifecycle.onNavigation(navigation.start);
+    // The badge shows the INP of the navigation the page is on, which has just started over.
+    page.overlay?.then((handle) => handle?.refresh());
+  };
+  const onPageShow = (e: PageTransitionEvent) => {
+    if (e.persisted) navigated({ url: navigations[navigations.length - 1].url, type: 'back-forward-cache', start: e.timeStamp, router: null });
+  };
+  // The App Router announces a navigation from inside the handler that starts it, so the input
+  // being dispatched, if any, is the one that started it.
+  const stopRouterNavigations = onRouterNavigation(({ url, type, at }) => {
+    const input = dispatchedInput();
+    navigated({ url, type: 'soft-navigation', start: at, router: { type, input: input && { inputTs: input.ts, gestureTs: input.gestureTs } } });
+  });
+
   installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit });
   for (const t of INPUT_TYPES) window.addEventListener(t, noteInput, { capture: true, passive: true });
+  window.addEventListener('pageshow', onPageShow, { capture: true });
   const stopFrames = frames ? observeFrames(frames, 60, lifecycle.onFrame) : () => {};
   // Observe at the browser's floor (16 ms) so short interactions with a heavy later render
   // are not lost, and so the INP estimate sees every interaction it can; everything else
@@ -172,7 +195,7 @@ function installNow(opts: InstallOptions): Api {
       warnOnce(
         'no-renderer',
         'no react-dom registered with the DevTools hook within 3s. install() has to run before react-dom loads: ' +
-          "make `import 'react-inp-blame/auto'` the first import of your entry module.",
+          "install with react-inp-blame/vite or react-inp-blame/next, or make `import 'react-inp-blame/auto'` the first import of your entry module.",
       );
     }
   }, 3000);
@@ -198,7 +221,9 @@ function installNow(opts: InstallOptions): Api {
       if (cancelDraw) cancelDraw();
       stopFrames();
       stopEvents();
+      stopRouterNavigations();
       for (const t of INPUT_TYPES) window.removeEventListener(t, noteInput, { capture: true });
+      window.removeEventListener('pageshow', onPageShow, { capture: true });
       uninstallHook();
       hideOverlay();
       page.listeners.clear();

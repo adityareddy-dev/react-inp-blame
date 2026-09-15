@@ -151,17 +151,26 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
 }
 
 /**
- * The input a commit belongs to. A sync commit runs inside the event's dispatch, so
- * `window.event` is that event and its `timeStamp` is exactly the Event Timing entry's
- * `startTime`. Anything else (a transition, an effect, data arriving) is stamped with the
+ * The input being dispatched right now: `window.event`, when it is one of INPUT_TYPES, whose
+ * `timeStamp` is exactly its Event Timing entry's `startTime`. Recorded in the ring if the capture
+ * listener has not seen it yet. Null outside an input's dispatch.
+ */
+export function dispatchedInput(): InputRecord | null {
+  const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
+  if (!ev || !ev.isTrusted || INPUT_TYPES.indexOf(ev.type) < 0) return null;
+  const inputs = state.inputs;
+  const last = inputs.length ? inputs[inputs.length - 1] : null;
+  return last && last.ts === ev.timeStamp ? last : record(ev);
+}
+
+/**
+ * The input a commit belongs to. A sync commit runs inside the event's dispatch, so it is the input
+ * being dispatched. Anything else (a transition, an effect, data arriving) is stamped with the
  * newest input seen.
  */
 function currentInput(): InputRecord | null {
-  const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
   const inputs = state.inputs;
-  const last = inputs.length ? inputs[inputs.length - 1] : null;
-  if (ev && ev.isTrusted && INPUT_TYPES.indexOf(ev.type) >= 0) return last && last.ts === ev.timeStamp ? last : record(ev);
-  return last;
+  return dispatchedInput() ?? (inputs.length ? inputs[inputs.length - 1] : null);
 }
 
 /** Every commit walked so far, oldest first. Live array. */
@@ -326,7 +335,7 @@ function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
   // A root's first commit replaces the empty fiber createRoot made. A rendered tree behind the
   // first commit seen here means the root rendered before install(), and those commits were missed.
   if (root.current.alternate?.child) {
-    warnOnce('late-install', "install() ran after a React root had already rendered, so its earlier commits were missed. Make `import 'react-inp-blame/auto'` the first import of your entry module.");
+    warnOnce('late-install', "install() ran after a React root had already rendered, so its earlier commits were missed. Install ahead of the app with react-inp-blame/vite or react-inp-blame/next, or make `import 'react-inp-blame/auto'` the first import of your entry module.");
   }
 }
 

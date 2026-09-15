@@ -49,6 +49,7 @@ function lifecycle(options: Partial<LifecycleOptions> = {}) {
     threshold: 40,
     commits: () => commits,
     inputs: () => [],
+    navigations: () => [],
     frames: null,
     interactionCount: null,
     labels: () => 'attributes',
@@ -168,4 +169,23 @@ test(`a late entry rebuilds its report only while its interaction is among the n
   assert.equal(published.length, 1);
   assert.equal(published[0].revision, 0);
   assert.equal(published[0].entries.length, 1);
+});
+
+test('a navigation starts the INP estimate over from the interactions that begin after it, and lets go of quiet ones', () => {
+  const { life, published, render } = lifecycle();
+  life.onEntries([entry(7, 'click', 120)]);
+  life.onEntries([entry(14, 'click', 24)]);
+  assert.equal(life.inp()?.interactionId, 7);
+
+  life.onNavigation(20_500);
+  assert.equal(life.inp(), null);
+  // The quiet click was let go, so a render stamped with its input publishes nothing.
+  render(commit(14_100, 14_000));
+  assert.equal(published.length, 1);
+
+  // A click that began just before the navigation and is heard after it is reported, but not counted.
+  life.onEntries([entry(21, 'click', 200, { startTime: 20_400, processingStart: 20_402, processingEnd: 20_592 })]);
+  life.onEntries([entry(28, 'click', 64)]);
+  assert.equal(published.length, 3);
+  assert.equal(life.inp()?.interactionId, 28);
 });

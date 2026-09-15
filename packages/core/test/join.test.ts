@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { attachLaterRender, buildReport, isLaterRender, refreshReport, sealReport, type LabelSource } from '../src/join.ts';
+import type { PageNavigation } from '../src/navigation.ts';
 import type { CommitSummary, FrameSummary, InputRecord } from '../src/types.ts';
 
 // Hand-built PerformanceEventTiming-like entries. Durations are multiples of 8 the way the
@@ -312,4 +313,20 @@ test('a commit timed by a clock too coarse for its components is blamed on its t
   assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'OrderSummary', detail: 'LineItem ×800', ms: 417, confidence: 'inferred' });
   assert.equal(r.explanation.cause, 'React spent 417 ms re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them).');
   assert.ok(r.explanation.notes.some((note) => note.includes('clock steps in whole milliseconds')));
+});
+
+test('a report is placed in the navigation its interaction began in, and names the soft navigation its input started', () => {
+  const home: PageNavigation = { url: 'https://shop.example/', type: 'navigate', start: 0, router: null };
+  // A link pressed at 990 ms and clicked at 1000: the router announced the cart while the click was dispatched.
+  const cart: PageNavigation = { url: 'https://shop.example/cart', type: 'soft-navigation', start: 1004, router: { type: 'push', input: { inputTs: 1000, gestureTs: 990 } } };
+  const placeOf = (entries: ReturnType<typeof entry>[]) => {
+    const { navigationURL, navigationType, startedNavigation } = buildReport(entries, [], [], [], 'attributes', [home, cart]);
+    return { navigationURL, navigationType, startedNavigation };
+  };
+  const toCart = { url: cart.url, type: 'push' };
+
+  assert.deepEqual(placeOf([entry('pointerdown', 990, 16, 991, 993), entry('click', 1000, 64, 1002, 1050)]), { navigationURL: home.url, navigationType: 'navigate', startedNavigation: toCart });
+  // Only the press was slow enough to be observed; the click it released still names the navigation.
+  assert.deepEqual(placeOf([entry('pointerdown', 990, 24, 991, 1006)]), { navigationURL: home.url, navigationType: 'navigate', startedNavigation: toCart });
+  assert.deepEqual(placeOf([entry('click', 3000, 64, 3002, 3050)]), { navigationURL: cart.url, navigationType: 'soft-navigation', startedNavigation: null });
 });

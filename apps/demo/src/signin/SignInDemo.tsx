@@ -5,8 +5,8 @@ import { burn } from '../burn';
 import { Entry, isTyping, Pill, titleFor } from '../ReportCard';
 import { journey, type Step } from './journey';
 
-// Installed by main.tsx's /auto import; this call returns that instance. Its inp() is the
-// same number the badge shows, so the page never carries two INPs that disagree.
+// Installed ahead of the app by the react-inp-blame/vite plugin; this call returns that instance. Its
+// inp() is the same number the badge shows, so the page never carries two INPs that disagree.
 const api = install();
 
 interface Profile {

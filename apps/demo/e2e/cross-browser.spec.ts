@@ -64,7 +64,7 @@ test('a browser that reports no event entries gets nothing installed', async ({ 
     overlay: document.getElementById('react-inp-blame') != null,
   }));
   expect(installed).toEqual({ mode: 'unsupported', hook: false, overlay: false });
-  // The /auto import and the demo's own install() call both ran; the reason is logged once.
+  // The install the Vite plugin adds and the demo's own install() call both ran; the reason is logged once.
   expect(warnings).toHaveLength(1);
   expect(warnings[0]).toContain('no Event Timing interactionId');
 });

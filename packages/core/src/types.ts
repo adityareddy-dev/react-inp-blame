@@ -164,10 +164,12 @@ export interface Api {
   /** The newest published report, at its latest revision. */
   last(): InteractionReport | null;
   /**
-   * The page's INP so far, the estimate web-vitals makes: the interaction at index
-   * floor(count / 50) among the 10 longest. It agrees with web-vitals' `onINP` given
-   * `durationThreshold: 16`, on the value and on the interaction; the design doc lists where the
-   * two part (web-vitals' default 40 ms threshold, back/forward cache restores, `clear()`).
+   * The INP of the navigation the page is on, so far: the estimate web-vitals makes, the interaction
+   * at index floor(count / 50) among the 10 longest. It starts over at each soft navigation and each
+   * restore from the back/forward cache, from the interactions that began after it. It agrees with
+   * web-vitals' `onINP` given `durationThreshold: 16`, on the value and on the interaction; the design
+   * doc lists where the two part (web-vitals' default 40 ms threshold, `clear()`, a soft navigation
+   * web-vitals is not asked to report).
    */
   inp(): InpEstimate | null;
   /** Drops every report and recorded commit, and starts the INP estimate over. */
@@ -262,10 +264,25 @@ export interface Explanation {
   readonly where: string | null;
   /** The one sentence that says where the time went. Display text. */
   readonly cause: string;
-  /** Extra sentences worth knowing: forced layout, a later render, waiting time, this library's own time. Display text. */
+  /** Extra sentences worth knowing: a navigation it started, forced layout, a later render, waiting time, this library's own time. Display text. */
   readonly notes: readonly string[];
   /** Waiting, working, updating the screen. With the report's `walkMs` their `ms` add up to the interaction's duration. */
   readonly phases: readonly Phase[];
+}
+
+/**
+ * How the page came to be at a URL: web-vitals' `Metric['navigationType']`, with the same values.
+ * 'soft-navigation' is a client-side navigation a router announced (the Next.js App Router, through
+ * `react-inp-blame/next`); 'back-forward-cache' is a page restored from the back/forward cache.
+ */
+export type NavigationType = 'navigate' | 'reload' | 'back-forward' | 'back-forward-cache' | 'prerender' | 'restore' | 'soft-navigation';
+
+/** A soft navigation an interaction started, as the router announced it. */
+export interface StartedNavigation {
+  /** Where it went, as an absolute URL. */
+  readonly url: string;
+  /** The router's word for it: 'push' or 'replace' for a link or `router.push()` / `router.replace()`, 'traverse' for back and forward. */
+  readonly type: 'push' | 'replace' | 'traverse';
 }
 
 /** One Event Timing entry of the interaction, the fields that matter. */
@@ -309,6 +326,16 @@ export interface InteractionReport {
   readonly walkMs: number;
   readonly presentation: number;
   readonly target: TargetInfo | null;
+  /**
+   * The URL of the page the interaction happened on: the document's, or that of the latest soft
+   * navigation that had begun when the interaction did. web-vitals' `Metric.navigationURL`, so a
+   * report lines up with the INP web-vitals reports for that URL.
+   */
+  readonly navigationURL: string;
+  /** How the page came to be at `navigationURL`: web-vitals' `Metric.navigationType`. */
+  readonly navigationType: NavigationType;
+  /** The soft navigation the interaction started, when a router announced one while its input was being dispatched; null otherwise. */
+  readonly startedNavigation: StartedNavigation | null;
   /** React commits between the input and the next paint: what INP measures. */
   readonly commits: readonly CommitSummary[];
   /** Commits that landed after that paint but still belong to this input (effects, transitions, cascades). INP does not count them; the user still waits for them. */

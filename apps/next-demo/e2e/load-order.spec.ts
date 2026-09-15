@@ -1,39 +1,99 @@
-import { expect, test } from '@playwright/test';
-import type { HookInfo, Stats } from 'react-inp-blame';
+import { expect, test, type Page } from '@playwright/test';
+import type { HookInfo, InpEstimate, InteractionReport, Stats } from 'react-inp-blame';
 
 const prod = process.env.INP_MODE === 'prod';
+const run = prod ? 'prod' : 'dev';
 
-// The question: does instrumentation-client.ts run early enough for React to register with
-// the DevTools hook? Proof is functional: if the first interaction's report carries React
-// commits, the hook was wired before React committed. stats() says whether the hook is ours
-// ('shim') or was already there ('chained', Fast Refresh's stub in dev).
-test('instrumentation-client wires the hook early enough to see React commits', async ({ page }) => {
+// withInpBlame adds react-inp-blame/next-client to instrumentationClientInject, and Next.js imports that
+// module before hydration. Whether that is early enough is shown by what follows: react-dom registered
+// with the library's hook, and the page's first keystroke is reported with React's commits. next.config.ts
+// asks for the debug global, which is how these tests read the library.
+
+/**
+ * Waits until app/last-interaction.tsx has subscribed to reports, which its effect does once hydration
+ * has committed. A key pressed earlier, while React is still hydrating, has the hydration commit joined
+ * to its report ahead of its own render, with Next.js's router components at the top of the hot path.
+ */
+async function subscribed(page: Page): Promise<void> {
+  await page.waitForSelector('body[data-subscribed]', { state: 'attached' });
+}
+
+/** Waits for a report of an interaction other than `seen`, and returns it. */
+async function reportAfter(page: Page, seen: number | null): Promise<InteractionReport> {
+  const handle = await page.waitForFunction(
+    (id) => {
+      const last = (window as any).__REACT_INP_BLAME__.last();
+      return last && last.interactionId !== id ? last : null;
+    },
+    seen,
+    { timeout: 8_000 },
+  );
+  return handle.jsonValue();
+}
+
+const placeOf = (r: InteractionReport) => ({ navigationURL: r.navigationURL, navigationType: r.navigationType, startedNavigation: r.startedNavigation });
+
+test('the injected module installs before react-dom, and the first keystroke is attributed', async ({ page }) => {
   await page.goto('/');
-  await page.waitForSelector('[data-test=trigger]');
-  await page.waitForTimeout(500);
+  await subscribed(page);
   const installed: { stats: Stats; hook: HookInfo } | null = await page.evaluate(() => {
     const api = (window as any).__REACT_INP_BLAME__;
     return api ? { stats: api.stats(), hook: api.debug.hook() } : null;
   });
-  console.log(`  [${prod ? 'prod' : 'dev'}] after load: ${JSON.stringify(installed)}`);
-  expect(installed, 'library not installed: instrumentation-client did not run').toBeTruthy();
+  console.log(`  [${run}] after load: ${JSON.stringify(installed)}`);
+  expect(installed, 'library not installed: the injected module did not run').toBeTruthy();
   // The library records what react-dom hands inject(), on its own hook and through one it chains
   // onto, so react-dom showing up here means install() ran before react-dom registered.
   expect(installed!.hook.renderers.map((r) => r.rendererPackageName), 'react-dom registered before install() ran').toContain('react-dom');
 
-  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
-  await page.type('[data-test=trigger]', 'a');
-  await page.waitForFunction(() => (window as any).__REACT_INP_BLAME__.last() != null, null, { timeout: 8_000 });
-  const r = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
-  console.log(`  [${prod ? 'prod' : 'dev'}] ${r.verdict}`);
+  await page.locator('[data-test=trigger]').press('a');
+  const r = await reportAfter(page, null);
+  console.log(`  [${run}] ${r.verdict}`);
+  expect(await page.evaluate(() => (window as any).__REACT_INP_BLAME__.reports().length), 'the keystroke was not the page’s first report').toBe(1);
   const all = [...r.commits, ...r.followUps];
   expect(all.length, 'no React commit recorded for the interaction').toBeGreaterThanOrEqual(1);
   const c = all[0];
   expect(c.rendered).toBeGreaterThanOrEqual(600);
-  console.log(`  [${prod ? 'prod' : 'dev'}] hot path ${c.hotPath.join(' > ')}, top ${c.components[0].name}`);
-  // Names must survive the production minifier: the displayName loader in next.config.ts
-  // stamps them as string literals. Without it the prod report reads "n".
+  console.log(`  [${run}] hot path ${c.hotPath.join(' > ')}, top ${c.components[0].name}`);
+  // Names must survive the production minifier: the displayName loader withInpBlame adds stamps them
+  // as string literals. Without it the prod report reads "n".
   expect(c.hotPath.join(' > ')).toContain('Sidebar');
   expect(c.components[0].name).toBe('NavItem');
   if (!prod) expect(c.hasDurations).toBe(true);
+});
+
+test('application code hears every report through onInteraction, the same as the debug global', async ({ page }) => {
+  await page.goto('/');
+  await subscribed(page);
+  let seen: number | null = null;
+  for (const key of ['a', 'b']) {
+    await page.locator('[data-test=trigger]').press(key);
+    const { interactionId } = await reportAfter(page, seen);
+    // app/last-interaction.tsx writes the id of each report it hears to <body>.
+    await expect.poll(() => page.evaluate(() => document.body.dataset.lastInteraction), `the application did not hear report ${interactionId}`).toBe(String(interactionId));
+    seen = interactionId;
+  }
+});
+
+test('a link click that starts a navigation is named with it, and the page it opens starts its INP over', async ({ page }) => {
+  await page.goto('/');
+  await subscribed(page);
+  const home = page.url();
+  const second = new URL('/second', home).href;
+  await page.click('[data-test=navigate]');
+  // Rendered on the client, so it is in the document only once React has committed it.
+  await page.waitForSelector('[data-test=slow]');
+
+  const link = await reportAfter(page, null);
+  console.log(`  [${run}] ${link.verdict}`);
+  expect(placeOf(link)).toEqual({ navigationURL: home, navigationType: 'navigate', startedNavigation: { url: second, type: 'push' } });
+  // The click began before the navigation it started, so it is not part of the INP of the page it opened.
+  const opened: InpEstimate | null = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.inp());
+  expect(opened).toBeNull();
+
+  await page.click('[data-test=slow]');
+  const slow = await reportAfter(page, link.interactionId);
+  expect(placeOf(slow)).toEqual({ navigationURL: second, navigationType: 'soft-navigation', startedNavigation: null });
+  const inp: InpEstimate | null = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.inp());
+  expect(inp?.interactionId).toBe(slow.interactionId);
 });

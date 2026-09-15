@@ -2,7 +2,7 @@
   "name": "next-demo",
   "private": true,
   "version": "0.0.1",
-  "description": "Does instrumentation-client.ts run before react-dom registers with the DevTools hook?",
+  "description": "Checks that withInpBlame installs react-inp-blame before react-dom registers with the DevTools hook, under next dev and both production bundlers",
   "scripts": {
     "dev": "next dev --port 5199",
     "build": "next build",

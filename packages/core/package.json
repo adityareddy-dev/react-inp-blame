@@ -34,6 +34,17 @@
       "import": "./next.cjs",
       "default": "./next.cjs"
     },
+    "./next-client": {
+      "types": "./dist/next-client.d.ts",
+      "react-server": "./dist/react-server.js",
+      "import": "./dist/next-client.js",
+      "default": "./dist/next-client.js"
+    },
+    "./vite": {
+      "types": "./vite.d.mts",
+      "import": "./vite.mjs",
+      "default": "./vite.mjs"
+    },
     "./display-names-loader": {
       "types": "./display-names-loader.d.cts",
       "import": "./display-names-loader.cjs",
@@ -41,8 +52,8 @@
     },
     "./package.json": "./package.json"
   },
-  "sideEffects": ["./dist/auto.js", "./src/auto.ts"],
-  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "README.md", "LICENSE"],
+  "sideEffects": ["./dist/auto.js", "./dist/next-client.js", "./src/auto.ts", "./src/next-client.ts"],
+  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "vite.mjs", "vite.d.mts", "README.md", "LICENSE"],
   "engines": {
     "node": ">=20.19"
   },
@@ -51,14 +62,18 @@
     "prepack": "npm run build",
     "test:unit": "node --import ./test/ts-imports.ts --test test/*.test.ts"
   },
-  "keywords": ["react", "inp", "web-vitals", "performance", "event-timing", "long-animation-frames", "devtools"],
+  "keywords": ["react", "inp", "web-vitals", "performance", "event-timing", "long-animation-frames", "devtools", "nextjs", "vite"],
   "peerDependencies": {
+    "next": ">=16.3.0",
     "react": ">=17",
-    "react-dom": ">=17"
+    "react-dom": ">=17",
+    "vite": ">=5"
   },
   "peerDependenciesMeta": {
+    "next": { "optional": true },
     "react": { "optional": true },
-    "react-dom": { "optional": true }
+    "react-dom": { "optional": true },
+    "vite": { "optional": true }
   },
   "devDependencies": { "typescript": "^5.6.0" }
 }

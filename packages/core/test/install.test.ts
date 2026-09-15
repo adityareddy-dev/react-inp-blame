@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, mountOverlay, onInteraction } from '../src/index.ts';
+import { onRouterTransitionStart } from '../src/next-client.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 
 const HOOK = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
@@ -32,43 +33,51 @@ class EventTimingWithInteractionId {
   }
 }
 
+/** The URL of the page the stand-in browser shows. */
+const PAGE_URL = 'https://shop.example/products';
+
 interface Page {
   window: Record<string, any>;
-  /** Event types install() is listening to on the window. */
-  listening: Set<string>;
+  /** The listener install() added on the window for each event type. */
+  listening: ReadonlyMap<string, (event: unknown) => void>;
+  /** Hands `event` to the window's listener for `type`. */
+  fire(type: string, event: Record<string, unknown>): void;
   /** Hands a batch of Event Timing entries to every connected observer. */
   paint(entries: any[]): void;
-  /** Runs `commit` inside a click's dispatch, where React's sync commit runs: `window.event` is the click. */
-  duringClick(commit: () => void): void;
+  /** Runs `inside` in a click's dispatch, where React's sync commit and a router's navigation run: `window.event` is the click. Returns the click's timeStamp. */
+  duringClick(inside: () => void): number;
 }
 
-/** Runs `body` against a stand-in browser: a window, Event Timing with interactionId unless told otherwise, no Long Animation Frames. */
+/** Runs `body` against a stand-in browser: a window on PAGE_URL, Event Timing with interactionId unless told otherwise, no Long Animation Frames. */
 function inBrowser(body: (page: Page) => void, { entryTypes = ['event', 'first-input'], interactionId = true }: { entryTypes?: string[]; interactionId?: boolean } = {}): void {
-  const names = ['window', 'PerformanceObserver', 'PerformanceEventTiming'];
+  const names = ['window', 'document', 'location', 'PerformanceObserver', 'PerformanceEventTiming'];
   const saved = names.map((name) => Object.getOwnPropertyDescriptor(globalThis, name));
-  const listening = new Set<string>();
+  const listening = new Map<string, (event: unknown) => void>();
   const win: Record<string, any> = {
-    addEventListener: (type: string) => listening.add(type),
+    addEventListener: (type: string, listener: (event: unknown) => void) => listening.set(type, listener),
     removeEventListener: (type: string) => listening.delete(type),
   };
   Observer.supportedEntryTypes = entryTypes;
   Observer.live.clear();
-  const values = [win, Observer, interactionId ? EventTimingWithInteractionId : class {}];
+  const values = [win, {}, { href: PAGE_URL }, Observer, interactionId ? EventTimingWithInteractionId : class {}];
   names.forEach((name, i) => Object.defineProperty(globalThis, name, { value: values[i], configurable: true, writable: true }));
   try {
     body({
       window: win,
       listening,
+      fire: (type, event) => listening.get(type)?.(event),
       paint: (entries) => {
         for (const o of [...Observer.live]) o.callback({ getEntries: () => entries });
       },
-      duringClick: (commit) => {
-        win.event = { isTrusted: true, type: 'click', timeStamp: performance.now() };
+      duringClick: (inside) => {
+        const timeStamp = performance.now();
+        win.event = { isTrusted: true, type: 'click', timeStamp };
         try {
-          commit();
+          inside();
         } finally {
           delete win.event;
         }
+        return timeStamp;
       },
     });
   } finally {
@@ -121,7 +130,13 @@ function countingRoot() {
   return { root, walks: () => named };
 }
 
-const slowClick = (duration: number) => ({ entryType: 'event', name: 'click', interactionId: 7, startTime: 1000, duration, processingStart: 1002, processingEnd: 1000 + duration - 8, target: null });
+/** A click's Event Timing entry: its handlers start 2 ms after the input and end 8 ms before the paint. */
+const click = (interactionId: number, startTime: number, duration: number) => ({ entryType: 'event', name: 'click', interactionId, startTime, duration, processingStart: startTime + 2, processingEnd: startTime + duration - 8, target: null });
+
+const slowClick = (duration: number) => click(7, 1000, duration);
+
+/** Where a report says its interaction happened, and the navigation it started. */
+const placeOf = (r: InteractionReport | null) => r && { navigationURL: r.navigationURL, navigationType: r.navigationType, startedNavigation: r.startedNavigation };
 
 /** A button that shows a person's name and carries a data-testid, as a detached DOM node. */
 function saveButton() {
@@ -387,6 +402,45 @@ test('sampleRate rolls once per page, and a page that loses gets nothing install
     const won = install({ sampleRate: 0.6 });
     assert.equal(won.stats().mode, 'shim');
     won.dispose();
+  });
+});
+
+test('a click that starts an App Router navigation is named with it, and the reports after it carry the new URL', () => {
+  inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    // Next.js calls the injected module's hook from inside the click handler that starts the navigation.
+    const clickedAt = page.duringClick(() => onRouterTransitionStart('/cart', 'push', null));
+    page.paint([click(7, clickedAt, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: { url: 'https://shop.example/cart', type: 'push' } });
+
+    // Back to the products page, announced with the event Next.js passes under its experimental flag,
+    // whose timestamp is on the Unix epoch. A click that began before it still happened on the cart.
+    const back = clickedAt + 2000;
+    onRouterTransitionStart(PAGE_URL, 'traverse', { timestamp: performance.timeOrigin + back });
+    page.paint([click(14, back - 100, 64)]);
+    assert.equal(api.last()?.navigationURL, 'https://shop.example/cart');
+    page.paint([click(21, back + 100, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'soft-navigation', startedNavigation: null });
+    api.dispose();
+  });
+});
+
+test('a page restored from the back/forward cache starts its INP over, and its reports say how it came back', () => {
+  inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    page.paint([slowClick(120)]);
+    assert.equal(api.inp()?.interactionId, 7);
+
+    page.fire('pageshow', { persisted: true, timeStamp: 5000 });
+    assert.equal(api.inp(), null);
+    page.paint([click(14, 6000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'back-forward-cache', startedNavigation: null });
+    assert.equal(api.inp()?.interactionId, 14);
+
+    // The pageshow of an ordinary load restores nothing.
+    page.fire('pageshow', { persisted: false, timeStamp: 7000 });
+    assert.equal(api.inp()?.interactionId, 14);
+    api.dispose();
   });
 });
 

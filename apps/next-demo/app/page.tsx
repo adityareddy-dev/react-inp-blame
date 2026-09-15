@@ -1,13 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { memo, useState } from 'react';
-
-function burn(ms: number) {
-  const end = performance.now() + ms;
-  while (performance.now() < end) {
-    // spin
-  }
-}
+import { burn } from './burn';
 
 /** The lifted-state anti-pattern: one keystroke re-renders an unrelated heavy sibling. */
 export default function Page() {
@@ -17,6 +12,10 @@ export default function Page() {
       <h1>Next.js load-order check</h1>
       <input data-test="trigger" value={name} onChange={(e) => setName(e.target.value)} placeholder="type here" />
       <p>Hello {name || 'stranger'}</p>
+      {/* A click slow enough to be reported, which starts a soft navigation. */}
+      <Link href="/second" data-test="navigate" onClick={() => burn(60)}>
+        Second page
+      </Link>
       <Sidebar />
       <Memoised />
     </main>

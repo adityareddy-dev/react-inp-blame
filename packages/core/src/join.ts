@@ -1,7 +1,8 @@
 import { fiberFromNode, handlerOf, ownersOf, type Fiber } from './fiber.js';
 import { rateInp } from './inp.js';
+import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
-import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, InputRecord, InteractionReport, Phase, ScriptSummary, TargetInfo } from './types.js';
+import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, InputRecord, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
 
 export const FOLLOW_UP_WINDOW = 1500;
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
@@ -123,8 +124,8 @@ function groupByRenderTime(entries: readonly InteractionTiming[]): PaintGroup[] 
 
 const near = (a: number, b: number) => Math.abs(a - b) <= STAMP_TOLERANCE;
 
-/** Does the commit's input stamp (or the press that input released) match one of these entry start times? */
-function stampMatches(c: CommitSummary, stamps: number[]): boolean {
+/** Does this input stamp, a commit's or a navigation's (or the press that input released), match one of these entry start times? */
+function stampMatches(c: Pick<CommitSummary, 'inputTs' | 'gestureTs'>, stamps: number[]): boolean {
   for (const s of stamps) if (near(s, c.inputTs) || near(s, c.gestureTs)) return true;
   return false;
 }
@@ -159,7 +160,8 @@ function joined(c: CommitSummary, by: 'exact' | 'overlap'): CommitSummary {
  * One report's data from every Event Timing entry seen for an interactionId. The headline is the
  * longest single entry, which is the number web-vitals reports as INP for the interaction;
  * `inputs` is the ring of recent inputs, used to tell whose commit is whose and to recover
- * the target when the entry's is gone.
+ * the target when the entry's is gone; `navigations` are the page's, oldest first, to say which
+ * one the interaction happened in and which one it started.
  */
 export function buildReport(
   entries: readonly InteractionTiming[],
@@ -167,6 +169,7 @@ export function buildReport(
   frames: readonly FrameSummary[] | null,
   inputs: readonly InputRecord[] = [],
   labels: LabelSource = 'attributes',
+  navigations: readonly PageNavigation[] = [],
 ): ReportData {
   let longest = entries[0];
   for (const e of entries) if (e.duration > longest.duration) longest = e;
@@ -229,6 +232,8 @@ export function buildReport(
   // the processing time the browser measured. That time is this library's, not the page's.
   let walkMs = 0;
   for (const c of inWindow) walkMs += Math.max(0, Math.min(c.at + c.walkMs, processingEnd) - Math.max(c.at, processingStart));
+  // Placed by its first input: a click that starts a navigation happened on the page it left.
+  const navigation = navigationAt(navigations, first);
 
   return {
     schemaVersion: 1,
@@ -244,6 +249,9 @@ export function buildReport(
     walkMs,
     presentation: end - processingEnd,
     target: targetNode ? describeTarget(targetNode, fiber, handler, labels) : null,
+    navigationURL: navigation?.url ?? '',
+    navigationType: navigation?.type ?? 'navigate',
+    startedNavigation: navigationStartedBy(navigations, stamps),
     commits: Object.freeze(inWindow),
     followUps: Object.freeze(followUps),
     frames: frames && Object.freeze(frames.filter((f) => f.start < end && f.start + f.duration > start)),
@@ -296,6 +304,20 @@ function claimedElsewhere(c: CommitSummary, inputs: readonly InputRecord[], stam
   return inputs.some((i) => near(i.ts, c.inputTs) && !stamps.some((s) => near(s, i.ts)));
 }
 
+/** The navigation an interaction that began at `time` happened in: the newest one that had begun by then. Null only for a report built without the page's navigations, as unit tests build them. */
+function navigationAt(navigations: readonly PageNavigation[], time: number): PageNavigation | null {
+  let found = navigations.length ? navigations[0] : null;
+  for (const n of navigations) if (n.start <= time) found = n;
+  return found;
+}
+
+/** The soft navigation an interaction started: the last one a router announced while one of its inputs was being dispatched. */
+function navigationStartedBy(navigations: readonly PageNavigation[], stamps: number[]): StartedNavigation | null {
+  let started: StartedNavigation | null = null;
+  for (const { url, router } of navigations) if (router?.input && stampMatches(router.input, stamps)) started = { url, type: router.type };
+  return started && Object.freeze(started);
+}
+
 /**
  * The next revision of a report more entries arrived for (the click after a held pointerdown, the
  * keyup after a keydown): rebuilt from every entry so far.
@@ -307,10 +329,11 @@ export function refreshReport(
   frames: readonly FrameSummary[] | null,
   inputs: readonly InputRecord[] = [],
   labels: LabelSource = 'attributes',
+  navigations: readonly PageNavigation[] = [],
 ): ReportData {
   // Time already spent building the report stays counted; the walks are recounted for the commits it now holds.
   const building = r.overheadMs - walked(r.commits) - walked(r.followUps);
-  const fresh = buildReport(entries, commits, frames, inputs, labels);
+  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations);
   return { ...fresh, revision: r.revision + 1, overheadMs: fresh.overheadMs + building };
 }
 
@@ -428,6 +451,16 @@ function nextNode(node: Node, root: Node): Node | null {
 const ms = (n: number): string => `${Math.round(n)} ms`;
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+/** A URL the way a link on `page` shows it: its path, query and fragment when it stays on that page's origin. */
+function linkText(url: string, page: string): string {
+  try {
+    const to = new URL(url);
+    return to.origin === new URL(page).origin ? to.pathname + to.search + to.hash : url;
+  } catch {
+    return url;
+  }
+}
 
 /** "the click handler handleLogin"; "the onClick handler" when the name is a prop's, which is all a minified build leaves. */
 function handlerPhrase(name: string, kind: string): string {
@@ -547,6 +580,7 @@ export function explain(r: InteractionReport): Explanation {
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   }
 
+  if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
   if (c) {
     const real = r.commits.filter(carriesWork).length;
     if (real > 1) notes.push(`React rendered ${real} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);

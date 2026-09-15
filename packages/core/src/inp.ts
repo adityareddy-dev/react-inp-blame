@@ -1,6 +1,6 @@
 import type { InteractionReport } from './types.js';
 
-/** The page's INP so far, estimated the way web-vitals does it. */
+/** The INP of the navigation the page is on, so far, estimated the way web-vitals does it. */
 export interface InpEstimate {
   /** Latency of the interaction INP points at: its longest single Event Timing entry, ms. */
   value: number;
@@ -56,7 +56,8 @@ const presented = (e: TimedInteraction) => e.startTime + e.duration;
  *   40 ms are not its candidates, so the numbers part when INP is under 40 ms or fewer than
  *   floor(count / 50) + 1 interactions reach 40 ms.
  * - web-vitals starts over after a back/forward cache restore, and at each soft navigation when
- *   asked to report them; this estimate starts over only on `reset()`, which it has no match for.
+ *   asked to report them. The library calls `reset()` at both, and on `clear()`, which web-vitals has
+ *   no match for; at a soft navigation web-vitals is not asked to report, only this estimate starts over.
  * - web-vitals updates once the page is idle, this estimate as entries arrive, so for a moment after
  *   an interaction this one can be ahead.
  */

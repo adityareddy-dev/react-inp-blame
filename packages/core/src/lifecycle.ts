@@ -1,5 +1,6 @@
 import { createInpTracker, rateInp, type InpEstimate } from './inp.js';
 import { attachLaterRender, buildReport, isLaterRender, refreshFrames, refreshReport, sealReport, type LabelSource, type ReportData } from './join.js';
+import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { CommitSummary, FrameSummary, InputRecord, InteractionReport } from './types.js';
@@ -8,8 +9,9 @@ import type { CommitSummary, FrameSummary, InputRecord, InteractionReport } from
  * What happens to reports between the first Event Timing entry of an interaction and the last
  * render that joins it: built, held back while quiet, published, revised when late entries,
  * frames or later renders arrive, and dropped past the limits below. Every revision is published
- * as a new frozen report. It reads no browser globals: install() feeds it from the observers and
- * the DevTools hook, and hands it a clock.
+ * as a new frozen report. A navigation starts the INP estimate over and lets go of the quiet ones.
+ * It reads no browser globals: install() feeds it from the observers, the DevTools hook and the
+ * page's navigations, and hands it a clock.
  */
 
 /** Published reports kept; the oldest goes first. */
@@ -26,6 +28,8 @@ export interface LifecycleOptions {
   commits(): readonly CommitSummary[];
   /** The ring of recent inputs, oldest first. */
   inputs(): readonly InputRecord[];
+  /** The page's navigations, oldest first: each report is placed in the one it happened in. */
+  navigations(): readonly PageNavigation[];
   /** Long animation frames seen so far, kept current by the caller; null where the browser has none. */
   frames: readonly FrameSummary[] | null;
   /** Reads `performance.interactionCount`, on browsers that have it. */
@@ -45,6 +49,8 @@ export interface Lifecycle {
   onCommit(c: CommitSummary): void;
   /** A long animation frame arrived; `frames` already holds it. */
   onFrame(): void;
+  /** A navigation began at `start` (`performance.now()`); `navigations` already holds it. */
+  onNavigation(start: number): void;
   /** Published reports, oldest first, each at its latest revision. */
   reports(): InteractionReport[];
   last(): InteractionReport | null;
@@ -70,6 +76,8 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
   // pointerdown, a keyup) can rebuild the report it belongs to.
   const entriesById = new Map<number, InteractionTiming[]>();
   const inp = createInpTracker(options.interactionCount);
+  // When the navigation the page is on began: interactions that began earlier are not part of its INP.
+  let navigationStart = 0;
   let spent = 0;
 
   /** Adds the time since `started` to the total, and returns it. */
@@ -118,7 +126,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     if (existing) {
       // A late entry of the same interaction: the click after a held pointerdown, the keyup.
       const wasQuiet = quiet.includes(existing);
-      revise(existing, refreshReport(existing.data, entries, options.commits(), frames, options.inputs(), options.labels()), started);
+      revise(existing, refreshReport(existing.data, entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations()), started);
       if (wasQuiet) {
         if (!worthPublishing(existing.data)) return;
         quiet.splice(quiet.indexOf(existing), 1);
@@ -127,7 +135,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       publish(existing.report);
       return;
     }
-    const data = buildReport(entries, options.commits(), frames, options.inputs(), options.labels());
+    const data = buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations());
     // Clicks on the badge and panel are not the app's interactions.
     if (data.target?.selector?.includes('#' + OVERLAY_ID)) {
       spend(started);
@@ -142,7 +150,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
   return {
     onEntries(batch) {
       const started = now();
-      inp.add(batch);
+      inp.add(batch.filter((e) => e.startTime >= navigationStart));
       spend(started);
       const byId = new Map<number, InteractionTiming[]>();
       for (const e of batch) {
@@ -188,6 +196,14 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       const next = refreshFrames(last.data, frames);
       if (next) publish(revise(last, next, started).report);
       else spend(started);
+    },
+
+    onNavigation(start) {
+      navigationStart = start;
+      inp.reset();
+      // Renders of the page it moves to, stamped with an input from before it, would otherwise publish
+      // quiet interactions from the page it left as if they had caused them.
+      quiet.length = 0;
     },
 
     reports: () => published.map((held) => held.report),

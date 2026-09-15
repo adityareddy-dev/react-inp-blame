@@ -16,67 +16,79 @@ them. This does.
 ## Where it's headed
 
 The goal is for this to ship as part of Next.js, so any Next app gets component-level INP
-attribution with nothing extra to install. Two things still have to exist before that's a
-fair ask: a `next` entry that wires `instrumentation-client.ts` and the names loader for you,
-and a `useReportWebVitals` adapter so INP reports carry component names. Nothing has been
+attribution with nothing extra to install. `react-inp-blame/next` now installs the library through
+`instrumentationClientInject` and adds the names loader; what still has to exist before that's a
+fair ask is a `useReportWebVitals` adapter so INP reports carry component names. Nothing has been
 proposed to the Next.js team yet.
 
 ## In a Next.js app
 
-Two lines, the same shape as Sentry's setup. (Not on npm yet; the workspace link is how the
-demo gets it.)
+One line, the same shape as Sentry's setup, on Next.js 16.3 or later. (Not on npm yet; the
+workspace link is how the demo gets it.)
 
     // next.config.ts
     import { withInpBlame } from 'react-inp-blame/next';
     export default withInpBlame({ /* your config */ }, { enabled: true });
 
-    // instrumentation-client.ts
-    import 'react-inp-blame/auto';
+`withInpBlame` adds a client module to `instrumentationClientInject`, which Next.js runs before
+hydration, so the very first interaction is attributed, and the loader that keeps component names
+through the production minifier, under Turbopack and under `next build --webpack`. Its `enabled`
+option picks the runs that get both: `'development'` (the default, so a production build gets
+nothing from the wrapper), `'production'`, `true` for both or `false`. `runtime` takes the options
+for `install()`, or `false` to keep only the loader. On the App Router every report says which URL it
+happened on and which navigation a click started, and the INP estimate starts over at each soft
+navigation. Pages Router: supported for attribution, no navigation join.
 
-`withInpBlame` adds the loader that keeps component names through the production minifier,
-under Turbopack and under `next build --webpack`. Its `enabled` option picks the runs that get
-it: `'development'` (the default, so a production build gets nothing from the wrapper),
-`'production'`, `true` for both or `false`. The import installs the hook before
-react-dom loads, so the very first interaction is attributed. Read reports with
-`onInteraction(report => ...)` from `react-inp-blame`, or open the Performance panel and
-look for the `react-inp-blame` tracks. Build on `report.explanation.blame` (what, which
+Read reports with `onInteraction(report => ...)` from `react-inp-blame`, or open the Performance
+panel and look for the `react-inp-blame` tracks. Build on `report.explanation.blame` (what, which
 component or handler, how many ms, and whether that was measured or inferred) and the report's
 numbers; `verdict` and the other sentences are display text, reworded in any version. The API in
 brief, the report contract and the bundle sizes are in the
 [package README](packages/core/README.md).
 
+## In a Vite app
+
+    // vite.config.ts
+    import { defineConfig } from 'vite';
+    import { inpBlame } from 'react-inp-blame/vite';
+    export default defineConfig({ plugins: [inpBlame({ enabled: true })] });
+
+The same two halves as Vite plugins: a script ahead of the page's own that installs the library,
+so the order of imports in your entry module stops mattering, and the displayName transform.
+`enabled` and `runtime` work as they do for Next.js.
+
 ## The badge and panel
 
-    // instrumentation-client.ts, instead of the /auto import
-    import { install } from 'react-inp-blame';
-    install({ overlay: true });          // or 'query': only with ?inp-blame in the URL
+    // next.config.ts; in vite.config.ts, inpBlame({ runtime: { overlay: true } })
+    export default withInpBlame(config, { runtime: { overlay: true } });   // or 'query': only with ?inp-blame in the URL
 
-A small badge in a corner shows the page's INP so far, green, amber or red. Click it for a
-panel that lists each slow interaction with the component (or handler) to blame and a bar
-split into waiting, working and updating the screen; click a row for the full explanation and
-the components that rendered. It is plain DOM in a shadow root, so it never causes a React
-render and takes no styles from the page. Its code loads on demand, after `install()` has
+A small badge in a corner shows the INP so far, green, amber or red, starting over at each soft
+navigation. Click it for a panel that lists each slow interaction with the component (or handler)
+to blame and a bar split into waiting, working and updating the screen; click a row for the full
+explanation and the components that rendered. It is plain DOM in a shadow root, so it never causes
+a React render and takes no styles from the page. Its code loads on demand, after `install()` has
 returned. `mountOverlay()` from `react-inp-blame` adds it after an `/auto` import and hands back
 a promise of its handle. Clicks on the badge itself are not counted.
 
 ## Layout
 
 - `packages/core` - the library (`react-inp-blame`). Zero dependencies.
-- `apps/demo` - two demos in one app. The default page is a sign-in flow (Framely, an
-  Instagram-style layout with its own name) with four realistic mistakes: the email field
-  re-renders the phone preview, the password field scores strength on the main thread, the
-  login click hashes the password before the request, and the profile grid measures itself
-  while rendering. A "What took time" panel lists every step in order with a rating and one
-  plain sentence. `#lab/...` holds six isolated anti-patterns, each with a "what's wrong /
-  the fix" note. Playwright tests assert the tool blames the right thing in both.
+- `apps/demo` - two demos in one app, installed with `react-inp-blame/vite`. The default page is a
+  sign-in flow (Framely, an Instagram-style layout with its own name) with four realistic mistakes:
+  the email field re-renders the phone preview, the password field scores strength on the main
+  thread, the login click hashes the password before the request, and the profile grid measures
+  itself while rendering. A "What took time" panel lists every step in order with a rating and one
+  plain sentence. `#lab/...` holds six isolated anti-patterns, each with a "what's wrong / the fix"
+  note. Playwright tests assert the tool blames the right thing in both.
   `scripts/react-matrix.mjs` generates `apps/demo-react18` and `apps/demo-react17`, the
   same demo pinned to older React.
-- `apps/next-demo` - the Next.js 16 check. `instrumentation-client.ts` calls `install()`
-  and runs before react-dom in production (in dev, Fast Refresh's hook stub is already there
-  and the library chains onto it). `next.config.ts` wraps its config in
-  `withInpBlame(config, { enabled: true })`, which runs `react-inp-blame/display-names-loader` on
-  client components under Turbopack and webpack, so the production report says
-  `Sidebar > NavItem` instead of the minifier's `n`. The test asserts that in both builds.
+- `apps/next-demo` - the Next.js 16 check. `next.config.ts` wraps its config in
+  `withInpBlame(config, { enabled: true, runtime: { debugGlobal: true } })`, which injects the
+  runtime before hydration and runs `react-inp-blame/display-names-loader` on client components
+  under Turbopack and webpack, so the production report says `Sidebar > NavItem` instead of the
+  minifier's `n`. The tests check that in both builds, that a component subscribing with
+  `onInteraction` hears the same reports as the debug global, and that a Link click is named with
+  the navigation it starts.
 - `docs/` - design notes.
 
 Quick start:
@@ -89,6 +101,8 @@ Quick start:
     npm test -w apps/demo-react17   # same suite on React 17.0.2, legacy root
     npm test -w apps/next-demo      # Next.js load-order check, dev server
     npm run test:prod -w apps/next-demo   # same against next build + next start
+
+The Next.js check loads the package as built, so run `npm run build` before it.
 
 Behind a package mirror that curates versions, `npm run fix-lock` rewrites lockfile URLs back to
 the public registry before committing; the `overrides` entry pins one transitive package to a
