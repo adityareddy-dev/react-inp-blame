@@ -38,7 +38,21 @@ test('context storm: blames the OrderSummary subtree, LineItem x800', async ({ p
 });
 
 test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
-  const r = await interact(page, 'layout-thrash', () => page.click('[data-test=trigger]'));
+  const r = await interact(page, 'layout-thrash', async () => {
+    await page.click('[data-test=trigger]');
+    // The long animation frame carrying the forced layout can arrive just after the report is
+    // built (there is no settle timer); it folds into the report in place. Wait for it.
+    await page
+      .waitForFunction(
+        () => {
+          const last = (window as any).__REACT_INP__.last();
+          return last && last.frames.reduce((a: number, f: any) => a + f.forcedLayout, 0) > 4;
+        },
+        null,
+        { timeout: 5_000 },
+      )
+      .catch(() => {});
+  });
   expect(r.commits.length).toBeGreaterThanOrEqual(1);
   const names = r.commits[0].components.map((x) => x.name);
   expect(names).toContain('PriceTicker');

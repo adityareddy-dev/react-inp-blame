@@ -14,7 +14,7 @@
   },
   "sideEffects": ["./dist/auto.js", "./src/auto.ts"],
   "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "README.md"],
-  "scripts": { "build": "tsc -p tsconfig.json" },
+  "scripts": { "build": "tsc -p tsconfig.json", "test:unit": "node --test test/*.test.ts" },
   "keywords": ["react", "inp", "web-vitals", "performance", "event-timing", "long-animation-frames", "devtools"],
   "devDependencies": { "typescript": "^5.6.0" }
 }

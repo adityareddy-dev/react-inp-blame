@@ -8,11 +8,40 @@ export interface RenderedComponent {
   total: number | null;
 }
 
+/** An input stamped on a commit: the event being dispatched when it ran, else the newest one seen. */
+export interface InputStamp {
+  /** `Event.timeStamp`, the same clock as Event Timing's `startTime`. */
+  ts: number;
+  type: string;
+  /** `timeStamp` of the pointerdown or keydown that began the press this input is part of; equals `ts` for those. */
+  gestureTs: number;
+}
+
+/** One input the library saw at dispatch. The last 8 are kept in a ring. */
+export interface InputRecord extends InputStamp {
+  /** `pointerId` for pointer events, `code` for key events: how a pointerup or keyup finds its press. */
+  press: string | number | undefined;
+  target: any;
+  /** The React fiber on the target at dispatch time. React drops it from the node on unmount, so a clicked row that was deleted still gets a component name. */
+  fiber: any;
+}
+
 export interface CommitSummary {
   /** performance.now() at the end of the commit. */
   at: number;
-  /** ms since the last input event before this commit. */
+  /** ms from the stamped input to this commit. */
   sinceInput: number;
+  /** `Event.timeStamp` of the input being dispatched when this commit ran, else of the newest input seen. Matched to an entry's `startTime` within 1 ms. */
+  inputTs: number;
+  /** `timeStamp` of the pointerdown or keydown that began that input's press. */
+  gestureTs: number;
+  inputType: string;
+  /**
+   * How the commit was joined to a report: exactly, by its input stamp, or by wall-clock overlap
+   * when no stamp matched (the fallback). Set when it is first joined; a commit in more than
+   * one report carries the last join's value.
+   */
+  joinedBy?: 'exact' | 'overlap';
   /** Component fibers that performed work in this commit. */
   rendered: number;
   /** Fiber visits stopped at the walk budget; counts are partial. */
@@ -96,13 +125,31 @@ export interface Explanation {
   phases: Phase[];
 }
 
+/** One Event Timing entry of the interaction, the fields that matter. */
+export interface EventEntrySummary {
+  name: string;
+  startTime: number;
+  duration: number;
+  processingStart: number;
+  processingEnd: number;
+}
+
 export interface InteractionReport {
   interactionId: number;
+  /** The event the headline is named after: the best-known one in the headline entry's paint group. */
   type: string;
+  /** `startTime` of the headline entry. */
   start: number;
+  /** The paint that ended the headline entry, `start + duration`. */
   end: number;
+  /** The longest single entry's duration: what web-vitals reports as this interaction's latency. */
   duration: number;
+  /** How much longer the whole interaction ran than the headline: first input to last paint over every entry with the id, minus `duration`. A finger held down on touch makes this large; a plain click leaves it near 0. */
+  holdMs: number;
+  /** Every entry seen for the id so far, in arrival order. */
+  entries: EventEntrySummary[];
   inputDelay: number;
+  /** Handlers and React rendering, clamped to the paint the way web-vitals clamps it. */
   processing: number;
   presentation: number;
   target: TargetInfo | null;
@@ -113,7 +160,7 @@ export interface InteractionReport {
   frames: FrameSummary[];
   /** Long animation frames overlapping the later renders. */
   laterFrames: FrameSummary[];
-  /** Bumped every time a later render or frame attaches to this report after it was first emitted. */
+  /** Bumped every time a later render, frame or Event Timing entry attaches to this report after it was first built. */
   revision: number;
   explanation: Explanation;
   /** The explanation as one line of text. */

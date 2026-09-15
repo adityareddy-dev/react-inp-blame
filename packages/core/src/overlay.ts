@@ -1,4 +1,5 @@
-import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types';
+import type { InpEstimate } from './inp.ts';
+import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types.ts';
 
 /**
  * The on-page badge and panel. Plain DOM inside a shadow root: no React, so it renders even
@@ -7,6 +8,7 @@ import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './
 
 interface Source {
   reports(): InteractionReport[];
+  inp(): InpEstimate | null;
   onInteraction(fn: (r: InteractionReport) => void): () => void;
   clear(): void;
 }
@@ -108,20 +110,22 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     timer = null;
     if (disposed) return;
     const all = source.reports();
-    const inp = pageInp(all);
+    // The page's INP the way web-vitals estimates it, from every interaction seen, not just
+    // the reported ones.
+    const inp = source.inp();
     if (!inp) {
       badge.dataset.rating = 'none';
       badge.innerHTML = `<i class="dot"></i>INP <span class="n">&mdash;</span>`;
     } else {
-      const R = RATING[inp.explanation.rating];
-      badge.dataset.rating = inp.explanation.rating;
-      badge.innerHTML = `<i class="dot" style="background:${R.color}"></i>INP <span class="ms">${Math.round(inp.duration)} ms</span>`;
+      const R = RATING[inp.rating];
+      badge.dataset.rating = inp.rating;
+      badge.innerHTML = `<i class="dot" style="background:${R.color}"></i>INP <span class="ms">${Math.round(inp.value)} ms</span>`;
     }
     if (panel.hidden) return;
     const groups = groupRows(all).slice(-max).reverse();
     const cost = all.length ? all.reduce((a, r) => a + r.overheadMs, 0) / all.length : 0;
     const head = inp
-      ? `<div><div class="big">${Math.round(inp.duration)}<small>ms</small>${tag(inp.explanation.rating)}</div><div class="sub">Page INP so far, from ${esc(titleFor(inp).title.toLowerCase())} &middot; ${all.length} interaction${all.length === 1 ? '' : 's'} measured</div></div>`
+      ? `<div><div class="big">${Math.round(inp.value)}<small>ms</small>${tag(inp.rating)}</div><div class="sub">Page INP so far${inp.report ? `, from ${esc(titleFor(inp.report).title.toLowerCase())}` : ''} &middot; ${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}</div></div>`
       : `<div><div class="big">&mdash;<small>ms</small></div><div class="sub">Interaction to Next Paint. Nothing slow yet.</div></div>`;
     panel.innerHTML =
       `<div class="head">${head}<button class="x" type="button" aria-label="Close">&times;</button></div>` +
@@ -294,13 +298,6 @@ function slowest(reports: InteractionReport[]): InteractionReport {
 function median(values: number[]): number {
   const s = values.slice().sort((a, b) => a - b);
   return s[Math.floor(s.length / 2)];
-}
-
-/** The page's INP so far: the worst interaction, or the 98th percentile once there are 50 or more. */
-function pageInp(reports: InteractionReport[]): InteractionReport | null {
-  if (!reports.length) return null;
-  const sorted = reports.slice().sort((a, b) => b.duration - a.duration);
-  return sorted[Math.min(sorted.length - 1, Math.floor(reports.length / 50))];
 }
 
 function heaviest(commits: CommitSummary[]): CommitSummary {

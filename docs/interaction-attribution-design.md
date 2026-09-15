@@ -69,20 +69,47 @@ least 60% of the parent's work, so it stops at "the OrderSummary subtree" rather
 descending into 800 identical rows.
 
 **Event Timing.** A `PerformanceObserver` on `event` entries, grouped by `interactionId` (a
-click is three entries: pointerdown, pointerup, click). The interaction window is the earliest
-`startTime` to the latest `startTime + duration`, which is the next paint. Input delay,
-processing and presentation delay fall out of the same numbers, the way web-vitals computes
-them. The target element resolves to its component through the `__reactFiber$` expando, and
-the React handler prop for the event type is looked up on the same chain, so "no React
-render; 120ms in the click handler computeChecksum" is possible without a profile.
+click is three entries: pointerdown, pointerup, click). The headline number is the longest
+single entry's duration, which is what web-vitals reports as the interaction's latency, so a
+pointer held down (normal on touch) does not inflate it. Entries whose paint landed within
+8 ms of each other count as one frame (web-vitals' `groupEntriesByRenderTime`), processing
+is clamped to that paint, and input delay, processing and presentation delay come out of the
+same numbers. The span of every entry with the id, press to release, is kept as `holdMs`
+and stays off the headline (since 2026-09-14; before that the headline was the whole span).
+The target element resolves to its component through the `__reactFiber$` expando, and the
+React handler prop for the event type is looked up on the same chain, so "no React render;
+120ms in the click handler computeChecksum" is possible without a profile. When the entry's
+target is null because the node left the DOM before the observer ran (a close button, a
+deleted row), the input ring below still holds the node and the fiber it carried at
+dispatch, which React deletes from the node on unmount.
+
+**The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
+pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every
+commit is stamped with the input being dispatched when it ran: `window.event`, which is
+still set for the sync commit of a discrete event, including the microtask React 18 and 19
+flush it in. A commit with no event on the stack (a transition, an effect, data arriving)
+is stamped with the newest input seen. A release also carries the timestamp of the press it
+belongs to (pointerup and click by `pointerId`, keyup by key code), so a render after a cheap
+click still finds the pointerdown that was slow enough to be observed. A commit belongs to
+an interaction when one of those stamps matches an entry's `startTime` within 1 ms: the
+Event Timing spec says `startTime` is the event's `timeStamp`, the same clock React's own
+Blocking track keys on. That is why 150 ms of input delay changes nothing and two
+overlapping interactions cannot both claim one commit at full cost. A commit no stamp
+explains, landing between an interaction's handlers and its paint, is still taken and
+flagged `joinedBy: 'overlap'`; one that ran during the input delay is what delayed the
+interaction, not part of it. Before or after the paint is decided against the paint that
+closed the headline entry, with the exact `processingEnd` as the other bound: durations are
+rounded to 8 ms, `processingEnd` is not, so a commit inside the handlers is never misfiled as
+a follow-up.
 
 **Long Animation Frames.** Overlapping `long-animation-frame` entries supply the script
 attribution and `forcedStyleAndLayoutDuration`. LoAF can only say "React's event dispatch ran
 for 80ms"; the fiber walk is what turns that into a component. Together they separate "your
 render was slow" from "your layout effect forced layout 400 times".
 
-**Follow-ups.** Commits that land after the paint but within a second of the same input, with
-no newer input in between. Effects, transitions and data-driven re-renders show up here.
+**Follow-ups.** Commits that land after the paint but within 1.5 s, stamped with the same
+input, with no newer input in between. Effects, transitions and data-driven re-renders show
+up here.
 
 **Saying it in plain words.** Every report carries an `explanation`: a headline ("264 ms
 click"), a rating on the INP thresholds (good to 200 ms, needs work to 500 ms, poor beyond),
@@ -102,10 +129,16 @@ paint is worth a sentence even though INP alone would never flag it.
 
 **Late arrivals.** A profile that renders 500 ms after the click, once the server answers,
 lands long after the report was first emitted. Such renders attach to the existing report
-(same input, no newer input since, within 1.5 s), the explanation is rebuilt, and listeners
-receive the same report again with a bumped `revision`. Long animation frames that arrive
-for those later renders fold in the same way. Event Timing rounds durations to 8 ms, so the
-window edge carries that much slack, or a render that ends at the paint gets misfiled.
+(same input stamp, no newer input since, within 1.5 s), the explanation is rebuilt, and
+listeners receive the same report again with a bumped `revision`. Long animation frames that
+arrive for those later renders fold in the same way. So do late Event Timing entries: an
+interaction's entries arrive with the paint that presented them, the pointerdown in one
+frame and the pointerup and click in a later one when the pointer was held, a keydown before
+its keyup. There is no settle timer any more (a 150 ms one used to split a long press into
+two reports): the report is built from the first batch, rebuilt in place when the rest
+arrive with the revision bumped, and a quiet 30 ms tap that turns out to be a 100 ms click
+is published at that point. Waiting for an interaction to be "complete" was never possible
+anyway, because entries under the observer's 16 ms floor never arrive at all.
 
 **Output.** An `InteractionReport` object, a listener API, and User Timing measures carrying
 the `devtools` detail that the Chrome Performance panel (128+) renders as custom tracks: a
@@ -122,8 +155,15 @@ the components that rendered before and after the paint. It is plain DOM in a sh
 (no React, so it renders while React is busy and never adds a commit), about 3 ms of work per
 report, and the page's own clicks on it are dropped before they become reports. The blame
 line comes from `explanation.blame`, a data twin of the cause sentence decided in the same
-branch, so the short and the long form never disagree. Page INP is the worst interaction, or
-the 98th percentile once there are 50 or more, the way web-vitals estimates it.
+branch, so the short and the long form never disagree. Page INP, on the badge, in the panel
+head and from `api.inp()`, is the web-vitals estimate computed in-library, with no web-vitals
+dependency: the interaction count is `performance.interactionCount` where the browser has
+it, else estimated from interactionId spacing (Chrome steps ids by 7); the 10 longest
+interactions are kept by their longest single entry; INP is the one at index
+`min(floor(count / 50), 9)`, longest first. It counts every interaction the observer sees at
+its 16 ms floor, so it is only exact when all interactions over 16 ms were observed. The
+demo's own "Page INP so far" line reads the same call, so the page never shows two INPs
+that disagree.
 
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
@@ -174,8 +214,8 @@ What needs help:
 - **Durations.** Only `react-dom/profiling` records them. Counts and the hot path are
   usually enough to name the culprit; durations tell you how bad.
 - **Budget.** The walk is bounded (`walkBudget`, default 5000 fibers) and only runs when an
-  input event landed within the last second. Reports carry `overheadMs` so the cost is
-  visible in the data rather than assumed.
+  input event landed within the last 1.5 s (`inputWindow`). Reports carry `overheadMs` so
+  the cost is visible in the data rather than assumed.
 
 The production mode is the one that has to reproduce a hand-made INP win on a large app; that
 test has not been run yet against anything but the demo.

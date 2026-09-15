@@ -1,12 +1,13 @@
-import type { InteractionReport } from './types';
+import type { CommitSummary, InteractionReport } from './types.ts';
 
 const ms = (n: number): string => `${Math.round(n)} ms`;
 
 /**
  * User Timing measures with a `devtools` detail render as custom tracks in the Chrome
  * Performance panel (Chrome 128+). Older Chrome still shows them in the Timings track.
+ * `commits` limits the render measures to the ones not emitted before.
  */
-export function emitTrack(r: InteractionReport): void {
+export function emitTrack(r: InteractionReport, commits: CommitSummary[] = [...r.commits, ...r.followUps]): void {
   if (typeof performance === 'undefined' || typeof performance.measure !== 'function') return;
   const x = r.explanation;
   const color = x.rating === 'poor' ? 'error' : x.rating === 'needs-work' ? 'tertiary' : 'primary';
@@ -38,7 +39,7 @@ export function emitTrack(r: InteractionReport): void {
         },
       },
     } as any);
-    for (const c of [...r.commits, ...r.followUps]) emitRender(r, c);
+    for (const c of commits) emitRender(r, c);
   } catch {
     // measures are best effort
   }

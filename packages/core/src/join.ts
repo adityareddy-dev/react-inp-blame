@@ -1,11 +1,16 @@
-import { handlerName, ownerChain } from './fiber';
-import type { Blame, CommitSummary, Explanation, FrameSummary, InteractionReport, TargetInfo } from './types';
+import { fiberFromNode, handlerOf, ownersOf } from './fiber.ts';
+import { rateInp } from './inp.ts';
+import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, InputRecord, InteractionReport, TargetInfo } from './types.ts';
 
 export const FOLLOW_UP_WINDOW = 1500;
+// A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
+// they agree to the timer's resolution; 1 ms covers the coarsening.
+const STAMP_TOLERANCE = 1;
+// Entries presented in the same frame share a render time to within 8 ms, the rounding
+// Event Timing applies to durations. Same rule as web-vitals' groupEntriesByRenderTime.
+const RENDER_GROUP_MS = 8;
 // A later render has to be worth a sentence. Tiny ones (a status pill, a panel updating)
 // are noise, and the page's own reporting UI would otherwise show up in every report.
-// Event Timing rounds durations to 8 ms, so the paint can sit a few ms past `end`.
-const PAINT_SLACK = 8;
 const MIN_LATER_MS = 10;
 const MIN_LATER_COUNT = 25;
 const worthMentioning = (c: CommitSummary) => (c.hasDurations ? c.total >= MIN_LATER_MS : c.rendered >= MIN_LATER_COUNT);
@@ -23,54 +28,141 @@ const FRIENDLY: Record<string, string> = {
   change: 'typing',
 };
 
-export function buildReport(entries: any[], commits: CommitSummary[], frames: FrameSummary[]): InteractionReport {
-  let start = Infinity;
-  let end = -Infinity;
-  let processingStart = Infinity;
-  let processingEnd = -Infinity;
+interface PaintGroup {
+  renderTime: number;
+  processingStart: number;
+  processingEnd: number;
+  entries: any[];
+}
+
+/** Entries whose paint landed within 8 ms of each other were presented by one frame. */
+function groupByRenderTime(entries: any[]): PaintGroup[] {
+  const groups: PaintGroup[] = [];
+  for (const e of entries) {
+    const renderTime = e.startTime + e.duration;
+    let group: PaintGroup | null = null;
+    for (let i = groups.length - 1; i >= 0; i--) {
+      if (Math.abs(renderTime - groups[i].renderTime) <= RENDER_GROUP_MS) {
+        group = groups[i];
+        break;
+      }
+    }
+    if (group) {
+      group.processingStart = Math.min(group.processingStart, e.processingStart);
+      group.processingEnd = Math.max(group.processingEnd, e.processingEnd);
+      group.entries.push(e);
+    } else {
+      groups.push({ renderTime, processingStart: e.processingStart, processingEnd: e.processingEnd, entries: [e] });
+    }
+  }
+  return groups;
+}
+
+const near = (a: number, b: number) => Math.abs(a - b) <= STAMP_TOLERANCE;
+
+/** Does the commit's input stamp (or the press that input released) match one of these entry start times? */
+function stampMatches(c: CommitSummary, stamps: number[]): boolean {
+  for (const s of stamps) if (near(s, c.inputTs) || near(s, c.gestureTs)) return true;
+  return false;
+}
+
+const rank = (name: string) => {
+  const i = PREFERRED.indexOf(name);
+  return i < 0 ? PREFERRED.length : i;
+};
+
+const summarize = (e: any): EventEntrySummary => ({
+  name: e.name,
+  startTime: e.startTime,
+  duration: e.duration,
+  processingStart: e.processingStart,
+  processingEnd: e.processingEnd,
+});
+
+/**
+ * One report from every Event Timing entry seen for an interactionId. The headline is the
+ * longest single entry, which is the number web-vitals reports as INP for the interaction;
+ * `inputs` is the ring of recent inputs, used to tell whose commit is whose and to recover
+ * the target when the entry's is gone.
+ */
+export function buildReport(entries: any[], commits: CommitSummary[], frames: FrameSummary[], inputs: InputRecord[] = []): InteractionReport {
+  let longest = entries[0];
+  for (const e of entries) if (e.duration > longest.duration) longest = e;
+  const group = groupByRenderTime(entries).find((g) => g.entries.includes(longest))!;
+  // The same clamps web-vitals applies: processing cannot start before this entry's input,
+  // and cannot run past the paint that closed it (a sync modal can make it look that way).
+  const start: number = longest.startTime;
+  const processingStart = Math.max(group.processingStart, start);
+  const end = Math.max(start + longest.duration, processingStart);
+  const processingEnd = Math.min(group.processingEnd, end);
+  const duration: number = longest.duration;
+  let first = Infinity;
+  let lastPaint = -Infinity;
+  for (const e of entries) {
+    first = Math.min(first, e.startTime);
+    lastPaint = Math.max(lastPaint, e.startTime + e.duration);
+  }
+  const holdMs = Math.max(0, lastPaint - first - duration);
+
+  // A click arrives as pointerdown, pointerup and click entries sharing one interactionId.
+  // Name the interaction by the most meaningful entry painted with the headline.
+  const sorted = group.entries.slice().sort((a, b) => rank(a.name) - rank(b.name));
+  const stamps: number[] = entries.map((e) => e.startTime);
+  const ring = inputs.find((i) => stamps.some((s) => near(s, i.ts))) || null;
+  // The entry's target is null when the node left the DOM before the observer ran (a close
+  // button, a deleted row); the ring kept the node, and the fiber React has since detached.
   let targetNode: any = null;
   for (const e of entries) {
-    start = Math.min(start, e.startTime);
-    end = Math.max(end, e.startTime + e.duration);
-    processingStart = Math.min(processingStart, e.processingStart);
-    processingEnd = Math.max(processingEnd, e.processingEnd);
-    if (!targetNode && e.target) targetNode = e.target;
+    if (e.target) {
+      targetNode = e.target;
+      break;
+    }
   }
-  // A click arrives as pointerdown, pointerup and click entries sharing one interactionId.
-  // Name the interaction by the most meaningful of them.
-  const rank = (name: string) => {
-    const i = PREFERRED.indexOf(name);
-    return i < 0 ? PREFERRED.length : i;
-  };
-  const sorted = entries.slice().sort((a, b) => rank(a.name) - rank(b.name));
-  const longest = sorted[0];
+  if (!targetNode && ring) targetNode = ring.target;
+  const fiber = (targetNode && fiberFromNode(targetNode)) || (ring && ring.fiber) || null;
   let handler: string | null = null;
   for (const e of sorted) {
-    if (e.target) handler = handlerName(e.target, e.name);
+    handler = handlerOf(fiber, e.name);
     if (handler) break;
   }
-  const duration = end - start;
-  const inputDelay = Math.max(0, processingStart - start);
-  const processing = Math.max(0, processingEnd - processingStart);
-  const presentation = Math.max(0, end - processingEnd);
 
-  const inWindow = commits.filter((c) => c.at >= start - 1 && c.at <= end + PAINT_SLACK);
-  // Same input (the commit's own input timestamp is within tolerance of this start), after the paint.
-  const followUps = commits.filter(
-    (c) => c.at > end + PAINT_SLACK && Math.abs(c.at - c.sinceInput - start) < 100 && c.at - start <= FOLLOW_UP_WINDOW && worthMentioning(c),
-  );
+  const inputDelay = processingStart - start;
+  const processing = processingEnd - processingStart;
+  const presentation = end - processingEnd;
+
+  // Durations are rounded to 8 ms but processingEnd is exact, so a commit inside the
+  // handlers is before the paint even when the rounded paint time says otherwise.
+  const paintBound = Math.max(end, group.processingEnd);
+  const inWindow: CommitSummary[] = [];
+  const followUps: CommitSummary[] = [];
+  for (const c of commits) {
+    if (stampMatches(c, stamps)) {
+      c.joinedBy = 'exact';
+      // Work before the headline entry's own input (a press held before a click) is not
+      // part of what INP measured for it; `holdMs` covers that time.
+      if (c.at < start - STAMP_TOLERANCE) continue;
+      if (c.at <= paintBound) inWindow.push(c);
+      else if (c.at - start <= FOLLOW_UP_WINDOW && worthMentioning(c)) followUps.push(c);
+    } else if (c.at >= processingStart - STAMP_TOLERANCE && c.at <= paintBound && !claimedElsewhere(c, inputs, stamps)) {
+      // No stamp matched, but it ran between this interaction's handlers and its paint.
+      c.joinedBy = c.joinedBy || 'overlap';
+      inWindow.push(c);
+    }
+  }
   const overlapping = frames.filter((f) => f.start < end && f.start + f.duration > start);
 
   const report: InteractionReport = {
     interactionId: longest.interactionId,
-    type: longest.name,
+    type: sorted[0].name,
     start,
     end,
     duration,
+    holdMs,
+    entries: entries.map(summarize),
     inputDelay,
     processing,
     presentation,
-    target: targetNode ? describeTarget(targetNode, handler) : null,
+    target: targetNode ? describeTarget(targetNode, fiber, handler) : null,
     commits: inWindow,
     followUps,
     frames: overlapping,
@@ -85,18 +177,57 @@ export function buildReport(entries: any[], commits: CommitSummary[], frames: Fr
   return report;
 }
 
+/** The commit's stamp names another input the ring knows, one that is not part of this interaction. */
+function claimedElsewhere(c: CommitSummary, inputs: InputRecord[], stamps: number[]): boolean {
+  return inputs.some((i) => near(i.ts, c.inputTs) && !stamps.some((s) => near(s, i.ts)));
+}
+
+/**
+ * More entries arrived for an interaction whose report already exists (the click after a
+ * held pointerdown, the keyup after a keydown). Rebuild it in place so listeners keep the
+ * same object, bump the revision, and say whether the headline moved.
+ */
+export function refreshReport(r: InteractionReport, entries: any[], commits: CommitSummary[], frames: FrameSummary[], inputs: InputRecord[] = []): boolean {
+  const fresh = buildReport(entries, commits, frames, inputs);
+  const headlineChanged = fresh.duration !== r.duration || fresh.start !== r.start || fresh.type !== r.type;
+  Object.assign(r, fresh, { revision: r.revision + 1 });
+  return headlineChanged;
+}
+
 function framesForLater(later: CommitSummary[], frames: FrameSummary[]): FrameSummary[] {
   return frames.filter((f) => later.some((c) => f.start <= c.at && f.start + f.duration >= c.at - Math.max(c.total, 16)));
 }
 
+function framesInWindow(r: InteractionReport, frames: FrameSummary[]): FrameSummary[] {
+  return frames.filter((f) => f.start < r.end && f.start + f.duration > r.start);
+}
+
+/**
+ * A long animation frame can arrive after the report was built (there is no settle timer),
+ * so its forced layout and scripts were missing from the first explanation. Fold in any that
+ * overlap the interaction's window or its later renders, and re-explain if anything changed.
+ */
+export function refreshFrames(r: InteractionReport, frames: FrameSummary[]): boolean {
+  const inWindow = framesInWindow(r, frames);
+  const later = framesForLater(r.followUps, frames);
+  if (inWindow.length === r.frames.length && later.length === r.laterFrames.length) return false;
+  r.frames = inWindow;
+  r.laterFrames = later;
+  r.explanation = explain(r);
+  r.verdict = toVerdict(r.explanation);
+  r.revision++;
+  return true;
+}
+
 /** Does this commit belong to the report's input, landing after its paint? */
 export function isLaterRender(r: InteractionReport, c: CommitSummary): boolean {
-  return c.at > r.end + PAINT_SLACK && c.at - r.start <= FOLLOW_UP_WINDOW && Math.abs(c.at - c.sinceInput - r.start) < 100 && worthMentioning(c);
+  return c.at > r.end && c.at - r.start <= FOLLOW_UP_WINDOW && stampMatches(c, r.entries.map((e) => e.startTime)) && worthMentioning(c);
 }
 
 /** Attach a later render to an already emitted report. Returns false if it was there already. */
 export function attachLaterRender(r: InteractionReport, c: CommitSummary, frames: FrameSummary[]): boolean {
   if (r.followUps.includes(c)) return false;
+  c.joinedBy = 'exact';
   r.followUps.push(c);
   r.overheadMs += c.walkMs;
   r.laterFrames = framesForLater(r.followUps, frames);
@@ -106,20 +237,8 @@ export function attachLaterRender(r: InteractionReport, c: CommitSummary, frames
   return true;
 }
 
-/** A long animation frame arrived; if it overlaps this report's later renders, fold it in. */
-export function refreshLaterFrames(r: InteractionReport, frames: FrameSummary[]): boolean {
-  if (!r.followUps.length) return false;
-  const next = framesForLater(r.followUps, frames);
-  if (next.length === r.laterFrames.length) return false;
-  r.laterFrames = next;
-  r.explanation = explain(r);
-  r.verdict = toVerdict(r.explanation);
-  r.revision++;
-  return true;
-}
-
-function describeTarget(node: any, handler: string | null): TargetInfo {
-  const owners = ownerChain(node);
+function describeTarget(node: any, fiber: any, handler: string | null): TargetInfo {
+  const owners = ownersOf(fiber);
   return {
     selector: selector(node),
     label: labelOf(node),
@@ -178,7 +297,7 @@ function leafOf(c: CommitSummary): string {
 function mostlyOf(c: CommitSummary): string | null {
   if (c.rendered === 1) return null;
   const top = c.components[0];
-  if (top && top.count > 1) return `${top.name} \u00d7${top.count}`;
+  if (top && top.count > 1) return `${top.name} ×${top.count}`;
   return plural(c.rendered, 'component');
 }
 
@@ -195,12 +314,6 @@ function renderPhrase(c: CommitSummary): string {
   return `re-rendering ${plural(c.rendered, 'component')} inside ${leaf}${mostly}`;
 }
 
-function topScript(frames: FrameSummary[]) {
-  let best: FrameSummary['scripts'][number] | null = null;
-  for (const f of frames) for (const s of f.scripts) if (!best || s.duration > best.duration) best = s;
-  return best;
-}
-
 /** Longest script in frames overlapping [from, to], if it is long enough to matter. */
 function longestScript(frames: FrameSummary[], from: number, to: number) {
   let best: FrameSummary['scripts'][number] | null = null;
@@ -214,7 +327,7 @@ function longestScript(frames: FrameSummary[], from: number, to: number) {
 }
 
 export function explain(r: InteractionReport): Explanation {
-  const rating = r.duration <= 200 ? 'good' : r.duration <= 500 ? 'needs-work' : 'poor';
+  const rating = rateInp(r.duration);
   const kind = FRIENDLY[r.type] || r.type;
   const headline = `${ms(r.duration)} ${kind}`;
   const where = r.target ? [r.target.label || r.target.selector, r.target.component ? `in ${r.target.component}` : ''].filter(Boolean).join(' ') || null : null;
@@ -294,6 +407,9 @@ export function explain(r: InteractionReport): Explanation {
   }
   if (r.presentation > 100 && r.presentation > r.processing && !cause.startsWith('After the')) {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update` + (lateScript ? `, mostly because ${scriptName(lateScript)} ran for ${ms(lateScript.duration)} before the next frame.` : '.'));
+  }
+  if (r.holdMs >= 100) {
+    notes.push(`The whole ${kind}, from press to release, spanned ${ms(r.duration + r.holdMs)}; INP counts only its slowest part, so the rest is left out of the headline.`);
   }
 
   const phases = [

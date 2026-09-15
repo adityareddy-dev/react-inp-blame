@@ -1,9 +1,13 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { InteractionReport } from 'react-inp-blame';
-import { onInteraction } from 'react-inp-blame';
+import { install, onInteraction } from 'react-inp-blame';
 import { burn } from '../burn';
 import { Entry, Pill, titleFor } from '../ReportCard';
 import { journey, type Step } from './journey';
+
+// Installed by main.tsx's /auto import; this call returns that instance. Its inp() is the
+// same number the badge shows, so the page never carries two INPs that disagree.
+const api = install();
 
 interface Profile {
   handle: string;
@@ -279,8 +283,7 @@ function Journey() {
   const [steps, setSteps] = useState<Step[]>(journey.steps());
   useEffect(() => journey.subscribe(setSteps), []);
   const rows = toRows(steps);
-  const reports = steps.filter((s): s is Extract<Step, { kind: 'interaction' }> => s.kind === 'interaction').map((s) => s.report);
-  const worst = reports.reduce<InteractionReport | null>((w, r) => (!w || r.duration > w.duration ? r : w), null);
+  const inp = api.inp();
   return (
     <aside className="journey" data-test="journey">
       <h3>What took time</h3>
@@ -296,11 +299,12 @@ function Journey() {
           <GroupEntry key={row.key} reports={row.reports} />
         ),
       )}
-      {worst && (
+      {inp && (
         <div className="inp" data-test="inp">
           Page INP so far
-          <b>{Math.round(worst.duration)} ms</b>
-          <Pill rating={worst.explanation.rating} /> from {titleFor(worst).title.toLowerCase()}
+          <b>{Math.round(inp.value)} ms</b>
+          <Pill rating={inp.rating} />
+          {inp.report ? ` from ${titleFor(inp.report).title.toLowerCase()}` : ''}
         </div>
       )}
     </aside>

@@ -1,26 +1,23 @@
-import type { FrameSummary, ScriptSummary } from './types';
+import type { FrameSummary, ScriptSummary } from './types.ts';
 
-/** Groups Event Timing entries by interactionId and hands over a group once it has settled. */
-export function observeEventTiming(threshold: number, onGroup: (entries: any[]) => void): () => void {
+/**
+ * Hands over Event Timing entries grouped by interactionId, one call per id per observer
+ * batch. Entries of one interaction arrive with the paint that presented them: a pointerdown
+ * in one frame, the pointerup and click in a later one, a keydown before its keyup. Nothing
+ * waits here; the caller merges a later batch into the report it already built.
+ */
+export function observeEventTiming(threshold: number, onGroup: (id: number, entries: any[]) => void): () => void {
   if (typeof PerformanceObserver === 'undefined') return () => {};
-  const pending = new Map<number, { entries: any[]; timer: any }>();
   const po = new PerformanceObserver((list) => {
+    const byId = new Map<number, any[]>();
     for (const e of list.getEntries() as any[]) {
       const id = e.interactionId;
       if (!id) continue;
-      let g = pending.get(id);
-      if (!g) {
-        g = { entries: [], timer: 0 };
-        pending.set(id, g);
-      }
-      g.entries.push(e);
-      clearTimeout(g.timer);
-      const group = g;
-      g.timer = setTimeout(() => {
-        pending.delete(id);
-        onGroup(group.entries);
-      }, 150);
+      let g = byId.get(id);
+      if (!g) byId.set(id, (g = []));
+      g.push(e);
     }
+    for (const [id, entries] of byId) onGroup(id, entries);
   });
   try {
     po.observe({ type: 'event', buffered: true, durationThreshold: Math.max(16, threshold) } as any);

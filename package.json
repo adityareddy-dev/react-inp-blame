@@ -16,6 +16,7 @@
     "dev": "npm run dev -w apps/demo",
     "test": "npm run test -w apps/demo",
     "test:prod": "npm run test:prod -w apps/demo",
+    "test:unit": "node --test packages/core/test/*.test.ts",
     "fix-lock": "node scripts/fix-lock.mjs"
   },
   "engines": {

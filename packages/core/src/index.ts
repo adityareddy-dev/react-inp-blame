@@ -1,17 +1,24 @@
-import { emitRender, emitTrack } from './devtools';
-import { hookOwner, hookState, installHook, noteInput } from './hook';
-import { attachLaterRender, buildReport, isLaterRender, refreshLaterFrames } from './join';
-import { observeEventTiming, observeFrames } from './observe';
-import { createOverlay, overlayRequested, OVERLAY_ID, type OverlayHandle } from './overlay';
-import type { CommitSummary, FrameSummary, InstallOptions, InteractionReport, OverlayOptions } from './types';
+import { emitRender, emitTrack } from './devtools.ts';
+import { hookOwner, hookState, INPUT_TYPES, installHook, noteInput, recentInputs } from './hook.ts';
+import { createInpTracker, rateInp, type InpEstimate } from './inp.ts';
+import { attachLaterRender, buildReport, isLaterRender, refreshFrames, refreshReport } from './join.ts';
+import { observeEventTiming, observeFrames } from './observe.ts';
+import { createOverlay, overlayRequested, OVERLAY_ID, type OverlayHandle } from './overlay.ts';
+import type { CommitSummary, FrameSummary, InstallOptions, InteractionReport, OverlayOptions } from './types.ts';
 
-export type * from './types';
-export { fiberFromNode, ownerChain, handlerName } from './fiber';
-export type { OverlayHandle } from './overlay';
+export type * from './types.ts';
+export type { InpEstimate } from './inp.ts';
+export { fiberFromNode, ownerChain, handlerName } from './fiber.ts';
+export type { OverlayHandle } from './overlay.ts';
 
 export interface Api {
   reports(): InteractionReport[];
   last(): InteractionReport | null;
+  /**
+   * The page's INP so far, the estimate web-vitals makes: the interaction at index
+   * floor(count / 50) among the 10 longest. Exact when every interaction over 16 ms was seen.
+   */
+  inp(): InpEstimate | null;
   clear(): void;
   onInteraction(fn: (r: InteractionReport) => void): () => void;
   stats(): { mode: string; owner: string; renderers: number; walks: number; walkTotalMs: number; reports: number; commitsRecorded: number };
@@ -23,10 +30,13 @@ export interface Api {
 const reports: InteractionReport[] = [];
 // Interactions under the threshold, kept only in case a later render attaches to them.
 const quiet: InteractionReport[] = [];
+// Raw Event Timing entries per interactionId, so a late entry (the click after a held
+// pointerdown, a keyup) can rebuild the report it belongs to.
+const entriesById = new Map<number, any[]>();
+const MAX_ENTRY_SETS = 100;
 const listeners = new Set<(r: InteractionReport) => void>();
 let installed: Api | null = null;
 let overlay: OverlayHandle | null = null;
-const INPUT_TYPES = ['pointerdown', 'pointerup', 'click', 'keydown', 'keyup', 'input'];
 const FOLLOW_UP_WINDOW_MS = 1500;
 
 /**
@@ -40,6 +50,7 @@ export function install(opts: InstallOptions = {}): Api {
   const devtoolsTrack = opts.devtoolsTrack ?? true;
 
   const frames: FrameSummary[] = [];
+  const inp = createInpTracker();
   const notify = (r: InteractionReport) => {
     for (const fn of listeners) {
       try {
@@ -49,6 +60,11 @@ export function install(opts: InstallOptions = {}): Api {
       }
     }
     if (opts.onReport) opts.onReport(r);
+  };
+  const findReport = (id: number): InteractionReport | null => {
+    for (let i = reports.length - 1; i >= 0; i--) if (reports[i].interactionId === id) return reports[i];
+    for (let i = quiet.length - 1; i >= 0; i--) if (quiet[i].interactionId === id) return quiet[i];
+    return null;
   };
 
   // A render that lands after the report was emitted (data arrived, an effect fired) still
@@ -77,8 +93,10 @@ export function install(opts: InstallOptions = {}): Api {
   for (const t of INPUT_TYPES) window.addEventListener(t, noteInput, { capture: true, passive: true });
 
   const stopFrames = observeFrames(frames, 60, () => {
+    // A LoAF can land after the report was built (there is no settle timer); fold it into the
+    // last report's window or its later renders and re-notify with the corrected numbers.
     const r = reports[reports.length - 1];
-    if (r && refreshLaterFrames(r, frames)) notify(r);
+    if (r && refreshFrames(r, frames)) notify(r);
   });
   const publish = (r: InteractionReport) => {
     reports.push(r);
@@ -87,9 +105,36 @@ export function install(opts: InstallOptions = {}): Api {
     notify(r);
   };
   // Observe at the browser's floor (16 ms) so short interactions with a heavy later render
-  // are not lost; everything else under the threshold stays quiet.
-  const stopEvents = observeEventTiming(16, (entries) => {
-    const r = buildReport(entries, hookState().commits, frames);
+  // are not lost, and so the INP estimate sees every interaction it can; everything else
+  // under the threshold stays quiet.
+  const stopEvents = observeEventTiming(16, (id, batch) => {
+    for (const e of batch) inp.add(e);
+    const seen = entriesById.get(id);
+    const entries = seen ? seen.concat(batch) : batch;
+    entriesById.set(id, entries);
+    if (entriesById.size > MAX_ENTRY_SETS) entriesById.delete(entriesById.keys().next().value as number);
+    const commits = hookState().commits;
+    const existing = seen ? findReport(id) : null;
+    if (existing) {
+      // A late entry of the same interaction: the click after a held pointerdown, the keyup.
+      const had = new Set([...existing.commits, ...existing.followUps]);
+      const wasQuiet = quiet.includes(existing);
+      const headlineChanged = refreshReport(existing, entries, commits, frames, recentInputs());
+      if (wasQuiet) {
+        if (existing.duration < threshold && !existing.followUps.length) return;
+        quiet.splice(quiet.indexOf(existing), 1);
+        publish(existing);
+        return;
+      }
+      if (devtoolsTrack) {
+        const fresh = [...existing.commits, ...existing.followUps].filter((c) => !had.has(c));
+        if (headlineChanged) emitTrack(existing, fresh);
+        else for (const c of fresh) emitRender(existing, c);
+      }
+      notify(existing);
+      return;
+    }
+    const r = buildReport(entries, commits, frames, recentInputs());
     // Clicks on our own badge and panel are not the app's interactions.
     if (r.target?.selector?.includes('#' + OVERLAY_ID)) return;
     if (r.duration < threshold && !r.followUps.length) {
@@ -103,10 +148,17 @@ export function install(opts: InstallOptions = {}): Api {
   const api: Api = {
     reports: () => reports.slice(),
     last: () => reports[reports.length - 1] || null,
+    inp: () => {
+      const e = inp.estimate();
+      if (!e) return null;
+      return { value: e.value, rating: rateInp(e.value), interactionCount: Math.round(e.interactionCount), report: findReport(e.id) };
+    },
     clear: () => {
       reports.length = 0;
       quiet.length = 0;
+      entriesById.clear();
       hookState().commits.length = 0;
+      inp.reset();
     },
     onInteraction,
     stats: () => {
@@ -172,6 +224,7 @@ function noop(): Api {
   return {
     reports: () => [],
     last: () => null,
+    inp: () => null,
     clear: () => {},
     onInteraction: () => () => {},
     stats: () => ({ mode: 'none', owner: 'none', renderers: 0, walks: 0, walkTotalMs: 0, reports: 0, commitsRecorded: 0 }),

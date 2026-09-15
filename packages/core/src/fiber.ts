@@ -1,4 +1,4 @@
-import type { CommitSummary, RenderedComponent } from './types';
+import type { CommitSummary, InputStamp, RenderedComponent } from './types.ts';
 
 // React work tags, stable across 17, 18 and 19.
 const FunctionComponent = 0;
@@ -51,8 +51,13 @@ function typeName(t: any): string | null {
 
 /** Component names from the node outwards, nearest first. */
 export function ownerChain(node: any, limit = 8): string[] {
+  return ownersOf(fiberFromNode(node), limit);
+}
+
+/** Component names from a fiber outwards, nearest first. */
+export function ownersOf(fiber: Fiber | null, limit = 8): string[] {
   const out: string[] = [];
-  let f = fiberFromNode(node);
+  let f = fiber;
   while (f && out.length < limit) {
     if (isComponent(f)) {
       const n = componentName(f);
@@ -78,9 +83,14 @@ const handlerProp: Record<string, string[]> = {
 
 /** Name of the first React handler prop for this event type on the target chain. */
 export function handlerName(node: any, eventType: string): string | null {
+  return handlerOf(fiberFromNode(node), eventType);
+}
+
+/** Same, starting from a fiber. */
+export function handlerOf(fiber: Fiber | null, eventType: string): string | null {
   const props = handlerProp[eventType];
   if (!props) return null;
-  let f = fiberFromNode(node);
+  let f = fiber;
   let hops = 0;
   while (f && hops++ < 64) {
     const p = f.memoizedProps;
@@ -112,7 +122,7 @@ interface Agg {
  * A fiber whose alternate still points at the same child list bailed out, so nothing
  * under it rendered and its subtree is stale: that is the prune.
  */
-export function walkCommit(rootFiber: Fiber, budget: number, at: number, sinceInput: number): CommitSummary {
+export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: InputStamp): CommitSummary {
   let visited = 0;
   let truncated = false;
   const hasDurations = typeof rootFiber.actualDuration === 'number';
@@ -210,7 +220,10 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, sinceIn
 
   return {
     at,
-    sinceInput,
+    sinceInput: at - input.ts,
+    inputTs: input.ts,
+    gestureTs: input.gestureTs,
+    inputType: input.type,
     rendered,
     truncated,
     roots: dedupe(performedRoots.map((a) => a.name)).slice(0, 5),
