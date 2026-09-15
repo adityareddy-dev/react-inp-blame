@@ -1,114 +1,262 @@
 # react-inp-blame
 
-Blames the React component behind a slow interaction. Prototype. Answers one question the browser cannot answer on its own: **which React
-component made this interaction slow?**
-
-The browser's Event Timing API knows an interaction was slow. Long Animation Frames know
-which scripts ran and how much forced layout happened. React's fiber tree knows which
-components rendered and (in dev and profiling builds) how long each took. Nothing joins
-them. This does.
+Interaction attribution for React: when a click, tap or key press is slow, it names the component or handler
+behind it and says where the time went. It joins the browser's Event Timing entries (what INP is built on)
+and Long Animation Frames (which scripts ran, and how much layout they forced) to React's fiber tree, read
+through the hook React keeps for developer tools. From the demo's sign-in page, in development:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
     after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
     PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
 
-## Where it's headed
+**Not on npm yet:** 0.1.0 is packaged but not published, and nothing has been proposed to any other project.
 
-The goal is for this to ship as part of Next.js, so any Next app gets component-level INP
-attribution with nothing extra to install. `react-inp-blame/next` now installs the library through
-`instrumentationClientInject` and adds the names loader; what still has to exist before that's a
-fair ask is a `useReportWebVitals` adapter so INP reports carry component names. Nothing has been
-proposed to the Next.js team yet.
+## Install with Next.js 16.3 or later
 
-## In a Next.js app
+```ts
+// next.config.ts
+import { withInpBlame } from 'react-inp-blame/next';
+export default withInpBlame({ /* your config */ });
+```
 
-One line, the same shape as Sentry's setup, on Next.js 16.3 or later. (Not on npm yet; the
-workspace link is how the demo gets it.)
+`withInpBlame` appends `react-inp-blame/next-client` to `instrumentationClientInject`, which Next.js imports
+before `instrumentation-client` and before hydration, and adds a loader, under Turbopack and webpack, that
+stamps `displayName` on the components in your `.tsx` and `.jsx` files so their names survive minification.
 
-    // next.config.ts
-    import { withInpBlame } from 'react-inp-blame/next';
-    export default withInpBlame({ /* your config */ }, { enabled: true });
+**`enabled` defaults to `'development'`: a production build gets neither the runtime nor the component
+names unless you pass `enabled: true` or `enabled: 'production'`.**
 
-`withInpBlame` adds a client module to `instrumentationClientInject`, which Next.js runs before
-hydration, so the very first interaction is attributed, and the loader that keeps component names
-through the production minifier, under Turbopack and under `next build --webpack`. Its `enabled`
-option picks the runs that get both: `'development'` (the default, so a production build gets
-nothing from the wrapper), `'production'`, `true` for both or `false`. `runtime` takes the options
-for `install()`, or `false` to keep only the loader. On the App Router every report says which URL it
-happened on and which navigation a click started, and the INP estimate starts over at each soft
-navigation. Pages Router: supported for attribution, no navigation join.
+| `enabled` | `'development'` (default) | `'production'` | `true` | `false` |
+| --- | --- | --- | --- | --- |
+| Runs that get the runtime and the loader | `next dev` | `next build` and `next start` | both | none: the config comes back untouched |
 
-Read reports with `onInteraction(report => ...)` from `react-inp-blame`, or open the Performance
-panel and look for the `react-inp-blame` tracks. Build on `report.explanation.blame` (what, which
-component or handler, how many ms, and whether that was measured or inferred) and the report's
-numbers; `verdict` and the other sentences are display text, reworded in any version. The API in
-brief, the report contract and the bundle sizes are in the
-[package README](packages/core/README.md).
+`runtime` is `true` (the defaults), the options for [`install()`](#installoptions), inlined through `env` and
+so plain data, or `false` for the loader alone. On the App Router, reports follow soft navigations in
+`navigationURL` and `navigationType`, name the one a click started in `startedNavigation`, and the INP
+estimate starts over at each. The Pages Router loads the injected module too (read in Next.js 16.3.5's source,
+not tested), so it gets attribution without navigations.
 
-## In a Vite app
+## Install with Vite
 
-    // vite.config.ts
-    import { defineConfig } from 'vite';
-    import { inpBlame } from 'react-inp-blame/vite';
-    export default defineConfig({ plugins: [inpBlame({ enabled: true })] });
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite';
+import { inpBlame } from 'react-inp-blame/vite';
+export default defineConfig({ plugins: [inpBlame()] });
+```
 
-The same two halves as Vite plugins: a script ahead of the page's own that installs the library,
-so the order of imports in your entry module stops mattering, and the displayName transform.
-`enabled` and `runtime` work as they do for Next.js.
+`inpBlame()` returns two plugins: a module script at the top of each HTML page that calls `install()`, so
+React registers with the library's hook whatever your entry imports first, and the `displayName` transform.
+`enabled` defaults to `'development'` here too (the dev server; `'production'` is `vite build`, `true` both,
+`false` adds no plugins), `runtime` is as for Next.js, and `pages(path)` picks the pages that get the script.
+With another bundler, make `import 'react-inp-blame/auto'` the first import of your entry module; for names,
+`react-inp-blame/display-names-loader` is a webpack-style loader with a `stamp(code)` export.
 
 ## The badge and panel
 
-    // next.config.ts; in vite.config.ts, inpBlame({ runtime: { overlay: true } })
-    export default withInpBlame(config, { runtime: { overlay: true } });   // or 'query': only with ?inp-blame in the URL
+`overlay: true`, in `runtime` or `install()`, shows a corner badge with the page's INP so far, green, amber or
+red. Click it for the recent slow interactions, newest first, each with what to blame and a bar split into
+waiting, working and updating the screen; a row opens into the full explanation and the components that
+rendered before and after the paint. `overlay: 'query'` shows it only when the URL has `?inp-blame` or
+`#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`: that is how to open it on a production
+page. `{ position, open, max }` sets the corner, whether the panel starts open and how many rows it keeps
+(20). It is plain DOM in a shadow root, so it never causes a React render, and its code is a chunk loaded
+after `install()` returns, only when shown. `mountOverlay(options)` shows it after an `/auto` import.
 
-A small badge in a corner shows the INP so far, green, amber or red, starting over at each soft
-navigation. Click it for a panel that lists each slow interaction with the component (or handler)
-to blame and a bar split into waiting, working and updating the screen; click a row for the full
-explanation and the components that rendered. It is plain DOM in a shadow root, so it never causes
-a React render and takes no styles from the page. Its code loads on demand, after `install()` has
-returned. `mountOverlay()` from `react-inp-blame` adds it after an `/auto` import and hands back
-a promise of its handle. Clicks on the badge itself are not counted.
+## API
 
-## Layout
+```ts
+import { onInteraction } from 'react-inp-blame';
+// explanation.blame and explanation.rating are data; verdict is display text.
+const stop = onInteraction((report) => console.log(report.explanation.blame, report.verdict));
+```
 
-- `packages/core` - the library (`react-inp-blame`). Zero dependencies.
-- `apps/demo` - two demos in one app, installed with `react-inp-blame/vite`. The default page is a
-  sign-in flow (Framely, an Instagram-style layout with its own name) with four realistic mistakes:
-  the email field re-renders the phone preview, the password field scores strength on the main
-  thread, the login click hashes the password before the request, and the profile grid measures
-  itself while rendering. A "What took time" panel lists every step in order with a rating and one
-  plain sentence. `#lab/...` holds six isolated anti-patterns, each with a "what's wrong / the fix"
-  note. Playwright tests assert the tool blames the right thing in both.
-  `scripts/react-matrix.mjs` generates `apps/demo-react18` and `apps/demo-react17`, the
-  same demo pinned to older React.
-- `apps/next-demo` - the Next.js 16 check. `next.config.ts` wraps its config in
-  `withInpBlame(config, { enabled: true, runtime: { debugGlobal: true } })`, which injects the
-  runtime before hydration and runs `react-inp-blame/display-names-loader` on client components
-  under Turbopack and webpack, so the production report says `Sidebar > NavItem` instead of the
-  minifier's `n`. The tests check that in both builds, that a component subscribing with
-  `onInteraction` hears the same reports as the debug global, and that a Link click is named with
-  the navigation it starts.
-- `docs/` - design notes.
+`onInteraction(fn)` is the one way to hear reports: `fn` gets each report when it is published and every
+later revision, and the call returns the unsubscribe. The package's types document every field.
 
-Quick start:
+### install(options)
 
-    npm install
-    npm run dev          # demo on http://localhost:5177
-    npm test             # dev build: full attribution with durations
-    npm run test:prod    # production build: attribution by render counts
-    npm test -w apps/demo-react18   # same suite on React 18.3.1
-    npm test -w apps/demo-react17   # same suite on React 17.0.2, legacy root
-    npm test -w apps/next-demo      # Next.js load-order check, dev server
-    npm run test:prod -w apps/next-demo   # same against next build + next start
+It has to run before react-dom loads, which the plugins and `/auto` see to, and it installs once per page. A
+later call, from any copy of the package, returns the same API and applies `overlay` and `onReport`
+(deprecated: it adds a listener); other options keep their first value, with a warning, until `dispose()`.
 
-The Next.js check loads the package as built, so run `npm run build` before it.
+| Option | Default | |
+| --- | --- | --- |
+| `overlay` | `false` | `true`, `'query'` or `{ position, open, max }` |
+| `threshold` | `40` | Report interactions from this many ms; shorter ones only when a heavy later render joins them |
+| `labels` | `'auto'` | Where `target.label` comes from: see [Labels and personal data](#labels-and-personal-data) |
+| `hook` | `'auto'` | `'chain'` wraps an existing `__REACT_DEVTOOLS_GLOBAL_HOOK__` and never creates one; `'shim'` creates one unless one exists; `'auto'` chains or creates |
+| `sampleRate` | `1` | Share of page loads that install anything |
+| `walkBudget` | `5000` | Component fibers visited per commit |
+| `inputWindow` | `1500` | Commits more than this many ms after the last input are not walked |
+| `devtoolsTrack` | `true` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track |
+| `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
 
-Behind a package mirror that curates versions, `npm run fix-lock` rewrites lockfile URLs back to
-the public registry before committing; the `overrides` entry pins one transitive package to a
-version the mirror carries (a root devDependency, since npm ignores `overrides` for workspace dependencies).
+The API has `reports()` (the last 50 published, oldest first, at their latest revision), `last()`, `inp()`
+(`{ value, rating, interactionId, interactionCount, report }` for this navigation, or null), `onInteraction(fn)`,
+`clear()` (drops reports and commits, and starts the INP estimate over), `dispose()` and `stats()`: `mode`
+(`'shim'`, `'chained'`, `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `walks`, and the
+library's own time in `walkTotalMs`, `reportTotalMs` and `installMs`. `debug.commits()` and `debug.hook()` are
+for debugging and may change in any version. Also exported: `mountOverlay`, `fiberFromNode`, `ownerChain` and
+`handlerName`. Under the `react-server` condition every export does nothing.
 
-Open the demo, record a Performance profile in Chrome DevTools, sign in: each interaction shows
-up in the "Interaction blame" track of a custom "react-inp-blame" group, beside React's own
-tracks (a production build, where React draws none, also gets a "React renders" track). For a guided,
-visible run: `INP_TOUR=1 npx playwright test tour --headed` from `apps/demo`.
+### InteractionReport
+
+```ts
+interface InteractionReport {
+  schemaVersion: 1; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
+  start: number; end: number; duration: number; holdMs: number;             // ms, performance.now() clock
+  inputDelay: number; processing: number; walkMs: number; presentation: number; // add up to duration
+  target: TargetInfo | null; entries: EventEntrySummary[]; // target: selector, label, component, owners, handler
+  navigationURL: string; navigationType: NavigationType; // web-vitals' names and values
+  startedNavigation: { url: string; type: 'push' | 'replace' | 'traverse' } | null;
+  commits: CommitSummary[]; followUps: CommitSummary[];   // before the paint; after it, within 1.5 s
+  frames: FrameSummary[] | null; laterFrames: FrameSummary[] | null; // null without Long Animation Frames
+  overheadMs: number;                                    // this library's own time on the interaction
+  explanation: {
+    blame: { kind: 'render' | 'handler' | 'waiting' | 'painting' | 'script' | 'none'; name: string | null;
+             detail: string | null; ms: number | null; confidence: 'measured' | 'inferred' };
+    rating: 'good' | 'needs-work' | 'poor'; phases: { label: string; ms: number; hint: string }[];
+    headline: string; where: string | null; cause: string; notes: string[];
+  };
+  verdict: string;
+}
+```
+
+`duration` is the longest single Event Timing entry, as web-vitals measures it; `holdMs` is how much longer
+the span from press to release ran. Reports are frozen: a late entry, frame or render that joins one reaches
+listeners as a new object with `revision` one higher, and `schemaVersion` changes when a field is removed or
+changes meaning. **`verdict`, `cause`, `notes`, `headline`, `where` and the phases' `label` and `hint` are
+display text that may change between versions**; the blame, the rating, the phases' `ms` and the report's
+numbers are the data. `confidence` is `'measured'` when the blame follows from this interaction's own timings,
+and `'inferred'` when it rests on render counts, a clock too coarse to time one component, a commit that only
+overlapped, a walk cut short, or no Long Animation Frames to rule other scripts out.
+
+## The INP estimate
+
+`inp()` and the badge estimate INP the way web-vitals' `onINP` does, without depending on web-vitals: each
+interaction's latency is its longest Event Timing entry, and INP is the one at index
+`min(floor(count / 50), 9)` among the 10 longest. It starts over at each soft navigation and back/forward
+cache restore. `apps/demo/e2e/inp.spec.ts` runs web-vitals 6.2.2's `onINP` in the same page
+(`reportAllChanges`, `durationThreshold: 16`) through more than 50 interactions and asserts after each that
+both name the same value and the same interaction. They still part at web-vitals' default 40 ms threshold,
+which `useReportWebVitals` keeps, when INP is under 40 ms or too few interactions reach it; at a soft
+navigation; after `clear()`; and for a moment after each interaction, while web-vitals waits for an idle page.
+
+## Compared with other tools
+
+| | react-inp-blame | Sentry `reactComponentAnnotation` | react-scan | web-vitals attribution | React 19.2 Performance tracks |
+| --- | --- | --- | --- | --- | --- |
+| Production-safe | yes¹ | yes | no² | yes | no: development and profiling builds |
+| Names the rendered subtree, not just the target's owner | yes | no³ | yes | no: a CSS selector | yes, in development⁴ |
+| Follow-up renders after the paint | yes | no | not told apart⁵ | no | drawn, not joined to the interaction |
+| Forced-layout split | yes, with Long Animation Frames | no | no: reads no Long Animation Frames | partly⁶ | no |
+| Plain-language verdict | yes | no | no | no | no |
+| Zero dependencies | yes | no | no (11 in 0.5.7) | yes | part of React |
+| Needs a build step for names | in production builds: the plugins add it | yes | not in development⁷ | no names | not in development |
+
+1. It fails closed on a browser or React it does not know, and `sampleRate` limits the page loads it runs on. The plugins leave it out of production builds unless `enabled` says otherwise.
+2. It does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended".
+3. Its build step puts `data-sentry-component` on the outermost element each component returns, and the SDK names an INP span from the target and at most four of its ancestors, using those names where it finds them.
+4. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
+5. It keeps every fiber render from the pointerup or keydown as one set, until the interaction's Event Timing entry arrives or a second after the frame that follows the input.
+6. `totalStyleAndLayoutDuration`, and `longestScript.entry`, which carries `forcedStyleAndLayoutDuration`.
+7. It ships bundler plugins under `react-scan/react-component-name/*`; what they match was not checked.
+
+Checked on 2026-09-15 against aidenybai/react-scan at 0fb3186, getsentry/sentry-javascript at 7267c25,
+reactjs/react.dev at f7f4524 and web-vitals 6.2.2's types. In development, React's Components track is the
+better source of per-component durations; what this library adds there is the join and the sentence.
+
+## Browser support
+
+| | Chromium | Firefox | Safari |
+| --- | --- | --- | --- |
+| Event Timing `interactionId` (required) | 96 | 144 | 26.2 |
+| Long Animation Frames: scripts and forced layout | 123 | no | no |
+| Performance panel tracks | 128 | no | no |
+
+Without `interactionId` nothing installs, one warning says why, and `stats().mode` is `'unsupported'`. Without
+Long Animation Frames, `frames` and `laterFrames` are `null` and the explanation leaves out the forced-layout and
+script sentences. On a page without cross-origin isolation, Playwright's Firefox 148 and WebKit 26.4 step
+`performance.now()` in whole milliseconds, too coarse to time one component: their development reports carry
+no per-component times, and blame built on render times is `'inferred'`.
+
+## What it costs
+
+Measured 2026-09-15 on 6fb9d59 in the demo's context storm (a click re-rendering 801 components) and big list
+(a keystroke re-rendering 1441), in Chromium 147 headless on an otherwise idle Windows PC: 30 fresh page loads
+per scenario, one interaction each, `walkBudget: 100000`, taken
+[as the design notes describe](docs/interaction-attribution-design.md#what-it-costs). p50 / p95 in ms:
+
+| | Context storm, production | Big list, production | Context storm, development | Big list, development |
+| --- | --- | --- | --- | --- |
+| `install()`, both calls the demo makes | 0.5 / 0.6 | 0.5 / 0.7 | 0.6 / 0.7 | 0.6 / 0.8 |
+| Walk of the commits joined to the report | 0.8 / 0.9 | 1.2 / 1.4 | 0.9 / 1.3 | 2.9 / 3.2 |
+| Event Timing callback, the page's listeners included | 1.0 / 1.2 | 1.0 / 1.2 | 1.1 / 1.4 | 1.1 / 1.4 |
+| Library time outside the walks (`stats().reportTotalMs`) | 0.9 / 1.2 | 1.0 / 1.3 | 0.8 / 1.1 | 0.9 / 1.2 |
+| `overheadMs` of the report | 1.3 / 1.5 | 1.7 / 1.9 | 1.5 / 1.9 | 3.4 / 3.8 |
+
+On the same machine with other processes at 15 to 49% CPU, the same commit read 1.1 to 1.6 times these p50s.
+The walk runs inside React's commit and its time is taken back out of `processing`; outside an interaction a
+commit costs a renderer lookup and one subtraction, and at the default `walkBudget` of 5000 neither scenario is
+cut short. With `enabled` at its default, neither plugin adds anything to a production build; where it loads:
+
+| Bundle (rolldown 1.2.8, minified ESM) | Minified | Gzip |
+| --- | --- | --- |
+| `react-inp-blame/auto`: everything that loads with the page | 34.3 KB | 12.9 KB |
+| The badge and panel, a chunk loaded only when shown | 11.3 KB | 4.2 KB |
+| What has to run before react-dom: the hook, the fiber reading, the observers | 11.5 KB | 4.8 KB |
+
+## What it reads from React
+
+These are React internals with no promise of stability, so the library checks them and fails closed: a
+react-dom outside 17 to 19, a first `root.current` of another shape, or a walk that throws turns the walk off
+for good, with one warning and `stats().unsupportedReason`, and reports carry on without components.
+
+- `window.__REACT_DEVTOOLS_GLOBAL_HOOK__`: created with `inject`, `onCommitFiberRoot`, `renderers`,
+  `supportsFiber` and a `reactInpBlame` marker, or, when one exists, its `inject` and `onCommitFiberRoot`
+  wrapped and its `renderers` read.
+- What react-dom hands `inject()`: `version`, `bundleType`, `rendererPackageName`. What React passes
+  `onCommitFiberRoot`: the renderer id, `root.current`, the priority and `didError`.
+- On fibers: `tag` (components are 0, 1, 11, 14 and 15; the root is 3), `flags` (the `PerformedWork` bit, 1),
+  `mode` (the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19), `child`, `sibling`, `return`, `alternate`
+  (the same `child` there means the fiber bailed out), `actualDuration`, `elementType` and `type` (for names:
+  `displayName` or `name`, through `render` for forwardRef and `type` for memo), and `memoizedProps` (the
+  event's handler prop, such as `onClick`). On DOM nodes: React's `__reactFiber$` key.
+
+Supported: react-dom 17, 18 and 19; only react-dom commits are walked. CI runs the demo's suites on React 19.3
+in development and production builds, its attribution spec on React 18.3.1 and 17.0.2 (legacy root), and the
+Next.js check on 16.3.5 under `next dev` and both production bundlers, and on `next@canary`, whose App Router
+brings a React canary, on every push and once a day, in a job allowed to fail. No job runs `react@canary` alone.
+
+## Known limits
+
+- **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
+  over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
+  installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.
+- **An interaction after the page's first input that paints in under 16 ms gets no report**, however heavy the
+  render after it: the browser sends no Event Timing entry for it. The first input still arrives as a
+  `first-input` entry. See "Quiet interactions" in the [design notes](docs/interaction-attribution-design.md).
+- React 18 and 19 development builds print "Download the React DevTools" on pages where the library created the
+  hook: it has no `checkDCE`, which react-dom takes to mean React DevTools is there.
+- A keystroke made before hydration commits gets the hydration commit joined to its report.
+- Production React records no durations, so blame there rests on render counts and is `'inferred'`
+  (`react-dom/profiling` gives durations), and minified handlers are named by their prop.
+- The names loader matches `function Foo(` and `const Foo = memo(` or `forwardRef(`, exported or not, at the
+  start of a line; arrow functions, classes and `memo<Props>(` keep their minified names.
+- Waiting on the server is not a phase: the render showing the result joins as a later render within 1.5 s of
+  the input, or not at all.
+
+## Labels and personal data
+
+`target.label` names the element in at most 40 characters, and never reads a form field's value or an
+element's whole text. Under a production build of React it uses only what your code wrote on the element:
+`aria-label`, a form field's `placeholder`, `name` or `type`, or `data-testid` or `data-test`. An element's
+text can be a person's name or email, and reports are made to be forwarded to error trackers and analytics, so
+text is opt-in there: with `install({ labels: 'text' })` an element with no `aria-label` that is not a form
+field is named by its first run of text. Development builds use text by default. Whatever `labels` says,
+`target.selector` has the tag, the `id` if there is one, and `data-test` or `data-testid` or else two classes,
+and `navigationURL` and `startedNavigation.url` are full URLs, query string included.
+
+[Design notes](docs/interaction-attribution-design.md) · [The plan](docs/road-to-acceptance.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · MIT license

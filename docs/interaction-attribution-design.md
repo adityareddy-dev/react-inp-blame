@@ -1,10 +1,42 @@
 # Interaction attribution for React: design notes
 
-Status: prototype, 2026-09-12. Core library, demo app with six anti-patterns, Playwright
-suite green against React 19.3 (dev and production builds), 18.3.1 and 17.0.2 (legacy root);
-Next.js 16.3.5 load-order check green in dev and production. Nothing published, nothing
-proposed to any outside project yet. See "What has not happened"
-at the end.
+Status, 2026-09-15: packaged as 0.1.0 and not published, nothing proposed to any outside project
+(see "What has not happened" at the end). On 6fb9d59 the Playwright suites were green against
+React 19.3 in development and production builds, 18.3.1 and 17.0.2 (legacy root), and Next.js 16.3.5
+under `next dev` and its Turbopack and webpack production builds. Since the prototype of 2026-09-12,
+the passes on the must-haves in `road-to-acceptance.md` changed this:
+
+- Must-haves 1 and 2 (21bf886): a commit joins an interaction on `Event.timeStamp` through a ring of
+  the last 8 inputs, with wall-clock overlap kept only as a flagged fallback; the headline is the
+  longest single Event Timing entry, with entries grouped by paint as web-vitals groups them and the
+  span from press to release kept apart as `holdMs`; the page's INP is estimated in the library; and
+  the unit tests begin. 0f46d4a then observes the page's first input as a `first-input` entry, so a
+  first click that paints in under 16 ms still gets its later render reported.
+- Must-haves 3 and 4 (26896e9): the shim has no `checkDCE`; `install({ hook })` chooses between
+  chaining onto a hook and creating one; `dispose()` puts a chained hook back; nothing installs
+  without Event Timing's `interactionId`; a react-dom outside React 17 to 19, or a root of another
+  shape, turns the walk off; only react-dom commits are walked; durations are read from
+  `ProfileMode`; and `frames` is `null` without Long Animation Frames, checked in Firefox and WebKit.
+- Must-haves 5 and 9 (d055b4b): only component fibers count against `walkBudget`, a depth guard stops
+  runaway trees, the walk's time comes out of `processing` as `walkMs`, `sampleRate` exists, labels
+  stop at 40 characters, the badge and panel are built after `install()` returns, and the Performance
+  panel entries sit beside React's own: renamed, coloured like React's, drawn with `console.timeStamp`
+  from Chrome 134, and taken back out of the User Timing buffer.
+- 96d95ae: the INP estimate is checked against web-vitals 6.2.2 after every interaction of a session;
+  `explanation.blame.confidence` says how sure the blame is; the whole-millisecond clocks of Firefox
+  and WebKit are recognised; the report lifecycle moved into `lifecycle.ts`; a spec loads React
+  DevTools' real hook and Fast Refresh before and after the library; the specs assert on data rather
+  than sentences; and the demo's timings got margins.
+- Must-have 11, the package (a41cd7e): `default` and `react-server` export conditions, reports frozen
+  per revision with `schemaVersion: 1`, `api.debug`, `stats().unsupportedReason`, one installation per
+  page, labels from attributes alone by default under a production React build, and `withInpBlame`
+  adding nothing outside `next dev` unless its `enabled` option says so.
+- Must-have 8 and the CI half of must-have 10 (6fb9d59): `withInpBlame` through
+  `instrumentationClientInject`, the navigation on every report, `react-inp-blame/vite`, and the CI and
+  publish workflows.
+- The documents of must-have 11 (2026-09-15): the README with its comparison, browser matrix and API
+  reference, CONTRIBUTING.md and SECURITY.md, and "What it costs" below measured again on 6fb9d59.
+  Publishing 0.1.0 is what is left of that must-have.
 
 ## The question
 
@@ -41,8 +73,13 @@ What the library itself costs is under "What it costs" below.
 One finding worth its own line: React runs the `useEffect` from a click after the paint,
 observed on 17.0.2, 18.3.1 and 19.3.0 alike. Event Timing closes the interaction at that
 paint (16 to 24ms), so INP never sees the 80ms render that follows, but the user does. The
-report carries these as "follow-up commits" and the verdict says so. No other tool draws that
-distinction today.
+report carries these as "follow-up commits" and the verdict says so. react-scan comes closest:
+it also groups Event Timing entries by `interactionId`, maps the target element to its fiber and
+records the fibers that render during the interaction. But it keeps every render from the pointerup
+or keydown as one set, until the interaction's entry arrives or a second after the frame that follows
+the input, so a render after the paint is not told apart from one before it, and a render that lands
+later is not joined at all (read in aidenybai/react-scan at 0fb3186,
+`packages/scan/src/core/notifications/`, on 2026-09-15).
 
 The same suite runs unchanged against React 18.3.1 and 17.0.2 (`scripts/react-matrix.mjs`
 generates the pinned variants); fiber tags, the `PerformedWork` flag and the hook protocol
@@ -57,71 +94,88 @@ nothing installed. Both time React's components with a clock too coarse for the 
 
 ## What it costs
 
-Measured 2026-09-15 on the Windows PC, Chromium 147 headless under Playwright 1.59.1, with a
-throwaway harness that is not in the repo: each scenario loaded 30 times on a fresh page, one
-interaction each, at the demo's `walkBudget: 100000`. p50 / p95 in ms; `performance.now()` is
-coarsened to 0.1 ms there. "install()" is `stats().installMs`, both calls the demo made then (the
-`/auto` import, then `install({ overlay })`). "Walk" is `walkMs` of the commits joined to the
-report. "Event Timing callback" is the wall time of the library's observer callback, timed from
-outside by wrapping `PerformanceObserver`, so it includes the page's own listeners.
-"Library, outside the walks" is `stats().reportTotalMs`. "Before" is commit 26896e9.
+Measured twice on 6fb9d59 on 2026-09-15, since the report lifecycle had moved into `lifecycle.ts`
+(96d95ae) and the demo's timings had changed after the last measurement. Windows PC, Chromium 147
+headless under Playwright 1.59.1, with a harness that is a script outside the repo. It serves the demo
+(the Vite dev server for the development build; for production, `vite build` into a folder outside the
+repo and `vite preview`), loads each scenario 30 times after two warm-up loads, alternating the two,
+each in a fresh page and browser context, and makes one interaction per load at the demo's
+`walkBudget: 100000`: a click on "Add to cart" in the context storm, one key in the big list's search
+box. It reads the numbers after 1.2 s and an idle callback, so late entries have joined the report and
+its Performance panel entries are drawn. p50 / p95 in ms, nearest rank; `performance.now()` is coarsened
+to 0.1 ms there. The two runs used the same harness and differ in what else the machine was doing: in
+one-second samples taken before and after the runs, other processes held it at 15 to 49% CPU during the
+first ("busy") and at 0 to 9% during the second ("idle").
 
-| Production build | Context storm, before | after | Big list, before | after |
-| --- | --- | --- | --- | --- |
-| install() | 1.3 / 2.1 | 0.5 / 0.8 | 1.3 / 2.0 | 0.6 / 0.8 |
-| Walk (801 and 1441 components) | 1.2 / 1.8 | 1.2 / 1.6 | 1.5 / 2.0 | 1.6 / 2.3 |
-| Event Timing callback | 1.1 / 1.7 | 1.1 / 1.6 | 0.9 / 1.3 | 1.0 / 1.4 |
-| Library, outside the walks | not recorded | 1.1 / 1.6 | not recorded | 1.1 / 1.5 |
-| `overheadMs` of the report | 1.2 / 1.8 (walks only) | 2.3 / 3.0 | 1.5 / 2.0 (walks only) | 2.7 / 3.3 |
+- "install()" is `stats().installMs`: both calls the demo makes, the one `react-inp-blame/vite` puts
+  ahead of the app and the `install()` in `SignInDemo.tsx`.
+- "Walk" is the `walkMs` of the commits joined to the report.
+- "Event Timing callback" is the wall time of the library's observer callback, timed from outside by
+  wrapping `PerformanceObserver`, so it includes the page's own listeners.
+- "Library, outside the walks" is `stats().reportTotalMs`.
 
-| Development build | Context storm, before | after | Big list, before | after |
-| --- | --- | --- | --- | --- |
-| install() | 1.4 / 1.9 | 0.6 / 1.0 | 1.3 / 1.8 | 0.7 / 1.4 |
-| Walk | 1.3 / 1.9 | 1.2 / 1.9 | 4.2 / 4.7 | 4.7 / 8.3 |
-| Event Timing callback | 1.1 / 1.6 | 1.0 / 1.5 | 1.0 / 1.4 | 1.2 / 2.5 |
-| Library, outside the walks | not recorded | 0.9 / 1.5 | not recorded | 1.1 / 1.8 |
+The "d055b4b" columns are the measurement before, taken the same way on that commit with a harness that
+was not kept; its "install()" was the `/auto` import and then `install({ overlay })`.
 
-The development runs after the change were taken with another process holding the machine at
-about 40% CPU; a repeat with no code change moved the context-storm walk from 1.2 / 1.9 to
-2.4 / 5.7, so read the development "after" column as noisy. The production runs agreed with
-each other.
+| Production build | Context storm, d055b4b | 6fb9d59, busy | 6fb9d59, idle | Big list, d055b4b | 6fb9d59, busy | 6fb9d59, idle |
+| --- | --- | --- | --- | --- | --- | --- |
+| install() | 0.5 / 0.8 | 0.6 / 1.1 | 0.5 / 0.6 | 0.6 / 0.8 | 0.6 / 1.0 | 0.5 / 0.7 |
+| Walk (801 and 1441 components) | 1.2 / 1.6 | 1.3 / 1.8 | 0.8 / 0.9 | 1.6 / 2.3 | 1.6 / 2.1 | 1.2 / 1.4 |
+| Event Timing callback | 1.1 / 1.6 | 1.2 / 1.7 | 1.0 / 1.2 | 1.0 / 1.4 | 1.2 / 1.6 | 1.0 / 1.2 |
+| Library, outside the walks | 1.1 / 1.6 | 1.2 / 1.5 | 0.9 / 1.2 | 1.1 / 1.5 | 1.1 / 1.6 | 1.0 / 1.3 |
+| `overheadMs` of the report | 2.3 / 3.0 | 1.8 / 2.3 | 1.3 / 1.5 | 2.7 / 3.3 | 2.1 / 2.8 | 1.7 / 1.9 |
 
-- **install()** is now under 1 ms at p95 in production. A CPU profile of the development demo
-  (V8 sampling at 50 µs over 20 loads; shares, since sampling adds its own cost) shows what came
-  off: creating the badge and panel, now done after install() returns; reading the user agent to
-  pick a way of drawing tracks, now done at the first draw; and starting the dynamic `import()`,
-  now started after the current task. What is left is the first call itself: compiling the
-  library's code on first use, and the browser calls that install the hook, five capture
-  listeners and two `PerformanceObserver`s. The number this section gave before, 0.4 to 0.9 ms
-  per commit for the walk in development, is not what these runs show on these two scenarios.
-- **The walk** did not change where the budget is not reached; it counts different fibers, not
-  fewer. At the default `walkBudget` of 5000 (15 loads each) every commit was cut short before,
-  at 713 of 801 components and 1027 of 1441, and none is now. Development walks cost more than
-  production ones on the same tree: 4.2 against 1.5 ms p50 for the big list before the change.
-- **Inside the interaction**, the walk's time is now taken out of `processing` (`walkMs`, 1.2 /
-  1.6 on the context storm and 1.6 / 2.3 on the big list in production) and named in the
-  explanation.
-- **The Event Timing callback** did not get cheaper on this page. The explanation and the
-  Performance panel entries are out of it, but the demo's own listeners read the explanation as
-  soon as they are called (the lab page copies each report with a spread, which runs the
-  getters), and the profile shows scheduling the idle callback and the first call of
-  `buildReport` as new costs in it. The getters are not what costs: defining them takes under
-  1 µs per report once warm (Node 24, 200,000 reports), about 30 µs on first use. A page whose
-  listeners do not read the explanation straight away no longer pays for it there.
-- **`overheadMs`** is larger than before because it now counts building the report and drawing
-  its entries, not only the walks. Drawing is about half a millisecond of it per report: with
-  `devtoolsTrack: false` the library's time outside the walks fell from 1.1 to 0.6 ms p50 on
-  both scenarios in production, while the Event Timing callback stayed where it was (1.0 / 1.5
-  and 1.0 / 1.7), because the entries are drawn when the page is idle, not in it. Reports are
-  frozen since 0.1.0, so drawing, which happens after a report exists, is no longer added to its
-  `overheadMs` and is counted only in `stats().reportTotalMs`; the `overheadMs` rows above still
-  include it.
+| Development build | Context storm, d055b4b | 6fb9d59, busy | 6fb9d59, idle | Big list, d055b4b | 6fb9d59, busy | 6fb9d59, idle |
+| --- | --- | --- | --- | --- | --- | --- |
+| install() | 0.6 / 1.0 | 0.7 / 1.1 | 0.6 / 0.7 | 0.7 / 1.4 | 0.7 / 1.2 | 0.6 / 0.8 |
+| Walk | 1.2 / 1.9 | 1.3 / 2.1 | 0.9 / 1.3 | 4.7 / 8.3 | 4.0 / 4.7 | 2.9 / 3.2 |
+| Event Timing callback | 1.0 / 1.5 | 1.3 / 1.7 | 1.1 / 1.4 | 1.2 / 2.5 | 1.3 / 1.8 | 1.1 / 1.4 |
+| Library, outside the walks | 0.9 / 1.5 | 1.1 / 1.4 | 0.8 / 1.1 | 1.1 / 1.8 | 1.1 / 1.4 | 0.9 / 1.2 |
+| `overheadMs` of the report | not recorded | 1.8 / 2.9 | 1.5 / 1.9 | not recorded | 4.7 / 5.4 | 3.4 / 3.8 |
+
+- **The machine moved these numbers more than the code did.** On the same commit the busy run read 1.1
+  to 1.6 times the idle run's p50s, the walks most: 1.3 against 0.8 ms on the context storm in
+  production, 4.0 against 2.9 ms on the big list in development. At p50 the busy run is within 0.2 ms of
+  d055b4b on every production row but `overheadMs`, and the idle run is at or below d055b4b on every
+  production row. The load during the d055b4b production runs was not recorded, so neither comparison
+  says the code got faster or slower. The d055b4b development runs were taken with another process
+  holding the machine at about 40% CPU, and a repeat there with no code change moved the context-storm
+  walk from 1.2 / 1.9 to 2.4 / 5.7.
+- **`overheadMs`** no longer counts drawing. Reports are frozen since 0.1.0, and a report's Performance
+  panel entries are drawn after it exists, so their time is only in `stats().reportTotalMs`. On d055b4b
+  `overheadMs` was the walks plus the library's time outside them (1.2 and 1.1 against 2.3 ms p50 on the
+  context storm in production). On 6fb9d59 it is 0.4 to 0.7 ms p50 below that sum in production, mostly
+  the drawing, which on d055b4b took about half a millisecond per report: there `devtoolsTrack: false`
+  took the library's time outside the walks from 1.1 to 0.6 ms p50 on both scenarios in production,
+  while the Event Timing callback stayed where it was, because the entries are drawn when the page is idle.
+- **install()** is under 1 ms at p50 in both runs and both builds, and at p95 in the idle run. Before
+  d055b4b, on 26896e9, it took 1.3 / 2.1 on the context storm in production. A CPU profile of the
+  development demo then (V8 sampling at 50 µs over 20 loads) showed what came off: creating the badge
+  and panel, now done after install() returns; reading the user agent to pick a way of drawing tracks, now
+  done at the first draw; and starting the dynamic `import()`, now started after the current task. What is
+  left is the first call itself: compiling the library's code on first use, and the browser calls that
+  install the hook, five capture listeners and two `PerformanceObserver`s.
+- **The walk** counts only component fibers against `walkBudget`, and at the default budget of 5000 no
+  commit of these scenarios is cut short: reinstalled with the default options, 10 loads of each in
+  development walked all 801 and all 1441 components, in both runs. On 26896e9, when DOM and text fibers
+  counted too, every commit stopped at 713 of 801 and 1027 of 1441. Development walks cost more than
+  production ones on the same tree: 2.9 against 1.2 ms p50 for the big list in the idle run, 4.0 against
+  1.6 in the busy one.
+- **Inside the interaction**, the walk's time is taken out of `processing` (`walkMs` in production:
+  0.8 / 0.9 on the context storm and 1.2 / 1.4 on the big list in the idle run, 1.3 / 1.8 and 1.6 / 2.1 in
+  the busy one) and named in the explanation.
+- **The Event Timing callback** includes the demo's own listeners, and the lab page copies each report
+  with a spread, which runs the explanation's getters inside it. The getters are not what costs:
+  defining them takes under 1 µs per report once warm (Node 24, 200,000 reports), about 30 µs on first
+  use. A page whose listeners do not read the explanation straight away does not pay for building it
+  there.
 
 Outside an interaction the per-commit cost is a renderer lookup and one subtraction.
 
 **Size.** Measured 2026-09-15 on 0.1.0 with the rolldown 1.2.8 in the repo's `node_modules`
 (`platform: 'browser'`, minified ESM, every export of `hook`, `fiber` and `observe` kept for the
-last row, gzip at zlib's default level), by a throwaway script that is not in the repo:
+last row, gzip at zlib's default level), by a throwaway script that is not in the repo, and measured
+again the same way on 6fb9d59 later that day, with the same figures:
 
 | Bundle | Minified | Gzip |
 | --- | --- | --- |
@@ -565,6 +619,11 @@ test has not been run yet against anything but the demo.
 
 ## Distribution: where this can live
 
+Written with the prototype on 2026-09-12. Where it differs, `road-to-acceptance.md` has replaced it: that
+plan drops the Profiler "Interactions" view, a framework hook on Chrome's Interactions track and the
+`react.*` OpenTelemetry attributes below, and turns inclusion in Next.js into an options passthrough on
+`useReportWebVitals` plus a documented recipe for config wrappers.
+
 **Chrome DevTools.** The Performance panel extensibility API is the zero-install path: any
 page that includes the library gets a React attribution track next to the Interactions track
 without an extension. A DevTools extension panel listing reports is the second step. The
@@ -618,19 +677,15 @@ than a dependency people have to pick.
 
 None of the following has been done, and nothing here should be described as if it had:
 
-- no npm publish, and the name `react-inp-blame` has not been checked against npm yet
+- no npm publish: the package and its publish workflow are ready for 0.1.0, and nothing is on npm.
+  No package had the name `react-inp-blame` on 2026-09-15 (`npm view react-inp-blame` answered 404).
 - no issue, PR or RFC opened with Chrome DevTools, React, Next.js, Vercel, OpenTelemetry or any RUM vendor
 - no human look at the Performance panel tracks yet (the trace file exists, the panel has not been opened on it)
-- no run against a real application, only the synthetic demo
+- no run against a real application, only the synthetic demo, and no run on the Next.js bench apps
+  `road-to-acceptance.md` names
 
-## Next steps, in order
+## Next steps
 
-1. An on-page overlay: a corner badge with the page's INP, and a panel that lists each slow
-   interaction, the component to blame and a waiting / working / painting bar. Same look in
-   the Vite demo and in Next.
-2. The production-mode overhead measurement on a real tree of several thousand fibers.
-3. Open `apps/demo/traces/context-storm-dev.json` in the Performance panel and check the
-   two tracks read well; adjust names, colours and tooltip text.
-4. Package split: `core`, `vite-plugin`, `next`, and an OpenTelemetry exporter.
-5. Then, and only then, the first outside conversation: one issue on
-   `open-telemetry/opentelemetry-js-contrib` proposing interaction-attribution attributes.
+`road-to-acceptance.md` is the plan and sets the order: what has to be true before anything public,
+then what would make Next.js and React want the library, then the order of the outside conversations.
+The Status paragraph at the top of this file says which of its must-haves the passes so far covered.

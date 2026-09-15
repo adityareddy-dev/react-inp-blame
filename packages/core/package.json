@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Which React component made this interaction slow. Joins Event Timing + Long Animation Frames to the fiber tree, emits Chrome Performance panel tracks.",
   "license": "MIT",
-  "author": "Aditya Reddy",
+  "author": "Aditya Reddy <adityareddy.dev@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/adityareddy-dev/react-inp-blame.git",
