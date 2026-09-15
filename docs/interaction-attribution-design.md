@@ -125,7 +125,21 @@ show up in every report. The `verdict` string is the explanation joined into one
 **Quiet interactions.** The observer runs at the browser's 16 ms floor; interactions under
 the reporting threshold (40 ms by default) are held back, not dropped, and surface only if a
 heavy later render attaches to them. A 24 ms click that triggers an 85 ms render after the
-paint is worth a sentence even though INP alone would never flag it.
+paint is worth a sentence even though INP alone would never flag it. Under the floor there is
+nothing to hold back: the browser sends no `event` entry for an interaction that paints in
+less than 16 ms, so a render its effect sets off after the paint has no report to attach to,
+however heavy. The page's first input is the exception. The browser also reports it as a
+`first-input` entry at any duration, carrying its interactionId, so the observer takes that
+entry too, as web-vitals' onINP does, and drops it when the `event` entry exists as well. For
+every later interaction under 16 ms the render stays unreported: its stamp still names the
+input exactly, but with no entry there is no latency to headline and no paint to place the
+render after, and making either up would be a guess. Found 2026-09-14 on the React 17 variant
+on Windows, where the cascading-effect click painted about 12 ms after the press, the point at
+which Event Timing's 8 ms rounding splits 8 from 16: from 1 in 20 to 3 in 10 runs emitted no
+report at all. The parent of the `Event.timeStamp` join commit failed the same way (6 in 30),
+so the join did not cause it. React 18 showed the same timing (the scheduler task rendering the
+details started 14.0 ms after the press, median, against 13.8 on React 17) and simply did not
+round down in 20 runs.
 
 **Late arrivals.** A profile that renders 500 ms after the click, once the server answers,
 lands long after the report was first emitted. Such renders attach to the existing report
@@ -161,9 +175,9 @@ dependency: the interaction count is `performance.interactionCount` where the br
 it, else estimated from interactionId spacing (Chrome steps ids by 7); the 10 longest
 interactions are kept by their longest single entry; INP is the one at index
 `min(floor(count / 50), 9)`, longest first. It counts every interaction the observer sees at
-its 16 ms floor, so it is only exact when all interactions over 16 ms were observed. The
-demo's own "Page INP so far" line reads the same call, so the page never shows two INPs
-that disagree.
+its 16 ms floor, plus the page's first input at any duration, so it is only exact when all
+interactions over 16 ms were observed. The demo's own "Page INP so far" line reads the same
+call, so the page never shows two INPs that disagree.
 
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it

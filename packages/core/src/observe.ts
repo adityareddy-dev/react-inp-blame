@@ -5,14 +5,21 @@ import type { FrameSummary, ScriptSummary } from './types.ts';
  * batch. Entries of one interaction arrive with the paint that presented them: a pointerdown
  * in one frame, the pointerup and click in a later one, a keydown before its keyup. Nothing
  * waits here; the caller merges a later batch into the report it already built.
+ *
+ * The browser sends no `event` entry under 16 ms, so an interaction that paints faster is
+ * never seen, and a heavy render its effect sets off after the paint has no report to join.
+ * The page's first input is the exception: it also comes as a `first-input` entry at any
+ * duration, carrying its interactionId, so that type is observed too (web-vitals' onINP does
+ * the same). At or over the floor the `event` entry exists as well, and the copy is dropped.
  */
 export function observeEventTiming(threshold: number, onGroup: (id: number, entries: any[]) => void): () => void {
   if (typeof PerformanceObserver === 'undefined') return () => {};
+  const floor = Math.max(16, threshold);
   const po = new PerformanceObserver((list) => {
     const byId = new Map<number, any[]>();
     for (const e of list.getEntries() as any[]) {
       const id = e.interactionId;
-      if (!id) continue;
+      if (!id || (e.entryType === 'first-input' && e.duration >= floor)) continue;
       let g = byId.get(id);
       if (!g) byId.set(id, (g = []));
       g.push(e);
@@ -20,10 +27,12 @@ export function observeEventTiming(threshold: number, onGroup: (id: number, entr
     for (const [id, entries] of byId) onGroup(id, entries);
   });
   try {
-    po.observe({ type: 'event', buffered: true, durationThreshold: Math.max(16, threshold) } as any);
+    po.observe({ type: 'event', buffered: true, durationThreshold: floor } as any);
   } catch {
     return () => {};
   }
+  const types = (PerformanceObserver as any).supportedEntryTypes as string[] | undefined;
+  if (types && types.includes('first-input')) po.observe({ type: 'first-input', buffered: true });
   return () => po.disconnect();
 }
 
