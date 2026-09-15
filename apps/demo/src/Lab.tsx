@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
-import type { InteractionReport } from 'inpector';
-import { onInteraction } from 'inpector';
+import type { InteractionReport } from 'react-inp-blame';
+import { onInteraction } from 'react-inp-blame';
 import { Entry, titleFor } from './ReportCard';
 import { BigList } from './scenarios/BigList';
 import { CascadingEffect } from './scenarios/CascadingEffect';

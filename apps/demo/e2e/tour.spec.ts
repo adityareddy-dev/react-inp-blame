@@ -3,7 +3,7 @@ import { test } from '@playwright/test';
 // Headed walkthrough for humans. Not part of the normal suite:
 //   INP_TOUR=1 npx playwright test tour --headed
 // Runs the sign-in flow slowly, then the anti-pattern lab, then parks with the browser open
-// so you can record a Performance profile in DevTools and look at the "Inpector"
+// so you can record a Performance profile in DevTools and look at the "react-inp-blame"
 // track group.
 test.skip(!process.env.INP_TOUR, 'headed tour only, set INP_TOUR=1');
 test.describe.configure({ timeout: 0 });
@@ -47,7 +47,7 @@ test('tour', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('[data-test=email]');
   console.log('\n  Browser stays open. In it: Cmd+Opt+I, Performance tab, Record, sign in again, Stop.');
-  console.log('  Look for the "Inpector" group with Interactions and React renders tracks.');
+  console.log('  Look for the "react-inp-blame" group with Interactions and React renders tracks.');
   console.log('  Close the browser or press Resume in the Playwright Inspector to end the tour.\n');
   await page.pause();
 });

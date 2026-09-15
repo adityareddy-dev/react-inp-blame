@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['inpector'],
+  transpilePackages: ['react-inp-blame'],
 };
 
 export default nextConfig;

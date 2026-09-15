@@ -8,8 +8,8 @@ export default defineConfig({
   plugins: [displayNames()],
   resolve: {
     alias: [
-      { find: 'inpector/auto', replacement: core('auto.ts') },
-      { find: /^inpector$/, replacement: core('index.ts') },
+      { find: 'react-inp-blame/auto', replacement: core('auto.ts') },
+      { find: /^react-inp-blame$/, replacement: core('index.ts') },
       // React 17 has no react-dom/client. The matrix script sets this for the 17 variant.
       ...(process.env.INP_REACT_LEGACY ? [{ find: 'react-dom/client', replacement: fileURLToPath(new URL('./src/legacy-client.ts', import.meta.url)) }] : []),
     ],

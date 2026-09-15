@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { InteractionReport } from 'inpector';
-import { onInteraction } from 'inpector';
+import type { InteractionReport } from 'react-inp-blame';
+import { onInteraction } from 'react-inp-blame';
 import { burn } from '../burn';
 import { Entry, Pill, titleFor } from '../ReportCard';
 import { journey, type Step } from './journey';

@@ -109,7 +109,7 @@ window edge carries that much slack, or a render that ends at the paint gets mis
 
 **Output.** An `InteractionReport` object, a listener API, and User Timing measures carrying
 the `devtools` detail that the Chrome Performance panel (128+) renders as custom tracks: a
-"Inpector" group with an Interactions track and a React commits track. Older
+"react-inp-blame" group with an Interactions track and a React commits track. Older
 Chrome shows the same measures in the Timings track. Not yet verified visually in a real
 profile, only that the measures are emitted without throwing.
 
@@ -192,7 +192,7 @@ than a dependency people have to pick.
 
 None of the following has been done, and nothing here should be described as if it had:
 
-- no npm publish, and the name `inpector` has not been checked against npm yet
+- no npm publish, and the name `react-inp-blame` has not been checked against npm yet
 - no issue, PR or RFC opened with Chrome DevTools, React, Next.js, Vercel, OpenTelemetry or any RUM vendor
 - no human look at the Performance panel tracks yet (the trace file exists, the panel has not been opened on it)
 - no run against a real application, only the synthetic demo

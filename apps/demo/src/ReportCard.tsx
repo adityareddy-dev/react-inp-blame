@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CommitSummary, InteractionReport } from 'inpector';
+import type { CommitSummary, InteractionReport } from 'react-inp-blame';
 
 export const RATING_LABEL = { good: 'Good', 'needs-work': 'Needs work', poor: 'Poor' } as const;
 

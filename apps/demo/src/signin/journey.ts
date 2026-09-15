@@ -1,4 +1,4 @@
-import type { InteractionReport } from 'inpector';
+import type { InteractionReport } from 'react-inp-blame';
 
 /** Everything that took time on this page, in order: interactions from the library, waits from the app. */
 export type Step =

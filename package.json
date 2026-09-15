@@ -1,5 +1,5 @@
 {
-  "name": "inpector-monorepo",
+  "name": "react-inp-blame-monorepo",
   "private": true,
   "version": "0.0.1",
   "description": "Interaction attribution for INP: joins Event Timing and Long Animation Frames to the React fiber tree",

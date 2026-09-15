@@ -34,7 +34,7 @@ for (const v of variants) {
       test: `${env} playwright test attribution`,
       'test:prod': `${env} INP_MODE=prod INP_PORT=${v.port + 1} playwright test attribution`,
     },
-    dependencies: { react: v.react, 'react-dom': v.react, 'inpector': '*' },
+    dependencies: { react: v.react, 'react-dom': v.react, 'react-inp-blame': '*' },
     devDependencies: { '@playwright/test': '1.59.1', vite: '^8.3.0' },
   };
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');

@@ -28,7 +28,7 @@ const FOLLOW_UP_WINDOW_MS = 1500;
 
 /**
  * Must run before react-dom evaluates. The simplest way is
- * `import 'inpector/auto'` as the first import of your entry module.
+ * `import 'react-inp-blame/auto'` as the first import of your entry module.
  */
 export function install(opts: InstallOptions = {}): Api {
   if (installed) return installed;
@@ -132,8 +132,8 @@ export function install(opts: InstallOptions = {}): Api {
     const h = hookState();
     if (h.mode === 'shim' && h.renderers === 0) {
       console.warn(
-        '[inpector] no React renderer registered within 3s. install() has to run before react-dom loads: ' +
-          "make `import 'inpector/auto'` the first import of your entry module.",
+        '[react-inp-blame] no React renderer registered within 3s. install() has to run before react-dom loads: ' +
+          "make `import 'react-inp-blame/auto'` the first import of your entry module.",
       );
     }
   }, 3000);

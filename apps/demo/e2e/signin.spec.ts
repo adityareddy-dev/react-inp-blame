@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { InteractionReport } from 'inpector';
+import type { InteractionReport } from 'react-inp-blame';
 
 const prod = process.env.INP_MODE === 'prod';
 

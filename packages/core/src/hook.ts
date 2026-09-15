@@ -27,7 +27,7 @@ export function hookState(): HookState {
 /** Whether the hook was created here ('shim') or found already installed ('chained'), plus who else owns it. */
 export function hookOwner(): string {
   if (!hookRef) return 'none';
-  if (hookRef.reactInpAttribution) return 'inpector';
+  if (hookRef.reactInpAttribution) return 'react-inp-blame';
   const keys = Object.keys(hookRef);
   return keys.length ? `existing hook (${keys.slice(0, 8).join(', ')}${keys.length > 8 ? ', ...' : ''})` : 'existing hook';
 }

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export const metadata = { title: 'Inpector, Next.js load-order check' };
+export const metadata = { title: 'react-inp-blame, Next.js load-order check' };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

@@ -1,6 +1,6 @@
-# Inpector
+# react-inp-blame
 
-The INP inspector for React. Prototype. Answers one question the browser cannot answer on its own: **which React
+Blames the React component behind a slow interaction. Prototype. Answers one question the browser cannot answer on its own: **which React
 component made this interaction slow?**
 
 The browser's Event Timing API knows an interaction was slow. Long Animation Frames know
@@ -23,7 +23,7 @@ component names. Nothing has been proposed to the Next.js team yet.
 
 ## Layout
 
-- `packages/core` - the library (`inpector`). Zero dependencies.
+- `packages/core` - the library (`react-inp-blame`). Zero dependencies.
 - `apps/demo` - two demos in one app. The default page is a sign-in flow (Framely, an
   Instagram-style layout with its own name) with four realistic mistakes: the email field
   re-renders the phone preview, the password field scores strength on the main thread, the
@@ -54,5 +54,5 @@ the public registry before committing; the `overrides` entry pins one transitive
 version the mirror carries (a root devDependency, since npm ignores `overrides` for workspace dependencies).
 
 Open the demo, record a Performance profile in Chrome DevTools, sign in: the interactions and
-their React renders show up as a custom "Inpector" track group. For a guided,
+their React renders show up as a custom "react-inp-blame" track group. For a guided,
 visible run: `INP_TOUR=1 npx playwright test tour --headed` from `apps/demo`.

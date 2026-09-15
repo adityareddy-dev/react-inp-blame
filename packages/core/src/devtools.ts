@@ -31,7 +31,7 @@ export function emitTrack(r: InteractionReport): void {
         devtools: {
           dataType: 'track-entry',
           track: 'Interactions',
-          trackGroup: 'Inpector',
+          trackGroup: 'react-inp-blame',
           color,
           tooltipText: r.verdict,
           properties,
@@ -59,7 +59,7 @@ export function emitRender(r: InteractionReport, c: InteractionReport['commits']
           devtools: {
             dataType: 'track-entry',
             track: 'React renders',
-            trackGroup: 'Inpector',
+            trackGroup: 'react-inp-blame',
             color: later ? 'tertiary' : 'secondary',
             tooltipText: `${c.rendered} components rendered${later ? ' after the screen updated' : ''}; heaviest path ${c.hotPath.join(' > ')}`,
             properties: c.components

@@ -1,5 +1,5 @@
 {
-  "name": "inpector",
+  "name": "react-inp-blame",
   "version": "0.0.1",
   "description": "Which React component made this interaction slow. Joins Event Timing + Long Animation Frames to the fiber tree, emits Chrome Performance panel tracks.",
   "license": "MIT",
