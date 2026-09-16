@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { InteractionReport } from 'react-inp-blame';
+import { clearReports, reportWithLaterRender, settle } from './page';
 
 // Commits join to interactions on Event.timeStamp, so a busy main thread between the input and its
 // renders does not lose the join. A busy loop holds the main thread for 350 ms while a click on the
@@ -11,10 +11,10 @@ import type { InteractionReport } from 'react-inp-blame';
 test('a click that waits over 150 ms to be handled still gets its later render', async ({ page }) => {
   await page.goto('/#cascading-effect');
   await page.waitForSelector('[data-test=trigger]');
-  await page.waitForTimeout(300);
+  await settle(page);
   const box = (await page.locator('[data-test=trigger]').boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
+  await clearReports(page);
 
   const blocking = page.evaluate(
     () =>
@@ -28,17 +28,14 @@ test('a click that waits over 150 ms to be handled still gets its later render',
         }, 30),
       ),
   );
+  // Long enough for the timeout above to have started spinning, short enough to still be inside it.
   await page.waitForTimeout(45);
   await page.mouse.down();
   await page.mouse.up();
   await blocking;
 
-  await page.waitForFunction(() => ((window as any).__REACT_INP_BLAME__.last()?.followUps.length ?? 0) > 0, null, { timeout: 8_000 });
-  const click: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
-  console.log(`  ${click.verdict}`);
-  console.log(
-    `  input delay ${Math.round(click.inputDelay)} ms, commits ${click.commits.map((c) => `${Math.round(c.at - click.start)}ms/${c.rendered}/${c.joinedBy}`).join(' ')}, follow-ups ${click.followUps.map((c) => `${Math.round(c.at - click.start)}ms/${c.rendered}/${c.joinedBy}`).join(' ')}`,
-  );
+  const click = await reportWithLaterRender(page);
+  await test.info().attach('verdict', { body: click.verdict, contentType: 'text/plain' });
 
   expect(click.inputDelay).toBeGreaterThanOrEqual(150);
   for (const c of [...click.commits, ...click.followUps]) expect(c.joinedBy).toBe('exact');

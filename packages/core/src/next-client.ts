@@ -11,7 +11,7 @@ import type { InstallOptions, StartedNavigation } from './types.js';
 /** What `withInpBlame` hands this module. */
 interface WrapperSettings {
   /** The options of its `runtime`; empty for the defaults. */
-  install: Omit<InstallOptions, 'onReport'>;
+  install: InstallOptions;
   /** `nextConfig.basePath`, which the App Router leaves out of the URLs it announces. */
   basePath: string;
 }

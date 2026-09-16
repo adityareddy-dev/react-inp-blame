@@ -1,4 +1,3 @@
-import type { Fiber } from './fiber.js';
 import type { InpEstimate } from './inp.js';
 
 // Reports are frozen when they are published, down to their commits, frames and explanation, and so
@@ -6,7 +5,7 @@ import type { InpEstimate } from './inp.js';
 
 export interface RenderedComponent {
   readonly name: string;
-  /** How many fibers of this component rendered in the commit. */
+  /** How many fibers of this component rendered in the commit. A memo wrapper and the component it renders are one, named after the wrapper. */
   readonly count: number;
   /** Summed self time in ms; null when the React build records no durations, or its clock is too coarse to time single components (`CommitSummary.coarseClock`). */
   readonly self: number | null;
@@ -28,8 +27,14 @@ export interface InputRecord extends InputStamp {
   /** `pointerId` for pointer events, `code` for key events: how a pointerup or keyup finds its press. */
   readonly press: string | number | undefined;
   readonly target: Node | null;
-  /** The React fiber on the target at dispatch time. React drops it from the node on unmount, so a clicked row that was deleted still gets a component name. */
-  readonly fiber: Fiber | null;
+  /**
+   * The components enclosing the target at dispatch, nearest first. Read before React's handlers run:
+   * once React commits the deletion of an element, React 18 and 19 clear its fiber's links and props, so
+   * a clicked row that deleted itself is still named after what it was.
+   */
+  readonly owners: readonly string[];
+  /** The React handler prop for this input's type on the target chain at dispatch, read then for the same reason. */
+  readonly handler: string | null;
 }
 
 export interface CommitSummary {
@@ -50,13 +55,19 @@ export interface CommitSummary {
   readonly joinedBy?: 'exact' | 'overlap';
   /** Component fibers that performed work in this commit. */
   readonly rendered: number;
+  /**
+   * The commit hydrated server-rendered HTML, a root's or a Suspense boundary's. Hydrating is the page
+   * starting up rather than an input's work, so such a commit is kept only when React ran it inside an
+   * input's dispatch, hydrating so that it could handle that input.
+   */
+  readonly hydrated: boolean;
   /** The walk stopped early, at `walkBudget` component fibers or at a subtree deeper than it follows, so the counts are partial. */
   readonly truncated: boolean;
-  /** Top-most components that rendered. */
+  /** The outermost components that rendered, at most 5. */
   readonly roots: readonly string[];
   /** The chain that carries most of the work, outermost first. */
   readonly hotPath: readonly string[];
-  /** Per-component aggregates, heaviest first. */
+  /** Per-component aggregates, heaviest first, at most 12. */
   readonly components: readonly RenderedComponent[];
   /** Whether React measured render durations for this tree: its root is in ProfileMode, or part of it was measured anyway (under a `<Profiler>`). Only development and profiling builds measure. */
   readonly hasDurations: boolean;
@@ -102,8 +113,8 @@ export interface Stats {
   /**
    * 'shim': this library created the DevTools hook. 'chained': it wraps a hook that was already
    * there. 'none': no hook in use (on the server, or `hook: 'chain'` found none), so reports carry
-   * no React commits. 'unsupported': nothing was installed, or React's commits are not read, for
-   * the reason in `unsupportedReason`. 'sampled-out': the page lost the `sampleRate` roll and
+   * no React commits. 'unsupported': nothing was installed, or no react-dom on the page can be read,
+   * for the reason in `unsupportedReason`. 'sampled-out': the page lost the `sampleRate` roll and
    * nothing was installed.
    */
   mode: 'shim' | 'chained' | 'none' | 'unsupported' | 'sampled-out';
@@ -128,12 +139,13 @@ export interface UnsupportedReason {
   /**
    * 'browser': no Event Timing `interactionId` (Chrome 96, Firefox 144, Safari 26.2), so nothing was
    * installed. 'another-copy': a copy of this library from an incompatible version is already on the
-   * page, so this one installed nothing. The other three stop only the reading of React's commits,
-   * and reports carry on without components: 'react-version', a react-dom outside React 17 to 19;
-   * 'fiber-shape', a first commit whose root is not the shape this library reads; 'walk-threw',
-   * reading a commit threw.
+   * page, so this one installed nothing. 'hook-disabled': the page's DevTools hook has `isDisabled` set
+   * or no `supportsFiber`, so React registers with no hook. The other three stop the reading of one
+   * react-dom's commits, and the page is 'unsupported' when that leaves no react-dom it can read:
+   * 'react-version', a react-dom outside React 17 to 19; 'fiber-shape', a first commit whose root is not
+   * the shape this library reads; 'walk-threw', reading a commit threw. Reports carry on without components.
    */
-  kind: 'browser' | 'another-copy' | 'react-version' | 'fiber-shape' | 'walk-threw';
+  kind: 'browser' | 'another-copy' | 'hook-disabled' | 'react-version' | 'fiber-shape' | 'walk-threw';
   /** The warning's sentence. Display text. */
   message: string;
 }
@@ -165,11 +177,16 @@ export interface Api {
   last(): InteractionReport | null;
   /**
    * The INP of the navigation the page is on, so far: the estimate web-vitals makes, the interaction
-   * at index floor(count / 50) among the 10 longest. It starts over at each soft navigation and each
-   * restore from the back/forward cache, from the interactions that began after it. It agrees with
-   * web-vitals' `onINP` given `durationThreshold: 16`, on the value and on the interaction; the design
-   * doc lists where the two part (web-vitals' default 40 ms threshold, `clear()`, a soft navigation
-   * web-vitals is not asked to report).
+   * at index floor(count / 50) among the 10 longest, chosen as entries arrive and again when the page is
+   * hidden. It starts over at each soft navigation and each restore from the back/forward cache, from
+   * the interactions that began after it.
+   *
+   * It is not web-vitals, and it is not a drop-in for it: it is the same algorithm written again from
+   * the same entries. Through the session `apps/demo/e2e/inp.spec.ts` drives, more than 50 interactions,
+   * it names the same value and the same interaction as web-vitals 6.2.2's `onINP` at
+   * `durationThreshold: 16` after every one of them. The design doc lists where the two part, which
+   * includes web-vitals' own default of 40 ms, `clear()`, a soft navigation web-vitals is not asked to
+   * report, and the older web-vitals that Next.js 16.3 vendors.
    */
   inp(): InpEstimate | null;
   /** Drops every report and recorded commit, and starts the INP estimate over. */
@@ -184,7 +201,11 @@ export interface Api {
 }
 
 export interface DebugApi {
-  /** The last 300 commits walked, in or out of an interaction window, oldest first. They carry no `joinedBy`. */
+  /**
+   * The last 300 commits walked, in or out of an interaction window, oldest first. They carry no
+   * `joinedBy`. A render the page's report listeners caused is not walked, and a hydration is kept only
+   * when React ran it inside an input's dispatch.
+   */
   commits(): CommitSummary[];
   /** Where React's commits come from. */
   hook(): HookInfo;
@@ -208,12 +229,16 @@ export interface FrameSummary {
 }
 
 export interface TargetInfo {
+  /** A CSS selector for the element: its tag, its id if it has one, then its `data-test` or `data-testid` attribute, or else up to two of its classes. */
   readonly selector: string | null;
   /** Human label for the element, at most 40 characters, from what `InstallOptions.labels` allows. e.g. 'button "Add to cart"' or 'input "filter rows"'. */
   readonly label: string | null;
-  /** Nearest component owning the event target. */
+  /**
+   * The nearest component enclosing the event target, by the tree React rendered it in. That is not
+   * React's owner chain: a button that Page passes into Card as children is in Card.
+   */
   readonly component: string | null;
-  /** Owner chain, nearest first. */
+  /** The components enclosing the target, nearest first, by the same tree. */
   readonly owners: readonly string[];
   /** Name of the React prop handler on the target chain for this event type, if it has one. */
   readonly handler: string | null;
@@ -248,6 +273,9 @@ export interface Blame {
   readonly confidence: 'measured' | 'inferred';
 }
 
+/** A rating on INP's thresholds, in web-vitals' words: good up to 200 ms, needs improvement up to 500 ms, poor beyond. */
+export type Rating = 'good' | 'needs-improvement' | 'poor';
+
 /**
  * The report in plain words, for people and for UIs. `blame`, `rating` and the phases' `ms` are
  * data. `headline`, `where`, `cause`, `notes` and the phases' `label` and `hint` are display text:
@@ -258,8 +286,8 @@ export interface Explanation {
   readonly headline: string;
   /** The cause as data, for a one-line UI. */
   readonly blame: Blame;
-  /** INP thresholds: good up to 200 ms, needs work up to 500 ms, poor beyond. */
-  readonly rating: 'good' | 'needs-work' | 'poor';
+  /** The interaction's duration on INP's thresholds. */
+  readonly rating: Rating;
   /** e.g. 'button "Add to cart" in ContextStorm'. Display text. */
   readonly where: string | null;
   /** The one sentence that says where the time went. Display text. */
@@ -380,7 +408,11 @@ export interface InstallOptions {
   threshold?: number;
   /** Draw each report in the Chrome Performance panel, in a "react-inp-blame" track group, once the page is idle. Default true. */
   devtoolsTrack?: boolean;
-  /** Maximum component fibers (function, class, memo and forwardRef components) visited per commit walk; DOM and text fibers do not count. Default 5000. */
+  /**
+   * Maximum component fibers (function, class, memo and forwardRef components) visited per commit walk;
+   * DOM and text fibers do not count, and a memo wrapper counts as one with the component it renders.
+   * Default 5000.
+   */
   walkBudget?: number;
   /** Commits later than this many ms after the last input are not walked. Default 1500. */
   inputWindow?: number;
@@ -401,8 +433,6 @@ export interface InstallOptions {
    * Default 'auto'.
    */
   labels?: 'auto' | 'text' | 'attributes';
-  /** @deprecated Use `onInteraction()`, the one way to hear reports; this option only adds a listener there. */
-  onReport?: (report: InteractionReport) => void;
   /**
    * How to hear about React commits. `'chain'` wraps a `window.__REACT_DEVTOOLS_GLOBAL_HOOK__`
    * that already exists (React DevTools, Fast Refresh in dev) and never creates one, so a

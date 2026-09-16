@@ -17,6 +17,7 @@
     "test": "npm run test -w apps/demo",
     "test:prod": "npm run test:prod -w apps/demo",
     "test:unit": "node --import ./packages/core/test/ts-imports.ts --test packages/core/test/*.test.ts",
+    "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p apps/demo/tsconfig.json --noEmit",
     "fix-lock": "node scripts/fix-lock.mjs"
   },
   "engines": {

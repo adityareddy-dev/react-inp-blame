@@ -11,7 +11,8 @@ export default defineConfig({
       // The specs check attribution and component names in production builds too; by default only the dev server gets either.
       enabled: true,
       // The badge sits bottom-left, because the demo's own "What took time" column is on the right.
-      runtime: { overlay: { position: 'bottom-left' }, walkBudget: 100000, debugGlobal: true },
+      // Everything else is left at its default, so the specs check what a user gets.
+      runtime: { overlay: { position: 'bottom-left' }, debugGlobal: true },
       // devtools-hook.html loads the library itself, before or after React DevTools and Fast Refresh.
       pages: (path) => path !== '/devtools-hook.html',
     }),

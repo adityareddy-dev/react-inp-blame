@@ -1,4 +1,4 @@
-import { fiberFromNode, handlerOf, ownersOf, type Fiber } from './fiber.js';
+import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
@@ -29,15 +29,14 @@ const RENDER_MIN_COMPONENTS = 10;
 // From 50 when a handler is named, since counts cannot weigh a render against a slow handler: the
 // demo's password field re-renders 2 components beside a handler that runs for 110 ms.
 const RENDER_MIN_COMPONENTS_BESIDE_HANDLER = 50;
-// A Long Animation Frames script is named from 20 ms: the API lists scripts from 5 ms, and one
-// under 20 did not make its frame long by itself (a long frame is over 50 ms).
+// A Long Animation Frames script is named from 20 ms of it inside the interaction: the API lists
+// scripts from 5 ms, and one under 20 did not make its frame long by itself (a long frame is over 50 ms).
 const SCRIPT_MIN_MS = 20;
 // Waiting, the screen update, and working time without durations are blamed from 50 ms, the length
 // of a long task: the least the browser itself calls long.
 const LONG_TASK_MS = 50;
-// A later render is worth a sentence from 10 ms or 25 components. The page's own reporting UI
-// re-renders after every report (the demo's "What took time" panel: 6 to 14 components, under 2 ms)
-// and would otherwise be in every report.
+// A later render is worth a sentence from 10 ms or 25 components. Less is the page settling after the
+// paint, a spinner going away or a status line changing, which is not what anyone was waiting for.
 const LATER_MIN_MS = 10;
 const LATER_MIN_COMPONENTS = 25;
 // Forced layout is worth a sentence from 4 ms, a quarter of a frame.
@@ -46,6 +45,8 @@ const FORCED_LAYOUT_MIN_MS = 4;
 const PRESENTATION_NOTE_MS = 100;
 // A press held around the interaction is worth a note from 100 ms; an ordinary click is shorter.
 const HOLD_NOTE_MS = 100;
+// A later render without durations is given a frame's length, to find the long animation frames it ran in.
+const FRAME_MS = 16;
 
 // A label names the clicked element; it is not a copy of it. The element can be a list of 3000
 // rows, and reading all of its text would cost more than the rest of the report, so at most its
@@ -55,6 +56,8 @@ const LABEL_CHARS = 40;
 const LABEL_NODES = 32;
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
+// The attributes tests select elements by. A selector names the one an element has.
+const TEST_ATTRIBUTES = ['data-test', 'data-testid'];
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
 const FRIENDLY: Record<string, string> = {
   click: 'click',
@@ -68,6 +71,8 @@ const FRIENDLY: Record<string, string> = {
   input: 'typing',
   change: 'typing',
 };
+const TYPING_EVENTS = ['keydown', 'keyup', 'keypress', 'input', 'change'];
+const POINTER_EVENTS = ['click', 'mousedown', 'mouseup', 'pointerdown', 'pointerup'];
 
 /** Where a target's label may come from, once `InstallOptions.labels` is settled for the page's React build. */
 export type LabelSource = 'text' | 'attributes';
@@ -85,12 +90,18 @@ interface PaintGroup {
   entries: InteractionTiming[];
 }
 
-/** What a person would call the interaction: "click", "tap", "key press" or "typing", from the event type. */
+/** What a person would call the interaction: "click", "tap", "key press" or "typing", from the event type. Display text. */
 export function kindOf(type: string): string {
   return FRIENDLY[type] || type;
 }
 
-/** A later render worth a sentence, rather than the page's own reporting UI updating. */
+/** A key press or typing, decided on the event type, not on the words `kindOf` picks. */
+export const isTypingEvent = (type: string): boolean => TYPING_EVENTS.includes(type);
+
+/** A click or a tap, decided on the event type. */
+export const isPointerEvent = (type: string): boolean => POINTER_EVENTS.includes(type);
+
+/** A later render worth a sentence, rather than the page settling after the paint. */
 const worthMentioning = (c: CommitSummary) => (c.hasDurations ? c.total >= LATER_MIN_MS : c.rendered >= LATER_MIN_COMPONENTS);
 
 /** A render with real work in it, the kind the blame and the "rendered N times" note count; a status pill updating is not one. */
@@ -104,12 +115,10 @@ function groupByRenderTime(entries: readonly InteractionTiming[]): PaintGroup[] 
   const groups: PaintGroup[] = [];
   for (const e of entries) {
     const renderTime = e.startTime + e.duration;
-    let group: PaintGroup | null = null;
-    for (let i = groups.length - 1; i >= 0; i--) {
-      if (Math.abs(renderTime - groups[i].renderTime) <= RENDER_GROUP_MS) {
-        group = groups[i];
-        break;
-      }
+    let group: PaintGroup | undefined;
+    for (let i = groups.length - 1; i >= 0 && !group; i--) {
+      const g = groups[i];
+      if (g && Math.abs(renderTime - g.renderTime) <= RENDER_GROUP_MS) group = g;
     }
     if (group) {
       group.processingStart = Math.min(group.processingStart, e.processingStart);
@@ -120,6 +129,12 @@ function groupByRenderTime(entries: readonly InteractionTiming[]): PaintGroup[] 
     }
   }
   return groups;
+}
+
+/** The paint group `entry` falls in. */
+function paintGroupOf(entries: readonly InteractionTiming[], entry: InteractionTiming): PaintGroup {
+  for (const group of groupByRenderTime(entries)) if (group.entries.includes(entry)) return group;
+  return { renderTime: entry.startTime + entry.duration, processingStart: entry.processingStart, processingEnd: entry.processingEnd, entries: [entry] };
 }
 
 const near = (a: number, b: number) => Math.abs(a - b) <= STAMP_TOLERANCE;
@@ -156,6 +171,22 @@ function joined(c: CommitSummary, by: 'exact' | 'overlap'): CommitSummary {
   return (copies[by] ??= Object.freeze({ ...c, joinedBy: by }));
 }
 
+/** The first entry target still in the DOM. Event Timing reports null for a node that has left it. */
+function entryTarget(entries: readonly InteractionTiming[]): Node | null {
+  for (const e of entries) if (e.target) return e.target;
+  return null;
+}
+
+/** The input in the ring that one of these entries is, by its timestamp. */
+function ringInput(inputs: readonly InputRecord[], stamps: number[]): InputRecord | null {
+  return inputs.find((i) => stamps.some((s) => near(s, i.ts))) ?? null;
+}
+
+/** The element an interaction landed on: an entry's target, or the node the ring kept when the entries' target has left the DOM. */
+export function interactionTarget(entries: readonly InteractionTiming[], inputs: readonly InputRecord[]): Node | null {
+  return entryTarget(entries) ?? ringInput(inputs, entries.map((e) => e.startTime))?.target ?? null;
+}
+
 /**
  * One report's data from every Event Timing entry seen for an interactionId. The headline is the
  * longest single entry, which is the number web-vitals reports as INP for the interaction;
@@ -171,9 +202,8 @@ export function buildReport(
   labels: LabelSource = 'attributes',
   navigations: readonly PageNavigation[] = [],
 ): ReportData {
-  let longest = entries[0];
-  for (const e of entries) if (e.duration > longest.duration) longest = e;
-  const group = groupByRenderTime(entries).find((g) => g.entries.includes(longest))!;
+  const longest = entries.reduce((a, e) => (e.duration > a.duration ? e : a));
+  const group = paintGroupOf(entries, longest);
   // The same clamps web-vitals applies: processing cannot start before this entry's input,
   // and cannot run past the paint that closed it (a sync modal can make it look that way).
   const start = longest.startTime;
@@ -193,22 +223,27 @@ export function buildReport(
   // Name the interaction by the most meaningful entry painted with the headline.
   const sorted = group.entries.slice().sort((a, b) => rank(a.name) - rank(b.name));
   const stamps = entries.map((e) => e.startTime);
-  const ring = inputs.find((i) => stamps.some((s) => near(s, i.ts))) || null;
-  // The entry's target is null when the node left the DOM before the observer ran (a close
-  // button, a deleted row); the ring kept the node, and the fiber React has since detached.
-  let targetNode: Node | null = null;
-  for (const e of entries) {
-    if (e.target) {
-      targetNode = e.target;
-      break;
-    }
-  }
-  if (!targetNode && ring) targetNode = ring.target;
-  const fiber = (targetNode && fiberFromNode(targetNode)) || (ring && ring.fiber) || null;
+  const ring = ringInput(inputs, stamps);
+  // The entry's target is null when the node left the DOM before the observer ran (a close button, a
+  // deleted row). The ring kept the node, and what React said about it at dispatch: by the time the
+  // entry arrives, React 18 and 19 have cleared the links and props of a deleted fiber.
+  const live = entryTarget(entries);
+  const targetNode = live ?? ring?.target ?? null;
+  const fiber = live && fiberFromNode(live);
+  let owners: readonly string[] = [];
   let handler: string | null = null;
-  for (const e of sorted) {
-    handler = handlerOf(fiber, e.name);
-    if (handler) break;
+  if (fiber) {
+    owners = ownersOf(fiber);
+    for (const e of sorted) {
+      handler = handlerOf(fiber, e.name);
+      if (handler) break;
+    }
+  } else if (ring) {
+    owners = ring.owners;
+    for (const e of sorted) {
+      handler = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime))?.handler ?? null;
+      if (handler) break;
+    }
   }
 
   // Durations are rounded to 8 ms but processingEnd is exact, so a commit inside the
@@ -238,7 +273,7 @@ export function buildReport(
   return {
     schemaVersion: 1,
     interactionId: longest.interactionId,
-    type: sorted[0].name,
+    type: (sorted[0] ?? longest).name,
     start,
     end,
     duration,
@@ -248,7 +283,7 @@ export function buildReport(
     processing: processingEnd - processingStart - walkMs,
     walkMs,
     presentation: end - processingEnd,
-    target: targetNode ? describeTarget(targetNode, fiber, handler, labels) : null,
+    target: targetNode ? describeTarget(targetNode, owners, handler, labels) : null,
     navigationURL: navigation?.url ?? '',
     navigationType: navigation?.type ?? 'navigate',
     startedNavigation: navigationStartedBy(navigations, stamps),
@@ -306,7 +341,7 @@ function claimedElsewhere(c: CommitSummary, inputs: readonly InputRecord[], stam
 
 /** The navigation an interaction that began at `time` happened in: the newest one that had begun by then. Null only for a report built without the page's navigations, as unit tests build them. */
 function navigationAt(navigations: readonly PageNavigation[], time: number): PageNavigation | null {
-  let found = navigations.length ? navigations[0] : null;
+  let found = navigations[0] ?? null;
   for (const n of navigations) if (n.start <= time) found = n;
   return found;
 }
@@ -338,23 +373,30 @@ export function refreshReport(
 }
 
 function framesForLater(later: readonly CommitSummary[], frames: readonly FrameSummary[]): readonly FrameSummary[] {
-  return Object.freeze(frames.filter((f) => later.some((c) => f.start <= c.at && f.start + f.duration >= c.at - Math.max(c.total, 16))));
+  return Object.freeze(frames.filter((f) => later.some((c) => f.start <= c.at && f.start + f.duration >= c.at - Math.max(c.total, FRAME_MS))));
 }
 
 function framesInWindow(r: ReportData, frames: readonly FrameSummary[]): readonly FrameSummary[] {
-  return Object.freeze(frames.filter((f) => f.start < r.end && f.start + f.duration > r.start));
+  return frames.filter((f) => f.start < r.end && f.start + f.duration > r.start);
+}
+
+/** `held` and the frames of `found` it does not hold yet, in time order; null when it holds every one. */
+function withNewFrames(held: readonly FrameSummary[] | null, found: readonly FrameSummary[]): readonly FrameSummary[] | null {
+  const added = found.filter((f) => !held?.includes(f));
+  return added.length ? Object.freeze([...(held ?? []), ...added].sort((a, b) => a.start - b.start)) : null;
 }
 
 /**
  * A long animation frame can arrive after the report was built (there is no settle timer), so its
- * forced layout and scripts were missing from the explanation. The next revision folds in any that
- * overlap the interaction's window or its later renders; null when they are the frames it has.
+ * forced layout and scripts were missing from the explanation. The next revision adds any that overlap
+ * the interaction's window or its later renders. The frames a report holds stay in it after the page's
+ * store of recent frames lets them go; null when there is nothing new to add.
  */
 export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): ReportData | null {
-  const inWindow = framesInWindow(r, frames);
-  const later = framesForLater(r.followUps, frames);
-  if (inWindow.length === r.frames?.length && later.length === r.laterFrames?.length) return null;
-  return { ...r, frames: inWindow, laterFrames: later, revision: r.revision + 1 };
+  const inWindow = withNewFrames(r.frames, framesInWindow(r, frames));
+  const later = withNewFrames(r.laterFrames, framesForLater(r.followUps, frames));
+  if (!inWindow && !later) return null;
+  return { ...r, frames: inWindow ?? r.frames, laterFrames: later ?? r.laterFrames, revision: r.revision + 1 };
 }
 
 /** Does this commit belong to the report's input, landing after its paint? */
@@ -367,16 +409,16 @@ export function attachLaterRender(r: ReportData, c: CommitSummary, frames: reado
   const commit = joined(c, 'exact');
   if (r.followUps.includes(commit)) return null;
   const followUps = Object.freeze([...r.followUps, commit]);
-  return { ...r, followUps, laterFrames: frames && framesForLater(followUps, frames), overheadMs: r.overheadMs + c.walkMs, revision: r.revision + 1 };
+  const laterFrames = frames && (withNewFrames(r.laterFrames, framesForLater(followUps, frames)) ?? r.laterFrames);
+  return { ...r, followUps, laterFrames, overheadMs: r.overheadMs + c.walkMs, revision: r.revision + 1 };
 }
 
-function describeTarget(node: Node, fiber: Fiber | null, handler: string | null, labels: LabelSource): TargetInfo {
-  const owners = ownersOf(fiber);
+function describeTarget(node: Node, owners: readonly string[], handler: string | null, labels: LabelSource): TargetInfo {
   return Object.freeze({
     selector: selector(node),
     label: labelOf(node, labels),
-    component: owners[0] || null,
-    owners: Object.freeze(owners),
+    component: owners[0] ?? null,
+    owners: Object.isFrozen(owners) ? owners : Object.freeze(owners.slice()),
     handler,
   });
 }
@@ -385,14 +427,18 @@ function elementOf(node: Node): Element | null {
   return node.nodeType === ELEMENT_NODE ? (node as Element) : node.parentElement;
 }
 
+/** 'button#save[data-test="save"]': the tag, the id, then the test attribute the element has, or else two of its classes. */
 function selector(node: Node): string | null {
   const el = elementOf(node);
   if (!el) return null;
   let s = el.tagName.toLowerCase();
   if (el.id) s += '#' + el.id;
-  const test = el.getAttribute('data-test') || el.getAttribute('data-testid');
-  if (test) s += `[data-test=${test}]`;
-  else if (el.classList && el.classList.length) s += '.' + Array.from(el.classList).slice(0, 2).join('.');
+  for (const name of TEST_ATTRIBUTES) {
+    const value = el.getAttribute(name);
+    // Quoted, so that a value with spaces or brackets is still one selector.
+    if (value) return `${s}[${name}="${value.replace(/["\\]/g, '\\$&')}"]`;
+  }
+  if (el.classList && el.classList.length) s += '.' + Array.from(el.classList).slice(0, 2).join('.');
   return s;
 }
 
@@ -450,7 +496,7 @@ function nextNode(node: Node, root: Node): Node | null {
 
 const ms = (n: number): string => `${Math.round(n)} ms`;
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A URL the way a link on `page` shows it: its path, query and fragment when it stays on that page's origin. */
 function linkText(url: string, page: string): string {
@@ -487,29 +533,62 @@ function mostlyOf(c: CommitSummary): string | null {
   return plural(c.rendered, 'component');
 }
 
-/** "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)" */
+/** "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "hydrating" for a hydration. */
 function renderPhrase(c: CommitSummary): string {
+  const verb = c.hydrated ? 'hydrating' : 're-rendering';
   const leaf = leafOf(c);
   const top = c.components[0];
-  if (c.rendered === 1) return `re-rendering ${leaf}`;
+  if (c.rendered === 1) return `${verb} ${leaf}`;
   let mostly = '';
   if (top && top.count > 1) {
     const time = top.self != null ? `, ${ms(top.self)}` : '';
     mostly = top.name === leaf ? ` (${top.count} of them${time})` : `, mostly ${top.name} (${top.count} of them${time})`;
   }
-  return `re-rendering ${plural(c.rendered, 'component')} inside ${leaf}${mostly}`;
+  return `${verb} ${plural(c.rendered, 'component')} inside ${leaf}${mostly}`;
 }
 
-/** Longest script in frames overlapping [from, to], if it is long enough to matter. */
-function longestScript(frames: readonly FrameSummary[], from: number, to: number): ScriptSummary | null {
-  let best: ScriptSummary | null = null;
+/** A Long Animation Frames script as one window of the interaction sees it. */
+interface ScriptPart {
+  readonly script: ScriptSummary;
+  /** How much of the script is counted for this window, ms: the part of it lying between the window's two edges. */
+  readonly ms: number;
+  /**
+   * Its forced layout, in proportion to that part. The API gives a script's forced layout as one total,
+   * not when in the script it happened, so the share is an estimate: the one web-vitals makes.
+   */
+  readonly forcedLayout: number;
+}
+
+/**
+ * The part of each script of `frames` that falls inside the window, clipped at both edges, with that
+ * part's share of the script's forced layout, because the API gives a script's forced layout as one
+ * total and never says when in the script it happened.
+ *
+ * web-vitals takes the same intersection for `totalScriptDuration` and `longestScript` (its
+ * `attribution/onINP.ts`, "intersectingScriptDuration") but clips the left edge only, so a script
+ * that starts inside an interaction and runs on past the paint counts against it whole. Here it
+ * counts only up to the paint: the rest ran after the screen had updated, and nobody waited for it.
+ */
+function scriptParts(frames: readonly FrameSummary[], from: number, to: number): ScriptPart[] {
+  const parts: ScriptPart[] = [];
   for (const f of frames) {
-    for (const s of f.scripts) {
-      if (s.start > to || s.start + s.duration < from) continue;
-      if (!best || s.duration > best.duration) best = s;
+    for (const script of f.scripts) {
+      // A script that had finished before the window, or had not started by the end of it, is not part of it.
+      if (script.start + script.duration < from || script.start > to) continue;
+      const ms = Math.min(script.start + script.duration, to) - Math.max(from, script.start);
+      parts.push({ script, ms, forcedLayout: script.duration > 0 ? (ms / script.duration) * script.forcedLayout : 0 });
     }
   }
-  return best && best.duration >= SCRIPT_MIN_MS ? best : null;
+  return parts;
+}
+
+const forcedLayoutOf = (parts: readonly ScriptPart[]): number => parts.reduce((a, p) => a + p.forcedLayout, 0);
+
+/** The longest part, if it is long enough to matter. */
+function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
+  let best: ScriptPart | null = null;
+  for (const p of parts) if (!best || p.ms > best.ms) best = p;
+  return best && best.ms >= SCRIPT_MIN_MS ? best : null;
 }
 
 /** The report in plain words. Frozen, like the report it explains. */
@@ -523,24 +602,34 @@ export function explain(r: InteractionReport): Explanation {
   const component = r.target?.component ?? null;
   const handler = handlerName ? handlerPhrase(handlerName, kind) : null;
   const outsideName = handler || `code outside React (the ${kind} handler or other scripts)`;
-  const scriptName = (s: ScriptSummary) => handler || `a script (${s.invoker || s.name || 'unknown'}${s.source ? `, ${s.source}` : ''})`;
 
-  const forced = r.frames ? r.frames.reduce((a, f) => a + f.forcedLayout, 0) : 0;
+  const processingStart = r.start + r.inputDelay;
+  const processingEnd = processingStart + r.processing + r.walkMs;
+  // A script is the handler only when it started while the input's handlers ran. One that was already
+  // running when the input came (the task the input waited behind), or that ran after the handlers, is
+  // named by what the browser says ran it.
+  const ranAsHandler = (s: ScriptSummary) => s.start >= processingStart - STAMP_TOLERANCE && s.start <= processingEnd;
+  const scriptPhrase = (s: ScriptSummary) => (handler && ranAsHandler(s) ? handler : `a script (${s.invoker || s.name || 'unknown'}${s.source ? `, ${s.source}` : ''})`);
+  const scriptBlameName = (s: ScriptSummary) => (handlerName && ranAsHandler(s) ? handlerName : s.invoker || s.name || null);
+
+  // A script counts for its part inside each window, and so does its forced layout.
+  const frames = r.frames ?? [];
+  const forcedWhileHandling = forcedLayoutOf(scriptParts(frames, processingStart, processingEnd));
+  const forcedAfterInput = forcedLayoutOf(scriptParts(frames, processingStart, r.end));
+  const lateScript = longestPart(scriptParts(frames, processingEnd, r.end));
+  const anyScript = longestPart(scriptParts(frames, r.start, r.end));
+  const lateScriptClause = lateScript ? `, mostly because ${scriptPhrase(lateScript.script)} ran for ${ms(lateScript.ms)} before the next frame.` : '.';
+
   const c = r.commits.length ? heaviest(r.commits) : null;
   const renderTotal = r.commits.reduce((a, x) => a + x.total, 0);
   const hasDurations = !!c && c.hasDurations;
   // Working time that was neither React's render phase nor forced layout: the handler itself,
   // React committing what it rendered, or other scripts in the same task.
-  const outside = Math.max(0, r.processing - renderTotal - forced);
+  const outside = Math.max(0, r.processing - renderTotal - forcedWhileHandling);
   const outsideMatters = hasDurations && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler.
   const renderMatters = !!c && (hasDurations ? renderTotal >= RENDER_MIN_MS : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS));
-  const processingEnd = r.start + r.inputDelay + r.processing + r.walkMs;
-  // A change handler runs on the input event, after the key event was processed, so its
-  // cost shows up between the handlers and the paint. Look for it there.
-  const lateScript = r.frames && longestScript(r.frames, processingEnd - 5, r.end);
-  const anyScript = r.frames && longestScript(r.frames, r.start, r.end);
 
   // The sentence and the data version of it are decided together, so a UI that shows the
   // short form never disagrees with the long one.
@@ -561,12 +650,14 @@ export function explain(r: InteractionReport): Explanation {
     cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
     blame = { kind: 'waiting', name: null, detail: null, ms: r.inputDelay, confidence: 'measured' };
   } else if (r.presentation > LONG_TASK_MS && r.presentation > r.processing) {
-    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update` + (lateScript ? `, mostly because ${scriptName(lateScript)} ran for ${ms(lateScript.duration)} before the next frame.` : '.');
-    blame = { kind: 'painting', name: lateScript ? handlerName || lateScript.invoker || lateScript.name || null : null, detail: null, ms: r.presentation, confidence: 'measured' };
+    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`;
+    blame = { kind: 'painting', name: lateScript ? scriptBlameName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (anyScript) {
     const small = c ? `React's render was small (${renderPhrase(c)})` : `React didn't render anything`;
-    cause = `${small}; ${scriptName(anyScript)} ran for ${ms(anyScript.duration)}.`;
-    blame = { kind: 'script', name: handlerName || anyScript.invoker || anyScript.name || null, detail: component, ms: anyScript.duration, confidence: 'measured' };
+    // A script cut by the interaction's edges ran for longer than the part counted here.
+    const ofIt = Math.round(anyScript.ms) < Math.round(anyScript.script.duration) ? ' of it' : '';
+    cause = `${small}; ${scriptPhrase(anyScript.script)} ran for ${ms(anyScript.ms)}${ofIt}.`;
+    blame = { kind: 'script', name: scriptBlameName(anyScript.script), detail: ranAsHandler(anyScript.script) ? component : null, ms: anyScript.ms, confidence: 'measured' };
   } else if (r.frames) {
     cause = c
       ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
@@ -587,8 +678,8 @@ export function explain(r: InteractionReport): Explanation {
     if (r.inputDelay > LONG_TASK_MS && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
     if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   }
-  if (forced >= FORCED_LAYOUT_MIN_MS) {
-    notes.push(`The browser also spent ${ms(forced)} recalculating layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
+  if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS) {
+    notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
   }
   if (r.followUps.length) {
     const f = heaviest(r.followUps);
@@ -598,7 +689,7 @@ export function explain(r: InteractionReport): Explanation {
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated: ${what}${layout}. INP doesn't count it, but people still wait for it.`);
   }
   if (r.presentation > PRESENTATION_NOTE_MS && r.presentation > r.processing && blame.kind !== 'painting') {
-    notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update` + (lateScript ? `, mostly because ${scriptName(lateScript)} ran for ${ms(lateScript.duration)} before the next frame.` : '.'));
+    notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`);
   }
   if (r.holdMs >= HOLD_NOTE_MS) {
     notes.push(`The whole ${kind}, from press to release, spanned ${ms(r.duration + r.holdMs)}; INP counts only its slowest part, so the rest is left out of the headline.`);

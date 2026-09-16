@@ -19,6 +19,7 @@ function commit(at: number, inputTs: number): CommitSummary {
     gestureTs: inputTs,
     inputType: 'click',
     rendered: 400,
+    hydrated: false,
     truncated: false,
     roots: ['Details'],
     hotPath: ['Details'],
@@ -65,6 +66,9 @@ function lifecycle(options: Partial<LifecycleOptions> = {}) {
   return { life, published, render };
 }
 
+/** An element with this id, as the observer hands a target over. */
+const elementWithId = (id: string) => ({ nodeType: 1, tagName: 'DIV', id, classList: { length: 0 }, parentNode: null, parentElement: null, firstChild: null, getAttribute: () => null });
+
 test('a quiet interaction is held back, and published once a render it caused lands after the paint', () => {
   const { life, published, render } = lifecycle();
   life.onEntries([entry(7, 'click', 24)]);
@@ -75,9 +79,9 @@ test('a quiet interaction is held back, and published once a render it caused la
   render(later);
   assert.equal(published.length, 1);
   const [r] = published;
-  assert.equal(r.schemaVersion, 1);
-  assert.equal(r.duration, 24);
-  assert.deepEqual(r.followUps, [{ ...later, joinedBy: 'exact' }]);
+  assert.equal(r?.schemaVersion, 1);
+  assert.equal(r?.duration, 24);
+  assert.deepEqual(r?.followUps, [{ ...later, joinedBy: 'exact' }]);
   assert.deepEqual(life.reports(), [r]);
 });
 
@@ -90,18 +94,26 @@ test('a late entry publishes the next revision as a new report, and the revision
   // The click came with the paint after the release, and it was slow.
   life.onEntries([entry(7, 'click', 120, { startTime: 7080, processingStart: 7082, processingEnd: 7190 })]);
   assert.equal(published.length, 1);
-  assert.equal(published[0].type, 'click');
-  assert.equal(published[0].duration, 120);
-  assert.equal(published[0].revision, 1);
+  assert.equal(published[0]?.type, 'click');
+  assert.equal(published[0]?.duration, 120);
+  assert.equal(published[0]?.revision, 1);
 
   life.onEntries([entry(7, 'pointerup', 16, { startTime: 7079, processingStart: 7080, processingEnd: 7081 })]);
   const [before, after] = published;
   assert.notEqual(after, before);
-  assert.equal(after.revision, 2);
-  assert.equal(after.entries.length, 3);
-  assert.equal(before.revision, 1);
-  assert.equal(before.entries.length, 2);
+  assert.equal(after?.revision, 2);
+  assert.equal(after?.entries.length, 3);
+  assert.equal(before?.revision, 1);
+  assert.equal(before?.entries.length, 2);
   assert.equal(life.last(), after);
+});
+
+test("the page's first input, heard as its first-input entry and then as its event entry, is one entry in its report", () => {
+  const { life, published } = lifecycle();
+  life.onEntries([entry(7, 'pointerdown', 56, { entryType: 'first-input' })]);
+  life.onEntries([entry(7, 'pointerdown', 56)]);
+  assert.equal(published.length, 1);
+  assert.equal(life.last()?.entries.length, 1);
 });
 
 test('a long animation frame that lands after the report is published as the next revision', () => {
@@ -111,13 +123,29 @@ test('a long animation frame that lands after the report is published as the nex
   frames.push(slowFrame);
   life.onFrame();
   const [before, after] = published;
-  assert.deepEqual(before.frames, []);
-  assert.deepEqual(after.frames, [slowFrame]);
-  assert.equal(after.revision, 1);
+  assert.deepEqual(before?.frames, []);
+  assert.deepEqual(after?.frames, [slowFrame]);
+  assert.equal(after?.revision, 1);
 
   // The same frames again change nothing, so nothing is published.
   life.onFrame();
   assert.equal(published.length, 2);
+});
+
+test("a report keeps its long animation frames once the page's store of recent frames has let them go", () => {
+  const frames: FrameSummary[] = [slowFrame];
+  const { life, published } = lifecycle({ frames });
+  life.onEntries([entry(7, 'click', 120)]);
+  assert.deepEqual(published[0]?.frames, [slowFrame]);
+  // Minutes later, 60 unrelated long frames have pushed it out of the store, which keeps the newest 60.
+  for (let i = 0; i < 60; i++) {
+    frames.push(Object.freeze({ start: 60_000 + i * 5_000, duration: 60, blocking: 10, forcedLayout: 0, scripts: Object.freeze([]) }));
+    frames.splice(0, frames.length - 60);
+    life.onFrame();
+  }
+  assert.equal(frames.includes(slowFrame), false);
+  assert.equal(published.length, 1, 'a revision was published with nothing new in it');
+  assert.deepEqual(life.last()?.frames, [slowFrame]);
 });
 
 test('every revision is frozen, down to its entries, commits, frames and explanation', () => {
@@ -125,6 +153,7 @@ test('every revision is frozen, down to its entries, commits, frames and explana
   life.onEntries([entry(7, 'click', 120)]);
   render(commit(7300, 7000));
   const r = published[1];
+  assert.ok(r);
   const parts = { report: r, entries: r.entries, entry: r.entries[0], followUps: r.followUps, followUp: r.followUps[0], frames: r.frames, laterFrames: r.laterFrames, explanation: r.explanation, blame: r.explanation.blame, phases: r.explanation.phases, notes: r.explanation.notes };
   for (const [name, part] of Object.entries(parts)) assert.ok(Object.isFrozen(part), `${name} can be changed`);
   assert.throws(() => {
@@ -134,12 +163,14 @@ test('every revision is frozen, down to its entries, commits, frames and explana
 
 test("a click on the library's own badge or panel is never reported, though INP counts it as web-vitals does", () => {
   const { life, published } = lifecycle();
-  const badge = { nodeType: 1, tagName: 'DIV', id: 'react-inp-blame', classList: { length: 0 }, parentNode: null, parentElement: null, firstChild: null, getAttribute: () => null };
-  life.onEntries([entry(7, 'click', 120, { target: badge })]);
+  life.onEntries([entry(7, 'click', 120, { target: elementWithId('react-inp-blame') })]);
   assert.deepEqual(published, []);
   assert.deepEqual(life.reports(), []);
   assert.equal(life.inp()?.interactionId, 7);
   assert.equal(life.inp()?.report, null);
+  // The page's own element with an id that merely starts the same way is the page's.
+  life.onEntries([entry(14, 'click', 120, { target: elementWithId('react-inp-blame-docs') })]);
+  assert.equal(published.length, 1);
 });
 
 test(`only the newest ${MAX_REPORTS} published reports are kept`, () => {
@@ -147,7 +178,7 @@ test(`only the newest ${MAX_REPORTS} published reports are kept`, () => {
   for (let k = 1; k <= MAX_REPORTS + 5; k++) life.onEntries([entry(7 * k, 'click', 120)]);
   const kept = life.reports();
   assert.equal(kept.length, MAX_REPORTS);
-  assert.equal(kept[0].interactionId, 7 * 6);
+  assert.equal(kept[0]?.interactionId, 7 * 6);
   assert.equal(life.last()?.interactionId, 7 * (MAX_REPORTS + 5));
 });
 
@@ -167,8 +198,8 @@ test(`a late entry rebuilds its report only while its interaction is among the n
   for (let k = 2; k <= MAX_ENTRY_SETS + 1; k++) life.onEntries([entry(7 * k, 'click', 24)]);
   life.onEntries([entry(7, 'pointerup', 16, { startTime: 7090, processingStart: 7091, processingEnd: 7092 })]);
   assert.equal(published.length, 1);
-  assert.equal(published[0].revision, 0);
-  assert.equal(published[0].entries.length, 1);
+  assert.equal(published[0]?.revision, 0);
+  assert.equal(published[0]?.entries.length, 1);
 });
 
 test('a navigation starts the INP estimate over from the interactions that begin after it, and lets go of quiet ones', () => {
@@ -188,4 +219,22 @@ test('a navigation starts the INP estimate over from the interactions that begin
   life.onEntries([entry(28, 'click', 64)]);
   assert.equal(published.length, 3);
   assert.equal(life.inp()?.interactionId, 28);
+});
+
+test('hiding the page chooses INP again at the interaction count by then', () => {
+  let count = 0;
+  const { life } = lifecycle({ interactionCount: () => count });
+  for (const [k, duration] of [
+    [1, 304],
+    [2, 200],
+    [3, 104],
+  ] as const) {
+    count = k;
+    life.onEntries([entry(7 * k, 'click', duration)]);
+  }
+  count = 103;
+  assert.equal(life.inp()?.interactionId, 7);
+  life.onHidden();
+  const inp = life.inp();
+  assert.deepEqual(inp && { value: inp.value, interactionId: inp.interactionId, interactionCount: inp.interactionCount }, { value: 104, interactionId: 21, interactionCount: 103 });
 });

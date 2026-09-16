@@ -60,7 +60,7 @@ const click = (duration: number) => [
 ];
 
 function commit(at: number, rendered: number, total: number, components: CommitSummary['components']): CommitSummary {
-  return { at, sinceInput: at - 1000, inputTs: 1000, gestureTs: 1000, inputType: 'click', rendered, truncated: false, roots: ['CascadingEffect'], hotPath: ['CascadingEffect'], components, hasDurations: true, coarseClock: false, total, walkMs: 0.3, priority: 1, didError: false };
+  return { at, sinceInput: at - 1000, inputTs: 1000, gestureTs: 1000, inputType: 'click', rendered, hydrated: false, truncated: false, roots: ['CascadingEffect'], hotPath: ['CascadingEffect'], components, hasDurations: true, coarseClock: false, total, walkMs: 0.3, priority: 1, didError: false };
 }
 
 test('a first click that paints under the 16 ms floor still gets its later render reported', () => {
@@ -71,7 +71,7 @@ test('a first click that paints under the 16 ms floor still gets its later rende
     paint(click(8));
   });
   assert.equal(handed.length, 1, 'nothing was handed over for the click');
-  const [entries] = handed;
+  const [entries = []] = handed;
   assert.deepEqual(
     entries.map((e) => `${e.entryType} ${e.name} ${e.interactionId}`),
     ['first-input pointerdown 7'],
@@ -96,7 +96,21 @@ test('a first click that also cleared the 16 ms floor is handed over once, not t
   });
   assert.equal(handed.length, 1);
   assert.deepEqual(
-    handed[0].map((e) => `${e.entryType} ${e.name}`),
+    handed[0]?.map((e) => `${e.entryType} ${e.name}`),
     ['event pointerdown', 'event pointerup', 'event click'],
+  );
+});
+
+test('a first input replayed to an install() that ran after it is handed over when its event entry never comes', () => {
+  const handed: any[][] = [];
+  inBrowser((paint) => {
+    observeEventTiming(16, (entries) => handed.push(entries));
+    // `buffered: true` replays `event` entries only from 104 ms, and `first-input` at any duration, so a
+    // 56 ms first click reaches a late observer as its first-input entry alone.
+    paint([timing('first-input', 'pointerdown', 56, 1001, 1040)]);
+  });
+  assert.deepEqual(
+    handed.map((batch) => batch.map((e) => `${e.entryType} ${e.name} ${e.duration}`)),
+    [['first-input pointerdown 56']],
   );
 });

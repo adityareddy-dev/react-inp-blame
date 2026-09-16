@@ -1,10 +1,10 @@
 import { createTimeline } from './devtools.js';
-import { clearCommits, dispatchedInput, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.js';
+import { checkHookReplaced, clearCommits, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { FOLLOW_UP_WINDOW, type LabelSource } from './join.js';
 import { createLifecycle } from './lifecycle.js';
 import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
-import { observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
+import { EVENT_TIMING_FLOOR_MS, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
 import { incompatibleCopy, shared } from './session.js';
@@ -19,6 +19,12 @@ export type { OverlayHandle } from './overlay.js';
 
 /** Where `debugGlobal: true` puts the API on window. */
 const DEBUG_GLOBAL = '__REACT_INP_BLAME__';
+/** `threshold` by default: web-vitals' default `durationThreshold`, two and a half frames at 60 Hz. */
+const DEFAULT_THRESHOLD = 40;
+/** `walkBudget` by default: over three times the 1441 components of the demo's largest commit, and still a bound on a runaway tree inside React's commit. */
+const DEFAULT_WALK_BUDGET = 5000;
+/** How long react-dom has to register with the hook before the page is told install() ran too late. */
+const RENDERER_CHECK_MS = 3000;
 
 type Listener = (report: InteractionReport) => void;
 
@@ -27,7 +33,7 @@ type Settings = Required<Pick<InstallOptions, 'threshold' | 'devtoolsTrack' | 'w
 
 interface Installation {
   api: Api;
-  /** Applies the options of a later install() call that can change while installed. */
+  /** Applies what a later install() call can still change while installed: `overlay`. */
   reapply(opts: InstallOptions): void;
 }
 
@@ -35,7 +41,7 @@ interface InstallState {
   installed: Installation | null;
   /** The API of a page that lost the `sampleRate` roll. Later calls get it back rather than rolling again, which would raise the share. */
   sampledOut: Api | null;
-  /** Everyone hearing reports, `onReport` included: reports have one way out. */
+  /** Everyone hearing reports. */
   listeners: Set<Listener>;
   /** The badge and panel, from the moment they are asked for: their code arrives by dynamic import. */
   overlay: Promise<OverlayHandle | null> | null;
@@ -58,7 +64,7 @@ const installTime = () => page.installMs;
  * Must run before react-dom evaluates. `react-inp-blame/vite` and `react-inp-blame/next` call it in
  * a module that runs ahead of the app; without either, make `import 'react-inp-blame/auto'` the
  * first import of your entry module. Calling it again while installed, from this or any other copy
- * of the library on the page, applies `overlay` and `onReport` and returns the same API.
+ * of the library on the page, applies `overlay` and returns the same API.
  */
 export function install(opts: InstallOptions = {}): Api {
   // Timed because it runs before the app does: Next.js warns when instrumentation-client takes over 16 ms.
@@ -104,9 +110,9 @@ function installNow(opts: InstallOptions): Api {
   }
 
   const settings: Settings = {
-    threshold: opts.threshold ?? 40,
+    threshold: opts.threshold ?? DEFAULT_THRESHOLD,
     devtoolsTrack: opts.devtoolsTrack ?? true,
-    walkBudget: opts.walkBudget ?? 5000,
+    walkBudget: opts.walkBudget ?? DEFAULT_WALK_BUDGET,
     inputWindow: opts.inputWindow ?? FOLLOW_UP_WINDOW,
     debugGlobal: opts.debugGlobal ?? false,
     hook: opts.hook ?? 'auto',
@@ -138,6 +144,28 @@ function installNow(opts: InstallOptions): Api {
     });
   };
 
+  // Reports reach listeners in a task of their own. A later render revises a report inside React's
+  // commit, and a listener that set state there would render inside that commit. The renders the
+  // listeners cause by hearing reports are kept out of every report (see hearingReports).
+  const undelivered: InteractionReport[] = [];
+  let delivery: ReturnType<typeof setTimeout> | null = null;
+  const deliver = () => {
+    delivery = null;
+    const reports = undelivered.splice(0);
+    if (!page.listeners.size) return;
+    hearingReports(() => {
+      for (const r of reports) {
+        for (const fn of page.listeners) {
+          try {
+            fn(r);
+          } catch {
+            // A listener's error is its own; the others still hear the report.
+          }
+        }
+      }
+    });
+  };
+
   // Where reports happened: the document's own navigation, then each soft navigation a router
   // announces and each restore from the back/forward cache, oldest first.
   const navigations: PageNavigation[] = [documentNavigation()];
@@ -152,16 +180,10 @@ function installNow(opts: InstallOptions): Api {
     now: () => performance.now(),
     publish: (r) => {
       drawWhenIdle(r);
-      for (const fn of page.listeners) {
-        try {
-          fn(r);
-        } catch {
-          // A listener's error is its own; the others still hear the report.
-        }
-      }
+      undelivered.push(r);
+      delivery ??= setTimeout(deliver, 0);
     },
   });
-  let stopOnReport = opts.onReport ? listen(opts.onReport) : null;
 
   const navigated = (navigation: PageNavigation) => {
     navigations.push(navigation);
@@ -171,7 +193,12 @@ function installNow(opts: InstallOptions): Api {
     page.overlay?.then((handle) => handle?.refresh());
   };
   const onPageShow = (e: PageTransitionEvent) => {
-    if (e.persisted) navigated({ url: navigations[navigations.length - 1].url, type: 'back-forward-cache', start: e.timeStamp, router: null });
+    const current = navigations[navigations.length - 1];
+    if (e.persisted && current) navigated({ url: current.url, type: 'back-forward-cache', start: e.timeStamp, router: null });
+  };
+  // web-vitals chooses INP again when the page is hidden, at the interaction count by then.
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'hidden') lifecycle.onHidden();
   };
   // The App Router announces a navigation from inside the handler that starts it, so the input
   // being dispatched, if any, is the one that started it.
@@ -183,22 +210,26 @@ function installNow(opts: InstallOptions): Api {
   installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit });
   for (const t of INPUT_TYPES) window.addEventListener(t, noteInput, { capture: true, passive: true });
   window.addEventListener('pageshow', onPageShow, { capture: true });
-  const stopFrames = frames ? observeFrames(frames, 60, lifecycle.onFrame) : () => {};
-  // Observe at the browser's floor (16 ms) so short interactions with a heavy later render
-  // are not lost, and so the INP estimate sees every interaction it can; everything else
-  // under the threshold stays quiet.
-  const stopEvents = observeEventTiming(16, lifecycle.onEntries);
+  window.addEventListener('visibilitychange', onVisibilityChange, { capture: true });
+  const stopFrames = frames ? observeFrames(frames, lifecycle.onFrame) : () => {};
+  // Observe at the browser's floor so short interactions with a heavy later render are not lost, and
+  // so the INP estimate sees every interaction it can; everything else under the threshold stays quiet.
+  const stopEvents = observeEventTiming(EVENT_TIMING_FLOOR_MS, (batch) => {
+    checkHookReplaced();
+    lifecycle.onEntries(batch);
+  });
 
-  const noRendererCheck = setTimeout(() => {
+  const rendererCheck = setTimeout(() => {
+    checkHookReplaced();
     const { mode } = hookStats();
     if ((mode === 'shim' || mode === 'chained') && !knownRenderers().some((r) => r.rendererPackageName === 'react-dom')) {
       warnOnce(
         'no-renderer',
-        'no react-dom registered with the DevTools hook within 3s. install() has to run before react-dom loads: ' +
+        `no react-dom registered with the DevTools hook within ${RENDERER_CHECK_MS / 1000}s. install() has to run before react-dom loads: ` +
           "install with react-inp-blame/vite or react-inp-blame/next, or make `import 'react-inp-blame/auto'` the first import of your entry module.",
       );
     }
-  }, 3000);
+  }, RENDERER_CHECK_MS);
   const debugName = debugGlobalName(settings.debugGlobal);
 
   const api: Api = {
@@ -217,13 +248,16 @@ function installNow(opts: InstallOptions): Api {
     },
     dispose: () => {
       if (page.installed?.api !== api) return;
-      clearTimeout(noRendererCheck);
+      clearTimeout(rendererCheck);
+      if (delivery !== null) clearTimeout(delivery);
+      undelivered.length = 0;
       if (cancelDraw) cancelDraw();
       stopFrames();
       stopEvents();
       stopRouterNavigations();
       for (const t of INPUT_TYPES) window.removeEventListener(t, noteInput, { capture: true });
       window.removeEventListener('pageshow', onPageShow, { capture: true });
+      window.removeEventListener('visibilitychange', onVisibilityChange, { capture: true });
       uninstallHook();
       hideOverlay();
       page.listeners.clear();
@@ -242,10 +276,6 @@ function installNow(opts: InstallOptions): Api {
   page.installed = {
     api,
     reapply: (next) => {
-      if (next.onReport !== undefined) {
-        stopOnReport?.();
-        stopOnReport = listen(next.onReport);
-      }
       applyOverlay(next.overlay);
       const kept = (Object.keys(settings) as (keyof Settings)[]).filter((k) => next[k] !== undefined && next[k] !== settings[k]);
       if (kept.length) {
@@ -271,14 +301,15 @@ export function mountOverlay(opts: OverlayOptions = {}): Promise<OverlayHandle |
   return page.overlay ?? showOverlay(api, opts);
 }
 
-/** Calls `fn` with each report when it is published, and again with every later revision of it. Returns the unsubscribe. */
+/**
+ * Calls `fn` with each report once it is published, and again with every later revision of it, in a
+ * task after the one that published it. An update `fn` makes while it runs is never read as part of an
+ * interaction; one it schedules for later, with setTimeout or an await, is an ordinary render.
+ * Returns the unsubscribe.
+ */
 export function onInteraction(fn: Listener): () => void {
   // A server renders no interactions, and a listener added during a render there would outlive the request.
   if (typeof window === 'undefined') return () => {};
-  return listen(fn);
-}
-
-function listen(fn: Listener): () => void {
   page.listeners.add(fn);
   return () => {
     page.listeners.delete(fn);

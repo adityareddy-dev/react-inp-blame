@@ -29,11 +29,7 @@ function stamp(code) {
 function loader(source) {
   const file = (this && this.resourcePath) || '';
   if (file.includes('node_modules')) return source;
-  const code = typeof source === 'string' ? source : String(source);
-  if (process.env.INP_DEBUG_NAMES) {
-    console.log('[display-names]', file.split('/').pop(), componentNames(code).join(', ') || '(none)');
-  }
-  return stamp(code);
+  return stamp(typeof source === 'string' ? source : String(source));
 }
 
 module.exports = loader;

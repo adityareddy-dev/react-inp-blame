@@ -11,10 +11,10 @@ export interface InpBlameOptions {
   /**
    * The runtime, in the runs `enabled` covers: a module script ahead of the page's own that calls
    * install() with these options (true for the defaults), so the order of imports in the entry module
-   * stops mattering. The options are written into that script, so they are data: `onReport` is not
-   * one of them. false leaves the runtime out and keeps only the displayName transform. Default true.
+   * stops mattering. The options are written into that script. false leaves the runtime out and keeps
+   * only the displayName transform. Default true.
    */
-  runtime?: boolean | Omit<InstallOptions, 'onReport'>;
+  runtime?: boolean | InstallOptions;
   /** Which HTML pages get the runtime's script, by their path from the root, such as '/index.html'. Default every page. */
   pages?: (path: string) => boolean;
 }

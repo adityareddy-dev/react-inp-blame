@@ -1,5 +1,10 @@
 import type { FrameSummary, ScriptSummary } from './types.js';
 
+/** The browser sends no `event` entry for an interaction under this many ms, whatever threshold an observer asks for. */
+export const EVENT_TIMING_FLOOR_MS = 16;
+/** Long animation frames kept to join to reports. A report keeps the frames it joined for as long as it is kept itself. */
+const MAX_FRAMES = 60;
+
 /** An Event Timing entry with the `interactionId` that TypeScript's DOM lib does not declare yet. */
 export interface InteractionTiming extends PerformanceEventTiming {
   readonly interactionId: number;
@@ -48,13 +53,26 @@ export function supportsLongAnimationFrames(): boolean {
  * never seen, and a heavy render its effect sets off after the paint has no report to join.
  * The page's first input is the exception: it also comes as a `first-input` entry at any
  * duration, carrying its interactionId, so that type is observed too (web-vitals' onINP does
- * the same). At or over the floor the `event` entry exists as well, and the copy is dropped.
+ * the same). When its `event` entry has been handed over, the copy adds nothing and is dropped.
  */
 export function observeEventTiming(threshold: number, onBatch: (entries: InteractionTiming[]) => void): () => void {
   if (typeof PerformanceObserver === 'undefined') return () => {};
-  const floor = Math.max(16, threshold);
+  const floor = Math.max(EVENT_TIMING_FLOOR_MS, threshold);
+  const firstInput = supportedEntryTypes().includes('first-input');
+  // The interactionIds of `event` entries handed over, kept until the page's first-input entry comes.
+  // Deciding on the copy's duration is not enough: `buffered: true` replays `event` entries to a late
+  // install() only from 104 ms, and `first-input` at any duration, so a 56 ms first input has no other entry.
+  let handedOver: Set<number> | null = firstInput ? new Set() : null;
   const po = new PerformanceObserver((list) => {
-    const batch = (list.getEntries() as InteractionTiming[]).filter((e) => e.interactionId && !(e.entryType === 'first-input' && e.duration >= floor));
+    const entries = list.getEntries() as InteractionTiming[];
+    if (handedOver) for (const e of entries) if (e.entryType === 'event' && e.interactionId) handedOver.add(e.interactionId);
+    const batch = entries.filter((e) => {
+      if (!e.interactionId) return false;
+      if (e.entryType !== 'first-input') return true;
+      const copy = handedOver?.has(e.interactionId) ?? false;
+      handedOver = null;
+      return !copy;
+    });
     if (batch.length) onBatch(batch);
   });
   const events: EventTimingObserverInit = { type: 'event', buffered: true, durationThreshold: floor };
@@ -63,18 +81,18 @@ export function observeEventTiming(threshold: number, onBatch: (entries: Interac
   } catch {
     return () => {};
   }
-  if (supportedEntryTypes().includes('first-input')) po.observe({ type: 'first-input', buffered: true });
+  if (firstInput) po.observe({ type: 'first-input', buffered: true });
   return () => po.disconnect();
 }
 
-export function observeFrames(store: FrameSummary[], max = 60, onFrame?: (f: FrameSummary) => void): () => void {
+export function observeFrames(store: FrameSummary[], onFrame: (f: FrameSummary) => void): () => void {
   if (!supportsLongAnimationFrames()) return () => {};
   const po = new PerformanceObserver((list) => {
     for (const e of list.getEntries() as PerformanceLongAnimationFrameTiming[]) {
       const f = summarizeFrame(e);
       store.push(f);
-      if (store.length > max) store.splice(0, store.length - max);
-      if (onFrame) onFrame(f);
+      if (store.length > MAX_FRAMES) store.splice(0, store.length - MAX_FRAMES);
+      onFrame(f);
     }
   });
   po.observe({ type: 'long-animation-frame', buffered: true });

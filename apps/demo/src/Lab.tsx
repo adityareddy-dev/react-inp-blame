@@ -125,7 +125,8 @@ export function Lab({ scenario }: { scenario: string }) {
 
 function LabReport() {
   const [report, setReport] = useState<InteractionReport | null>(null);
-  useEffect(() => onInteraction((r) => setReport({ ...r })), []);
+  // Each revision arrives as a new frozen report, so there is nothing to copy.
+  useEffect(() => onInteraction((r) => setReport(r)), []);
   return (
     <aside className="journey">
       <h3>What took time</h3>

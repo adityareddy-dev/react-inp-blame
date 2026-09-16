@@ -1,21 +1,20 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { CommitSummary, HookInfo, InteractionReport, Stats } from 'react-inp-blame';
+import { clearReports, lastReport, settle, waitForFrames } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
 // A render blamed from React's durations is measured; production builds have only counts to go on.
 const renderConfidence = prod ? 'inferred' : 'measured';
 
+/** Opens a scenario, makes one interaction in it, and returns the report. The verdict is attached to the test rather than printed. */
 async function interact(page: Page, scenario: string, act: () => Promise<void>): Promise<InteractionReport> {
   await page.goto(`/#${scenario}`);
   await page.waitForSelector('[data-test=trigger]');
-  await page.waitForTimeout(300);
-  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
+  await settle(page);
+  await clearReports(page);
   await act();
-  await page.waitForFunction(() => (window as any).__REACT_INP_BLAME__.last() != null, null, { timeout: 8_000 });
-  const r: InteractionReport = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
-  const all: CommitSummary[] = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.debug.commits());
-  console.log(`  [${scenario}] ${r.verdict}  (overhead ${r.overheadMs.toFixed(2)}ms)`);
-  console.log(`    window 0..${Math.round(r.duration)}ms; in window ${r.commits.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')} | follow-ups ${r.followUps.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')} | all ${all.map((c) => `${Math.round(c.at - r.start)}ms/${c.rendered}`).join(' ')}`);
+  const r = await lastReport(page);
+  await test.info().attach(`${scenario}: verdict`, { body: `${r.verdict}\n\nmeasuring it cost ${r.overheadMs.toFixed(2)} ms`, contentType: 'text/plain' });
   return r;
 }
 
@@ -23,33 +22,33 @@ test('hook is installed before React registers', async ({ page }) => {
   await page.goto('/#fine');
   await page.waitForSelector('[data-test=trigger]');
   const { stats, hook }: { stats: Stats; hook: HookInfo } = await page.evaluate(() => {
-    const api = (window as any).__REACT_INP_BLAME__;
+    const api = window.__REACT_INP_BLAME__;
     return { stats: api.stats(), hook: api.debug.hook() };
   });
   expect(stats.mode).toBe('shim');
   expect(hook.renderers.map((r) => r.rendererPackageName)).toContain('react-dom');
 });
 
-// install() runs before the app does, and Next.js warns when instrumentation takes over 16 ms. The
-// 2 ms budget was set on a Windows PC where it measured about 0.5 ms; shared CI runners are slower and
-// noisier, so CI sets its own in INP_INSTALL_BUDGET_MS (.github/workflows/ci.yml) and the check still runs.
-const installBudgetMs = Number(process.env.INP_INSTALL_BUDGET_MS || 2);
+// install() runs before the app does, and Next.js warns when instrumentation-client takes over 16 ms.
+// The budget here is under a third of that, which holds on a developer's machine (about 0.5 ms on the
+// Windows PC this was written on) and on a shared CI runner alike.
+const INSTALL_BUDGET_MS = 5;
 
-test(`install() costs the page under ${installBudgetMs} ms, the badge and panel loading after it`, async ({ page }) => {
+test(`install() costs the page under ${INSTALL_BUDGET_MS} ms, the badge and panel loading after it`, async ({ page }) => {
   const loads: number[] = [];
   for (let i = 0; i < 5; i++) {
     // A new query string, so each goto loads the page rather than moving to its hash.
     await page.goto(`/?load=${i}#fine`);
     await page.waitForSelector('#react-inp-blame .badge');
-    const stats: Stats = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.stats());
+    const stats: Stats = await page.evaluate(() => window.__REACT_INP_BLAME__.stats());
     loads.push(stats.installMs);
   }
   // Both calls the demo makes: the one the Vite plugin places ahead of the app, then install() in
   // SignInDemo.tsx. The median of five loads, because the first costs more than the reloads after it
   // and any single one can land on a busy moment of the machine.
   loads.sort((a, b) => a - b);
-  console.log(`  install() over five loads: ${loads.map((ms) => ms.toFixed(1)).join(', ')} ms, budget ${installBudgetMs} ms`);
-  expect(loads[2]).toBeLessThan(installBudgetMs);
+  await test.info().attach('install() over five loads, ms', { body: loads.map((ms) => ms.toFixed(2)).join(', '), contentType: 'text/plain' });
+  expect(loads[2]).toBeLessThan(INSTALL_BUDGET_MS);
 });
 
 test('context storm: blames the OrderSummary subtree, LineItem x800', async ({ page }) => {
@@ -80,8 +79,8 @@ test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
     await page
       .waitForFunction(
         () => {
-          const last = (window as any).__REACT_INP_BLAME__.last();
-          return last && last.frames.reduce((a: number, f: any) => a + f.forcedLayout, 0) > 4;
+          const last = window.__REACT_INP_BLAME__.last();
+          return last && (last.frames ?? []).reduce((a, f) => a + f.forcedLayout, 0) > 4;
         },
         null,
         { timeout: 5_000 },
@@ -98,8 +97,14 @@ test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
 });
 
 test('handler hog: no React render, the click handler is named', async ({ page }) => {
-  const r = await interact(page, 'handler-hog', () => page.click('[data-test=trigger]'));
+  const r = await interact(page, 'handler-hog', async () => {
+    await page.click('[data-test=trigger]');
+    // The blame here rests on the long animation frame that timed the handler, and that entry can arrive
+    // after the report was built, as a revision of it. On React 17 it usually does.
+    await waitForFrames(page);
+  });
   expect(r.commits.length).toBe(0);
+  expect(r.frames, 'the long animation frame that timed the handler never arrived').not.toEqual([]);
   // Handlers are plain functions, so their names only survive in dev; a production build leaves
   // the prop name. Components get displayName stamped instead.
   if (prod) expect(r.target?.handler).toBeTruthy();
@@ -143,21 +148,59 @@ test('cascading effect: the heavy second render is named, before or after the pa
   expect(heavy.joinedBy).toBe('exact');
   if (r.followUps.includes(heavy)) expect(heavy.at).toBeGreaterThan(r.end);
   else expect(heavy.at).toBeLessThanOrEqual(r.end);
-  console.log(`    cascading effect landed ${r.followUps.includes(heavy) ? 'AFTER the paint (follow-up)' : 'BEFORE the paint (in window)'}`);
+});
+
+// The sign-in page's "What took time" panel re-renders whenever it hears a report. Those renders land
+// after the interaction's paint with no input of their own, so they would be stamped with the input the
+// report belongs to and join it as its later render, which publishes a revision, which re-renders the
+// panel again: a loop on any page that shows its own reports.
+test("the page's own panel, which renders every report it hears, is never part of one", async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/');
+  await page.waitForSelector('[data-test=email]');
+  await settle(page);
+  await clearReports(page);
+
+  // A keystroke in each field in turn, so the panel grows a row per switch: by the sixth it re-renders
+  // 26 components, over the 25 that make a later render worth reporting where there are no durations.
+  const typing: Array<[field: string, key: string]> = [
+    ['email', 'a'],
+    ['password', 'b'],
+    ['email', 'c'],
+    ['password', 'd'],
+    ['email', 'e'],
+    ['password', 'f'],
+  ];
+  for (const [i, [field, key]] of typing.entries()) {
+    await page.locator(`[data-test=${field}]`).press(key);
+    await page.waitForFunction((reported) => window.__REACT_INP_BLAME__.reports().length >= reported, i + 1, { timeout: 8_000 });
+  }
+  await settle(page);
+
+  const panel = ['GroupEntry', 'Entry', 'PhaseBar', 'Pill'];
+  const renderedPanel = (c: CommitSummary) => c.components.some((x) => panel.includes(x.name));
+  const reports: InteractionReport[] = await page.evaluate(() => window.__REACT_INP_BLAME__.reports());
+  const walked: CommitSummary[] = await page.evaluate(() => window.__REACT_INP_BLAME__.debug.commits());
+  await test.info().attach('reports', { body: reports.map((r) => `${r.revision} revisions: ${r.verdict}`).join('\n'), contentType: 'text/plain' });
+
+  expect(reports.flatMap((r) => [...r.commits, ...r.followUps]).filter(renderedPanel), 'a panel render joined a report').toEqual([]);
+  expect(walked.filter(renderedPanel).length, 'a panel render was walked').toBe(0);
+  expect(errors, 'the page threw while reports were delivered').toEqual([]);
 });
 
 test('control: the well-built version stays cheap', async ({ page }) => {
   await page.goto('/#fine');
   await page.waitForSelector('[data-test=trigger]');
-  await page.waitForTimeout(300);
-  await page.evaluate(() => (window as any).__REACT_INP_BLAME__.clear());
+  await settle(page);
+  await clearReports(page);
   await page.click('[data-test=trigger]');
-  await page.waitForTimeout(600);
-  const r: InteractionReport | null = await page.evaluate(() => (window as any).__REACT_INP_BLAME__.last());
-  if (r) {
-    console.log(`  [fine] ${r.verdict}`);
-    expect(r.duration).toBeLessThan(100);
-    const rendered = r.commits.reduce((a, c) => a + c.rendered, 0);
-    expect(rendered).toBeLessThanOrEqual(3);
-  }
+
+  // The click's own commit proves the library heard it, whether or not the interaction was slow
+  // enough to be reported at all.
+  const walked = await page.waitForFunction(() => window.__REACT_INP_BLAME__.debug.commits()[0] ?? null, null, { timeout: 8_000 });
+  const commit: CommitSummary = await walked.jsonValue();
+  expect(commit.rendered).toBeLessThanOrEqual(3);
+  const r: InteractionReport | null = await page.evaluate(() => window.__REACT_INP_BLAME__.last());
+  if (r) expect(r.duration, r.verdict).toBeLessThan(100);
 });

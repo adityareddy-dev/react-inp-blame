@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { rootShapeProblem, walkCommit } from '../src/fiber.ts';
+import { handlerOf, ownersOf, rootShapeProblem, walkCommit } from '../src/fiber.ts';
 
 // The HostRoot fiber React 17, 18 and 19 hand the hook as `root.current`, in a development build.
 const hostRoot = (): Record<string, unknown> => ({ tag: 3, flags: 0, mode: 3, child: null, sibling: null, return: null, alternate: null, actualDuration: 1.5 });
+
+/** What React hands the hook with a commit: the root, holding the tree it committed and the lanes still pending. */
+const committed = (current: unknown) => ({ current, pendingLanes: 0 });
 
 function without(key: string): Record<string, unknown> {
   const fiber = hostRoot();
@@ -15,8 +18,8 @@ const click = { ts: 90, type: 'click', gestureTs: 90 };
 const development = { profileMode: 0b10, priority: 1, didError: false };
 
 /** A fiber of a freshly mounted tree, linked to its children. Tag 0 is a function component that rendered, 5 a DOM element, 6 a text node. */
-function fiber(tag: number, type: unknown, children: Record<string, unknown>[] = []): Record<string, unknown> {
-  const f: Record<string, unknown> = { tag, flags: tag === 0 ? 1 : 0, mode: 0, elementType: type, type, memoizedProps: null, return: null, child: children[0] ?? null, sibling: null, alternate: null };
+function fiber(tag: number, type: unknown, children: Record<string, unknown>[] = [], flags = tag === 0 ? 1 : 0): Record<string, unknown> {
+  const f: Record<string, unknown> = { tag, flags, mode: 0, elementType: type, type, memoizedProps: null, memoizedState: null, return: null, child: children[0] ?? null, sibling: null, alternate: null };
   children.forEach((child, i) => {
     child.return = f;
     child.sibling = children[i + 1] ?? null;
@@ -29,20 +32,22 @@ const element = (tag: string, ...children: Record<string, unknown>[]) => fiber(5
 const text = () => fiber(6, null);
 
 test('the shape check accepts the root React hands the hook, with or without durations', () => {
-  assert.equal(rootShapeProblem(hostRoot()), null);
+  assert.equal(rootShapeProblem(committed(hostRoot())), null);
   // Production builds have no actualDuration field at all.
-  assert.equal(rootShapeProblem(without('actualDuration')), null);
+  assert.equal(rootShapeProblem(committed(without('actualDuration'))), null);
 });
 
 test('the shape check names the first field that is not what the walk reads', () => {
   const cases: Array<[string, unknown, string]> = [
-    ['no fiber at all', undefined, 'root.current is not an object'],
-    ['a component fiber instead of the root', { ...hostRoot(), tag: 0 }, 'root.current.tag is 0, not 3 (HostRoot)'],
-    ['React 16 called the flags effectTag', { ...without('flags'), effectTag: 0 }, 'root.current.flags is not a number'],
-    ['a tree link that went missing', without('alternate'), 'root.current.alternate is neither a fiber nor null'],
-    ['durations stored some other way', { ...hostRoot(), actualDuration: '1.5' }, 'root.current.actualDuration is neither a number nor absent'],
+    ['no root at all', undefined, 'the root is not an object'],
+    ['pending work kept some other way', { current: hostRoot() }, 'root.pendingLanes is not a number'],
+    ['no fiber at all', committed(undefined), 'root.current is not an object'],
+    ['a component fiber instead of the root', committed({ ...hostRoot(), tag: 0 }), 'root.current.tag is 0, not 3 (HostRoot)'],
+    ['React 16 called the flags effectTag', committed({ ...without('flags'), effectTag: 0 }), 'root.current.flags is not a number'],
+    ['a tree link that went missing', committed(without('alternate')), 'root.current.alternate is neither a fiber nor null'],
+    ['durations stored some other way', committed({ ...hostRoot(), actualDuration: '1.5' }), 'root.current.actualDuration is neither a number nor absent'],
   ];
-  for (const [why, current, problem] of cases) assert.equal(rootShapeProblem(current), problem, why);
+  for (const [why, root, problem] of cases) assert.equal(rootShapeProblem(root), problem, why);
 });
 
 test('only component fibers count against the walk budget, not the DOM and text fibers under them', () => {
@@ -79,11 +84,59 @@ test('a tree deeper than the walk follows is cut off there, without overflowing 
   );
 });
 
+test('a memo wrapper and the component it renders count once, named after the wrapper', () => {
+  // memo(fn, compare), memo(forwardRef(...)) and memo(Class) leave a MemoComponent fiber (tag 14) above the
+  // component it renders (0, 11 or 1), and React flags both as rendered. displayName is stamped on the
+  // wrapper; the minifier has renamed the function inside it.
+  function List() {}
+  const minifiedFunction = () => Object.defineProperty(function () {}, 'name', { value: 'l' });
+  const shapes: Array<[name: string, innerTag: number, inner: unknown]> = [
+    ['CmpRow', 0, minifiedFunction()],
+    ['FwdRow', 11, { render: minifiedFunction() }],
+    ['ClassRow', 1, minifiedFunction()],
+  ];
+  const rows = shapes.flatMap(([name, innerTag, inner]) => {
+    const wrapper = { type: inner, displayName: name };
+    return [1, 2].map(() => fiber(14, wrapper, [fiber(innerTag, inner, [element('li', text())], 1)], 1));
+  });
+  const c = walkCommit(root(rendered(List, element('ul', ...rows))) as any, 5000, 100, click, development);
+  assert.equal(c.rendered, 7);
+  assert.deepEqual(c.components.map((x) => `${x.name} ×${x.count}`).sort(), ['ClassRow ×2', 'CmpRow ×2', 'FwdRow ×2', 'List ×1']);
+
+  // From inside a row outwards, the row is named once.
+  const li = (rows[0]?.child as Record<string, unknown>).child;
+  assert.deepEqual(ownersOf(li as any), ['CmpRow', 'List']);
+});
+
+test('a commit that hydrates a root or a Suspense boundary says so', () => {
+  function Item() {}
+  // React 18 and 19 mark a root's state isDehydrated until the commit that hydrates it.
+  const hydratingRoot = root(rendered(Item));
+  hydratingRoot.alternate = { tag: 3, child: null, memoizedState: { isDehydrated: true } };
+  assert.equal(walkCommit(hydratingRoot as any, 5000, 100, click, development).hydrated, true);
+
+  // A Suspense boundary (tag 13) keeps its server-rendered HTML as `dehydrated` until its code has run.
+  const boundary = fiber(13, null, [rendered(Item)]);
+  boundary.alternate = { tag: 13, child: null, memoizedState: { dehydrated: {} } };
+  assert.equal(walkCommit(root(boundary) as any, 5000, 100, click, development).hydrated, true);
+  // In any later commit its previous state was hydrated already.
+  boundary.alternate = { tag: 13, child: null, memoizedState: null };
+  assert.equal(walkCommit(root(boundary) as any, 5000, 100, click, development).hydrated, false);
+});
+
+test('a handler is named by its function, or by its prop when the minifier left the function one or two letters', () => {
+  function handleSave() {}
+  const minified = Object.defineProperty(() => {}, 'name', { value: 'l' });
+  const button = (onClick: unknown) => ({ ...fiber(5, 'button'), memoizedProps: { onClick } });
+  assert.equal(handlerOf(button(handleSave) as any, 'click'), 'handleSave');
+  assert.equal(handlerOf(button(minified) as any, 'click'), 'onClick');
+});
+
 test('outside ProfileMode a development tree reports render counts, not a 0 ms render', () => {
   // Development builds give every fiber actualDuration = 0 and only measure trees in ProfileMode.
   function Row() {}
-  const row = { tag: 0, flags: 1, mode: 1, elementType: Row, type: Row, memoizedProps: null, return: null, child: null, sibling: null, alternate: null, actualDuration: 0 };
-  const root = { tag: 3, flags: 0, mode: 1, elementType: null, type: null, memoizedProps: null, return: null, child: row, sibling: null, alternate: null, actualDuration: 0 };
+  const row = { tag: 0, flags: 1, mode: 1, elementType: Row, type: Row, memoizedProps: null, memoizedState: null, return: null, child: null, sibling: null, alternate: null, actualDuration: 0 };
+  const root = { tag: 3, flags: 0, mode: 1, elementType: null, type: null, memoizedProps: null, memoizedState: null, return: null, child: row, sibling: null, alternate: null, actualDuration: 0 };
   const c = walkCommit(root, 5000, 100, click, { profileMode: 0b10, priority: 1, didError: false });
   assert.equal(c.hasDurations, false);
   assert.equal(c.total, 0);
@@ -126,16 +179,16 @@ test('whole milliseconds long enough to mean something keep their per-component 
   // Chromium's clock steps in 0.1 ms.
   const quick = walkCommit(profiledRoot(timed(Chart, 0.1, ...Array.from({ length: 12 }, () => timed(Series, 0.1)))) as any, 5000, 100, click, development);
   assert.equal(quick.coarseClock, false);
-  assert.equal(quick.components[0].name, 'Series');
-  assert.notEqual(quick.components[0].self, null);
+  assert.equal(quick.components[0]?.name, 'Series');
+  assert.notEqual(quick.components[0]?.self, null);
 });
 
 test('time React measured under a root outside ProfileMode still counts, as under <Profiler>', () => {
   // <Profiler> puts its own subtree in ProfileMode whatever the root's mode.
   function Chart() {}
-  const chart = { tag: 0, flags: 1, mode: 0b10, elementType: Chart, type: Chart, memoizedProps: null, return: null, child: null, sibling: null, alternate: null, actualDuration: 12 };
-  const profiler = { tag: 12, flags: 0, mode: 0b10, elementType: null, type: null, memoizedProps: null, return: null, child: chart, sibling: null, alternate: null, actualDuration: 12 };
-  const root = { tag: 3, flags: 0, mode: 0, elementType: null, type: null, memoizedProps: null, return: null, child: profiler, sibling: null, alternate: null, actualDuration: 0 };
+  const chart = { tag: 0, flags: 1, mode: 0b10, elementType: Chart, type: Chart, memoizedProps: null, memoizedState: null, return: null, child: null, sibling: null, alternate: null, actualDuration: 12 };
+  const profiler = { tag: 12, flags: 0, mode: 0b10, elementType: null, type: null, memoizedProps: null, memoizedState: null, return: null, child: chart, sibling: null, alternate: null, actualDuration: 12 };
+  const root = { tag: 3, flags: 0, mode: 0, elementType: null, type: null, memoizedProps: null, memoizedState: null, return: null, child: profiler, sibling: null, alternate: null, actualDuration: 0 };
   const c = walkCommit(root, 5000, 100, click, { profileMode: 0b10, priority: undefined, didError: false });
   assert.equal(c.hasDurations, true);
   assert.equal(c.total, 12);

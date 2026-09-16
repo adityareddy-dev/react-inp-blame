@@ -5,6 +5,7 @@ const FunctionComponent = 0;
 const ClassComponent = 1;
 const HostRoot = 3;
 const ForwardRef = 11;
+const SuspenseComponent = 13;
 const MemoComponent = 14;
 const SimpleMemoComponent = 15;
 // Fiber flag React sets on every component fiber that actually rendered in a commit.
@@ -16,6 +17,18 @@ const MAX_DEPTH = 1000;
 // The hot path follows a child carrying at least this share of its parent's work. Over half means
 // no sibling carries as much; 60 rather than 50 keeps it from following a child that barely leads.
 const HOT_PATH_SHARE = 0.6;
+// The hot path names at most this many steps below the component it starts from: enough to reach the
+// subtree to blame in a real tree, few enough to read in one line.
+const HOT_PATH_STEPS = 12;
+// A commit keeps its most-rendered components and its outermost ones up to these counts. A report
+// names a culprit; it is not a profile.
+const MAX_COMPONENTS = 12;
+const MAX_ROOTS = 5;
+// DOM nodes climbed to find a fiber, and fibers climbed to find a handler: more than any real nesting
+// between an element and the component that handles it.
+const MAX_HOPS = 64;
+// A minifier leaves one- and two-letter function names, which say nothing about the handler.
+const MINIFIED_NAME_LENGTH = 2;
 // A clock that steps in whole milliseconds (Firefox and Safari without cross-origin isolation) makes
 // every component's time a whole number. With this many components timed and every time whole, that
 // is the clock and not chance: Chromium steps in 0.1 ms, where eight whole values in a row are a
@@ -41,6 +54,8 @@ export interface Fiber {
   /** What React renders; differs from `elementType` for memo without a compare function. */
   type: unknown;
   memoizedProps: Record<string, unknown> | null;
+  /** Read only to tell hydration: a HostRoot's `isDehydrated`, a Suspense boundary's `dehydrated`. */
+  memoizedState: unknown;
   return: Fiber | null;
   child: Fiber | null;
   sibling: Fiber | null;
@@ -48,6 +63,16 @@ export interface Fiber {
   alternate: Fiber | null;
   /** ms React spent rendering this fiber's subtree in the commit; absent in production builds. */
   actualDuration?: number;
+}
+
+/** What React hands the DevTools hook with each commit: the root of the tree it committed. */
+export interface FiberRoot {
+  current: Fiber;
+  /**
+   * The lanes (bits) of updates React has not committed on this root: every update sets its lane, and a
+   * commit clears the lanes it finished before React calls the hook. The same field in React 17 to 19.
+   */
+  pendingLanes: number;
 }
 
 /**
@@ -59,11 +84,15 @@ export function profileModeBit(reactMajor: number): number {
 }
 
 /**
- * Why `root.current` is not a fiber this library can walk, or null when it is: a HostRoot with
- * numeric flags and mode, tree links that are fibers or null, and `actualDuration` a number or
- * absent. A React release that changes any of these fails here once, instead of every walk.
+ * Why a committed root is not one this library can read, or null when it is: `pendingLanes` a number,
+ * and `current` a HostRoot with numeric flags and mode, tree links that are fibers or null, and
+ * `actualDuration` a number or absent. A React release that changes any of these fails here once,
+ * instead of every walk.
  */
-export function rootShapeProblem(current: unknown): string | null {
+export function rootShapeProblem(root: unknown): string | null {
+  if (!root || typeof root !== 'object') return 'the root is not an object';
+  const { current, pendingLanes } = root as Record<string, unknown>;
+  if (typeof pendingLanes !== 'number') return 'root.pendingLanes is not a number';
   if (!current || typeof current !== 'object') return 'root.current is not an object';
   const f = current as Record<string, unknown>;
   if (f.tag !== HostRoot) return `root.current.tag is ${String(f.tag)}, not ${HostRoot} (HostRoot)`;
@@ -81,11 +110,9 @@ export function rootShapeProblem(current: unknown): string | null {
 export function fiberFromNode(node: Node | null): Fiber | null {
   let n = node;
   let hops = 0;
-  while (n && hops++ < 64) {
-    const keys = Object.keys(n);
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i];
-      if (k.charCodeAt(0) === 95 && k.startsWith('__reactFiber$')) return (n as unknown as Record<string, Fiber>)[k];
+  while (n && hops++ < MAX_HOPS) {
+    for (const k of Object.keys(n)) {
+      if (k.charCodeAt(0) === 95 && k.startsWith('__reactFiber$')) return (n as unknown as Record<string, Fiber>)[k] ?? null;
     }
     n = n.parentNode;
   }
@@ -115,21 +142,35 @@ function typeName(t: unknown): string | null {
   return null;
 }
 
-/** Component names from the node outwards, nearest first. */
+/**
+ * A component fiber's name. memo(fn, compare), memo(forwardRef(...)) and memo(Class) are two fibers: a
+ * MemoComponent, and below it the component it renders, both flagged as having rendered. They are one
+ * component, named after the wrapper, which is where displayName is stamped and what the minifier
+ * cannot rename.
+ */
+function nameOf(f: Fiber): string | null {
+  const wrapper = f.return !== null && f.return.tag === MemoComponent ? componentName(f.return) : null;
+  return wrapper || componentName(f);
+}
+
+/** A MemoComponent is counted as the component it renders, never as a component of its own. */
+const countsAsComponent = (f: Fiber) => f.tag !== MemoComponent && isComponent(f);
+
+/**
+ * The components enclosing the node, nearest first. They follow the tree React rendered the node in,
+ * which is not React's owner chain: a button that Page passes into Card as children is in Card.
+ */
 export function ownerChain(node: Node | null, limit = 8): string[] {
   return ownersOf(fiberFromNode(node), limit);
 }
 
-/** Component names from a fiber outwards, nearest first. */
+/** The components enclosing a fiber, nearest first, by the same tree. */
 export function ownersOf(fiber: Fiber | null, limit = 8): string[] {
   const out: string[] = [];
-  let f = fiber;
-  while (f && out.length < limit) {
-    if (isComponent(f)) {
-      const n = componentName(f);
-      if (n) out.push(n);
-    }
-    f = f.return;
+  for (let f = fiber; f && out.length < limit; f = f.return) {
+    if (!countsAsComponent(f)) continue;
+    const name = nameOf(f);
+    if (name) out.push(name);
   }
   return out;
 }
@@ -158,7 +199,7 @@ export function handlerOf(fiber: Fiber | null, eventType: string): string | null
   if (!props) return null;
   let f = fiber;
   let hops = 0;
-  while (f && hops++ < 64) {
+  while (f && hops++ < MAX_HOPS) {
     const p = f.memoizedProps;
     if (p) {
       for (const key of props) {
@@ -166,7 +207,7 @@ export function handlerOf(fiber: Fiber | null, eventType: string): string | null
         if (typeof fn === 'function') {
           const name = (fn as { displayName?: string }).displayName || fn.name || '';
           // A minified name ("l") says nothing; the prop name at least says which handler.
-          return name.length > 2 ? name : key;
+          return name.length > MINIFIED_NAME_LENGTH ? name : key;
         }
       }
     }
@@ -202,6 +243,20 @@ interface Tally {
 /** A commit as its walk reads it: everything but the time the walk took, which only the caller can measure. */
 export type CommitWalk = Omit<CommitSummary, 'walkMs' | 'joinedBy'>;
 
+/** A HostRoot whose previous state was server-rendered HTML waiting to hydrate, which React 18 and 19 mark `isDehydrated`. */
+function hydratesRoot(root: Fiber): boolean {
+  const before = root.alternate?.memoizedState as { isDehydrated?: unknown } | null | undefined;
+  return before?.isDehydrated === true;
+}
+
+/** A Suspense boundary whose server-rendered content hydrated in this commit: dehydrated before it, not after. */
+function hydratesBoundary(f: Fiber): boolean {
+  if (f.tag !== SuspenseComponent || f.alternate === null) return false;
+  const before = f.alternate.memoizedState as { dehydrated?: unknown } | null;
+  const after = f.memoizedState as { dehydrated?: unknown } | null;
+  return before != null && before.dehydrated != null && (after == null || after.dehydrated == null);
+}
+
 /**
  * Summarise one commit from the fiber tree after it became current.
  * A fiber whose alternate still points at the same child list bailed out, so nothing
@@ -219,9 +274,11 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // Rendered components with a time, and whether any time had a fraction of a millisecond.
   let timed = 0;
   let fractional = false;
+  // A root hydrating is known from the root; a Suspense boundary hydrating, only by finding it.
+  let hydrated = hydratesRoot(rootFiber);
 
   function visit(f: Fiber, depth: number): Agg[] {
-    const comp = isComponent(f);
+    const comp = countsAsComponent(f);
     // Host and text fibers are most of any tree, and counting them cut every root-level update
     // short on a page of 5000 DOM nodes. They cost the walk no more than they cost React: a
     // subtree React did not re-render is pruned below, so the walk only follows React's own work.
@@ -230,6 +287,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       truncated = true;
       return [];
     }
+    hydrated ||= hydratesBoundary(f);
     const bailedOut = f.alternate !== null && f.alternate.child === f.child;
     const performed = comp && (f.flags & PerformedWork) !== 0;
     let kids: Agg[] = [];
@@ -239,7 +297,11 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       } else {
         for (let c: Fiber | null = f.child; c !== null && !outOfBudget; c = c.sibling) {
           const r = visit(c, depth + 1);
-          if (r.length) kids = kids.length ? kids.concat(r) : r;
+          if (!r.length) continue;
+          // Appended in place: copying the list for every child would make a wide list quadratic,
+          // inside React's commit. Nothing else holds an array a visit returns.
+          if (kids.length) for (const a of r) kids.push(a);
+          else kids = r;
         }
       }
     }
@@ -247,13 +309,13 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       // A component that did not render itself but carries rendered descendants stays on the
       // path by name, so the hot path can say "the OrderSummary subtree".
       if (comp && kids.length) {
-        const name = componentName(f) || '(anonymous)';
+        const name = nameOf(f) || '(anonymous)';
         return [{ name, performed: false, rendered: kids.reduce((a, k) => a + k.rendered, 0), total: f.actualDuration || 0, kids }];
       }
       return kids;
     }
     rendered++;
-    const name = componentName(f) || '(anonymous)';
+    const name = nameOf(f) || '(anonymous)';
     const total = f.actualDuration || 0;
     if (total > 0) {
       timed++;
@@ -305,8 +367,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   if (performedRoots.length) {
     let cur = performedRoots.reduce((a, b) => (metric(b) > metric(a) ? b : a));
     hotPath.push(cur.name);
-    let depth = 0;
-    while (cur.kids.length && depth++ < 12) {
+    for (let step = 0; cur.kids.length && step < HOT_PATH_STEPS; step++) {
       const next = cur.kids.reduce((a, b) => (metric(b) > metric(a) ? b : a));
       if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
       if (next.name !== cur.name) hotPath.push(next.name);
@@ -318,7 +379,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   const perComponentTimes = hasDurations && !coarseClock;
   const components = [...byName.values()]
     .sort((a, b) => (perComponentTimes ? b.self - a.self : b.count - a.count))
-    .slice(0, 12)
+    .slice(0, MAX_COMPONENTS)
     .map((c): RenderedComponent => Object.freeze({ name: c.name, count: c.count, self: perComponentTimes ? c.self : null, total: perComponentTimes ? c.total : null }));
 
   return {
@@ -328,8 +389,9 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     gestureTs: input.gestureTs,
     inputType: input.type,
     rendered,
+    hydrated,
     truncated,
-    roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, 5)),
+    roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),
     components: Object.freeze(components),
     hasDurations,

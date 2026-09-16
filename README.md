@@ -72,14 +72,17 @@ import { onInteraction } from 'react-inp-blame';
 const stop = onInteraction((report) => console.log(report.explanation.blame, report.verdict));
 ```
 
-`onInteraction(fn)` is the one way to hear reports: `fn` gets each report when it is published and every
-later revision, and the call returns the unsubscribe. The package's types document every field.
+`onInteraction(fn)` is the one way to hear reports: `fn` gets each report, and every later revision of it,
+in a task after the one that published it, and the call returns the unsubscribe. A panel that renders what
+it hears is safe, because the update a listener makes while it runs is never read as part of an
+interaction. An update it schedules for later, with setTimeout or an await, is an ordinary render. The
+package's types document every field.
 
 ### install(options)
 
 It has to run before react-dom loads, which the plugins and `/auto` see to, and it installs once per page. A
-later call, from any copy of the package, returns the same API and applies `overlay` and `onReport`
-(deprecated: it adds a listener); other options keep their first value, with a warning, until `dispose()`.
+later call, from any copy of the package, returns the same API and applies `overlay`; other options keep
+their first value, with a warning, until `dispose()`.
 
 | Option | Default | |
 | --- | --- | --- |
@@ -117,7 +120,7 @@ interface InteractionReport {
   explanation: {
     blame: { kind: 'render' | 'handler' | 'waiting' | 'painting' | 'script' | 'none'; name: string | null;
              detail: string | null; ms: number | null; confidence: 'measured' | 'inferred' };
-    rating: 'good' | 'needs-work' | 'poor'; phases: { label: string; ms: number; hint: string }[];
+    rating: 'good' | 'needs-improvement' | 'poor'; phases: { label: string; ms: number; hint: string }[];
     headline: string; where: string | null; cause: string; notes: string[];
   };
   verdict: string;
@@ -137,12 +140,17 @@ overlapped, a walk cut short, or no Long Animation Frames to rule other scripts 
 
 `inp()` and the badge estimate INP the way web-vitals' `onINP` does, without depending on web-vitals: each
 interaction's latency is its longest Event Timing entry, and INP is the one at index
-`min(floor(count / 50), 9)` among the 10 longest. It starts over at each soft navigation and back/forward
-cache restore. `apps/demo/e2e/inp.spec.ts` runs web-vitals 6.2.2's `onINP` in the same page
-(`reportAllChanges`, `durationThreshold: 16`) through more than 50 interactions and asserts after each that
-both name the same value and the same interaction. They still part at web-vitals' default 40 ms threshold,
-which `useReportWebVitals` keeps, when INP is under 40 ms or too few interactions reach it; at a soft
-navigation; after `clear()`; and for a moment after each interaction, while web-vitals waits for an idle page.
+`min(floor(count / 50), 9)` among the 10 longest, chosen as entries arrive and again when the page is
+hidden, the two moments web-vitals chooses at. It starts over at each soft navigation and back/forward
+cache restore, and after one of those, interactions the browser counted but no entry was sent for read as
+the same 8 ms web-vitals reports for them. `apps/demo/e2e/inp.spec.ts` runs web-vitals 6.2.2's `onINP` in the
+same page (`reportAllChanges`, `durationThreshold: 16`) through more than 50 interactions and asserts after
+each that both name the same value and the same interaction. That is one session, not a promise: this is the
+same algorithm written again from the same entries, and it is not web-vitals. The two part at the default 40 ms
+threshold, which `useReportWebVitals` keeps, when INP is under 40 ms or too few interactions reach it; at a
+soft navigation; after `clear()`; for a moment after each interaction, while web-vitals waits for an idle
+page; and against the older web-vitals that Next.js 16.3 vendors, which keeps counting every interaction
+since the page loaded after a back/forward cache restore.
 
 ## Compared with other tools
 
@@ -204,26 +212,33 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 
 | Bundle (rolldown 1.2.8, minified ESM) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 34.3 KB | 12.9 KB |
-| The badge and panel, a chunk loaded only when shown | 11.3 KB | 4.2 KB |
-| What has to run before react-dom: the hook, the fiber reading, the observers | 11.5 KB | 4.8 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 39.0 KB | 14.4 KB |
+| The badge and panel, a chunk loaded only when shown | 11.2 KB | 4.2 KB |
+| What has to run before react-dom: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
 
 ## What it reads from React
 
 These are React internals with no promise of stability, so the library checks them and fails closed: a
-react-dom outside 17 to 19, a first `root.current` of another shape, or a walk that throws turns the walk off
-for good, with one warning and `stats().unsupportedReason`, and reports carry on without components.
+react-dom outside 17 to 19, a first `root.current` of another shape, or a walk that throws stops that
+react-dom being read, for good, with one warning and `stats().unsupportedReason`. The page is only
+`stats().mode === 'unsupported'` when no react-dom on it can be read, so an embedded widget that brought
+its own React does not switch off the app's own. Reports carry on without components.
 
-- `window.__REACT_DEVTOOLS_GLOBAL_HOOK__`: created with `inject`, `onCommitFiberRoot`, `renderers`,
-  `supportsFiber` and a `reactInpBlame` marker, or, when one exists, its `inject` and `onCommitFiberRoot`
-  wrapped and its `renderers` read.
+- `window.__REACT_DEVTOOLS_GLOBAL_HOOK__`: created with `inject`, `onCommitFiberRoot`,
+  `onPostCommitFiberRoot`, `renderers`, `supportsFiber` and a `reactInpBlame` marker, or, when one exists,
+  those three methods wrapped and its `renderers`, `isDisabled` and `supportsFiber` read.
 - What react-dom hands `inject()`: `version`, `bundleType`, `rendererPackageName`. What React passes
-  `onCommitFiberRoot`: the renderer id, `root.current`, the priority and `didError`.
-- On fibers: `tag` (components are 0, 1, 11, 14 and 15; the root is 3), `flags` (the `PerformedWork` bit, 1),
-  `mode` (the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19), `child`, `sibling`, `return`, `alternate`
-  (the same `child` there means the fiber bailed out), `actualDuration`, `elementType` and `type` (for names:
-  `displayName` or `name`, through `render` for forwardRef and `type` for memo), and `memoizedProps` (the
-  event's handler prop, such as `onClick`). On DOM nodes: React's `__reactFiber$` key.
+  `onCommitFiberRoot`: the renderer id, the root, the priority and `didError`.
+- On the root: `current`, and `pendingLanes`, the bits of the updates React has not committed yet. They say
+  which commits the page's own report listeners caused, so a panel that shows reports is never read as part
+  of one.
+- On fibers: `tag` (components are 0, 1, 11, 14 and 15; the root is 3, a Suspense boundary 13), `flags` (the
+  `PerformedWork` bit, 1), `mode` (the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19), `child`, `sibling`,
+  `return`, `alternate` (the same `child` there means the fiber bailed out), `actualDuration`, `elementType`
+  and `type` (for names: `displayName` or `name`, through `render` for forwardRef and `type` for memo),
+  `memoizedProps` (the event's handler prop, such as `onClick`) and `memoizedState` (whether a root or a
+  boundary was still server-rendered HTML: `isDehydrated` and `dehydrated`). On DOM nodes: React's
+  `__reactFiber$` key.
 
 Supported: react-dom 17, 18 and 19; only react-dom commits are walked. CI runs the demo's suites on React 19.3
 in development and production builds, its attribution spec on React 18.3.1 and 17.0.2 (legacy root), and the
@@ -240,7 +255,11 @@ brings a React canary, on every push and once a day, in a job allowed to fail. N
   `first-input` entry. See "Quiet interactions" in the [design notes](docs/interaction-attribution-design.md).
 - React 18 and 19 development builds print "Download the React DevTools" on pages where the library created the
   hook: it has no `checkDCE`, which react-dom takes to mean React DevTools is there.
-- A keystroke made before hydration commits gets the hydration commit joined to its report.
+- **Hydration is joined to an input only when React hydrated inside that input's dispatch**, which is what
+  React does for a click on a boundary that has not hydrated yet; the commit then says it hydrated rather
+  than re-rendered. A hydration that merely follows a keystroke is nobody's interaction and is left out.
+- On React 17, which calls nothing after a commit's effects, a render set off by an effect of your report
+  listener's own render can still join a report. On React 18 and 19 it cannot.
 - Production React records no durations, so blame there rests on render counts and is `'inferred'`
   (`react-dom/profiling` gives durations), and minified handlers are named by their prop.
 - The names loader matches `function Foo(` and `const Foo = memo(` or `forwardRef(`, exported or not, at the

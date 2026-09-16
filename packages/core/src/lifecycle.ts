@@ -1,8 +1,8 @@
 import { createInpTracker, rateInp, type InpEstimate } from './inp.js';
-import { attachLaterRender, buildReport, isLaterRender, refreshFrames, refreshReport, sealReport, type LabelSource, type ReportData } from './join.js';
+import { attachLaterRender, buildReport, interactionTarget, isLaterRender, refreshFrames, refreshReport, sealReport, type LabelSource, type ReportData } from './join.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
-import { OVERLAY_ID } from './overlay-host.js';
+import { inOverlay } from './overlay-host.js';
 import type { CommitSummary, FrameSummary, InputRecord, InteractionReport } from './types.js';
 
 /**
@@ -51,6 +51,8 @@ export interface Lifecycle {
   onFrame(): void;
   /** A navigation began at `start` (`performance.now()`); `navigations` already holds it. */
   onNavigation(start: number): void;
+  /** The page was hidden: the INP estimate is chosen again at the interaction count by then, as web-vitals chooses when it reports on hide. */
+  onHidden(): void;
   /** Published reports, oldest first, each at its latest revision. */
   reports(): InteractionReport[];
   last(): InteractionReport | null;
@@ -108,15 +110,25 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     if (quiet.length > MAX_QUIET) quiet.shift();
   };
   const find = (id: number): Held | null => {
-    for (let i = published.length - 1; i >= 0; i--) if (published[i].data.interactionId === id) return published[i];
-    for (let i = quiet.length - 1; i >= 0; i--) if (quiet[i].data.interactionId === id) return quiet[i];
+    for (const list of [published, quiet]) {
+      for (let i = list.length - 1; i >= 0; i--) {
+        const held = list[i];
+        if (held && held.data.interactionId === id) return held;
+      }
+    }
     return null;
   };
 
   function onInteraction(id: number, batch: InteractionTiming[]): void {
     const started = now();
     const seen = entriesById.get(id);
-    const entries = seen ? seen.concat(batch) : batch;
+    // The page's first input can arrive twice, as its `first-input` entry and later as its `event` entry.
+    const fresh = seen ? batch.filter((e) => !seen.some((held) => held.name === e.name && held.startTime === e.startTime)) : batch;
+    if (!fresh.length) {
+      spend(started);
+      return;
+    }
+    const entries = seen ? seen.concat(fresh) : fresh;
     // Re-inserted, so the limit drops the interaction heard from longest ago.
     entriesById.delete(id);
     entriesById.set(id, entries);
@@ -135,14 +147,13 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       publish(existing.report);
       return;
     }
-    const data = buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations());
     // Clicks on the badge and panel are not the app's interactions.
-    if (data.target?.selector?.includes('#' + OVERLAY_ID)) {
+    if (inOverlay(interactionTarget(entries, options.inputs()))) {
       spend(started);
       return;
     }
-    const held = revise(null, data, started);
-    if (!worthPublishing(data)) return holdBack(held);
+    const held = revise(null, buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations()), started);
+    if (!worthPublishing(held.data)) return holdBack(held);
     keep(held);
     publish(held.report);
   }
@@ -176,7 +187,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       // reporting even though INP alone would not flag it.
       for (let i = quiet.length - 1; i >= 0; i--) {
         const held = quiet[i];
-        if (!isLaterRender(held.data, c)) continue;
+        if (!held || !isLaterRender(held.data, c)) continue;
         const next = attachLaterRender(held.data, c, frames);
         if (!next) break;
         quiet.splice(i, 1);
@@ -200,10 +211,16 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
 
     onNavigation(start) {
       navigationStart = start;
-      inp.reset();
+      inp.reset('navigation');
       // Renders of the page it moves to, stamped with an input from before it, would otherwise publish
       // quiet interactions from the page it left as if they had caused them.
       quiet.length = 0;
+    },
+
+    onHidden() {
+      const started = now();
+      inp.update();
+      spend(started);
     },
 
     reports: () => published.map((held) => held.report),
@@ -211,13 +228,14 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     inp() {
       const e = inp.estimate();
       if (!e) return null;
-      return { value: e.value, rating: rateInp(e.value), interactionId: e.id, interactionCount: Math.round(e.interactionCount), report: find(e.id)?.report ?? null };
+      const report = e.id === null ? null : (find(e.id)?.report ?? null);
+      return { value: e.value, rating: rateInp(e.value), interactionId: e.id, interactionCount: Math.round(e.interactionCount), report };
     },
     clear() {
       published.length = 0;
       quiet.length = 0;
       entriesById.clear();
-      inp.reset();
+      inp.reset('clear');
     },
     spentMs: () => spent,
   };

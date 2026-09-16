@@ -16,7 +16,9 @@ export default defineConfig({
   webServer: {
     command: prod ? `npx next build${flag} && npx next start --port ${port}` : `npx next dev${flag} --port ${port}`,
     url: `http://localhost:${port}`,
-    reuseExistingServer: true,
+    // Outside CI a server left from a previous run is reused; on CI every run starts its own, so a
+    // leftover server on one of these ports is never tested in place of the right one.
+    reuseExistingServer: !process.env.CI,
     timeout: 240_000,
   },
 });

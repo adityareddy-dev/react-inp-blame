@@ -28,17 +28,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # The library's own types are checked by the build; this adds the Vite demo, its specs and the
+      # walkthrough, which nothing else compiles.
+      - run: npm run typecheck
       - run: npm run test:unit
 
   e2e:
     name: Vite demo, React 17 and 18, Next.js
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env:
-      # The install() check in apps/demo/e2e/attribution.spec.ts defaults to 2 ms, set on a Windows PC
-      # where install() measured about 0.5 ms. Shared runners are slower and noisier, so the check runs
-      # here against a looser budget rather than being skipped.
-      INP_INSTALL_BUDGET_MS: 5
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

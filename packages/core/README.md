@@ -28,8 +28,8 @@ so their names survive the production minifier. `enabled` decides which runs get
 `'development'` (`next dev`, the default), `'production'` (`next build`), `true` for both, `false`
 for neither; a run it leaves out gets the config back untouched. `runtime` takes the options for
 `install()`, such as `{ overlay: 'query' }`. They reach the browser inlined through `env`, so they
-are data: `onReport` is not one of them. `runtime: false` leaves the client module out, for an app
-that installs from its own `instrumentation-client.ts`.
+are plain data. `runtime: false` leaves the client module out, for an app that installs from its own
+`instrumentation-client.ts`.
 
 On the App Router the client module also hears each navigation: every report carries
 `navigationURL` and `navigationType`, a click that started a navigation names it in
@@ -68,13 +68,15 @@ installs with the default options before react-dom loads.
   Options: `overlay`, `threshold` (40 ms), `labels` (`'auto'`), `hook` (`'auto'`), `sampleRate`
   (1), `walkBudget` (5000), `inputWindow` (1500 ms), `devtoolsTrack` (true), `debugGlobal`
   (`true` puts the API on `window.__REACT_INP_BLAME__`).
-- `onInteraction(fn)` hears each report when it is published and each later revision of it, and
-  returns the unsubscribe. It is the one way to hear reports; `install({ onReport })` is deprecated.
+- `onInteraction(fn)` hears each report, and each later revision of it, in a task after the one that
+  published it, and returns the unsubscribe. It is the one way to hear reports. A panel that renders
+  what it hears is safe: the update your listener makes while it runs is never read as part of an
+  interaction. One it schedules for later, with setTimeout or an await, is an ordinary render.
 - The API: `reports()`, `last()`, `inp()` (the INP of the navigation the page is on, estimated the
-  way web-vitals does; it starts over at each soft navigation and each restore from the
-  back/forward cache), `clear()`, `stats()` (the mode, why a page is unsupported, what the library
-  has cost), `dispose()`, and `debug.commits()` and `debug.hook()`, which are for debugging and may
-  change in any version.
+  way web-vitals does, chosen again when the page is hidden; it starts over at each soft navigation
+  and each restore from the back/forward cache), `clear()`, `stats()` (the mode, why a page is
+  unsupported, what the library has cost), `dispose()`, and `debug.commits()` and `debug.hook()`,
+  which are for debugging and may change in any version.
 - `mountOverlay(options?)` shows the on-page badge and panel; their code loads when shown.
 - `fiberFromNode`, `ownerChain` and `handlerName` are the lookups reports are built from.
 
@@ -93,13 +95,13 @@ opt-in there: `install({ labels: 'text' })`. Development builds read it by defau
 
 ## Size
 
-Measured 2026-09-15 on 0.1.0 with rolldown 1.2.8, minified ESM for the browser, gzip at its default level:
+Measured 2026-09-15 with rolldown 1.2.8, minified ESM for the browser, gzip at its default level:
 
 | What | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 34.3 KB | 12.9 KB |
-| The badge and panel, a chunk loaded only when shown | 11.3 KB | 4.2 KB |
-| What has to run before react-dom: the hook, the fiber reading, the observers | 11.5 KB | 4.8 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 39.0 KB | 14.4 KB |
+| The badge and panel, a chunk loaded only when shown | 11.2 KB | 4.2 KB |
+| What has to run before react-dom: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
 
 Under the `react-server` condition, `react-inp-blame`, `react-inp-blame/auto` and
 `react-inp-blame/next-client` resolve to a module whose exports do nothing, so a Server Component

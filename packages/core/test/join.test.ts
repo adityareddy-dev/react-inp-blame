@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { attachLaterRender, buildReport, isLaterRender, refreshReport, sealReport, type LabelSource } from '../src/join.ts';
 import type { PageNavigation } from '../src/navigation.ts';
-import type { CommitSummary, FrameSummary, InputRecord } from '../src/types.ts';
+import type { CommitSummary, FrameSummary, InputRecord, ScriptSummary } from '../src/types.ts';
 
 // Hand-built PerformanceEventTiming-like entries. Durations are multiples of 8 the way the
 // browser rounds them, except where the case under test says otherwise.
@@ -18,6 +18,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
     gestureTs: inputTs,
     inputType: 'click',
     rendered: 30,
+    hydrated: false,
     truncated: false,
     roots: ['List'],
     hotPath: ['List'],
@@ -33,7 +34,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
 }
 
 function input(ts: number, type: string, extra: Partial<InputRecord> = {}): InputRecord {
-  return { ts, type, gestureTs: ts, press: undefined, target: null, fiber: null, ...extra };
+  return { ts, type, gestureTs: ts, press: undefined, target: null, owners: [], handler: null, ...extra };
 }
 
 /** A detached DOM element as the label reads it. Its textContent throws: a label must never need all of it. */
@@ -66,6 +67,12 @@ function text(value: string): Record<string, unknown> {
   return { nodeType: 3, nodeValue: value, parentNode: null, parentElement: null, nextSibling: null, firstChild: null };
 }
 
+/** A Long Animation Frames script, as the observer summarises one. */
+const script = (invoker: string, start: number, duration: number, forcedLayout = 0): ScriptSummary => ({ invoker, name: '', source: 'app.js', start, duration, forcedLayout });
+
+/** A long animation frame holding these scripts. */
+const frame = (start: number, duration: number, scripts: ScriptSummary[]): FrameSummary => ({ start, duration, blocking: Math.max(0, duration - 50), forcedLayout: scripts.reduce((a, s) => a + s.forcedLayout, 0), scripts });
+
 /** The report as it is published: the data these arguments build, sealed. */
 const report = (...args: Parameters<typeof buildReport>) => sealReport(buildReport(...args));
 
@@ -85,7 +92,6 @@ test('headline is the longest single entry, not the span of the whole interactio
   assert.equal(r.presentation, 11);
   // The 61 ms the pointer was held before the click is kept, off the headline.
   assert.equal(r.holdMs, 61);
-  assert.equal(r.explanation.headline, '100 ms click');
   assert.equal(r.explanation.phases.reduce((a, p) => a + p.ms, 0), 100);
 });
 
@@ -149,21 +155,12 @@ test('a commit stamped with the click joins the pointerdown report through the p
   assert.deepEqual(buildReport(pressed, [afterClick], []).followUps, [joinedAs(afterClick, 'exact')]);
 });
 
-test('a null entry target falls back to the node and fiber the ring kept at dispatch', () => {
-  function Dialog() {}
-  function CloseButton() {}
-  function handleClose() {}
-  const fiber = { tag: 0, elementType: CloseButton, memoizedProps: { onClick: handleClose }, return: { tag: 0, elementType: Dialog, memoizedProps: {}, return: null } };
-  // A detached element: no parent, and React has already deleted its fiber expando.
+test('a null entry target falls back to the node, the components and the handler the ring read at dispatch', () => {
+  // A detached element: by the time the entry arrives, React has cleared the fiber it had.
   const node = element('button', [text(' Close ')]);
-  const ring = [input(0, 'click', { target: node as unknown as Node, fiber: fiber as unknown as InputRecord['fiber'] })];
+  const ring = [input(0, 'click', { target: node as unknown as Node, owners: ['CloseButton', 'Dialog'], handler: 'handleClose' })];
   const r = report([entry('click', 0, 120, 3, 100)], [], [], ring, 'text');
-  assert.ok(r.target);
-  assert.equal(r.target.selector, 'button');
-  assert.equal(r.target.label, 'button "Close"');
-  assert.equal(r.target.component, 'CloseButton');
-  assert.deepEqual(r.target.owners, ['CloseButton', 'Dialog']);
-  assert.equal(r.target.handler, 'handleClose');
+  assert.deepEqual(r.target, { selector: 'button', label: 'button "Close"', component: 'CloseButton', owners: ['CloseButton', 'Dialog'], handler: 'handleClose' });
   assert.equal(r.verdict.startsWith('120 ms click on button "Close" in CloseButton.'), true);
 });
 
@@ -179,7 +176,6 @@ test('a late entry of a long press makes the next revision, rebuilt from every e
   assert.equal(second.revision, 1);
   assert.equal(second.entries.length, 3);
   assert.deepEqual(second.commits, [joinedAs(sync, 'exact')]);
-  assert.equal(sealReport(second).explanation.headline, '100 ms click');
   assert.equal(first.duration, 32);
   assert.equal(first.entries.length, 1);
   // A keyup that changes nothing else is still a revision, so listeners see the entry list grow.
@@ -205,7 +201,7 @@ test("processing leaves out this library's own walk during the handlers, and the
 });
 
 /** The label of a click on `target`, with labels from `labels`. */
-const labelOf = (target: Record<string, unknown>, labels: LabelSource) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], [], [], labels).target!.label;
+const labelOf = (target: Record<string, unknown>, labels: LabelSource) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], [], [], labels).target?.label;
 
 test('with text allowed, the label is the aria-label or the first run of text, at most 40 characters, never the whole textContent', () => {
   const label = (target: Record<string, unknown>) => labelOf(target, 'text');
@@ -230,12 +226,20 @@ test("with attributes only, the label comes from what the page's code wrote on t
   assert.equal(label(element('div', [], { 'aria-label': 'B'.repeat(60) })), `div "${'B'.repeat(40)}"`);
 });
 
+test('a selector names the test attribute it was built from, with its value quoted', () => {
+  const selectorOf = (target: Record<string, unknown>) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], []).target?.selector;
+  assert.equal(selectorOf(element('button', [], { 'data-testid': 'add to cart' })), 'button[data-testid="add to cart"]');
+  assert.equal(selectorOf(element('input', [], { 'data-test': 'say "hi"' })), 'input[data-test="say \\"hi\\""]');
+});
+
 test('each revision is explained on first read, and a later render makes a new revision with its own verdict', () => {
   const data = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
   const later = commit(400, 0, { total: 40 });
-  const next = attachLaterRender(data, later, [])!;
+  const next = attachLaterRender(data, later, []);
+  assert.ok(next);
   const before = sealReport(data);
   const after = sealReport(next);
+  assert.deepEqual([before.followUps.length, after.followUps.length], [0, 1]);
   assert.doesNotMatch(before.verdict, /after the screen updated/);
   assert.match(after.verdict, /A second React render landed 280 ms after the screen updated/);
   assert.equal(after.revision, 1);
@@ -253,17 +257,15 @@ test('later renders attach only by an exact stamp', () => {
   assert.equal(isLaterRender(r, commit(2000, 0)), false);
 });
 
-test('the rating follows the INP thresholds', () => {
+test("the rating follows INP's thresholds", () => {
   assert.equal(report([entry('click', 0, 200, 1, 2)], [], []).explanation.rating, 'good');
-  assert.equal(report([entry('click', 0, 208, 1, 2)], [], []).explanation.rating, 'needs-work');
+  assert.equal(report([entry('click', 0, 208, 1, 2)], [], []).explanation.rating, 'needs-improvement');
   assert.equal(report([entry('click', 0, 504, 1, 2)], [], []).explanation.rating, 'poor');
 });
 
-/** The ring after a click on a "Log in" button whose onClick is `handler`, owned by SignInPage. */
-function loginClick(handler: () => void): InputRecord[] {
-  function SignInPage() {}
-  const fiber = { tag: 0, elementType: SignInPage, memoizedProps: { onClick: handler }, return: null };
-  return [input(0, 'click', { target: element('button', [text('Log in')]) as unknown as Node, fiber: fiber as unknown as InputRecord['fiber'] })];
+/** The ring after a click at `ts` on a "Log in" button owned by SignInPage, whose onClick the ring named `handler` at dispatch. */
+function loginClick(handler: string, ts = 0): InputRecord[] {
+  return [input(ts, 'click', { target: element('button', [text('Log in')]) as unknown as Node, owners: ['SignInPage'], handler })];
 }
 
 test('a blame says whether it was measured or inferred', () => {
@@ -281,23 +283,41 @@ test('a blame says whether it was measured or inferred', () => {
   assert.equal(blame([commit(50, 999, { total: 90 })]), 'render inferred');
   assert.equal(blame([commit(50, 0, { total: 90, truncated: true })]), 'render inferred');
   // A production build that re-rendered two components beside a named handler.
-  assert.equal(blame([commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick(function handleLogin() {})), 'handler inferred');
+  assert.equal(blame([commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick('handleLogin')), 'handler inferred');
   // The browser measured waiting and painting itself; with no commit and no Long Animation Frames, nothing rules scripts out.
   assert.equal(report([entry('click', 0, 120, 80, 100)], [], []).explanation.blame.confidence, 'measured');
   assert.equal(report([entry('click', 0, 40, 5, 10)], [], []).explanation.blame.confidence, 'measured');
   assert.equal(report([entry('click', 0, 40, 5, 10)], [], null).explanation.blame.confidence, 'inferred');
 });
 
-test('a render under 1 ms reads "under 1 ms", and a handler known by its prop name reads "the onClick handler"', () => {
+test('a render under 1 ms reads "under 1 ms", and a handler known only by its prop reads "the onClick handler"', () => {
   const slowClick = [entry('click', 0, 120, 3, 100)];
-  const development = report(slowClick, [commit(50, 0, { total: 0.3, rendered: 2 })], [], loginClick(function handleLogin() {}));
+  const development = report(slowClick, [commit(50, 0, { total: 0.3, rendered: 2 })], [], loginClick('handleLogin'));
   assert.equal(development.explanation.cause, "The click handler handleLogin ran for about 97 ms; React's own render took under 1 ms.");
-  // A minifier leaves the handler a one-letter name, so the name reported is the prop's.
-  const minified = () => {};
-  Object.defineProperty(minified, 'name', { value: 'l' });
-  const production = report(slowClick, [commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick(minified));
-  assert.equal(production.target?.handler, 'onClick');
+  // A minifier leaves the handler a one-letter name, so what the ring names it by is its prop.
+  const production = report(slowClick, [commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick('onClick'));
   assert.equal(production.explanation.cause, 'The onClick handler most likely took the 97 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.');
+});
+
+test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {
+  // A click at 1000 waited behind an analytics task that ran from 745 to 1045. Its own handler ran from
+  // 1045 to 1065, rendering 2 components in 1 ms, and the screen updated at 1096.
+  const waitedBehind = [frame(700, 400, [script('TimerHandler:setTimeout', 745, 300), script('DIV#root.onclick', 1045, 20)])];
+  const r = report([entry('click', 1000, 96, 1045, 1065)], [commit(1060, 1000, { total: 1, rendered: 2 })], waitedBehind, loginClick('handleLogin', 1000));
+  assert.deepEqual(r.explanation.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 45, confidence: 'measured' });
+
+  // Another click waited behind a task that forced 45 ms of layout, in the same frame as its own 60 ms
+  // handler. That layout was not the handler's, so it is not taken out of the handler's time.
+  const sameFrame = [frame(850, 254, [script('TimerHandler:setTimeout', 870, 160, 45), script('DIV#root.onclick', 1030, 60)])];
+  const handled = report([entry('click', 1000, 104, 1030, 1090)], [commit(1088, 1000, { total: 2, rendered: 2 })], sameFrame, loginClick('handleLogin', 1000));
+  assert.deepEqual(handled.explanation.blame, { kind: 'handler', name: 'handleLogin', detail: 'SignInPage', ms: 58, confidence: 'measured' });
+
+  // A third click, handled from 1005 to 1065 and painted at 1104, while a task queued at 1070 ran on
+  // until 1370. Only the 34 ms of it before the paint is inside the interaction; the rest came after
+  // the screen had updated and is nothing the person waited for.
+  const ranPast = [frame(1000, 400, [script('TimerHandler:setTimeout', 1070, 300)])];
+  const overran = report([entry('click', 1000, 104, 1005, 1065)], [], ranPast, loginClick('handleLogin', 1000));
+  assert.deepEqual(overran.explanation.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 34, confidence: 'measured' });
 });
 
 test('a commit timed by a clock too coarse for its components is blamed on its total, as inferred, with no per-component milliseconds', () => {
@@ -311,8 +331,14 @@ test('a commit timed by a clock too coarse for its components is blamed on its t
   });
   const r = report([entry('click', 0, 456, 3, 440)], [coarse], null);
   assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'OrderSummary', detail: 'LineItem ×800', ms: 417, confidence: 'inferred' });
+  assert.equal(r.commits[0]?.coarseClock, true);
   assert.equal(r.explanation.cause, 'React spent 417 ms re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them).');
   assert.ok(r.explanation.notes.some((note) => note.includes('clock steps in whole milliseconds')));
+});
+
+test('a commit that hydrated is described as hydrating, not re-rendering', () => {
+  const r = report([entry('click', 0, 120, 3, 100)], [commit(50, 0, { hydrated: true, total: 90 })], []);
+  assert.equal(r.explanation.cause, 'React spent 90 ms hydrating 30 components inside List, mostly Row (30 of them, 20 ms).');
 });
 
 test('a report is placed in the navigation its interaction began in, and names the soft navigation its input started', () => {

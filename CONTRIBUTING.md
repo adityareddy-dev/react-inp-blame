@@ -66,10 +66,14 @@ the script again rather than editing them. The `npm install` links the new works
 change `package-lock.json`.
 
 Run the suites one at a time. Each starts its server on a fixed port (the demo on 5177 and 5178, the
-React 18 copy on 5187 and 5188, the React 17 copy on 5197 and 5198, Next.js on 5199, 5198 and 5197),
-and a server already listening on that port is reused: always by the Next.js suites, and outside CI by
-the others. A server left over from another suite would be tested in place of the right one, so stop
-it before the next suite starts.
+React 18 copy on 5187 and 5188, the React 17 copy on 5195 and 5196, Next.js on 5199, 5198 and 5197),
+and outside CI a server already listening on that port is reused. A server left over from another suite
+would be tested in place of the right one, so stop it before the next suite starts.
+
+Two things the demo's suite leaves out of a normal run:
+
+    INP_KEEP_TRACE=1 npm test           # keeps the Chrome trace in apps/demo/traces, to open in the Performance panel
+    INP_TOUR=1 npx playwright test --headed -w apps/demo   # the headed walkthrough in apps/demo/tour
 
 ## What a pull request needs
 

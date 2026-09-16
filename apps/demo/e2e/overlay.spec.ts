@@ -1,36 +1,33 @@
 import { expect, test } from '@playwright/test';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { settle } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
-const mode = prod ? 'prod' : 'dev';
+
+/** Takes a screenshot into the test's own output folder and attaches it, so a run can be judged by eye. */
+async function shot(page: import('@playwright/test').Page, name: string): Promise<void> {
+  const file = test.info().outputPath(`${name}.png`);
+  await page.screenshot({ path: file });
+  await test.info().attach(name, { path: file, contentType: 'image/png' });
+}
 
 // The on-page overlay: a badge with the page's INP, and a panel that names the component
-// behind each slow interaction. Screenshots land in apps/demo/shots (gitignored) so the
-// look can be judged by eye.
+// behind each slow interaction.
 test('overlay: the badge shows the page INP and the panel blames the right thing', async ({ page }) => {
-  const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../shots');
-  fs.mkdirSync(dir, { recursive: true });
-
   await page.goto('/');
   await page.waitForSelector('[data-test=email]');
   const badge = page.locator('#react-inp-blame .badge');
   await expect(badge).toBeVisible();
   await expect(badge).toContainText('INP');
-  await page.screenshot({ path: path.join(dir, `overlay-idle-${mode}.png`) });
+  await shot(page, `overlay-idle-${prod ? 'prod' : 'dev'}`);
 
-  await page.type('[data-test=email]', 'ada@example.com', { delay: 60 });
-  await page.type('[data-test=password]', 'Hunter2!', { delay: 60 });
+  await page.locator('[data-test=email]').pressSequentially('ada@example.com', { delay: 60 });
+  await page.locator('[data-test=password]').pressSequentially('Hunter2!', { delay: 60 });
   await page.click('[data-test=login]');
   await page.waitForSelector('[data-test=photos]', { timeout: 10_000 });
-  await page.waitForTimeout(900);
-
-  const badgeText = (await badge.textContent()) || '';
-  console.log(`  badge: ${badgeText.replace(/\s+/g, ' ').trim()}`);
-  expect(badgeText).toMatch(/\d+ ms/);
-  expect(await badge.getAttribute('data-rating')).not.toBe('good');
-  await page.screenshot({ path: path.join(dir, `overlay-badge-${mode}.png`) });
+  // The badge shows the page's INP, which the login click has just made the worst interaction.
+  await expect(badge).toHaveAttribute('data-rating', /needs-improvement|poor/, { timeout: 10_000 });
+  await expect(badge).toContainText(/\d+ ms/);
+  await shot(page, `overlay-badge-${prod ? 'prod' : 'dev'}`);
 
   await badge.click();
   const panel = page.locator('#react-inp-blame .panel');
@@ -42,16 +39,15 @@ test('overlay: the badge shows the page INP and the panel blames the right thing
   // where labels come from attributes only, its data-test.
   await expect(first).toContainText(prod ? 'login' : 'Log in');
   if (!prod) await expect(first).toContainText('handleLogin');
-  console.log(`  first row: ${((await first.textContent()) || '').replace(/\s+/g, ' ').trim()}`);
   await first.click();
   await expect(first.locator('.more')).toBeVisible();
-  await page.screenshot({ path: path.join(dir, `overlay-open-${mode}.png`) });
+  await shot(page, `overlay-open-${prod ? 'prod' : 'dev'}`);
 
-  const head = ((await panel.locator('.head').textContent()) || '').replace(/\s+/g, ' ').trim();
-  console.log(`  head: ${head}`);
-  expect(head).toMatch(/\d+\s*ms/);
-  expect(head).toContain('Page INP so far');
+  const head = panel.locator('.head');
+  await expect(head).toContainText(/\d+\s*ms/);
+  await expect(head).toContainText('Page INP so far');
 
   await page.keyboard.press('Escape');
   await expect(panel).toBeHidden();
+  await settle(page);
 });

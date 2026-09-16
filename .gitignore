@@ -9,4 +9,4 @@ traces/
 .next/
 next-env.d.ts
 apps/demo-react*/
-shots/
+*.tsbuildinfo

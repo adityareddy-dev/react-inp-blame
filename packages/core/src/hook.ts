@@ -1,6 +1,7 @@
-import { fiberFromNode, profileModeBit, rootShapeProblem, walkCommit, type Fiber } from './fiber.js';
+import { fiberFromNode, handlerOf, ownersOf, profileModeBit, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, InputRecord, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
+import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
 import { warnOnce } from './warn.js';
 
 const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
@@ -11,34 +12,37 @@ interface HookHolder {
   [HOOK_KEY]?: unknown;
 }
 
-/** What React passes `onCommitFiberRoot`: the root of the tree it just committed. */
-interface FiberRoot {
-  current: Fiber;
-}
-
-/** A `__REACT_DEVTOOLS_GLOBAL_HOOK__`, reduced to what this library calls or wraps. */
+/** A `__REACT_DEVTOOLS_GLOBAL_HOOK__`, reduced to what this library reads, calls or wraps. */
 interface DevtoolsHook {
   /** What each renderer handed `inject()`, by id. React DevTools' hook fills it; Fast Refresh's stub does not. */
   renderers?: Map<number, unknown>;
+  /** React registers with no hook that sets it: how a page turns React's developer tools support off. */
+  isDisabled?: boolean;
+  /** React registers only with a hook that sets it. */
+  supportsFiber?: boolean;
   inject(internals: unknown): number;
   onCommitFiberRoot(id: number, root: FiberRoot, priority?: number, didError?: boolean): void;
+  /** React 18 and 19 call it once a commit's passive effects have run, when the hook has it. */
+  onPostCommitFiberRoot?(id: number, root: FiberRoot): void;
   /** Marks the hook this library created. */
   reactInpBlame?: true;
 }
 
-/** Why React's commits cannot be read: the kind `stats().unsupportedReason` reports, and the reason in words. */
+/** Why a renderer's commits cannot be read: the kind `stats().unsupportedReason` reports, and the warning's sentence. */
 interface Problem {
   kind: Extract<UnsupportedReason['kind'], 'react-version' | 'fiber-shape' | 'walk-threw'>;
-  reason: string;
+  message: string;
 }
 
 interface Renderer {
   info: RendererInfo;
   /** Only react-dom commits are walked: other renderers have no DOM behind their fibers. */
   isReactDom: boolean;
+  /** Its version is an experimental build's, read as the newest React (see `parseReactVersion`). */
+  experimental: boolean;
   /** `profileModeBit` for its React major. */
   profileMode: number;
-  /** Why its commits cannot be read (a React outside 17 to 19, a root of another shape), or null. */
+  /** Why its commits cannot be read (a React outside 17 to 19, a root of another shape, a walk that threw), or null. */
   problem: Problem | null;
   /** Its first commit has been checked. */
   checked: boolean;
@@ -61,6 +65,23 @@ export interface HookOptions {
   onSummary: (c: CommitSummary) => void;
 }
 
+/**
+ * The React work the page's report listeners caused on one root. A listener that shows reports renders
+ * when it hears one. That render has no input of its own, so it would be stamped with the report's
+ * input, join the report as its later render, and reach the listener again as the report's next
+ * revision: a loop on any page that renders its reports. React sets a lane (a bit) in
+ * `root.pendingLanes` for each update and clears it when the update commits, so the lanes the listeners
+ * leave pending name their work, and so do the lanes that work schedules in turn.
+ */
+interface ListenerWork {
+  /** Pending lanes whose work the listeners caused. */
+  lanes: number;
+  /** `pendingLanes` when last looked at: a lane set since is new. */
+  seen: number;
+  /** The root's last commit was the listeners' work, and React has not yet said that its passive effects ran. */
+  effectsPending: boolean;
+}
+
 interface HookState {
   options: HookOptions | null;
   /** The hook commits are read from while installed. */
@@ -70,8 +91,9 @@ interface HookState {
   /** The hook this library created. React keeps the hook it registered with for the page's life, so a second install reuses it. */
   shim: DevtoolsHook | null;
   devtoolsLockedOut: boolean;
+  /** How the hook is in use: 'shim', 'chained' or 'none', or 'unsupported' when the page's hook is disabled. */
   mode: Stats['mode'];
-  /** Set with the first reason React's commits stopped being read. */
+  /** Why the page's hook cannot be used at all. A renderer's own problem is on the renderer. */
   unsupported: UnsupportedReason | null;
   /** Every commit walked so far, oldest first. */
   commits: CommitSummary[];
@@ -81,6 +103,12 @@ interface HookState {
   registries: WeakMap<DevtoolsHook, Map<number, Renderer>>;
   /** The last 8 inputs seen, oldest first. */
   inputs: InputRecord[];
+  /** Every root that committed while installed, held weakly so that an unmounted root is not kept alive by this list. */
+  roots: WeakRef<FiberRoot>[];
+  /** What the page's report listeners caused on each root in `roots`. */
+  listenerWork: WeakMap<FiberRoot, ListenerWork>;
+  /** The page's report listeners are running. */
+  hearing: boolean;
 }
 
 /** One for the page, whichever copy of the library installed (see session.ts). */
@@ -97,6 +125,9 @@ const state = shared<HookState>('hook', () => ({
   walkTotalMs: 0,
   registries: new WeakMap(),
   inputs: [],
+  roots: [],
+  listenerWork: new WeakMap(),
+  hearing: false,
 }));
 
 // The events Event Timing gives an interactionId to. Derived events (input, change, keypress,
@@ -121,13 +152,17 @@ export function noteInput(e: Event): void {
 function record(e: DispatchedInput): InputRecord {
   const isKey = e.type === 'keydown' || e.type === 'keyup';
   const target = e.target as Node | null;
+  // Read now, before React's handlers run: once React commits the deletion of the element, React 18
+  // and 19 clear its fiber's links and props, and the Event Timing entry arrives after that.
+  const fiber = fiberFromNode(target);
   const rec: InputRecord = {
     ts: e.timeStamp,
     type: e.type,
     gestureTs: gestureOf(e, isKey),
     press: isKey ? e.code : e.pointerId,
     target,
-    fiber: fiberFromNode(target),
+    owners: Object.freeze(ownersOf(fiber)),
+    handler: handlerOf(fiber, e.type),
   };
   state.inputs.push(rec);
   if (state.inputs.length > RING_SIZE) state.inputs.shift();
@@ -139,11 +174,10 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
   if (e.type === 'pointerdown' || e.type === 'keydown') return e.timeStamp;
   const want = isKey ? 'keydown' : 'pointerdown';
   const press = isKey ? e.code : e.pointerId;
-  const inputs = state.inputs;
   let fallback = -1;
-  for (let i = inputs.length - 1; i >= 0; i--) {
-    const r = inputs[i];
-    if (r.type !== want || e.timeStamp - r.ts > PRESS_WINDOW) continue;
+  for (let i = state.inputs.length - 1; i >= 0; i--) {
+    const r = state.inputs[i];
+    if (!r || r.type !== want || e.timeStamp - r.ts > PRESS_WINDOW) continue;
     if (press !== undefined && r.press === press) return r.ts;
     if (fallback < 0) fallback = r.ts;
   }
@@ -158,19 +192,13 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
 export function dispatchedInput(): InputRecord | null {
   const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
   if (!ev || !ev.isTrusted || INPUT_TYPES.indexOf(ev.type) < 0) return null;
-  const inputs = state.inputs;
-  const last = inputs.length ? inputs[inputs.length - 1] : null;
+  const last = newestInput();
   return last && last.ts === ev.timeStamp ? last : record(ev);
 }
 
-/**
- * The input a commit belongs to. A sync commit runs inside the event's dispatch, so it is the input
- * being dispatched. Anything else (a transition, an effect, data arriving) is stamped with the
- * newest input seen.
- */
-function currentInput(): InputRecord | null {
-  const inputs = state.inputs;
-  return dispatchedInput() ?? (inputs.length ? inputs[inputs.length - 1] : null);
+/** The newest input in the ring. */
+function newestInput(): InputRecord | null {
+  return state.inputs[state.inputs.length - 1] ?? null;
 }
 
 /** Every commit walked so far, oldest first. Live array. */
@@ -182,15 +210,14 @@ export function clearCommits(): void {
   state.commits.length = 0;
 }
 
-/** The hook's half of `stats()`. */
+/** The hook's half of `stats()`. It only reads. */
 export function hookStats(): Pick<Stats, 'mode' | 'unsupportedReason' | 'walks' | 'walkTotalMs'> {
-  noticeReplacement();
-  return { mode: state.mode, unsupportedReason: state.unsupported, walks: state.walks, walkTotalMs: state.walkTotalMs };
+  const unsupportedReason = state.unsupported ?? unreadableReactDom();
+  return { mode: unsupportedReason ? 'unsupported' : state.mode, unsupportedReason, walks: state.walks, walkTotalMs: state.walkTotalMs };
 }
 
 /** `api.debug.hook()`. */
 export function hookInfo(): HookInfo {
-  noticeReplacement();
   return { owner: owner(), renderers: knownRenderers(), devtoolsLockedOut: state.devtoolsLockedOut };
 }
 
@@ -199,8 +226,24 @@ export function knownRenderers(): RendererInfo[] {
   return state.attached ? [...registryOf(state.attached).values()].map((r) => r.info) : [];
 }
 
-/** The shim's accessor sees an assignment; a tool that redefined or deleted the property is only found by looking. */
-function noticeReplacement(): void {
+/** Why no react-dom on the page can be read, when every one registered has a problem; null while one can be, or before any registers. */
+function unreadableReactDom(): UnsupportedReason | null {
+  if (!state.attached) return null;
+  let first: Problem | null = null;
+  for (const renderer of registryOf(state.attached).values()) {
+    if (!renderer.isReactDom) continue;
+    if (!renderer.problem) return null;
+    first ??= renderer.problem;
+  }
+  return first && { kind: first.kind, message: first.message };
+}
+
+/**
+ * Looks for a tool that replaced the shim by redefining or deleting the global, which its accessor
+ * cannot see (an assignment it can). install() calls it at fixed points, so reading `stats()` or
+ * `debug.hook()` never changes what they report.
+ */
+export function checkHookReplaced(): void {
   const { attached, shim } = state;
   if (!attached || attached !== shim) return;
   const current = (window as unknown as HookHolder)[HOOK_KEY];
@@ -226,6 +269,13 @@ export function installHook(opts: HookOptions): void {
   const existing = holder[HOOK_KEY] as DevtoolsHook | undefined;
   if (existing && existing === state.shim) {
     attach(existing, 'shim');
+  } else if (existing && (existing.isDisabled || !existing.supportsFiber)) {
+    // React checks both before registering, so it registers with no hook at all.
+    const message =
+      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ turns React's developer tools support off (isDisabled, or no supportsFiber), so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.";
+    state.mode = 'unsupported';
+    state.unsupported = { kind: 'hook-disabled', message };
+    warnOnce('hook-disabled', message);
   } else if (existing) {
     if (opts.hook === 'shim') {
       warnOnce('shim-over-hook', "hook: 'shim' found a React DevTools hook already installed and chained onto it instead: replacing it would lock out whatever installed it.");
@@ -240,7 +290,7 @@ export function installHook(opts: HookOptions): void {
   }
 }
 
-/** Stops reading commits and puts a chained hook back the way it was. The shim stays: React still holds it. */
+/** Stops reading commits, forgets what was read, and puts a chained hook back the way it was. The shim stays: React still holds it. */
 export function uninstallHook(): void {
   state.detach?.();
   state.detach = null;
@@ -249,8 +299,12 @@ export function uninstallHook(): void {
   state.mode = 'none';
   state.unsupported = null;
   state.commits = [];
+  state.inputs = [];
   state.walks = 0;
   state.walkTotalMs = 0;
+  state.roots = [];
+  state.listenerWork = new WeakMap();
+  state.hearing = false;
 }
 
 function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
@@ -276,49 +330,60 @@ function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer 
     bundleType: typeof handed.bundleType === 'number' ? handed.bundleType : null,
     rendererPackageName: typeof handed.rendererPackageName === 'string' ? handed.rendererPackageName : null,
   });
-  const major = info.version ? parseInt(info.version, 10) : NaN;
-  const supported = major >= 17 && major <= 19;
-  const isReactDom = info.rendererPackageName === 'react-dom';
+  const version = parseReactVersion(info.version);
+  const supported = version !== null && version.major >= OLDEST_REACT_MAJOR && version.major <= NEWEST_REACT_MAJOR;
   const renderer: Renderer = {
     info,
-    isReactDom,
-    profileMode: supported ? profileModeBit(major) : 0,
-    problem: isReactDom && !supported ? { kind: 'react-version', reason: `react-dom ${info.version ?? 'without a version'} is outside React 17 to 19` } : null,
+    isReactDom: info.rendererPackageName === 'react-dom',
+    experimental: version?.experimental ?? false,
+    profileMode: supported ? profileModeBit(version.major) : 0,
+    problem: null,
     checked: false,
   };
+  if (!supported) renderer.problem = problem('react-version', `react-dom ${info.version ?? 'without a version'} is outside React ${OLDEST_REACT_MAJOR} to ${NEWEST_REACT_MAJOR}`);
   registryOf(hook).set(id, renderer);
   return renderer;
 }
 
-function admit(renderer: Renderer): void {
-  if (renderer.isReactDom && renderer.problem) failClosed(renderer.problem);
+function problem(kind: Problem['kind'], reason: string): Problem {
+  return { kind, message: `${reason}, so the commits of that react-dom are not read. Interactions are still reported, without its components.` };
 }
 
-/** A React this library does not know is not guessed at: stop reading commits and say why, once. */
-function failClosed({ kind, reason }: Problem): void {
-  const message = `${reason}, so React commits are not read. Interactions are still reported, without components.`;
-  state.mode = 'unsupported';
-  state.unsupported ??= { kind, message };
-  warnOnce('unsupported-react', message);
+/** Says once that a react-dom's commits cannot be read. Other renderers are not walked anyway, and are not warned about. */
+function admit(renderer: Renderer): void {
+  if (renderer.isReactDom && renderer.problem) warnOnce(renderer.problem.message, renderer.problem.message);
+}
+
+/** A React this library does not know is not guessed at: that renderer's commits are not read from here on. */
+function stopReading(renderer: Renderer, kind: Problem['kind'], reason: string): void {
+  renderer.problem = problem(kind, reason);
+  admit(renderer);
 }
 
 function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: number | undefined, didError: boolean | undefined): void {
   const { options } = state;
-  if (!options || hook !== state.attached || state.mode === 'unsupported') return;
+  if (!options || hook !== state.attached) return;
   // A renderer that registered before install() is unknown here, and its commits are not read.
   const renderer = registryOf(hook).get(id);
-  if (!renderer || !renderer.isReactDom) return;
+  if (!renderer || !renderer.isReactDom || renderer.problem) return;
   if (!renderer.checked) checkFirstCommit(renderer, root);
-  if (renderer.problem) return;
+  if (renderer.problem || causedByListeners(root)) return;
   const now = performance.now();
-  const input = currentInput();
-  // Outside an interaction window this is the whole cost: a lookup and one subtraction.
+  const dispatched = dispatchedInput();
+  // A root's first commit mounts it, or hydrates its server-rendered HTML: the page starting up, not an
+  // input's work, unless React ran it inside that input's dispatch (a click that opens a dialog in a root
+  // of its own, or React hydrating so that it can handle the click). A Suspense boundary hydrating is the
+  // same, and only the walk can find one.
+  const firstCommit = root.current.alternate === null || root.current.alternate.child === null;
+  const input = dispatched ?? (firstCommit ? null : newestInput());
+  // Outside an interaction window this is the whole cost: a few lookups and one subtraction.
   if (!input || now - input.ts > options.inputWindow) return;
   const t0 = performance.now();
   const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true });
   const summary: CommitSummary = Object.freeze({ ...walk, walkMs: performance.now() - t0 });
   state.walkTotalMs += summary.walkMs;
   state.walks++;
+  if (summary.hydrated && !dispatched) return;
   if (state.commits.length >= MAX_COMMITS) state.commits.shift();
   state.commits.push(summary);
   options.onSummary(summary);
@@ -326,10 +391,10 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
 
 function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
   renderer.checked = true;
-  const shape = rootShapeProblem(root && root.current);
+  const shape = rootShapeProblem(root);
   if (shape) {
-    renderer.problem = { kind: 'fiber-shape', reason: `the fiber tree of react-dom ${renderer.info.version} is not the shape this library reads (${shape})` };
-    failClosed(renderer.problem);
+    const build = renderer.experimental ? ' (an experimental build, read as React 19)' : '';
+    stopReading(renderer, 'fiber-shape', `the fiber tree of react-dom ${renderer.info.version}${build} is not the shape this library reads (${shape})`);
     return;
   }
   // A root's first commit replaces the empty fiber createRoot made. A rendered tree behind the
@@ -339,19 +404,96 @@ function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
   }
 }
 
+/**
+ * Calls the page's report listeners through `hear`, and remembers the React work they cause: a commit
+ * during the call, and each lane the call leaves pending on a root. Those commits are the page's own
+ * reporting UI, so they are never read as an interaction's render (see `ListenerWork`).
+ */
+export function hearingReports(hear: () => void): void {
+  const roots: [FiberRoot, ListenerWork][] = [];
+  state.roots = state.roots.filter((ref) => {
+    const root = ref.deref();
+    if (root) roots.push([root, listenerWorkOf(root)]);
+    return root !== undefined;
+  });
+  for (const [root, work] of roots) work.seen = root.pendingLanes;
+  state.hearing = true;
+  try {
+    hear();
+  } finally {
+    state.hearing = false;
+    for (const [root, work] of roots) takeNewLanes(root, work);
+  }
+}
+
+function listenerWorkOf(root: FiberRoot): ListenerWork {
+  let work = state.listenerWork.get(root);
+  if (!work) {
+    state.listenerWork.set(root, (work = { lanes: 0, seen: root.pendingLanes, effectsPending: false }));
+    state.roots.push(new WeakRef(root));
+  }
+  return work;
+}
+
+/** Counts the lanes set on the root since it was last looked at as the listeners' work. */
+function takeNewLanes(root: FiberRoot, work: ListenerWork): void {
+  work.lanes |= root.pendingLanes & ~work.seen;
+  work.seen = root.pendingLanes;
+}
+
+/**
+ * Whether this commit is the listeners' work: it ran while they did, or it finished a lane they left
+ * pending. What such a commit's render and layout effects schedule is set by the time React calls the
+ * hook, so it is theirs too; what its passive effects schedule is taken when React says they ran.
+ */
+function causedByListeners(root: FiberRoot): boolean {
+  const work = listenerWorkOf(root);
+  const theirs = state.hearing || (work.lanes & ~root.pendingLanes) !== 0;
+  // The lanes this commit finished are done with; the ones still pending stay theirs.
+  work.lanes &= root.pendingLanes;
+  if (theirs) takeNewLanes(root, work);
+  else work.seen = root.pendingLanes;
+  work.effectsPending = theirs;
+  return theirs;
+}
+
+/** React 18 and 19, once a commit's passive effects have run. React 17 has no such call, so there an effect of the listeners' render is not recognised. */
+function onPostCommit(hook: DevtoolsHook, root: FiberRoot): void {
+  if (hook !== state.attached) return;
+  const work = state.listenerWork.get(root);
+  if (!work?.effectsPending) return;
+  work.effectsPending = false;
+  takeNewLanes(root, work);
+}
+
 /** React calls the hook inside its commit; nothing here may throw into it. */
-function guarded(hook: DevtoolsHook, id: number, root: FiberRoot, priority?: number, didError?: boolean): void {
+function guardedCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority?: number, didError?: boolean): void {
   try {
     onCommit(hook, id, root, priority, didError);
   } catch (error) {
-    failClosed({ kind: 'walk-threw', reason: `reading a React commit threw (${String(error)})` });
+    threw(hook, id, error);
   }
+}
+
+function guardedPostCommit(hook: DevtoolsHook, id: number, root: FiberRoot): void {
+  try {
+    onPostCommit(hook, root);
+  } catch (error) {
+    threw(hook, id, error);
+  }
+}
+
+function threw(hook: DevtoolsHook, id: number, error: unknown): void {
+  const renderer = registryOf(hook).get(id);
+  if (renderer) stopReading(renderer, 'walk-threw', `reading a commit of react-dom ${renderer.info.version ?? 'without a version'} threw (${String(error)})`);
 }
 
 /** Wraps a hook someone else installed; returns the undo. */
 function chain(hook: DevtoolsHook): () => void {
   const prevInject = hook.inject;
   const prevCommit = hook.onCommitFiberRoot;
+  const hadPostCommit = Object.prototype.hasOwnProperty.call(hook, 'onPostCommitFiberRoot');
+  const prevPostCommit = hook.onPostCommitFiberRoot;
   const inject = function (this: unknown, ...args: Parameters<DevtoolsHook['inject']>): number {
     const id = prevInject.apply(this, args);
     const renderer = register(hook, id, args[0]);
@@ -359,11 +501,16 @@ function chain(hook: DevtoolsHook): () => void {
     return id;
   };
   const onCommitFiberRoot = function (this: unknown, ...args: Parameters<DevtoolsHook['onCommitFiberRoot']>): void {
-    guarded(hook, ...args);
+    guardedCommit(hook, ...args);
     if (typeof prevCommit === 'function') prevCommit.apply(this, args);
+  };
+  const onPostCommitFiberRoot = function (this: unknown, id: number, root: FiberRoot): void {
+    guardedPostCommit(hook, id, root);
+    if (typeof prevPostCommit === 'function') prevPostCommit.call(this, id, root);
   };
   if (typeof prevInject === 'function') hook.inject = inject;
   hook.onCommitFiberRoot = onCommitFiberRoot;
+  hook.onPostCommitFiberRoot = onPostCommitFiberRoot;
   // Renderers that registered before install(): React DevTools' hook kept what they handed it.
   if (hook.renderers instanceof Map) {
     const registry = registryOf(hook);
@@ -373,18 +520,22 @@ function chain(hook: DevtoolsHook): () => void {
     // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through.
     if (hook.inject === inject) hook.inject = prevInject;
     if (hook.onCommitFiberRoot === onCommitFiberRoot) hook.onCommitFiberRoot = prevCommit;
+    if (hook.onPostCommitFiberRoot === onPostCommitFiberRoot) {
+      if (hadPostCommit) hook.onPostCommitFiberRoot = prevPostCommit;
+      else delete hook.onPostCommitFiberRoot;
+    }
   };
 }
 
 /**
- * The least React needs to register and report commits. React checks for every other hook
- * method before calling it (17.0.2, 18.3.1 and 19.3.0 alike), and there is deliberately no
- * `checkDCE`: react-dom reads that as React DevTools being present.
+ * The least React needs to register and report commits, and the call after a commit's passive effects.
+ * React checks for every other hook method before calling it (17.0.2, 18.3.1 and 19.3.0 alike), and
+ * there is deliberately no `checkDCE`: react-dom reads that as React DevTools being present.
  */
 function createShim(): DevtoolsHook {
   let nextId = 0;
   const renderers = new Map<number, unknown>();
-  const hook: DevtoolsHook & { supportsFiber: true } = {
+  const hook: DevtoolsHook = {
     renderers,
     supportsFiber: true,
     inject(internals) {
@@ -396,7 +547,10 @@ function createShim(): DevtoolsHook {
       return id;
     },
     onCommitFiberRoot(id, root, priority, didError) {
-      guarded(hook, id, root, priority, didError);
+      guardedCommit(hook, id, root, priority, didError);
+    },
+    onPostCommitFiberRoot(id, root) {
+      guardedPostCommit(hook, id, root);
     },
     reactInpBlame: true,
   };

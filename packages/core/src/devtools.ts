@@ -1,4 +1,7 @@
+import { heaviest } from './join.js';
+import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
+import { parseReactVersion } from './version.js';
 
 /**
  * Entries the Chrome Performance panel draws as custom tracks (Chrome 128+), in a group beside
@@ -18,14 +21,15 @@ interface TrackConsole {
   timeStamp(label: string, start: number, end: number, track: string, trackGroup: string, color: Color): void;
 }
 
-// The Scheduler priorities React passes with the commit of a discrete or continuous input:
-// immediate and user-blocking, 1 and 2 on React 18 and 19, 99 and 98 on React 17. Transitions,
-// deferred values and updates from effects or timers all arrive at normal priority or lower.
-const BLOCKING_PRIORITIES = [1, 2, 98, 99];
+// The Scheduler priorities React 18 and 19 pass with the commit of a discrete or continuous input:
+// immediate and user-blocking. Transitions, deferred values and updates from effects or timers all
+// arrive at normal priority or lower. React 17 passes immediate priority with every commit of a legacy
+// root, whatever caused it, so its priorities are not read.
+const BLOCKING_PRIORITIES = [1, 2];
 
-// Interactions whose drawn headline is remembered: more than the lifecycle can still revise (50
-// published, 20 quiet), so a revision of a report is never drawn as if it were new.
-const REMEMBERED_HEADLINES = 100;
+// Interactions whose drawn headline is remembered: every one the lifecycle can still revise, so a
+// revision of a report is never drawn as if it were new.
+const REMEMBERED_HEADLINES = MAX_REPORTS + MAX_QUIET;
 
 const ms = (n: number): string => `${Math.round(n)} ms`;
 
@@ -46,7 +50,11 @@ export function createTimeline(renderers: () => RendererInfo[]): Timeline {
     draw(r) {
       if (typeof performance === 'undefined' || typeof performance.measure !== 'function') return;
       if (timeStampTracks === null) timeStampTracks = drawsTimeStampTracks();
-      const reactDrawsRenders = timeStampTracks && renderers().some(drawsComponentsTrack);
+      const known = renderers();
+      // React draws its Components track only for the commits it measured.
+      const measured = r.commits.some((c) => c.hasDurations) || r.followUps.some((c) => c.hasDurations);
+      const reactDrawsRenders = timeStampTracks && measured && known.some(drawsComponentsTrack);
+      const readPriorities = !known.some(isReact17Dom);
       try {
         const headline = `${r.start} ${r.end} ${r.type}`;
         if (drawnHeadlines.get(r.interactionId) !== headline) {
@@ -60,7 +68,7 @@ export function createTimeline(renderers: () => RendererInfo[]): Timeline {
         for (const c of [...r.commits, ...r.followUps]) {
           if (drawnCommits.has(c)) continue;
           drawnCommits.add(c);
-          drawRender(r, c, timeStampTracks);
+          drawRender(r, c, timeStampTracks, readPriorities);
         }
       } catch {
         // entries are best effort
@@ -76,7 +84,8 @@ export function createTimeline(renderers: () => RendererInfo[]): Timeline {
  */
 function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void {
   const x = r.explanation;
-  const main = r.commits.length ? r.commits[0] : null;
+  // The commit the verdict's blame names, so the entry's name never contradicts its tooltip.
+  const main = r.commits.length ? heaviest(r.commits) : null;
   const leaf = main ? main.hotPath[main.hotPath.length - 1] || main.roots[0] || '' : '';
   const properties: [string, string][] = [
     ['Total', ms(r.duration)],
@@ -99,12 +108,12 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
 }
 
 /** One entry for one React commit joined to the report. */
-function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boolean): void {
+function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boolean, readPriorities: boolean): void {
   const later = c.at > r.end;
   const name = c.hotPath[c.hotPath.length - 1] || c.roots[0] || 'root';
-  const label = `${later ? 'Later render' : 'React render'} · ${name} (${c.rendered} components)`;
+  const label = `${later ? 'Later render' : c.hydrated ? 'Hydration' : 'React render'} · ${name} (${c.rendered} components)`;
   const start = Math.max(r.start, c.hasDurations ? c.at - c.total : c.at - 0.5);
-  const color = renderColor(c, later);
+  const color = renderColor(c, later, readPriorities);
   if (timeStampTracks) {
     (console as unknown as TrackConsole).timeStamp(label, start, c.at, RENDER_TRACK, TRACK_GROUP, color);
     return;
@@ -119,12 +128,13 @@ function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boo
 
 /**
  * React's colours: warning for the event, primary for a blocking render, tertiary for a deferred
- * one, error for a render that threw. Production builds pass no priority, so there the paint
- * decides: a commit before it was the input's own render.
+ * one, error for a render that threw. Where the priority says nothing (production builds pass none,
+ * and React 17 passes the same one with every commit), the paint decides: a commit before it was the
+ * input's own render.
  */
-function renderColor(c: CommitSummary, later: boolean): Color {
+function renderColor(c: CommitSummary, later: boolean, readPriorities: boolean): Color {
   if (c.didError) return 'error';
-  if (c.priority === undefined) return later ? 'tertiary' : 'primary';
+  if (!readPriorities || c.priority === undefined) return later ? 'tertiary' : 'primary';
   return BLOCKING_PRIORITIES.includes(c.priority) ? 'primary' : 'tertiary';
 }
 
@@ -147,9 +157,19 @@ function drawsTimeStampTracks(): boolean {
   return chrome !== null && Number(chrome[1]) >= 134;
 }
 
-/** React 19.2 added a Components track of its own, drawn in development builds with `console.timeStamp`. */
+/**
+ * React 19.2 added a Components track of its own, drawn with `console.timeStamp` for each component it
+ * measured: every one in a development build, the trees in ProfileMode in a profiling build. A production
+ * build measures nothing and draws nothing. So beside react-dom 19.2 or later, the renders of a report
+ * whose commits carry durations are drawn by React already.
+ */
 function drawsComponentsTrack(renderer: RendererInfo): boolean {
-  if (renderer.rendererPackageName !== 'react-dom' || renderer.bundleType !== 1 || !renderer.version) return false;
-  const [major, minor] = renderer.version.split('.').map((part) => parseInt(part, 10));
-  return major > 19 || (major === 19 && minor >= 2);
+  if (renderer.rendererPackageName !== 'react-dom') return false;
+  const version = parseReactVersion(renderer.version);
+  return version !== null && (version.major > 19 || (version.major === 19 && version.minor >= 2));
+}
+
+/** React 17 passes the same priority with every commit of a legacy root, so there the priority says nothing about the commit. */
+function isReact17Dom(renderer: RendererInfo): boolean {
+  return renderer.rendererPackageName === 'react-dom' && parseReactVersion(renderer.version)?.major === 17;
 }

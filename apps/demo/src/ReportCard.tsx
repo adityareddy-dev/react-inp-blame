@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CommitSummary, InteractionReport } from 'react-inp-blame';
 
-export const RATING_LABEL = { good: 'Good', 'needs-work': 'Needs work', poor: 'Poor' } as const;
+export const RATING_LABEL = { good: 'Good', 'needs-improvement': 'Needs improvement', poor: 'Poor' } as const;
 
 export function Pill({ rating }: { rating: keyof typeof RATING_LABEL }) {
   return <span className={`pill ${rating}`}>{RATING_LABEL[rating]}</span>;

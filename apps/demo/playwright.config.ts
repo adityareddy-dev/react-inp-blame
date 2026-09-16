@@ -30,5 +30,8 @@ export default defineConfig({
     // Firefox and WebKit have Event Timing but no Long Animation Frames, so only the checks written for any browser run there.
     { name: `firefox-${mode}`, use: { browserName: 'firefox' }, testMatch: crossBrowser },
     { name: `webkit-${mode}`, use: { browserName: 'webkit' }, testMatch: crossBrowser },
+    // The headed walkthrough in ./tour is for a person to watch, so it is a project of its own that
+    // only exists when INP_TOUR asks for it: a normal run neither collects it nor reports it skipped.
+    ...(process.env.INP_TOUR ? [{ name: 'tour', testDir: './tour', use: { browserName: 'chromium' as const } }] : []),
   ],
 });

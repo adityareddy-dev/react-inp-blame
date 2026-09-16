@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import './page';
 
 // web-vitals' onINP runs in the page beside the library, from its IIFE build, reporting every change
 // and observing at the library's own 16 ms threshold. After each interaction of a session the two
@@ -16,7 +17,8 @@ test.use({ channel: 'chromium' });
 
 interface Inp {
   value: number;
-  interactionId: number;
+  /** Null only for the stand-in web-vitals reports when every interaction since a navigation painted too quickly to be seen. */
+  interactionId: number | null;
   interactionCount: number;
 }
 
@@ -47,13 +49,13 @@ async function interaction(page: Page, name: string, act: () => Promise<void>): 
   // in Chromium's headless mode an idle callback without a limit sometimes never ran on this page.
   await page.evaluate(() => new Promise<void>((resolve) => requestIdleCallback(() => resolve(), { timeout: 1000 })));
   const { vitals, library } = await page.evaluate(() => {
-    const inp = (window as any).__REACT_INP_BLAME__.inp();
+    const inp = window.__REACT_INP_BLAME__.inp();
     const reports = (window as any).__inpCheck.reports;
     return { vitals: reports[reports.length - 1] ?? null, library: inp && { value: inp.value, interactionId: inp.interactionId, interactionCount: inp.interactionCount } };
   });
   console.log(`  ${name.padEnd(24)} web-vitals ${vitals?.value} ms (#${vitals?.interactionId}), react-inp-blame ${library?.value} ms (#${library?.interactionId}) of ${library?.interactionCount}`);
   expect(library && { value: library.value, interactionId: library.interactionId }, name).toEqual(vitals);
-  return library;
+  return library!;
 }
 
 test('page INP agrees with web-vitals after every interaction, from a quiet first click to past 50 interactions', async ({ page }) => {

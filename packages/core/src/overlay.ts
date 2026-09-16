@@ -1,5 +1,5 @@
 import type { InpEstimate } from './inp.js';
-import { carriesWork, heaviest, kindOf } from './join.js';
+import { carriesWork, heaviest, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types.js';
 
@@ -25,7 +25,7 @@ export interface OverlayHandle {
 
 const RATING = {
   good: { label: 'Good', color: '#22c55e' },
-  'needs-work': { label: 'Needs work', color: '#f59e0b' },
+  'needs-improvement': { label: 'Needs improvement', color: '#f59e0b' },
   poor: { label: 'Poor', color: '#ef4444' },
 } as const;
 const IDLE = '#6b7280';
@@ -125,7 +125,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const groups = groupRows(all).slice(-max).reverse();
     const cost = all.length ? all.reduce((a, r) => a + r.overheadMs, 0) / all.length : 0;
     const head = inp
-      ? `<div><div class="big">${Math.round(inp.value)}<small>ms</small>${tag(inp.rating)}</div><div class="sub">Page INP so far${inp.report ? `, from ${esc(titleFor(inp.report).title.toLowerCase())}` : ''} &middot; ${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}</div></div>`
+      ? `<div><div class="big">${Math.round(inp.value)}<small>ms</small>${tag(inp.rating)}</div><div class="sub">Page INP so far${inp.report ? `, from ${esc(titleFor(inp.report).toLowerCase())}` : ''} &middot; ${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}</div></div>`
       : `<div><div class="big">&mdash;<small>ms</small></div><div class="sub">Interaction to Next Paint. Nothing slow yet.</div></div>`;
     panel.innerHTML =
       `<div class="head">${head}<button class="x" type="button" aria-label="Close">&times;</button></div>` +
@@ -136,7 +136,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   function row(g: Group): string {
     const r = slowest(g.reports);
     const R = RATING[r.explanation.rating];
-    const { title } = titleFor(r);
+    const title = titleFor(r);
     const total = Math.max(r.duration, 1);
     const bar = r.explanation.phases
       .map((p, i) => `<i class="p${i}" style="width:${((p.ms / total) * 100).toFixed(1)}%" title="${esc(p.label)}: ${Math.round(p.ms)} ms"></i>`)
@@ -145,7 +145,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const n = g.reports.length;
     const meta = n > 1 ? `<div class="meta">${n} key presses &middot; slowest ${Math.round(r.duration)} ms &middot; typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms</div>` : '';
     return (
-      `<div class="row${expanded.has(r.interactionId) ? ' on' : ''}" data-id="${r.interactionId}">` +
+      `<div class="row" data-id="${r.interactionId}">` +
       `<div class="r1"><i class="dot" style="background:${R.color}"></i><span class="t">${esc(title)}</span><span class="ms" style="color:${R.color}">${Math.round(r.duration)} ms</span></div>` +
       meta +
       `<div class="blame">${blameLine(r.explanation.blame)}</div>` +
@@ -266,15 +266,15 @@ function groupRows(reports: InteractionReport[]): Group[] {
   const out: Group[] = [];
   for (const r of reports) {
     const last = out[out.length - 1];
-    if (last && isTyping(r) && isTyping(last.reports[0]) && sameTarget(r, last.reports[0])) last.reports.push(r);
+    const started = last?.reports[0];
+    if (last && started && isTyping(r) && isTyping(started) && sameTarget(r, started)) last.reports.push(r);
     else out.push({ reports: [r] });
   }
   return out;
 }
 
 function isTyping(r: InteractionReport): boolean {
-  const kind = kindOf(r.type);
-  return kind === 'key press' || kind === 'typing';
+  return isTypingEvent(r.type);
 }
 
 function sameTarget(a: InteractionReport, b: InteractionReport): boolean {
@@ -285,9 +285,10 @@ function slowest(reports: InteractionReport[]): InteractionReport {
   return reports.reduce((a, b) => (b.duration > a.duration ? b : a));
 }
 
+/** The middle value, or 0 for no values; every caller has at least one. */
 function median(values: number[]): number {
   const s = values.slice().sort((a, b) => a - b);
-  return s[Math.floor(s.length / 2)];
+  return s[Math.floor(s.length / 2)] ?? 0;
 }
 
 /** The heaviest later render. A report only takes later renders with real work in them, so any one is worth a line. */
@@ -327,12 +328,11 @@ function blameLine(b: Blame): string {
 }
 
 /** "Typing in Password" / "Click on Log in", from the report's target. */
-function titleFor(r: InteractionReport): { title: string } {
+function titleFor(r: InteractionReport): string {
   const t = r.target;
   const label = t?.label ? t.label.replace(/^\w+ /, '') : (t?.selector ?? '');
-  const kind = kindOf(r.type);
-  const verb = kind === 'key press' || kind === 'typing' ? 'Typing in' : kind === 'click' || kind === 'tap' ? 'Click on' : kind;
-  return { title: `${verb} ${label}`.trim() };
+  const verb = isTypingEvent(r.type) ? 'Typing in' : isPointerEvent(r.type) ? 'Click on' : kindOf(r.type);
+  return `${verb} ${label}`.trim();
 }
 
 function tag(rating: keyof typeof RATING): string {

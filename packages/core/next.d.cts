@@ -13,11 +13,11 @@ export interface WithInpBlameOptions {
    * The runtime, in the runs `enabled` covers: `react-inp-blame/next-client`, added to
    * `instrumentationClientInject` so Next.js runs it before instrumentation-client and before
    * hydration. It calls install() with these options (true for the defaults) and joins App Router
-   * navigations to reports. The options reach the browser inlined through `env`, so they are data:
-   * `onReport` is not one of them. false leaves the runtime out and keeps only the displayName loader,
-   * for a project that installs from its own instrumentation-client. Default true.
+   * navigations to reports. The options reach the browser inlined through `env`. false leaves the
+   * runtime out and keeps only the displayName loader, for a project that installs from its own
+   * instrumentation-client. Default true.
    */
-  runtime?: boolean | Omit<InstallOptions, 'onReport'>;
+  runtime?: boolean | InstallOptions;
 }
 
 /**

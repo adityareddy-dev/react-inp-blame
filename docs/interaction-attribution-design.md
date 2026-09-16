@@ -37,6 +37,15 @@ the passes on the must-haves in `road-to-acceptance.md` changed this:
 - The documents of must-have 11 (2026-09-15): the README with its comparison, browser matrix and API
   reference, CONTRIBUTING.md and SECURITY.md, and "What it costs" below measured again on 6fb9d59.
   Publishing 0.1.0 is what is left of that must-have.
+- The fixes from the code review of 2026-09-15, by four readers of the repository (measurement, React
+  internals, packaging, code quality): reports reach listeners in a task of their own and a render a
+  listener causes is never read, so a page that shows its own reports no longer feeds itself; hydration
+  joins an input only when React hydrated inside its dispatch; a memo wrapper and the component it
+  renders count once; a clicked element React has already deleted is named from what the ring read at
+  dispatch; a Long Animation Frames script counts for the part of it inside the interaction, and only a
+  script that ran while the handlers did is named as the handler; a report keeps the frames it joined;
+  INP is chosen again when the page is hidden; one react-dom that cannot be read no longer stops the
+  others; and the rating is web-vitals' `needs-improvement`.
 
 ## The question
 
@@ -99,9 +108,9 @@ Measured twice on 6fb9d59 on 2026-09-15, since the report lifecycle had moved in
 headless under Playwright 1.59.1, with a harness that is a script outside the repo. It serves the demo
 (the Vite dev server for the development build; for production, `vite build` into a folder outside the
 repo and `vite preview`), loads each scenario 30 times after two warm-up loads, alternating the two,
-each in a fresh page and browser context, and makes one interaction per load at the demo's
-`walkBudget: 100000`: a click on "Add to cart" in the context storm, one key in the big list's search
-box. It reads the numbers after 1.2 s and an idle callback, so late entries have joined the report and
+each in a fresh page and browser context, and makes one interaction per load at `walkBudget: 100000`,
+which the demo set at the time and no longer does: a click on "Add to cart" in the context storm, one
+key in the big list's search box. It reads the numbers after 1.2 s and an idle callback, so late entries have joined the report and
 its Performance panel entries are drawn. p50 / p95 in ms, nearest rank; `performance.now()` is coarsened
 to 0.1 ms there. The two runs used the same harness and differ in what else the machine was doing: in
 one-second samples taken before and after the runs, other processes held it at 15 to 49% CPU during the
@@ -170,27 +179,35 @@ was not kept; its "install()" was the `/auto` import and then `install({ overlay
   use. A page whose listeners do not read the explanation straight away does not pay for building it
   there.
 
-Outside an interaction the per-commit cost is a renderer lookup and one subtraction.
+Outside an interaction the per-commit cost is a renderer lookup, the check that the page's own report
+listeners did not cause the commit (a map lookup and two bit tests), and one subtraction.
 
-**Size.** Measured 2026-09-15 on 0.1.0 with the rolldown 1.2.8 in the repo's `node_modules`
+These figures were taken on 6fb9d59, before the review fixes. What changed since costs a commit the
+listener check above and the walk a `tag` comparison per fiber; neither has been measured again, and the
+sizes below have.
+
+**Size.** Measured 2026-09-15 with the rolldown 1.2.8 in the repo's `node_modules`
 (`platform: 'browser'`, minified ESM, every export of `hook`, `fiber` and `observe` kept for the
-last row, gzip at zlib's default level), by a throwaway script that is not in the repo, and measured
-again the same way on 6fb9d59 later that day, with the same figures:
+last row, gzip at zlib's default level), by a script that is not in the repo, first on 0.1.0 and on
+6fb9d59 with the same figures, then again after the review fixes:
 
-| Bundle | Minified | Gzip |
-| --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 34.3 KB | 12.9 KB |
-| The badge and panel, a chunk loaded by dynamic `import()` only when shown | 11.3 KB | 4.2 KB |
-| Before hydration: `hook`, `fiber`, `observe`, `session` and `warn` alone | 11.5 KB | 4.8 KB |
+| Bundle | Minified | Gzip | On 6fb9d59 |
+| --- | --- | --- | --- |
+| `react-inp-blame/auto`: everything that loads with the page | 39.0 KB | 14.4 KB | 34.3 / 12.9 |
+| The badge and panel, a chunk loaded by dynamic `import()` only when shown | 11.2 KB | 4.2 KB | 11.3 / 4.2 |
+| Before hydration: `hook`, `fiber`, `observe`, `session`, `version` and `warn` alone | 14.5 KB | 5.8 KB | 11.5 / 4.8 |
 
-The same script gives 32.6 KB / 12.3 KB, 11.3 KB / 4.2 KB and 11.3 KB / 4.7 KB for commit a41cd7e,
-before reports carried navigations, so those cost the entry 1.7 KB minified and 0.6 KB gzipped. An
-earlier script measured that commit at 31.8 / 12.0, 11.1 / 4.1 and 9.3 / 4.0 KB; its settings were
-not kept, so those figures do not compare with these line for line.
+The review fixes cost the entry 4.7 KB minified and 1.5 KB gzipped, and the part before hydration 3.0
+and 1.0 of that: telling the page's own report renders from its work needs the lane bookkeeping and the
+post-commit wrapper in `hook.ts`, the ring now reads the enclosing components and the handler at
+dispatch, the walk carries the hydration checks, and the version parsing moved into `version.ts`. The
+same script gives 32.6 KB / 12.3 KB, 11.3 KB / 4.2 KB and 11.3 KB / 4.7 KB for commit a41cd7e, before
+reports carried navigations. An earlier script measured that commit at 31.8 / 12.0, 11.1 / 4.1 and
+9.3 / 4.0 KB; its settings were not kept, so those figures do not compare with these line for line.
 
 The badge and panel were already behind the dynamic import and stay there. The explanation prose
 (`join.ts`), the report lifecycle, the INP estimate and the Performance panel drawing still load
-with the entry, which is why it is about three times the part that has to run before hydration.
+with the entry, which is why it is about two and a half times the part that has to run before hydration.
 The figures in `road-to-acceptance.md` (29 KB minified and 10.6 KB gzipped for `/auto`, badge and
 panel included) predate the passes that added the lifecycle, the INP estimate and the version
 gates, so the two sets do not compare line for line. `withInpBlame` adds its client module and its
@@ -208,10 +225,14 @@ commit, in production builds too, provided the hook exists before `react-dom` ev
 there (React DevTools, or Fast Refresh's stub in dev) and never creates one, so a production
 page without either gets Event Timing and LoAF only. `'shim'` creates a minimal hook, and
 `'auto'`, the default, chains when a hook exists and shims otherwise. The shim holds only what
-React uses (`inject`, `onCommitFiberRoot`, the `renderers` map; React checks for every other
-method before calling it). It has no `checkDCE`: react-dom reads that as the real React
-DevTools being present, and in development builds it silenced React's "Download the React
-DevTools" message. `dispose()` puts a chained hook's `inject` and `onCommitFiberRoot` back.
+React uses (`inject`, `onCommitFiberRoot`, `onPostCommitFiberRoot`, the `renderers` map; React
+checks for every other method before calling it). It has no `checkDCE`: react-dom reads that as the
+real React DevTools being present, and in development builds it silenced React's "Download the React
+DevTools" message. `dispose()` puts a chained hook's `inject`, `onCommitFiberRoot` and
+`onPostCommitFiberRoot` back, removing the last of those when the hook had none. A hook the page has
+switched off (`isDisabled`, or no `supportsFiber`) is not chained onto at all, because React registers
+with nothing there: `stats().mode` is `'unsupported'` with `kind: 'hook-disabled'`, and Event Timing
+reports carry on without components.
 
 React DevTools never installs over an existing hook: its `installHook` returns as soon as
 `window` has the property, reading and writing nothing. So a shim that loads before it locks
@@ -244,6 +265,25 @@ walk per commit and one set of listeners. In `apps/next-demo` a client component
 the spec checks it hears the same reports as the debug global under `next dev` and both production
 builds, so the module Next.js injects and the application share one installation there too.
 
+**Reports reach listeners in a task of their own, and what a listener renders is not an interaction's
+work.** A later render joins a report inside React's commit, so publishing that revision from there
+called the page's listeners inside the commit: a listener that sets state rendered inside the commit it
+was hearing about, which React 18 and 19 count as a nested update and stop at 50 with "Maximum update
+depth exceeded", while React 17 counts before the hook and so never stops. The render a listener causes
+also lands after the interaction's paint with no input of its own, so it was stamped with that
+interaction's input, joined the report as its later render, and published a revision the listener heard
+again: any page that shows its own reports fed itself. Since 2026-09-15 install() queues each published
+revision and hands it over in a later task, and the hook keeps the listeners' work apart from the
+page's. React sets a lane in `root.pendingLanes` for every update and clears it when that update
+commits, so a commit during the delivery, a commit that finishes a lane the delivery left pending, and
+whatever that commit's own render and layout effects schedule are not read at all; for its passive
+effects React 18 and 19 call `onPostCommitFiberRoot` when they have run, and React 17 has no such call,
+so there an effect of a listener's own render can still join a report. Measured against a 37-component
+panel fed by `onInteraction`, driven from source with react-dom 17.0.2, 18.3.1 and 19.3.0 in Node: one
+click gave 54 listener calls and 53 wrong "second React render" notes blaming the panel on React 18 and
+19 (111 on React 17 in development, 22,045 in a production build, with the main thread held for 1.4 s);
+after the fix, one call and no follow-ups on all three, in both builds.
+
 Durations come from `ProfileMode` on the root, which is what makes React fill `actualDuration`:
 bit 8 on React 17, bit 2 on 18 and 19, chosen by the version react-dom hands `inject()`. React
 17 and 18 development builds, and 19 profiling builds, set it when a hook existed as react-dom
@@ -272,15 +312,19 @@ their times, since a millisecond of rounding moves them by a quarter at most.
 rendererPackageName) is kept in `api.debug.hook().renderers`, and only `react-dom` commits are
 walked, so a react-three-fiber canvas is never read as a DOM tree. A renderer that registered before
 `install()` is not walked either when the hook kept nothing about it (Fast Refresh's stub keeps
-nothing; React DevTools' hook keeps everything). A react-dom outside React 17 to 19, a
-`root.current` that fails the shape check at its first commit (tag 3, numeric `flags` and
-`mode`, `child`, `sibling`, `return` and `alternate` fibers or null, `actualDuration` a number or
-absent), or a walk that throws turns the walk off for good, with one warning and
-`stats().mode === 'unsupported'`; Event Timing reports carry on without components. Since 0.1.0
-`stats().unsupportedReason` says which of these it was, as data (`kind` is `'browser'`,
-`'react-version'`, `'fiber-shape'` or `'walk-threw'`) beside the warning's sentence; before, the
-reason was only in the console. A first commit with a rendered tree already behind it means
-`install()` ran after that root rendered, and a warning says so once.
+nothing; React DevTools' hook keeps everything). A react-dom outside React 17 to 19, a root that fails
+the shape check at its first commit (numeric `pendingLanes`, and a `current` with tag 3, numeric
+`flags` and `mode`, `child`, `sibling`, `return` and `alternate` fibers or null, `actualDuration` a
+number or absent), or a walk that throws stops that renderer's commits being read, for good, with one
+warning. The page is `stats().mode === 'unsupported'` only when no react-dom on it can be read, so an
+embedded widget that brought React 16 no longer switches off the app's own React. A version of
+`0.0.0-experimental-<sha>`, which is what react@experimental carries, says nothing about the React it
+is ahead of, so it is read as the newest major and left to the shape check. Event Timing reports carry
+on without components. Since 0.1.0 `stats().unsupportedReason` says which of these it was, as data
+(`kind` is `'browser'`, `'another-copy'`, `'hook-disabled'`, `'react-version'`, `'fiber-shape'` or
+`'walk-threw'`) beside the warning's sentence; before, the reason was only in the console. A first
+commit with a rendered tree already behind it means `install()` ran after that root rendered, and a
+warning says so once.
 
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
@@ -288,7 +332,12 @@ bailed out, so its whole subtree is stale and gets pruned; that prune is what ke
 cheap on big trees. Ancestors that were only cloned on the way down (App, layouts, providers)
 are named on the path but never counted as roots. The hot path follows the child carrying at
 least 60% of the parent's work, so it stops at "the OrderSummary subtree" rather than
-descending into 800 identical rows.
+descending into 800 identical rows. A memo wrapper is a fiber of its own above the component it
+renders (`memo(fn, compare)`, `memo(forwardRef(...))` and `memo(Class)`, but not `memo(fn)`, which
+React keeps as a single fiber), and React flags both as having rendered, so each such component was
+counted twice until 2026-09-15: 504 rendered where 304 did, on 17, 18 and 19 alike. The wrapper now
+counts as the component below it and lends it its name, which is where `displayName` is stamped and
+what a minifier cannot rename.
 
 Only component fibers count against `walkBudget` (default 5000). DOM and text fibers are most of
 any tree, and until 2026-09-15 they counted too: at the default budget every context-storm click
@@ -315,10 +364,13 @@ allowed, from the first run of text of an element with no aria-label that is not
 Text is allowed under a development build of React and wherever `install({ labels: 'text' })`
 asks for it, not by default under a production build: an element's text can be a person's name
 or email (a clicked table cell), and production reports are the ones forwarded to Sentry, Faro
-or an OpenTelemetry collector. Selectors still carry ids and classes. When the entry's
-target is null because the node left the DOM before the observer ran (a close button, a
-deleted row), the input ring below still holds the node and the fiber it carried at
-dispatch, which React deletes from the node on unmount.
+or an OpenTelemetry collector. Selectors still carry ids and classes, and name the test attribute they
+were built from with its value quoted. When the entry's target is null because the node left the DOM
+before the observer ran (a close button, a deleted row), the input ring below still holds the node,
+and the enclosing components and the handler prop read from its fiber at dispatch. Keeping the fiber
+itself was not enough: React 18 and 19 clear a deleted fiber's `return` and `memoizedProps` when the
+deletion's effects run, which is before the entry arrives, and a click that deleted its own row was
+reported with no component, no owners and no handler at all.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every
@@ -339,8 +391,28 @@ closed the headline entry, with the exact `processingEnd` as the other bound: du
 rounded to 8 ms, `processingEnd` is not, so a commit inside the handlers is never misfiled as
 a follow-up.
 
+A root's first commit, which mounts it or hydrates its server-rendered HTML, and any commit that
+hydrates a Suspense boundary, are the page starting up rather than an input's work. They join an
+interaction only when React ran them inside that input's dispatch, which is what React does for a
+discrete event on a boundary that has not hydrated yet, and such a commit says it hydrated rather than
+re-rendered. Until 2026-09-15 they were stamped with the newest input like any other commit, so on
+React 17, 18 and 19 alike a click on server-rendered HTML collected the whole hydration commit as its
+"second React render", and a quiet first tap was published on the strength of it. README.md carried that
+as a known limit, and this is the first half of the hydration verdict `road-to-acceptance.md` plans as
+item 3 of "What would make them want it", brought forward: it reads the same signal that plan names, a
+root's `isDehydrated` state and a boundary's `dehydrated` one. What is still unbuilt there is the rest of
+that item, reporting the wait as a phase of its own and naming the Suspense boundary people waited for.
+
 **Long Animation Frames.** Overlapping `long-animation-frame` entries supply the script
-attribution and `forcedStyleAndLayoutDuration`. LoAF can only say "React's event dispatch ran
+attribution and `forcedStyleAndLayoutDuration`. A script counts for the part of it inside the
+interaction, with its forced layout apportioned to that part (the API gives forced layout as one
+total per script, never saying when in the script it happened). web-vitals takes the same
+intersection but clips the left edge only, so a script that starts inside an interaction and runs on
+past the paint counts against it whole. Here it stops at the paint, since the rest ran after the
+screen had updated and nobody waited for it. Only a script that started while the input's handlers ran is named as the handler: the task
+an input waited behind is not its handler, and its forced layout is not the handler's to answer for.
+Until 2026-09-15 a 96 ms click that waited behind a 300 ms timer was reported as "the click handler
+handleSave ran for 300 ms", with confidence `measured`. LoAF can only say "React's event dispatch ran
 for 80ms"; the fiber walk is what turns that into a component. Together they separate "your
 render was slow" from "your layout effect forced layout 400 times". Only Chromium has LoAF. In
 Firefox and Safari a report's `frames` and `laterFrames` are `null`, and the explanation leaves
@@ -351,7 +423,8 @@ input, with no newer input in between. Effects, transitions and data-driven re-r
 up here.
 
 **Saying it in plain words.** Every report carries an `explanation`: a headline ("264 ms
-click"), a rating on the INP thresholds (good to 200 ms, needs work to 500 ms, poor beyond),
+click"), a rating on the INP thresholds in web-vitals' words (good to 200 ms, needs improvement to
+500 ms, poor beyond),
 where it happened (the element's own label and the component that owns it), one sentence for
 the cause, extra sentences only when they earn their place, and the time split into three
 phases a person can picture: waiting before the handler, working, updating the screen. The
@@ -410,7 +483,10 @@ lands long after the report was first emitted. Such renders attach to the existi
 revision: a new frozen report with `revision` bumped and its own explanation, the earlier one
 left as it was (before 0.1.0 the same object was changed and handed over again). Long animation
 frames that
-arrive for those later renders fold in the same way. So do late Event Timing entries: an
+arrive for those later renders fold in the same way, and a report keeps the frames it has joined even
+once the page's store of the last 60 has let them go: until 2026-09-15 the newest report was rebuilt
+from that store on every frame, so after a minute of scrolling it lost its own frames and its verdict
+fell back to "no long task was recorded". So do late Event Timing entries: an
 interaction's entries arrive with the paint that presented them, the pointerdown in one
 frame and the pointerup and click in a later one when the pointer was held, a keydown before
 its keyup. There is no settle timer any more (a 150 ms one used to split a long press into
@@ -459,8 +535,8 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   is removed or changes meaning, and it is frozen down to its commits, frames and explanation.
   Each commit a report holds is a frozen copy stamped with how it joined that report
   (`joinedBy`), so a commit in two reports no longer carries whichever join came last.
-  `onInteraction` is the one way to hear reports; the `onReport` option is deprecated and only
-  adds a listener there. What is there for debugging (every commit walked, the hook's owner, its
+  `onInteraction` is the one way to hear reports, and each report reaches it in a task after the one
+  that published it; the `onReport` option was deprecated at 0.1.0 and is now gone. What is there for debugging (every commit walked, the hook's owner, its
   renderers and the lockout flag) is under `api.debug`, outside the contract, while `stats()`
   keeps the mode, why a page is unsupported and the costs. `debugGlobal: true` puts the API on
   `window.__REACT_INP_BLAME__`.
@@ -508,7 +584,10 @@ head and from `api.inp()`, is the web-vitals estimate computed in-library, with 
 dependency: the interaction count is `performance.interactionCount` where the browser has
 it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
 (Chrome steps ids by 7); the 10 longest interactions are kept by their longest single entry;
-INP is the one at index `min(floor(count / 50), 9)`, longest first. It counts every interaction
+INP is the one at index `min(floor(count / 50), 9)`, longest first, chosen as entries arrive and again
+when the page is hidden, which are the two moments web-vitals chooses at. After a soft navigation or a
+back/forward cache restore, interactions the browser counted but sent no entry for read as the 8 ms
+web-vitals stands in for them, with `interactionId: null`. It counts every interaction
 the observer sees at its 16 ms floor, plus the page's first input at any duration. The demo's
 own "Page INP so far" line reads the same call, so the page never shows two INPs that disagree.
 
@@ -537,9 +616,12 @@ web-vitals starts over at a soft navigation only when asked to report them, and 
 the browser's soft navigation entries where the library learns of it from the router (see
 Navigations above), so at a soft navigation the two can start over at different moments, or only
 one of them at all. The library starts over on `clear()`, including the panel's Clear button;
-web-vitals does not. And
-web-vitals updates once the page is idle, so for a moment after an interaction the library's
-number is ahead.
+web-vitals does not. web-vitals updates once the page is idle, so for a moment after an interaction the
+library's number is ahead, and when the page is hidden it also takes the entries its observer has not
+delivered yet, which this estimate sees only when they are delivered. And Next.js 16.3.5's
+`useReportWebVitals` runs the web-vitals 4 it vendors, which after a back/forward cache restore keeps
+counting every interaction since the page loaded (its base is only ever set to 0), so past 50
+interactions before a restore that copy and this estimate can point at different interactions.
 
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
@@ -655,8 +737,10 @@ half was a hand-written `import 'react-inp-blame/auto'` in `instrumentation-clie
 now checks the injected module under `next dev`, Turbopack production and `next build --webpack`
 production. The loader was proven 2026-09-14 in the same three runs; before it the verdict read
 "602 components re-rendered under n". One lesson from the webpack run: its type check rejects a page
-file that exports anything Next does not expect, which Turbopack's does not, so the demo's `memo()`
-component is no longer exported. A `useReportWebVitals` adapter would attach the report to
+file that exports anything Next does not expect, which Turbopack's does not, so nothing beside the page
+itself is exported there. The `memo()` component that stood in for the loader's `const X = memo(` case
+rendered null and was never checked by a spec, so it is gone; `packages/core/test/display-names-loader.test.ts`
+covers the patterns the loader matches, and the ones it does not, instead. A `useReportWebVitals` adapter would attach the report to
 web-vitals' INP attribution object so Vercel Speed Insights, or anything else consuming it, gets
 component names for free. The aim is inclusion in Next.js itself rather than a plugin people have to
 find; the wrapper and that adapter are what make that a reasonable ask.

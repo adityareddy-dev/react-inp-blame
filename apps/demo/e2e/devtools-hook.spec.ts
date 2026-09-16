@@ -14,10 +14,10 @@ async function clickThrough(page: Page, order: string): Promise<{ stats: Stats; 
   await page.goto(`/devtools-hook.html?order=${order}`);
   await page.waitForSelector('[data-test=trigger]');
   await page.click('[data-test=trigger]');
-  await page.waitForFunction(() => ((window as any).__REACT_INP_BLAME__.last()?.followUps.length ?? 0) > 0, null, { timeout: 8_000 });
+  await page.waitForFunction(() => (window.__REACT_INP_BLAME__.last()?.followUps.length ?? 0) > 0, null, { timeout: 8_000 });
   return page.evaluate(() => {
-    const api = (window as any).__REACT_INP_BLAME__;
-    return { stats: api.stats(), hook: api.debug.hook(), report: api.last() };
+    const api = window.__REACT_INP_BLAME__;
+    return { stats: api.stats(), hook: api.debug.hook(), report: api.last()! };
   });
 }
 
@@ -38,9 +38,9 @@ const devtoolsRoots = (page: Page): Promise<number> =>
   });
 
 /** Mounted roots in Fast Refresh's record, which its wrapper of onCommitFiberRoot keeps. */
-const refreshRoots = (page: Page): Promise<number> => page.evaluate(() => (window as any).__refreshRuntime._getMountedRootCount());
+const refreshRoots = (page: Page): Promise<number> => page.evaluate(() => window.__refreshRuntime!._getMountedRootCount());
 
-const unmount = (page: Page): Promise<void> => page.evaluate(() => (window as any).__unmountApp());
+const unmount = (page: Page): Promise<void> => page.evaluate(() => window.__unmountApp!());
 
 test.describe('React DevTools', () => {
   test('loaded first: the library chains onto its hook, and DevTools still hears every commit', async ({ page }) => {

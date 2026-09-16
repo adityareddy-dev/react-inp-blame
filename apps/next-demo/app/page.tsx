@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, useState } from 'react';
+import { useState } from 'react';
 import { burn } from './burn';
 
 /** The lifted-state anti-pattern: one keystroke re-renders an unrelated heavy sibling. */
@@ -17,7 +17,6 @@ export default function Page() {
         Second page
       </Link>
       <Sidebar />
-      <Memoised />
     </main>
   );
 }
@@ -36,9 +35,3 @@ function NavItem({ index }: { index: number }) {
   burn(0.12);
   return <li>Item {index}</li>;
 }
-
-// Exercises the `const X = memo(` case of the displayName loader. Not exported: a page file
-// may only export what Next expects, and the webpack build's type check enforces that.
-const Memoised = memo(function Memoised() {
-  return null;
-});
