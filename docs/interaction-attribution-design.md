@@ -40,9 +40,8 @@ production builds. Since the prototype of 2026-09-12, the changes against the mu
 - The fixes from the code review of 2026-09-15, by four readers of the repository (measurement, React
   internals, packaging, code quality): reports reach listeners in a task of their own and a render a
   listener causes while it runs is never read, so a page that shows its own reports no longer feeds
-  itself; hydration
-  joins an input only when React hydrated inside its dispatch; a memo wrapper and the component it
-  renders count once; a clicked element React has already deleted is named from what the ring read at
+  itself; hydration joins an input only when React hydrated inside its dispatch; a memo wrapper and
+  the component it renders count once; a clicked element React has already deleted is named from what the ring read at
   dispatch; a Long Animation Frames script counts for the part of it inside the interaction, and only a
   script that ran while the handlers did is named as the handler; a report keeps the frames it joined;
   INP is chosen again when the page is hidden; one react-dom that cannot be read no longer stops the
@@ -619,7 +618,10 @@ first click waits for the page to settle. A few hundred ms after navigation the 
 work ends in a long animation frame of 56 to 89 ms with no script attributed to it, and a click
 landing next to it waits for that frame: clicked as soon as the form appeared, 6 of 60 first clicks
 on a freshly launched browser read 16 to 72 ms. Once the badge was up and the page had had an idle
-period and painted two frames, all 120 read 0 or 8 ms.
+period and painted two frames, all 120 read 0 or 8 ms. A slower machine can still miss the frame, and
+a page has exactly one first input, so the spec makes that click on up to three freshly loaded pages
+and keeps the first page whose click was quiet. If none of them is, it carries on with the last page
+and annotates the run to say that path went unexercised there, rather than failing on the machine.
 
 The two still part in four cases. web-vitals observes at 40 ms unless given `durationThreshold:
 16`; at its default, interactions of 16 to 40 ms are not its candidates, so the numbers differ
