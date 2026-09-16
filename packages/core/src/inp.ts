@@ -38,8 +38,8 @@ interface Candidate {
   latency: number;
 }
 
-// web-vitals keeps the 10 longest interactions and reports the one at index floor(count / 50):
-// the worst until 50 interactions, then a rough 98th percentile.
+// web-vitals keeps the 10 longest interactions and reports the one at index floor(count / 50), or the
+// last it kept when fewer arrived: the worst until 50 interactions, then a rough 98th percentile.
 const MAX_CANDIDATES = 10;
 const INTERACTIONS_PER_CANDIDATE = 50;
 // Chrome hands out interactionIds 7 apart, so the spacing between the smallest and largest id

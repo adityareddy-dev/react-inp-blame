@@ -14,7 +14,13 @@ permissions:
   id-token: write
 
 jobs:
+  # The whole of CI for this commit, the e2e suites included, before anything reaches npm. ci.yml's own
+  # push trigger is branches only, so a tag runs it once, here, and the publish waits for it.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

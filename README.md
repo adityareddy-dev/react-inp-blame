@@ -10,7 +10,7 @@ through the hook React keeps for developer tools. From the demo's sign-in page, 
     after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
     PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
 
-**Not on npm yet:** 0.1.0 is packaged but not published, and nothing has been proposed to any other project.
+**Not on npm yet:** 0.1.0 is ready to publish.
 
 ## Install with Next.js 16.3 or later
 
@@ -140,11 +140,12 @@ overlapped, a walk cut short, or no Long Animation Frames to rule other scripts 
 
 `inp()` and the badge estimate INP the way web-vitals' `onINP` does, without depending on web-vitals: each
 interaction's latency is its longest Event Timing entry, and INP is the one at index
-`min(floor(count / 50), 9)` among the 10 longest, chosen as entries arrive and again when the page is
-hidden, the two moments web-vitals chooses at. It starts over at each soft navigation and back/forward
-cache restore, and after one of those, interactions the browser counted but no entry was sent for read as
-the same 8 ms web-vitals reports for them. `apps/demo/e2e/inp.spec.ts` runs web-vitals 6.2.2's `onINP` in the
-same page (`reportAllChanges`, `durationThreshold: 16`) through more than 50 interactions and asserts after
+`min(floor(count / 50), n - 1)` among the `n` longest it kept, `n` at most 10, chosen as entries arrive
+and again when the page is hidden, the two moments web-vitals chooses at. It starts over at each soft
+navigation and back/forward cache restore, and after one of those, interactions the browser counted but no
+entry was sent for read as the same 8 ms web-vitals reports for them. `apps/demo/e2e/inp.spec.ts` runs
+web-vitals 6.2.2's `onINP` in the same page (`reportAllChanges`, `durationThreshold: 16`) through more
+than 50 interactions and asserts after
 each that both name the same value and the same interaction. That is one session, not a promise: this is the
 same algorithm written again from the same entries, and it is not web-vitals. The two part at the default 40 ms
 threshold, which `useReportWebVitals` keeps, when INP is under 40 ms or too few interactions reach it; at a
@@ -187,8 +188,9 @@ better source of per-component durations; what this library adds there is the jo
 Without `interactionId` nothing installs, one warning says why, and `stats().mode` is `'unsupported'`. Without
 Long Animation Frames, `frames` and `laterFrames` are `null` and the explanation leaves out the forced-layout and
 script sentences. On a page without cross-origin isolation, Playwright's Firefox 148 and WebKit 26.4 step
-`performance.now()` in whole milliseconds, too coarse to time one component: their development reports carry
-no per-component times, and blame built on render times is `'inferred'`.
+`performance.now()` in whole milliseconds, too coarse to time a quick component: when eight or more of a
+commit's components are timed, every one reads a whole millisecond and they average under 4 ms, the report
+leaves their times out and blame built on render times is `'inferred'`.
 
 ## What it costs
 
@@ -214,7 +216,7 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 | --- | --- | --- |
 | `react-inp-blame/auto`: everything that loads with the page | 39.0 KB | 14.4 KB |
 | The badge and panel, a chunk loaded only when shown | 11.2 KB | 4.2 KB |
-| What has to run before react-dom: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
+| Of that, the part that has to run before react-dom, not a separate entry yet: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
 
 ## What it reads from React
 
@@ -230,8 +232,9 @@ its own React does not switch off the app's own. Reports carry on without compon
 - What react-dom hands `inject()`: `version`, `bundleType`, `rendererPackageName`. What React passes
   `onCommitFiberRoot`: the renderer id, the root, the priority and `didError`.
 - On the root: `current`, and `pendingLanes`, the bits of the updates React has not committed yet. They say
-  which commits the page's own report listeners caused, so a panel that shows reports is never read as part
-  of one.
+  which commits the page's own report listeners caused while they ran, so a panel that shows reports is not
+  read as part of one. An update a listener defers to a later task is an ordinary render and is read like
+  any other.
 - On fibers: `tag` (components are 0, 1, 11, 14 and 15; the root is 3, a Suspense boundary 13), `flags` (the
   `PerformedWork` bit, 1), `mode` (the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19), `child`, `sibling`,
   `return`, `alternate` (the same `child` there means the fiber bailed out), `actualDuration`, `elementType`
@@ -269,8 +272,9 @@ brings a React canary, on every push and once a day, in a job allowed to fail. N
 
 ## Labels and personal data
 
-`target.label` names the element in at most 40 characters, and never reads a form field's value or an
-element's whole text. Under a production build of React it uses only what your code wrote on the element:
+`target.label` names the element by its tag and a name of at most 40 characters, and never reads a form
+field's value or an element's whole text. Under a production build of React it uses only what your code
+wrote on the element:
 `aria-label`, a form field's `placeholder`, `name` or `type`, or `data-testid` or `data-test`. An element's
 text can be a person's name or email, and reports are made to be forwarded to error trackers and analytics, so
 text is opt-in there: with `install({ labels: 'text' })` an element with no `aria-label` that is not a form

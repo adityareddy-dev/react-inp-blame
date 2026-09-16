@@ -93,9 +93,6 @@ Two things the demo's suite leaves out of a normal run:
 - The report is a contract. Adding a field to `InteractionReport` is fine; removing one, or changing
   what one means, needs a new `schemaVersion` and a line in the pull request saying so.
 
-`npm run fix-lock` is only for installs behind a private npm mirror: it rewrites the mirror's tarball
-URLs in `package-lock.json` back to registry.npmjs.org.
-
 ## Security
 
 Report vulnerabilities by email, as [SECURITY.md](SECURITY.md) describes, not in an issue.

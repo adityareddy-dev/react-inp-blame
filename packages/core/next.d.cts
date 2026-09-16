@@ -15,13 +15,24 @@ export interface WithInpBlameOptions {
    * hydration. It calls install() with these options (true for the defaults) and joins App Router
    * navigations to reports. The options reach the browser inlined through `env`. false leaves the
    * runtime out and keeps only the displayName loader, for a project that installs from its own
-   * instrumentation-client. Default true.
+   * instrumentation-client; the App Router navigation join goes with it, since that is what the
+   * client module hears. Default true.
    */
   runtime?: boolean | InstallOptions;
 }
 
+/** The context Next.js passes a config written as a function of the phase. */
+export interface NextConfigPhase {
+  defaultConfig: NextConfig;
+}
+
+/** A config written as a function of the phase, the other form Next.js documents. */
+export type NextConfigFunction = (phase: string, context: NextConfigPhase) => NextConfig | Promise<NextConfig>;
+
 /**
  * Wraps a Next.js config: installs react-inp-blame before hydration, and keeps component names
- * through the production minifier under Turbopack and webpack.
+ * through the production minifier under Turbopack and webpack. A config written as a function is
+ * wrapped around what it returns, so it comes back as a function too.
  */
+export function withInpBlame(nextConfig: NextConfigFunction, options?: WithInpBlameOptions): NextConfigFunction;
 export function withInpBlame(nextConfig?: NextConfig, options?: WithInpBlameOptions): NextConfig;

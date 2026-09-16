@@ -1,10 +1,10 @@
 # Interaction attribution for React: design notes
 
-Status, 2026-09-15: packaged as 0.1.0 and not published, nothing proposed to any outside project
-(see "What has not happened" at the end). On 6fb9d59 the Playwright suites were green against
-React 19.3 in development and production builds, 18.3.1 and 17.0.2 (legacy root), and Next.js 16.3.5
-under `next dev` and its Turbopack and webpack production builds. Since the prototype of 2026-09-12,
-the passes on the must-haves in `road-to-acceptance.md` changed this:
+Status, 2026-09-15: packaged as 0.1.0 and not published (see "What is not done" at the end). On
+6fb9d59 the Playwright suites were green against React 19.3 in development and production builds,
+18.3.1 and 17.0.2 (legacy root), and Next.js 16.3.5 under `next dev` and its Turbopack and webpack
+production builds. Since the prototype of 2026-09-12, the changes against the must-haves in
+`road-to-acceptance.md` are these:
 
 - Must-haves 1 and 2 (21bf886): a commit joins an interaction on `Event.timeStamp` through a ring of
   the last 8 inputs, with wall-clock overlap kept only as a flagged fallback; the headline is the
@@ -39,7 +39,8 @@ the passes on the must-haves in `road-to-acceptance.md` changed this:
   Publishing 0.1.0 is what is left of that must-have.
 - The fixes from the code review of 2026-09-15, by four readers of the repository (measurement, React
   internals, packaging, code quality): reports reach listeners in a task of their own and a render a
-  listener causes is never read, so a page that shows its own reports no longer feeds itself; hydration
+  listener causes while it runs is never read, so a page that shows its own reports no longer feeds
+  itself; hydration
   joins an input only when React hydrated inside its dispatch; a memo wrapper and the component it
   renders count once; a clicked element React has already deleted is named from what the ring read at
   dispatch; a Long Animation Frames script counts for the part of it inside the interaction, and only a
@@ -65,24 +66,30 @@ This library does the join and answers in plain words:
 
 ## What is proven so far
 
-Every line below comes out of `apps/demo/e2e/attribution.spec.ts`, run headless in Chromium.
+`apps/demo/e2e/attribution.spec.ts` runs these headless in Chromium and asserts the component
+names, the blame and the control row's 100 ms bound. The counts below are what a run produces:
+the spec pins floors rather than exact tallies (`rendered >= 400`, `count >= 100`), and in a
+production build it asserts that a handler name exists, not which prop it came from.
 
-| Scenario (anti-pattern) | Dev build verdict | Production build |
+| Scenario (anti-pattern) | What the report names | Production build |
 | --- | --- | --- |
-| Context storm: unstable context value | 163ms rendering the OrderSummary subtree, LineItem x800 | same names via displayName stamping, attribution by render counts |
-| Layout thrash: read after write in 400 layout effects | 49ms render plus 185ms forced style/layout, PriceTicker x400 | same |
-| Handler hog: 120ms in the click handler, no state change | no React render before the paint; 120ms in the click handler computeChecksum | handler name minified, component names intact |
-| Big list: 3000 unvirtualised rows filtered per keystroke | 157ms rendering the BigList subtree, Row x1440 | same |
-| Lifted state: unrelated heavy sibling re-renders per keystroke | 127ms rendering the Sidebar subtree, NavItem x600 | same |
-| Cascading effect: derived state set from useEffect | 1ms before the paint, then a follow-up commit 87ms after it rendering Detail x400 | same |
-| Control: memoised rows, stable callbacks | 1 component rendered, under 30ms | same |
+| Context storm: unstable context value | render blame on the OrderSummary subtree, LineItem ×800 | the same names through displayName stamping, blame from render counts |
+| Layout thrash: read after write in 400 layout effects | render blame on LayoutThrash, PriceTicker ×400, with the forced layout the long animation frame recorded | same |
+| Handler hog: 120ms in the click handler, no state change | no React render before the paint; script blame on the click handler computeChecksum | the handler named by its prop, component names intact |
+| Big list: 3000 unvirtualised rows filtered per keystroke | render blame on BigList, Row ×1440 | same |
+| Lifted state: unrelated heavy sibling re-renders per keystroke | render blame on Sidebar, NavItem ×600 | same |
+| Cascading effect: derived state set from useEffect | a cheap commit, then the heavy one rendering Detail ×400, joined by its exact input stamp | same |
+| Control: memoised rows, stable callbacks | at most 3 components rendered, and under 100ms wherever it is reported at all | same |
 
 What the library itself costs is under "What it costs" below.
 
-One finding worth its own line: React runs the `useEffect` from a click after the paint,
-observed on 17.0.2, 18.3.1 and 19.3.0 alike. Event Timing closes the interaction at that
-paint (16 to 24ms), so INP never sees the 80ms render that follows, but the user does. The
-report carries these as "follow-up commits" and the verdict says so. react-scan comes closest:
+One finding worth its own line: the render a click's `useEffect` sets off lands after the paint, on
+17.0.2, 18.3.1 and 19.3.0 alike. React 18 and 19 run the effect itself before the paint, flushing a
+discrete update's passive effects inside the click's own task, but a state update made in the effect
+takes default priority and renders in a later task; React 17 has no such flush and defers the effect
+as well. Event Timing closes the interaction at that paint (16 to 24ms), so INP never sees the 80ms
+render that follows, but the user does. The report carries these as "follow-up commits" and the
+verdict says so. react-scan comes closest:
 it also groups Event Timing entries by `interactionId`, maps the target element to its fiber and
 records the fibers that render during the interaction. But it keeps every render from the pointerup
 or keydown as one set, until the interaction's entry arrives or a second after the frame that follows
@@ -91,9 +98,10 @@ later is not joined at all (read in aidenybai/react-scan at 0fb3186,
 `packages/scan/src/core/notifications/`, on 2026-09-15).
 
 The same suite runs unchanged against React 18.3.1 and 17.0.2 (`scripts/react-matrix.mjs`
-generates the pinned variants); fiber tags, the `PerformedWork` flag and the hook protocol
-are identical across the three majors, and so are the verdicts. The one internal the library
-reads that moved is the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19.
+generates the pinned variants); fiber tags, the `PerformedWork` flag and `onCommitFiberRoot` are the
+same across the three majors, and so are the verdicts. Two things are not: the `ProfileMode` bit moved
+(8 on React 17, 2 on 18 and 19), and React 17 takes any hook for React DevTools where 18 and 19 look
+for `checkDCE`.
 
 Since 2026-09-14 `apps/demo/e2e/cross-browser.spec.ts` also runs in Firefox 148 and WebKit
 26.4 (Playwright's builds, checked on Windows): reports appear and name the component, with
@@ -163,7 +171,8 @@ was not kept; its "install()" was the `/auto` import and then `install({ overlay
   and panel, now done after install() returns; reading the user agent to pick a way of drawing tracks, now
   done at the first draw; and starting the dynamic `import()`, now started after the current task. What is
   left is the first call itself: compiling the library's code on first use, and the browser calls that
-  install the hook, five capture listeners and two `PerformanceObserver`s.
+  install the hook, seven capture listeners (one per input type, plus `pageshow` and
+  `visibilitychange`) and two `PerformanceObserver`s.
 - **The walk** counts only component fibers against `walkBudget`, and at the default budget of 5000 no
   commit of these scenarios is cut short: reinstalled with the default options, 10 loads of each in
   development walked all 801 and all 1441 components, in both runs. On 26896e9, when DOM and text fibers
@@ -209,7 +218,7 @@ The badge and panel were already behind the dynamic import and stay there. The e
 (`join.ts`), the report lifecycle, the INP estimate and the Performance panel drawing still load
 with the entry, which is why it is about two and a half times the part that has to run before hydration.
 The figures in `road-to-acceptance.md` (29 KB minified and 10.6 KB gzipped for `/auto`, badge and
-panel included) predate the passes that added the lifecycle, the INP estimate and the version
+panel included) predate the changes that added the lifecycle, the INP estimate and the version
 gates, so the two sets do not compare line for line. `withInpBlame` adds its client module and its
 loader to `next dev` only unless `enabled` says otherwise, and `react-inp-blame/vite` adds its
 plugins to the dev server only, so a production build with the default carries nothing from the
@@ -224,15 +233,15 @@ commit, in production builds too, provided the hook exists before `react-dom` ev
 `install({ hook })` decides where commits come from. `'chain'` wraps a hook that is already
 there (React DevTools, or Fast Refresh's stub in dev) and never creates one, so a production
 page without either gets Event Timing and LoAF only. `'shim'` creates a minimal hook, and
-`'auto'`, the default, chains when a hook exists and shims otherwise. The shim holds only what
-React uses (`inject`, `onCommitFiberRoot`, `onPostCommitFiberRoot`, the `renderers` map; React
-checks for every other method before calling it). It has no `checkDCE`: react-dom reads that as the
-real React DevTools being present, and in development builds it silenced React's "Download the React
-DevTools" message. `dispose()` puts a chained hook's `inject`, `onCommitFiberRoot` and
-`onPostCommitFiberRoot` back, removing the last of those when the hook had none. A hook the page has
-switched off (`isDisabled`, or no `supportsFiber`) is not chained onto at all, because React registers
-with nothing there: `stats().mode` is `'unsupported'` with `kind: 'hook-disabled'`, and Event Timing
-reports carry on without components.
+`'auto'`, the default, chains when a hook exists and shims otherwise. The shim holds what React
+needs: `supportsFiber`, `inject`, `onCommitFiberRoot`, `onPostCommitFiberRoot` and the `renderers`
+map, plus a `reactInpBlame` marker; React checks for every other method before calling it. It has no
+`checkDCE`: react-dom reads that as the real React DevTools being present, and in development builds it
+silenced React's "Download the React DevTools" message. `dispose()` puts a chained hook's `inject`,
+`onCommitFiberRoot` and `onPostCommitFiberRoot` back, removing the last of those when the hook had none.
+A hook the page has switched off (`isDisabled`, or no `supportsFiber`) is not chained onto at all,
+because React registers with nothing there: `stats().mode` is `'unsupported'` with
+`kind: 'hook-disabled'`, and Event Timing reports carry on without components.
 
 React DevTools never installs over an existing hook: its `installHook` returns as soon as
 `window` has the property, reading and writing nothing. So a shim that loads before it locks
@@ -265,8 +274,8 @@ walk per commit and one set of listeners. In `apps/next-demo` a client component
 the spec checks it hears the same reports as the debug global under `next dev` and both production
 builds, so the module Next.js injects and the application share one installation there too.
 
-**Reports reach listeners in a task of their own, and what a listener renders is not an interaction's
-work.** A later render joins a report inside React's commit, so publishing that revision from there
+**Reports reach listeners in a task of their own, and what a listener renders while it runs is not an
+interaction's work.** A later render joins a report inside React's commit, so publishing that revision from there
 called the page's listeners inside the commit: a listener that sets state rendered inside the commit it
 was hearing about, which React 18 and 19 count as a nested update and stop at 50 with "Maximum update
 depth exceeded", while React 17 counts before the hook and so never stops. The render a listener causes
@@ -278,7 +287,10 @@ page's. React sets a lane in `root.pendingLanes` for every update and clears it 
 commits, so a commit during the delivery, a commit that finishes a lane the delivery left pending, and
 whatever that commit's own render and layout effects schedule are not read at all; for its passive
 effects React 18 and 19 call `onPostCommitFiberRoot` when they have run, and React 17 has no such call,
-so there an effect of a listener's own render can still join a report. Measured against a 37-component
+so there an effect of a listener's own render can still join a report. An update a listener defers
+instead, with `setTimeout`, `requestAnimationFrame` or an `await`, is scheduled after the lanes have been
+taken, so its commit is read like any other render. That is the library working as intended: a genuine
+later render is the thing it exists to report. Measured against a 37-component
 panel fed by `onInteraction`, driven from source with react-dom 17.0.2, 18.3.1 and 19.3.0 in Node: one
 click gave 54 listener calls and 53 wrong "second React render" notes blaming the panel on React 18 and
 19 (111 on React 17 in development, 22,045 in a production build, with the main thread held for 1.4 s);
@@ -357,8 +369,8 @@ and stays off the headline (since 2026-09-14; before that the headline was the w
 The target element resolves to its component through the `__reactFiber$` expando, and the
 React handler prop for the event type is looked up on the same chain, so "no React render;
 120ms in the click handler computeChecksum" is possible without a profile. The element's label
-is at most 40 characters, and its whole `textContent` is never read, because a click can land on
-a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
+names it by its tag and a name of at most 40 characters, and its whole `textContent` is never read,
+because a click can land on a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
 form field's placeholder, name or type, or its data-testid or data-test), and, where text is
 allowed, from the first run of text of an element with no aria-label that is not a form field.
 Text is allowed under a development build of React and wherever `install({ labels: 'text' })`
@@ -584,9 +596,10 @@ head and from `api.inp()`, is the web-vitals estimate computed in-library, with 
 dependency: the interaction count is `performance.interactionCount` where the browser has
 it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
 (Chrome steps ids by 7); the 10 longest interactions are kept by their longest single entry;
-INP is the one at index `min(floor(count / 50), 9)`, longest first, chosen as entries arrive and again
-when the page is hidden, which are the two moments web-vitals chooses at. After a soft navigation or a
-back/forward cache restore, interactions the browser counted but sent no entry for read as the 8 ms
+INP is the one at index `min(floor(count / 50), n - 1)` among the `n` kept, longest first, chosen as
+entries arrive and again when the page is hidden, which are the two moments web-vitals chooses at. After
+a soft navigation or a back/forward cache restore, interactions the browser counted but sent no entry
+for read as the 8 ms
 web-vitals stands in for them, with `interactionId: null`. It counts every interaction
 the observer sees at its 16 ms floor, plus the page's first input at any duration. The demo's
 own "Page INP so far" line reads the same call, so the page never shows two INPs that disagree.
@@ -701,23 +714,14 @@ test has not been run yet against anything but the demo.
 
 ## Distribution: where this can live
 
-Written with the prototype on 2026-09-12. Where it differs, `road-to-acceptance.md` has replaced it: that
-plan drops the Profiler "Interactions" view, a framework hook on Chrome's Interactions track and the
-`react.*` OpenTelemetry attributes below, and turns inclusion in Next.js into an options passthrough on
-`useReportWebVitals` plus a documented recipe for config wrappers.
+Written with the prototype on 2026-09-12 and cut back since to what ships. `road-to-acceptance.md`
+dropped the pitches that stood here: a React DevTools Profiler "Interactions" view, a framework hook on
+Chrome's Interactions track, and `react.*` OpenTelemetry attributes. It also turns inclusion in Next.js
+into an options passthrough on `useReportWebVitals` plus a documented recipe for config wrappers.
 
 **Chrome DevTools.** The Performance panel extensibility API is the zero-install path: any
-page that includes the library gets a React attribution track next to the Interactions track
-without an extension. A DevTools extension panel listing reports is the second step. The
-long-term ask to the Chrome DevTools team would be a hook for framework attribution on the
-Interactions track itself, which needs a working library and users first.
-
-**React DevTools.** The Profiler dropped interaction tracing when React 18 removed the
-`unstable_trace` API, and nothing replaced it. This library chains onto the DevTools hook
-today (mode `chained`), so an "Interactions" view in the Profiler that joins Event Timing to
-commits is a feature request with a working reference implementation behind it. React 19.2's
-own Performance tracks (Scheduler and Components) are complementary: they show React's work,
-this labels the interaction.
+page that includes the library gets a React attribution track next to Chrome's own Interactions
+track, with no extension to install.
 
 **Next.js.** Tested on Next 16.3.5 (`apps/next-demo`). Setup is one line: `withInpBlame()` around
 the config in `next.config.ts` (`react-inp-blame/next`). It appends `react-inp-blame/next-client` to
@@ -740,10 +744,12 @@ production. The loader was proven 2026-09-14 in the same three runs; before it t
 file that exports anything Next does not expect, which Turbopack's does not, so nothing beside the page
 itself is exported there. The `memo()` component that stood in for the loader's `const X = memo(` case
 rendered null and was never checked by a spec, so it is gone; `packages/core/test/display-names-loader.test.ts`
-covers the patterns the loader matches, and the ones it does not, instead. A `useReportWebVitals` adapter would attach the report to
-web-vitals' INP attribution object so Vercel Speed Insights, or anything else consuming it, gets
-component names for free. The aim is inclusion in Next.js itself rather than a plugin people have to
-find; the wrapper and that adapter are what make that a reasonable ask.
+covers the patterns the loader matches, and the ones it does not, instead. A `react-inp-blame/web-vitals`
+entry supplying web-vitals' `generateTarget` would put component paths into `interactionTarget`, which is
+where Vercel Speed Insights' selector breakdown would pick them up with no work on the vendor's side.
+Enriching `metric.attribution` instead needs Next.js's `experimental.webVitalsAttribution`, which 16.3.5
+does not wire up: `client/web-vitals.js` imports the build without attribution whatever the flag says.
+Neither entry exists here; `road-to-acceptance.md` has both.
 
 **Vite.** `react-inp-blame/vite`: a module script ahead of the page's own that installs the
 library, so the order of imports in the entry module stops mattering, and the displayName transform.
@@ -751,25 +757,20 @@ Vite runs a `transformIndexHtml` hook ordered `pre` before it reads the page's s
 script is served in development and bundled in production like the page's own, and module scripts
 run in document order. The demo and its React 17 and 18 variants install with it.
 
-**RUM vendors and OpenTelemetry.** The report maps cleanly onto span attributes:
-`interaction.id`, `interaction.type`, `react.component`, `react.hot_path`,
-`react.rendered_count`, `react.commit_count`, `react.follow_up_count`, `dom.forced_layout_ms`.
-A semantic-convention proposal turns the library into one implementation of a standard rather
-than a dependency people have to pick.
+## What is not done
 
-## What has not happened
-
-None of the following has been done, and nothing here should be described as if it had:
-
-- no npm publish: the package and its publish workflow are ready for 0.1.0, and nothing is on npm.
-  No package had the name `react-inp-blame` on 2026-09-15 (`npm view react-inp-blame` answered 404).
-- no issue, PR or RFC opened with Chrome DevTools, React, Next.js, Vercel, OpenTelemetry or any RUM vendor
-- no human look at the Performance panel tracks yet (the trace file exists, the panel has not been opened on it)
-- no run against a real application, only the synthetic demo, and no run on the Next.js bench apps
-  `road-to-acceptance.md` names
+- **0.1.0 is not on npm.** The package and its publish workflow are ready. No package held the name
+  `react-inp-blame` on 2026-09-15 (`npm view react-inp-blame` answered 404).
+- **Nobody has looked at the Performance panel tracks by eye.** `apps/demo/e2e/devtools-track.spec.ts`
+  records a trace of a slow click and reads its JSON, checking the track group, the track names, the
+  colours, the tooltip and that the measures are cleared again, in development and production builds
+  and behind a Chrome 133 user agent. Opening `apps/demo/traces/context-storm-dev.json` in the panel
+  beside React's own tracks is still to do.
+- **Nothing has run against a real application**, only the synthetic demo, and nothing on the Next.js
+  bench apps `road-to-acceptance.md` names.
 
 ## Next steps
 
 `road-to-acceptance.md` is the plan and sets the order: what has to be true before anything public,
-then what would make Next.js and React want the library, then the order of the outside conversations.
-The Status paragraph at the top of this file says which of its must-haves the passes so far covered.
+then what would make Next.js and React want the library. The Status paragraph at the top of this file
+says which of its must-haves are covered.

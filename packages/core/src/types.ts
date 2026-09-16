@@ -177,9 +177,9 @@ export interface Api {
   last(): InteractionReport | null;
   /**
    * The INP of the navigation the page is on, so far: the estimate web-vitals makes, the interaction
-   * at index floor(count / 50) among the 10 longest, chosen as entries arrive and again when the page is
-   * hidden. It starts over at each soft navigation and each restore from the back/forward cache, from
-   * the interactions that began after it.
+   * at index min(floor(count / 50), n - 1) among the n it kept, n at most 10, chosen as entries arrive
+   * and again when the page is hidden. It starts over at each soft navigation and each restore from
+   * the back/forward cache, from the interactions that began after it.
    *
    * It is not web-vitals, and it is not a drop-in for it: it is the same algorithm written again from
    * the same entries. Through the session `apps/demo/e2e/inp.spec.ts` drives, more than 50 interactions,
@@ -231,7 +231,7 @@ export interface FrameSummary {
 export interface TargetInfo {
   /** A CSS selector for the element: its tag, its id if it has one, then its `data-test` or `data-testid` attribute, or else up to two of its classes. */
   readonly selector: string | null;
-  /** Human label for the element, at most 40 characters, from what `InstallOptions.labels` allows. e.g. 'button "Add to cart"' or 'input "filter rows"'. */
+  /** Human label for the element: its tag and a name of at most 40 characters, from what `InstallOptions.labels` allows. e.g. 'button "Add to cart"' or 'input "filter rows"'. */
   readonly label: string | null;
   /**
    * The nearest component enclosing the event target, by the tree React rendered it in. That is not
@@ -419,8 +419,9 @@ export interface InstallOptions {
   /** Expose the API on window (true = window.__REACT_INP_BLAME__, or give a name). */
   debugGlobal?: boolean | string;
   /**
-   * Where a report's `target.label` may come from. Every label is at most 40 characters, and none
-   * ever reads an element's whole `textContent` or a form field's value.
+   * Where a report's `target.label` may come from. Every label names the element by its tag and a
+   * name of at most 40 characters, and none ever reads an element's whole `textContent` or a form
+   * field's value.
    *
    * `'attributes'`: only what the page's code wrote on the element: its `aria-label`, a form
    * field's `placeholder`, `name` or `type`, or its `data-testid` or `data-test`.

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 
 const { withInpBlame } = createRequire(import.meta.url)('../next.cjs');
@@ -76,4 +79,88 @@ test("the project's own Turbopack rules, webpack(), injected modules and env are
   assert.deepEqual(ran, ['the project webpack()']);
   assert.deepEqual(config.instrumentationClientInject, ['./lib/analytics.js', CLIENT_MODULE]);
   assert.equal(config.env.API_URL, 'https://api.example');
+});
+
+/** What withInpBlame returns for a config written as a function: Next.js calls it with the phase while NODE_ENV is still set. */
+async function wrappedFunction(
+  nodeEnv: 'development' | 'production',
+  config: unknown,
+  phase: string,
+  defaultConfig: Record<string, unknown>,
+  options?: { enabled?: unknown; runtime?: unknown },
+): Promise<Record<string, any>> {
+  const saved = process.env.NODE_ENV;
+  process.env.NODE_ENV = nodeEnv;
+  try {
+    const wrapper = withInpBlame(config, options);
+    assert.equal(typeof wrapper, 'function', 'a config written as a function comes back as a function');
+    return await wrapper(phase, { defaultConfig });
+  } finally {
+    if (saved === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = saved;
+  }
+}
+
+/** A directory shaped like a project with this Next.js in its node_modules, which is where withInpBlame reads the version. */
+function projectWithNext(version: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'inp-next-'));
+  fs.mkdirSync(path.join(dir, 'node_modules', 'next'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'node_modules', 'next', 'package.json'), JSON.stringify({ name: 'next', version }));
+  return dir;
+}
+
+/** Runs `fn` from `dir`, the working directory Next.js reads a config in. */
+function inProject<T>(dir: string, fn: () => T): T {
+  const saved = process.cwd();
+  process.chdir(dir);
+  try {
+    return fn();
+  } finally {
+    process.chdir(saved);
+  }
+}
+
+test('a config written as a function is wrapped around what it returns, and keeps every setting', async () => {
+  const project = (phase: string, { defaultConfig }: { defaultConfig: Record<string, unknown> }) => ({
+    basePath: '/shop',
+    output: 'standalone',
+    images: { unoptimized: true },
+    phaseSeen: phase,
+    defaultSeen: defaultConfig,
+  });
+  const config = await wrappedFunction('development', project, 'phase-development-server', { reactStrictMode: true });
+
+  assert.deepEqual(added(config), EVERYTHING);
+  assert.equal(config.basePath, '/shop');
+  assert.equal(config.output, 'standalone');
+  assert.deepEqual(config.images, { unoptimized: true });
+  // Next.js's own two arguments reach the project's function unchanged.
+  assert.equal(config.phaseSeen, 'phase-development-server');
+  assert.deepEqual(config.defaultSeen, { reactStrictMode: true });
+  // And basePath still reaches the client module, which the App Router leaves out of the URLs it announces.
+  assert.deepEqual(clientSettings(config), { install: {}, basePath: '/shop' });
+});
+
+test('an async function config is awaited', async () => {
+  const config = await wrappedFunction('production', async () => ({ basePath: '/docs' }), 'phase-production-build', {}, { enabled: true });
+  assert.deepEqual(added(config), EVERYTHING);
+  assert.equal(config.basePath, '/docs');
+});
+
+test('a Next.js older than instrumentationClientInject is refused by name, and a canary of a later one is not', (t) => {
+  const old = projectWithNext('15.5.25');
+  const canary = projectWithNext('16.4.0-canary.31');
+  t.after(() => {
+    for (const dir of [old, canary]) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  assert.throws(
+    () => inProject(old, () => wrapped('development', {})),
+    (error: unknown) => error instanceof Error && /needs Next\.js 16\.3 or later/.test(error.message) && error.message.includes('15.5.25'),
+  );
+  // A prerelease of a later version passes the floor. The peer range this replaced refused it at install time.
+  assert.deepEqual(added(inProject(canary, () => wrapped('development', {}))), EVERYTHING);
+  // enabled: false adds nothing to the config, so there is nothing to refuse.
+  const untouched = { reactStrictMode: true };
+  assert.equal(inProject(old, () => wrapped('development', untouched, { enabled: false })), untouched);
 });

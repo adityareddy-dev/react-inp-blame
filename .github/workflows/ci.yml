@@ -1,8 +1,12 @@
 name: CI
 
 on:
+  # Branches only: a version tag runs this through publish.yml instead, which waits for it.
   push:
+    branches: ['**']
   pull_request:
+  # Called by publish.yml, so a release runs the whole suite before it publishes.
+  workflow_call:
   # Daily as well, so the next@canary job goes red the day a Next.js or React canary breaks something,
   # not at the next push.
   schedule:

@@ -50,7 +50,7 @@ const FRAME_MS = 16;
 
 // A label names the clicked element; it is not a copy of it. The element can be a list of 3000
 // rows, and reading all of its text would cost more than the rest of the report, so at most its
-// first run of text is read, and at most 40 characters of any label are kept.
+// first run of text is read, and at most 40 characters of the name inside a label are kept.
 const LABEL_CHARS = 40;
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;

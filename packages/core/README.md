@@ -19,7 +19,7 @@ The design notes, the demos and the browser matrix are in the
 
     // next.config.ts
     import { withInpBlame } from 'react-inp-blame/next';
-    export default withInpBlame({ /* your config */ }, { enabled: true });
+    export default withInpBlame({ /* your config */ });
 
 That is the whole setup, on Next.js 16.3 or later. `withInpBlame` adds `react-inp-blame/next-client`
 to `instrumentationClientInject`, so Next.js installs the library before hydration, which the
@@ -29,12 +29,14 @@ so their names survive the production minifier. `enabled` decides which runs get
 for neither; a run it leaves out gets the config back untouched. `runtime` takes the options for
 `install()`, such as `{ overlay: 'query' }`. They reach the browser inlined through `env`, so they
 are plain data. `runtime: false` leaves the client module out, for an app that installs from its own
-`instrumentation-client.ts`.
+`instrumentation-client.ts`; the navigation join below goes with it, since the client module is what
+hears navigations.
 
 On the App Router the client module also hears each navigation: every report carries
 `navigationURL` and `navigationType`, a click that started a navigation names it in
-`startedNavigation`, and `inp()` starts over at each soft navigation. Pages Router: supported for
-attribution, no navigation join.
+`startedNavigation`, and `inp()` starts over at each soft navigation. The Pages Router loads the injected
+module too (read in Next.js 16.3.5's source, not tested), so it gets attribution without the navigation
+join.
 
 ## Vite
 
@@ -42,7 +44,7 @@ attribution, no navigation join.
     import { defineConfig } from 'vite';
     import { inpBlame } from 'react-inp-blame/vite';
 
-    export default defineConfig({ plugins: [inpBlame({ enabled: true })] });
+    export default defineConfig({ plugins: [inpBlame()] });
 
 `inpBlame` returns two plugins. One adds a module script ahead of the page's own that calls
 `install()`, so React registers with the library's hook whatever the entry module imports first;
@@ -58,8 +60,8 @@ installs with the default options before react-dom loads.
     import { onInteraction } from 'react-inp-blame';
 
     onInteraction((report) => {
-      const { blame, rating } = report.explanation; // data: kind, name, ms, confidence
-      console.log(report.verdict);                  // display text, reworded in any version
+      const { blame, rating } = report.explanation;                // data: kind, name, ms, confidence
+      console.log(blame.kind, blame.name, rating, report.verdict); // the verdict is display text, reworded in any version
     });
 
 - `install(options?)` installs once per page and returns the API; every later call, from any copy
@@ -87,8 +89,8 @@ data; `verdict` and the other sentences are display text. `navigationURL` and `n
 which page the interaction happened on, with web-vitals' names and values, and `startedNavigation`
 names the soft navigation it started, if it started one.
 
-A report's `target.label` names the clicked element in at most 40 characters. Under a production
-build of React it comes only from what the page's code wrote on the element: its aria-label, a
+A report's `target.label` names the clicked element by its tag and a name of at most 40 characters. Under
+a production build of React it comes only from what the page's code wrote on the element: its aria-label, a
 form field's placeholder, name or type, or its data-testid or data-test. The text an element
 shows can be someone's name or email, and reports are made to be forwarded, so reading it is
 opt-in there: `install({ labels: 'text' })`. Development builds read it by default.
@@ -101,7 +103,7 @@ Measured 2026-09-15 with rolldown 1.2.8, minified ESM for the browser, gzip at i
 | --- | --- | --- |
 | `react-inp-blame/auto`: everything that loads with the page | 39.0 KB | 14.4 KB |
 | The badge and panel, a chunk loaded only when shown | 11.2 KB | 4.2 KB |
-| What has to run before react-dom: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
+| Of that, the part that has to run before react-dom, not a separate entry yet: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
 
 Under the `react-server` condition, `react-inp-blame`, `react-inp-blame/auto` and
 `react-inp-blame/next-client` resolve to a module whose exports do nothing, so a Server Component

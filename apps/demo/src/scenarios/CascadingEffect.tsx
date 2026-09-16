@@ -3,8 +3,10 @@ import { burn } from '../burn';
 
 /**
  * Anti-pattern: derived state set from an effect. One click, two commits, the second one heavy.
- * React 19 runs the effect after the paint, so INP only sees the cheap first commit. The user
- * still waits for the second one. The report calls it a follow-up commit.
+ * React 18 and 19 run the effect inside the click's own task, but the state it sets there takes
+ * default priority and renders in a later one, after the paint; React 17 defers the effect itself.
+ * Either way INP sees only the cheap first commit and the user still waits for the second. The
+ * report calls it a follow-up commit.
  */
 export function CascadingEffect() {
   const [selected, setSelected] = useState<number | null>(null);

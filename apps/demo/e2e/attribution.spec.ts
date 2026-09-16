@@ -137,9 +137,11 @@ test('lifted state: the unrelated Sidebar carries the cost', async ({ page }) =>
 
 test('cascading effect: the heavy second render is named, before or after the paint', async ({ page }) => {
   const r = await interact(page, 'cascading-effect', () => page.click('[data-test=trigger]'));
-  // In every React tested (17.0.2, 18.3.1, 19.3.0) the click's useEffect ran after the
-  // paint, so the heavy commit is a follow-up. The check accepts either placement in case
-  // a build flushes it before the paint. Either way the tool has to name Detail.
+  // In every React tested (17.0.2, 18.3.1, 19.3.0) the render the click's useEffect sets off lands
+  // after the paint, so the heavy commit is a follow-up: React 18 and 19 run the effect in the click's
+  // own task but render its state update at default priority in a later one, and React 17 defers the
+  // effect as well. The check accepts either placement in case a build commits it before the paint.
+  // Either way the tool has to name Detail.
   const all = [...r.commits, ...r.followUps];
   expect(all.length).toBeGreaterThanOrEqual(2);
   const heavy = all.reduce((a, b) => (b.rendered > a.rendered ? b : a));

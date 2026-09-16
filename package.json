@@ -17,11 +17,10 @@
     "test": "npm run test -w apps/demo",
     "test:prod": "npm run test:prod -w apps/demo",
     "test:unit": "node --import ./packages/core/test/ts-imports.ts --test packages/core/test/*.test.ts",
-    "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p apps/demo/tsconfig.json --noEmit",
-    "fix-lock": "node scripts/fix-lock.mjs"
+    "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p apps/demo/tsconfig.json --noEmit"
   },
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.18"
   },
   "devDependencies": {
     "baseline-browser-mapping": "2.11.22"
