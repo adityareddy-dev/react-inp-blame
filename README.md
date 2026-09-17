@@ -194,7 +194,7 @@ leaves their times out and blame built on render times is `'inferred'`.
 
 ## What it costs
 
-Measured 2026-09-15 on 6fb9d59 in the demo's context storm (a click re-rendering 801 components) and big list
+Measured 2026-09-15 on 7917366 in the demo's context storm (a click re-rendering 801 components) and big list
 (a keystroke re-rendering 1441), in Chromium 147 headless on an otherwise idle Windows PC: 30 fresh page loads
 per scenario, one interaction each, `walkBudget: 100000`, taken
 [as the design notes describe](docs/interaction-attribution-design.md#what-it-costs). p50 / p95 in ms:
@@ -285,4 +285,4 @@ field is named by its first run of text. Development builds use text by default.
 `target.selector` has the tag, the `id` if there is one, and `data-test` or `data-testid` or else two classes,
 and `navigationURL` and `startedNavigation.url` are full URLs, query string included.
 
-[Design notes](docs/interaction-attribution-design.md) · [The plan](docs/road-to-acceptance.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · MIT license
+[Design notes](docs/interaction-attribution-design.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · MIT license

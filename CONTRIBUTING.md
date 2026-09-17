@@ -12,7 +12,7 @@ we can agree on the approach before you spend time on it.
   production builds.
 - `scripts/react-matrix.mjs`: generates the React 18 and 17 copies of the demo.
 - `scripts/pack-smoke.mjs`: installs the packed tarball into throwaway apps and checks it there.
-- `docs/`: the design notes (`interaction-attribution-design.md`) and the plan (`road-to-acceptance.md`).
+- `docs/`: the design notes (`interaction-attribution-design.md`).
 
 ## Setup
 
