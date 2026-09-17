@@ -246,7 +246,10 @@ its own React does not switch off the app's own. Reports carry on without compon
 Supported: react-dom 17, 18 and 19; only react-dom commits are walked. CI runs the demo's suites on React 19.3
 in development and production builds, its attribution spec on React 18.3.1 and 17.0.2 (legacy root), and the
 Next.js check on 16.3.5 under `next dev` and both production bundlers, and on `next@canary`, whose App Router
-brings a React canary, on every push and once a day, in a job allowed to fail. No job runs `react@canary` alone.
+brings a React canary, on every push and once a day, in a job allowed to fail. It also installs the package as
+packed for npm into apps with no peers, with Next.js 15, with Next.js 16.3.5 and with Vite 5, on Node 20.19, the
+oldest its `engines` allows, and imports and requires every subpath there; the canary job installs it beside
+`next@canary` as well. No job runs `react@canary` alone.
 
 ## Known limits
 

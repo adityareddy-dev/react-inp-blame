@@ -11,12 +11,13 @@ we can agree on the approach before you spend time on it.
 - `apps/next-demo`: the Next.js check, `e2e/load-order.spec.ts`, run under `next dev` and two
   production builds.
 - `scripts/react-matrix.mjs`: generates the React 18 and 17 copies of the demo.
+- `scripts/pack-smoke.mjs`: installs the packed tarball into throwaway apps and checks it there.
 - `docs/`: the design notes (`interaction-attribution-design.md`) and the plan (`road-to-acceptance.md`).
 
 ## Setup
 
 You need Node 22.18 or later, because the unit tests run TypeScript through Node's own type
-stripping (CI uses Node 22 and 24), and npm.
+stripping (CI runs them on Node 22 and 24), and npm.
 
     npm ci
     npx playwright install chromium firefox webkit
@@ -49,6 +50,7 @@ From the repository root:
     npm test -w apps/next-demo                    # Next.js, next dev
     npm run test:prod -w apps/next-demo           # Next.js, Turbopack production build
     npm run test:prod:webpack -w apps/next-demo   # Next.js, webpack production build
+    npm run test:pack                             # the packed tarball, installed into throwaway apps
 
 The Vite demo runs every spec in Chromium, and `cross-browser.spec.ts` in Firefox and WebKit as well.
 It imports the library's source, so it needs no build. The Next.js app uses the package as built, so
@@ -70,6 +72,31 @@ React 18 copy on 5187 and 5188, the React 17 copy on 5195 and 5196, Next.js on 5
 and outside CI a server already listening on that port is reused. A server left over from another suite
 would be tested in place of the right one, so stop it before the next suite starts.
 
+`npm run test:pack` is the one check that sees the package as npm publishes it; the suites above reach
+it through the workspace link. It packs `packages/core` and installs the tarball, with one `npm install`
+each, into throwaway apps in the temp directory: one with no peers, one with Next.js 15, one with the
+Next.js that `apps/next-demo` pins and one with Vite 5. In each it checks that every file `package.json`
+points at is in the package, imports and requires every subpath, and loads the browser entries again
+under the `react-server` condition. The Next.js 15 app has to get the wrapper's version error rather
+than a failed install, and the Vite app a production build whose page installs the library. It needs
+the npm registry and no port. Name fixtures to run only those; `next-canary` runs only when named,
+because a canary is allowed to break. `--tarball` checks a tarball that already exists, which is how CI
+runs the script on Node 20.19, the oldest Node the package supports:
+
+    npm run test:pack -- bare next-15
+    node scripts/pack-smoke.mjs --tarball path/to/react-inp-blame-0.1.0.tgz
+
+An app that fails a check is left in place, and its path is printed.
+
+To repeat CI's Node 20.19 run without installing that Node, pack a tarball and hand it to the script
+under the `node` package from npm:
+
+    npm pack -w packages/core --pack-destination <dir>
+    npx -y node@20.19.0 scripts/pack-smoke.mjs --tarball <dir>/react-inp-blame-0.1.0.tgz
+
+On Windows, run the second command with npm's default script shell rather than Git Bash: the POSIX
+launcher of that package points at a placeholder file there, and only its `.cmd` one finds `node.exe`.
+
 Two things the demo's suite leaves out of a normal run:
 
     INP_KEEP_TRACE=1 npm test           # keeps the Chrome trace in apps/demo/traces, to open in the Performance panel
@@ -77,9 +104,10 @@ Two things the demo's suite leaves out of a normal run:
 
 ## What a pull request needs
 
-- `npm run build`, `npm run test:unit` and the Playwright suites the change can affect pass locally.
-  CI runs all of them on every push and pull request and once a day, plus a job against
-  `next@canary` that is allowed to fail.
+- `npm run build`, `npm run test:unit` and the Playwright suites the change can affect pass locally,
+  and `npm run test:pack` when the change touches what is published: `packages/core/package.json` or
+  a file it lists. CI runs all of them on every push and pull request and once a day, plus a job
+  against `next@canary` that is allowed to fail.
 - A test for every change in behaviour. Tests assert on a report's data (`explanation.blame`, the
   phases, the commits), never on the wording of `verdict`, `cause` or `notes`: those are display text
   and may change in any version.

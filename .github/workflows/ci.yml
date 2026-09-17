@@ -37,6 +37,30 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
 
+  # The one job that sees what users install. Every other job resolves react-inp-blame through the
+  # workspace link, so a file left out of `files`, an exports target that does not exist or a peer range
+  # npm refuses to install would publish with all of them green. publish.yml needs this whole workflow,
+  # so a release waits for this job as well.
+  tarball:
+    name: Packed tarball on Node 20.19
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Packed on Node 24, which is what publish.yml packs the release on. `prepack` builds it first.
+      - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
+      # Installed and loaded on the oldest Node the package promises, which no other job runs. '20.19' is
+      # the newest 20.19.x to setup-node, and quoted because YAML reads a bare one as a number.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20.19'
+      - run: node scripts/pack-smoke.mjs --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
+
   e2e:
     name: Vite demo, React 17 and 18, Next.js
     runs-on: ubuntu-latest
@@ -93,3 +117,9 @@ jobs:
         run: npm run test:prod -w apps/next-demo
       - name: webpack production build
         run: npm run test:prod:webpack -w apps/next-demo
+      # The tarball job's install, beside next@canary: that npm still resolves the two together, and that
+      # withInpBlame lets a prerelease of a later Next.js past its floor. The suites above say nothing
+      # about that and it says nothing about them, so it runs whether or not they passed.
+      - name: Packed tarball beside next@canary
+        if: ${{ !cancelled() }}
+        run: node scripts/pack-smoke.mjs next-canary
