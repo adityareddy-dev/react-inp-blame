@@ -266,6 +266,9 @@ oldest its `engines` allows, and imports and requires every subpath there; the c
   than re-rendered. A hydration that merely follows a keystroke is nobody's interaction and is left out.
 - On React 17, which calls nothing after a commit's effects, a render set off by an effect of your report
   listener's own render can still join a report. On React 18 and 19 it cannot.
+- **A render your report listener causes is recognised by the lane React put it on**, and React has one lane
+  for each priority. An update of the app's own that lands on the same lane before React commits is rendered
+  in that same commit and left out with it, which for an otherwise quiet interaction can mean no report.
 - Production React records no durations, so blame there rests on render counts and is `'inferred'`
   (`react-dom/profiling` gives durations), and minified handlers are named by their prop.
 - The names loader matches `function Foo(` and `const Foo = memo(` or `forwardRef(`, exported or not, at the
