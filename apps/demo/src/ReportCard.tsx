@@ -68,13 +68,13 @@ function costText(ms: number): string {
   return ms < 0.05 ? 'under 0.1 ms' : `${ms.toFixed(1)} ms`;
 }
 
-/** "Typing in Password" / "Click on Log in", from the report's target. */
+/** "Typing in Password" / "Click on Log in", from the report's target. A report with no target is just "Typing" or "Click". */
 export function titleFor(report: InteractionReport): { title: string; subtitle?: string } {
   const t = report.target;
   const label = t?.label ? t.label.replace(/^\w+ /, '') : (t?.selector ?? '');
-  const verb = isTyping(report) ? 'Typing in' : 'Click on';
+  const title = isTyping(report) ? (label ? `Typing in ${label}` : 'Typing') : label ? `Click on ${label}` : 'Click';
   const subtitle = t?.component ? `in ${t.component}${t.handler ? ` · ${handlerLabel(t.handler)}` : ''}` : undefined;
-  return { title: `${verb} ${label}`.trim(), subtitle };
+  return { title, subtitle };
 }
 
 function Raw({ report }: { report: InteractionReport }) {

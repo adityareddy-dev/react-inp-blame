@@ -327,12 +327,13 @@ function blameLine(b: Blame): string {
   }
 }
 
-/** "Typing in Password" / "Click on Log in", from the report's target. */
+/** "Typing in Password" / "Click on Log in", from the report's target. A report with no target is just "Typing" or "Click". */
 function titleFor(r: InteractionReport): string {
   const t = r.target;
   const label = t?.label ? t.label.replace(/^\w+ /, '') : (t?.selector ?? '');
-  const verb = isTypingEvent(r.type) ? 'Typing in' : isPointerEvent(r.type) ? 'Click on' : kindOf(r.type);
-  return `${verb} ${label}`.trim();
+  if (isTypingEvent(r.type)) return label ? `Typing in ${label}` : 'Typing';
+  if (isPointerEvent(r.type)) return label ? `Click on ${label}` : 'Click';
+  return `${kindOf(r.type)} ${label}`.trim();
 }
 
 function tag(rating: keyof typeof RATING): string {
