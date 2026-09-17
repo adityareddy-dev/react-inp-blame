@@ -12,6 +12,8 @@ No dependencies. React 17 to 19 (react-dom). Browsers with Event Timing's `inter
 (Chrome 96, Firefox 144, Safari 26.2); only Chromium has Long Animation Frames. Anywhere else
 `install()` installs nothing, and `stats()` says why.
 
+    npm install react-inp-blame
+
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
 

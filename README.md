@@ -10,7 +10,7 @@ through the hook React keeps for developer tools. From the demo's sign-in page, 
     after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
     PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
 
-**Not on npm yet:** 0.1.0 is ready to publish.
+    npm install react-inp-blame
 
 ## Install with Next.js 16.3 or later
 

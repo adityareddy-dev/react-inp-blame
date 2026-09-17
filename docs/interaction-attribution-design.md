@@ -1,6 +1,6 @@
 # Interaction attribution for React: design notes
 
-Status, 2026-09-15: packaged as 0.1.0 and not published (see "What is not done" at the end). On
+Status, 2026-09-17: 0.1.0 is on npm, published from the `v0.1.0` tag with provenance. On
 7917366 the Playwright suites were green against React 19.3 in development and production builds,
 18.3.1 and 17.0.2 (legacy root), and Next.js 16.3.5 under `next dev` and its Turbopack and webpack
 production builds. Since the prototype of 2026-09-12, the changes are these:
@@ -35,7 +35,7 @@ production builds. Since the prototype of 2026-09-12, the changes are these:
   publish workflows.
 - The documents (2026-09-15): the README with its comparison, browser matrix and API
   reference, CONTRIBUTING.md and SECURITY.md, and "What it costs" below measured again on 7917366.
-  Publishing 0.1.0 is what is left.
+  0.1.0 was published on 2026-09-17.
 - The fixes from the code review of 2026-09-15, by four readers of the repository (measurement, React
   internals, packaging, code quality): reports reach listeners in a task of their own and a render a
   listener causes while it runs is never read, so a page that shows its own reports no longer feeds
@@ -758,8 +758,6 @@ run in document order. The demo and its React 17 and 18 variants install with it
 
 ## What is not done
 
-- **0.1.0 is not on npm.** The package and its publish workflow are ready. No package held the name
-  `react-inp-blame` on 2026-09-15 (`npm view react-inp-blame` answered 404).
 - **Nobody has looked at the Performance panel tracks by eye.** `apps/demo/e2e/devtools-track.spec.ts`
   records a trace of a slow click and reads its JSON, checking the track group, the track names, the
   colours, the tooltip and that the measures are cleared again, in development and production builds
@@ -770,6 +768,6 @@ run in document order. The demo and its React 17 and 18 variants install with it
 
 ## Next steps
 
-What is left is the list above: publish 0.1.0, look at the Performance panel tracks by eye, and run
+What is left is the list above: look at the Performance panel tracks by eye, and run
 the library against a real application and against Next.js's own bench apps. After those, the rest of
 the hydration verdict and the `react-inp-blame/web-vitals` entry described under "Distribution".
