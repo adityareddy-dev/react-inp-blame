@@ -40,6 +40,12 @@
       "import": "./dist/next-client.js",
       "default": "./dist/next-client.js"
     },
+    "./web-vitals": {
+      "types": "./dist/web-vitals.d.ts",
+      "react-server": "./dist/react-server.js",
+      "import": "./dist/web-vitals.js",
+      "default": "./dist/web-vitals.js"
+    },
     "./vite": {
       "types": "./vite.d.mts",
       "import": "./vite.mjs",

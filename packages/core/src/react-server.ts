@@ -1,8 +1,9 @@
 /**
- * What `react-inp-blame`, `react-inp-blame/auto` and `react-inp-blame/next-client` resolve to under
- * the `react-server` export condition, which bundlers set for the React Server Components graph. A
- * server component has no page to measure, so every export does nothing, and none of the browser code
- * reaches the server bundle. The types stay those of the browser entries.
+ * What `react-inp-blame`, `react-inp-blame/auto`, `react-inp-blame/next-client` and
+ * `react-inp-blame/web-vitals` resolve to under the `react-server` export condition, which bundlers
+ * set for the React Server Components graph. A server component has no page to measure, so every
+ * export does nothing, and none of the browser code reaches the server bundle. The types stay those
+ * of the browser entries.
  */
 import { inertApi } from './inert.js';
 import type { Api } from './types.js';
@@ -34,3 +35,11 @@ export function handlerName(): null {
 }
 
 export function onRouterTransitionStart(): void {}
+
+export function generateTarget(): undefined {
+  return undefined;
+}
+
+export function attributeINP(): { react: null } {
+  return { react: null };
+}

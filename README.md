@@ -53,6 +53,53 @@ React registers with the library's hook whatever your entry imports first, and t
 With another bundler, make `import 'react-inp-blame/auto'` the first import of your entry module; for names,
 `react-inp-blame/display-names-loader` is a webpack-style loader with a `stamp(code)` export.
 
+## With web-vitals
+
+`react-inp-blame/web-vitals` gives the [web-vitals](https://github.com/GoogleChrome/web-vitals) package
+React component names, in one option. It imports nothing from web-vitals, and `generateTarget` works with
+no `install()` at all: it only reads the fiber React leaves on the node.
+
+```ts
+import { onINP } from 'web-vitals/attribution';
+import { generateTarget } from 'react-inp-blame/web-vitals';
+
+onINP(send, { generateTarget });
+// attribution.interactionTarget: 'ProfilePage > PhotoTile (button.tile)'
+```
+
+```tsx
+'use client'; // Next.js: useReportWebVitals reports the build without attribution, so add the React side
+import { useReportWebVitals } from 'next/web-vitals';
+import { attributeINP } from 'react-inp-blame/web-vitals';
+
+export function WebVitals() {
+  useReportWebVitals((metric) => {
+    send(metric.name === 'INP' ? { ...metric, attribution: attributeINP(metric) } : metric);
+  });
+  return null;
+}
+```
+
+The component path goes into `attribution.interactionTarget`, where web-vitals otherwise puts a CSS
+selector, so it shows up wherever that field is already collected and charted, with nothing to change
+downstream. A path names at most four components, and they are the four nearest the element, so in a deep
+tree it starts below the page and the layout rather than ending short of the component that renders what
+was clicked. `generateTarget` returns `undefined` when the node has no React fiber or no named component
+above it, which is web-vitals' signal to fall back to its own selector, and it never throws.
+
+`attributeINP(metric)` returns the metric's attribution (`{}` where there is none, as under
+`useReportWebVitals`) with a `react` field added: `{ schemaVersion, interactionId, blame, handler,
+hotPath, components, commits, followUps }`, frozen, from this library's own report for that interaction.
+It is `null` when nothing is installed on the page, and when there is no report for the interaction:
+one that stayed under `threshold` and set off no later render, or one already pushed out of the 50
+reports a page keeps. It never guesses, and like `generateTarget` it never throws: a metric it cannot
+read gives `react: null` rather than an exception inside your analytics callback. web-vitals keeps
+everything else it owns: which interaction is
+the page's INP, at what percentile, over the back/forward cache and soft navigations.
+
+Component names in production need the `displayName` transform (the Next.js wrapper, the Vite plugin or
+the loader, all above). Without it the minifier has renamed them and the path reads `a > b (button.tile)`.
+
 ## The badge and panel
 
 `overlay: true`, in `runtime` or `install()`, shows a corner badge with the page's INP so far, green, amber or
@@ -102,7 +149,9 @@ The API has `reports()` (the last 50 published, oldest first, at their latest re
 (`'shim'`, `'chained'`, `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `walks`, and the
 library's own time in `walkTotalMs`, `reportTotalMs` and `installMs`. `debug.commits()` and `debug.hook()` are
 for debugging and may change in any version. Also exported: `mountOverlay`, `fiberFromNode`, `ownerChain` and
-`handlerName`. Under the `react-server` condition every export does nothing.
+`handlerName`. Under the `react-server` condition every export does nothing, here and on
+[`react-inp-blame/web-vitals`](#with-web-vitals): `generateTarget` returns `undefined` and
+`attributeINP` returns `{ react: null }`.
 
 ### InteractionReport
 
@@ -217,6 +266,7 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 | `react-inp-blame/auto`: everything that loads with the page | 39.0 KB | 14.4 KB |
 | The badge and panel, a chunk loaded only when shown | 11.2 KB | 4.2 KB |
 | Of that, the part that has to run before react-dom, not a separate entry yet: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
+| `react-inp-blame/web-vitals` on its own, measured 2026-09-19 by a different script that read `/auto` at 38.2 / 14.1 | 2.7 KB | 1.3 KB |
 
 ## What it reads from React
 

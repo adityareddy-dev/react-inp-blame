@@ -21,6 +21,7 @@ export default defineConfig({
     alias: [
       // The app imports the library from source, so a change needs no build; the plugins above come from the package.
       { find: /^react-inp-blame$/, replacement: core('index.ts') },
+      { find: /^react-inp-blame\/web-vitals$/, replacement: core('web-vitals.ts') },
       // React 17 has no react-dom/client. The matrix script sets this for the 17 variant.
       ...(process.env.INP_REACT_LEGACY ? [{ find: 'react-dom/client', replacement: page('src/legacy-client.ts') }] : []),
     ],

@@ -1,5 +1,6 @@
+import { heaviest } from './commits.js';
 import type { InpEstimate } from './inp.js';
-import { carriesWork, heaviest, isPointerEvent, isTypingEvent, kindOf } from './join.js';
+import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types.js';
 

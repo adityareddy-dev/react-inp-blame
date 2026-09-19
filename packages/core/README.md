@@ -57,6 +57,48 @@ Next.js, with `'development'` meaning the dev server and `'production'` meaning 
 Anywhere else, make `import 'react-inp-blame/auto'` the first import of the entry module: it
 installs with the default options before react-dom loads.
 
+## With web-vitals
+
+`react-inp-blame/web-vitals` gives the web-vitals package React component names, in one option. It
+imports nothing from web-vitals, and `generateTarget` needs no `install()`: it only reads the fiber
+React leaves on the node.
+
+    import { onINP } from 'web-vitals/attribution';
+    import { generateTarget } from 'react-inp-blame/web-vitals';
+
+    onINP(send, { generateTarget });
+    // attribution.interactionTarget: 'ProfilePage > PhotoTile (button.tile)'
+
+Next.js reports the build without attribution, so there the React side is added to the metric:
+
+    'use client';
+    import { useReportWebVitals } from 'next/web-vitals';
+    import { attributeINP } from 'react-inp-blame/web-vitals';
+
+    export function WebVitals() {
+      useReportWebVitals((metric) => {
+        send(metric.name === 'INP' ? { ...metric, attribution: attributeINP(metric) } : metric);
+      });
+      return null;
+    }
+
+The component path goes into `attribution.interactionTarget`, where web-vitals otherwise puts a CSS
+selector, so it shows up wherever that field is already collected. A path names at most four
+components, and they are the four nearest the element, so a deep tree loses the page and the layout
+rather than the component that renders what was clicked. `generateTarget` returns `undefined` when the
+node has no React fiber or no named component above it, which is web-vitals' signal to fall back to
+its own selector, and it never throws. `attributeINP(metric)` returns the
+metric's attribution (`{}` where there is none) with a frozen `react` field added, from this
+library's report for that interaction: the blame with its confidence, the handler, the hot path, the
+heaviest commit's components, and what React rendered before and after the paint. It is `null` when
+nothing is installed and when there is no report for that interaction, one that stayed under
+`threshold` or one already pushed out of the 50 a page keeps; it never guesses, and a metric it cannot
+read gives `react: null` rather than throwing in the callback. web-vitals keeps
+which interaction is INP, the percentile, the back/forward cache and soft navigations.
+
+In production the component names need the `displayName` transform above; without it the minifier
+has renamed them and the path reads `a > b (button.tile)`.
+
 ## API
 
     import { onInteraction } from 'react-inp-blame';
@@ -107,8 +149,13 @@ Measured 2026-09-15 with rolldown 1.2.8, minified ESM for the browser, gzip at i
 | The badge and panel, a chunk loaded only when shown | 11.2 KB | 4.2 KB |
 | Of that, the part that has to run before react-dom, not a separate entry yet: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
 
-Under the `react-server` condition, `react-inp-blame`, `react-inp-blame/auto` and
-`react-inp-blame/next-client` resolve to a module whose exports do nothing, so a Server Component
-that imports them adds no browser code to the server bundle.
+`react-inp-blame/web-vitals` on its own is 2.7 KB minified, 1.3 KB gzipped, measured 2026-09-19 with
+the same rolldown settings but by a different script, which read `/auto` at 38.2 / 14.1 that day
+against the 39.0 / 14.4 above. It pulls in none of the hook, the observers or the badge: an app that
+only wants component names in its web-vitals attribution pays for the fiber reading and nothing else.
+
+Under the `react-server` condition, `react-inp-blame`, `react-inp-blame/auto`,
+`react-inp-blame/next-client` and `react-inp-blame/web-vitals` resolve to a module whose exports do
+nothing, so a Server Component that imports them adds no browser code to the server bundle.
 
 MIT

@@ -712,6 +712,75 @@ What needs help:
 The production mode is the one that has to reproduce a hand-made INP win on a large app; that
 test has not been run yet against anything but the demo.
 
+## The web-vitals entry
+
+`react-inp-blame/web-vitals` (`packages/core/src/web-vitals.ts`), added 2026-09-19. It exists because
+web-vitals is already in the page of anyone who measures INP, and its one sanctioned framework hook,
+`generateTarget` on the attribution options, was reviewed and added for exactly this: a framework
+naming the element in its own words. Two exports, no import of web-vitals at all: the two types it
+needs are declared structurally in the file, so the entry works with any version that has the fields
+and costs an app that does not use web-vitals nothing.
+
+**What web-vitals keeps.** Which interaction is the page's INP and at what percentile, the interaction
+count, reporting across the back/forward cache and soft navigations, and its own intersection with Long
+Animation Frames. None of that is reimplemented here; `inp()` on the API is a second implementation of
+the same algorithm for the badge, and this entry is the opposite bet: let web-vitals decide, and add
+only the fiber side.
+
+**What it adds.** `generateTarget(node)` gives the components enclosing the node, outermost first, and
+the node itself: `"ProfilePage > PhotoTile (button.tile)"`, which web-vitals writes to
+`attribution.interactionTarget` in place of its own CSS selector. It reads `fiberFromNode` and
+`ownersOf`, the same two lookups every report is built from, so there is one walk in the codebase, not
+two. `attributeINP(metric)` returns the metric's attribution with a frozen `react` field added: the
+blame with its confidence, the handler, the hot path, the heaviest commit's components (at most 5), and
+what React rendered before and after the paint. It carries its own `schemaVersion`, separate from the
+report's, because it is a smaller and slower-moving shape than `InteractionReport`.
+
+**The join.** `metric.entries[].interactionId` against the published reports, newest first. Both sides
+read the same Event Timing entries and the same ids, so the match is exact and no tolerance is needed.
+There is no second key: web-vitals drops every entry without an `interactionId` before a metric is
+built (`lib/InteractionManager.js`), and this library's observer does the same, so an entry with no id
+matches nothing rather than being matched on a start time.
+
+**Limits.**
+
+- `react` is `null` when nothing is installed on the page, and when the library has no report for the
+  interaction web-vitals picked: one that stayed under `threshold` and set off no later render, or one
+  already pushed out of the 50 reports a page keeps (`MAX_REPORTS`). It is never a guess.
+- `generateTarget` needs no installation, only React's fiber expando, so it works in a page that never
+  calls `install()`. `attributeINP` needs one, though not from the same copy of the library: the
+  installation lives on `globalThis` (`session.ts`), so any copy of a compatible version sees it.
+- Under a production build without the `displayName` transform the minifier has renamed the components
+  and the path reads `"a > b (button.tile)"`. Nothing can tell that apart from a real one-letter name,
+  so the entry prints it rather than hiding it.
+- The element half of the target is built from attributes only, never from the element's text, the same
+  rule reports follow (`element.ts`), and the whole string is capped at 120 characters. A path names at
+  most four components and they are the four **nearest** the element, so a deep tree loses the page and
+  the layout rather than the component that renders what was clicked; over the character cap the
+  outermost go first for the same reason. What is left after the components is the element's budget,
+  rather than the joined string being sliced, so a long id is shortened and never leaves a bracket open.
+- Neither export throws. `generateTarget` returns `undefined` for a node it cannot read, which is
+  web-vitals' own signal to fall back to its CSS selector, and `attributeINP` returns `react: null` for
+  a metric it cannot read. Both run inside somebody else's analytics callback, which is no place to
+  raise an exception over a node from another document.
+- `attributeINP` reads `report.explanation`, which is built on first read, so the sentences are built
+  in the web-vitals callback rather than in the Event Timing one. That callback already runs when the
+  page is idle or hidden.
+
+**Size.** 2.7 KB minified, 1.3 KB gzipped on its own, measured 2026-09-19 with the same rolldown
+settings as the table above (the same script read `/auto` at 38.2 / 14.1 that day, against the 39.0 /
+14.4 in the table, so the two scripts are close but not identical). It holds none of the hook, the
+observers, the report lifecycle, the explanation prose or the overlay. Keeping it there needed three
+small extractions: the CSS selector into `element.ts`, the page's installation into `install-state.ts`,
+and the choice of the heaviest commit into `commits.ts`, which the overlay, the DevTools tracks and the
+report's own verdict all make the same way. Reading reports no longer means importing the code that
+produces them.
+
+**Checked by** `packages/core/test/web-vitals.test.ts` and `apps/demo/e2e/web-vitals.spec.ts`, which
+runs web-vitals 6.2.2's attribution build in the page beside the library, in development and production
+builds, and holds `attributeINP(metric).react.blame` against the library's own report for the same
+interaction.
+
 ## Distribution: where this can live
 
 Written with the prototype on 2026-09-12 and cut back since to what ships. Three ideas that stood here
@@ -743,12 +812,14 @@ production. The loader was proven 2026-09-14 in the same three runs; before it t
 file that exports anything Next does not expect, which Turbopack's does not, so nothing beside the page
 itself is exported there. The `memo()` component that stood in for the loader's `const X = memo(` case
 rendered null and was never checked by a spec, so it is gone; `packages/core/test/display-names-loader.test.ts`
-covers the patterns the loader matches, and the ones it does not, instead. A `react-inp-blame/web-vitals`
-entry supplying web-vitals' `generateTarget` would put component paths into `interactionTarget`, which is
-where Vercel Speed Insights' selector breakdown would pick them up with no work on the vendor's side.
-Enriching `metric.attribution` instead needs Next.js's `experimental.webVitalsAttribution`, which 16.3.5
-does not wire up: `client/web-vitals.js` imports the build without attribution whatever the flag says.
-Neither entry exists yet.
+covers the patterns the loader matches, and the ones it does not, instead. `react-inp-blame/web-vitals`
+now supplies web-vitals' `generateTarget`, which puts component paths into `interactionTarget`, the
+field an analytics product reads without any work on the vendor's side (see "The web-vitals entry").
+Enriching `metric.attribution` from Next.js itself would need `experimental.webVitalsAttribution`, which
+16.3.5 does not wire up: `dist/client/web-vitals.js` calls `onINP` from `next/dist/compiled/web-vitals`,
+the build without attribution, whatever the flag says, and the attribution build it also ships is never
+imported there. So under `useReportWebVitals` the metric has no `attribution` and `attributeINP` adds
+the React side to `{}`.
 
 **Vite.** `react-inp-blame/vite`: a module script ahead of the page's own that installs the
 library, so the order of imports in the entry module stops mattering, and the displayName transform.
@@ -769,5 +840,7 @@ run in document order. The demo and its React 17 and 18 variants install with it
 ## Next steps
 
 What is left is the list above: look at the Performance panel tracks by eye, and run
-the library against a real application and against Next.js's own bench apps. After those, the rest of
-the hydration verdict and the `react-inp-blame/web-vitals` entry described under "Distribution".
+the library against a real application and against Next.js's own bench apps. The
+`react-inp-blame/web-vitals` entry landed on 2026-09-19 and has its own section; what it still wants is
+a run under Next.js's `useReportWebVitals`, which reports INP only when the page is hidden and so needs
+a test that can hide it. After those, the rest of the hydration verdict.

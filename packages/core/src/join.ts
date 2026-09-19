@@ -1,3 +1,5 @@
+import { heaviest } from './commits.js';
+import { elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
@@ -54,10 +56,7 @@ const FRAME_MS = 16;
 const LABEL_CHARS = 40;
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
-const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
-// The attributes tests select elements by. A selector names the one an element has.
-const TEST_ATTRIBUTES = ['data-test', 'data-testid'];
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
 const FRIENDLY: Record<string, string> = {
   click: 'click',
@@ -423,25 +422,6 @@ function describeTarget(node: Node, owners: readonly string[], handler: string |
   });
 }
 
-function elementOf(node: Node): Element | null {
-  return node.nodeType === ELEMENT_NODE ? (node as Element) : node.parentElement;
-}
-
-/** 'button#save[data-test="save"]': the tag, the id, then the test attribute the element has, or else two of its classes. */
-function selector(node: Node): string | null {
-  const el = elementOf(node);
-  if (!el) return null;
-  let s = el.tagName.toLowerCase();
-  if (el.id) s += '#' + el.id;
-  for (const name of TEST_ATTRIBUTES) {
-    const value = el.getAttribute(name);
-    // Quoted, so that a value with spaces or brackets is still one selector.
-    if (value) return `${s}[${name}="${value.replace(/["\\]/g, '\\$&')}"]`;
-  }
-  if (el.classList && el.classList.length) s += '.' + Array.from(el.classList).slice(0, 2).join('.');
-  return s;
-}
-
 /**
  * 'button "Add to cart"': the element's kind and what names it. The name comes from what the page's
  * code wrote on the element: its aria-label, a form field's placeholder, name or type, or its
@@ -511,14 +491,6 @@ function linkText(url: string, page: string): string {
 /** "the click handler handleLogin"; "the onClick handler" when the name is a prop's, which is all a minified build leaves. */
 function handlerPhrase(name: string, kind: string): string {
   return /^on[A-Z]/.test(name) ? `the ${name} handler` : `the ${kind} handler ${name}`;
-}
-
-export function heaviest(list: readonly CommitSummary[]): CommitSummary {
-  return list.reduce((a, b) => (score(b) > score(a) ? b : a));
-}
-
-function score(c: CommitSummary): number {
-  return c.hasDurations ? c.total : c.rendered;
 }
 
 function leafOf(c: CommitSummary): string {

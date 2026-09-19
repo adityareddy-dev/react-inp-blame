@@ -1,4 +1,4 @@
-import { heaviest } from './join.js';
+import { heaviest } from './commits.js';
 import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 import { parseReactVersion } from './version.js';

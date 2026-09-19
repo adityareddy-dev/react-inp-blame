@@ -1,13 +1,14 @@
 import { createTimeline } from './devtools.js';
 import { checkHookReplaced, clearCommits, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
+import { page, type Listener } from './install-state.js';
 import { FOLLOW_UP_WINDOW, type LabelSource } from './join.js';
 import { createLifecycle } from './lifecycle.js';
 import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
 import { EVENT_TIMING_FLOOR_MS, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
-import { incompatibleCopy, shared } from './session.js';
+import { incompatibleCopy } from './session.js';
 import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, RendererInfo } from './types.js';
 import { warnOnce } from './warn.js';
 
@@ -26,30 +27,8 @@ const DEFAULT_WALK_BUDGET = 5000;
 /** How long react-dom has to register with the hook before the page is told install() ran too late. */
 const RENDERER_CHECK_MS = 3000;
 
-type Listener = (report: InteractionReport) => void;
-
 /** The options only a first install() can set; a later call that changes one is warned about. */
 type Settings = Required<Pick<InstallOptions, 'threshold' | 'devtoolsTrack' | 'walkBudget' | 'inputWindow' | 'debugGlobal' | 'hook' | 'sampleRate' | 'labels'>>;
-
-interface Installation {
-  api: Api;
-  /** Applies what a later install() call can still change while installed: `overlay`. */
-  reapply(opts: InstallOptions): void;
-}
-
-interface InstallState {
-  installed: Installation | null;
-  /** The API of a page that lost the `sampleRate` roll. Later calls get it back rather than rolling again, which would raise the share. */
-  sampledOut: Api | null;
-  /** Everyone hearing reports. */
-  listeners: Set<Listener>;
-  /** The badge and panel, from the moment they are asked for: their code arrives by dynamic import. */
-  overlay: Promise<OverlayHandle | null> | null;
-  installMs: number;
-}
-
-/** One for the page, whichever copy of the library installs (see session.ts). */
-const page = shared<InstallState>('install', () => ({ installed: null, sampledOut: null, listeners: new Set(), overlay: null, installMs: 0 }));
 
 /** `performance.interactionCount`, which TypeScript's DOM lib does not declare yet. */
 interface InteractionCounting {
