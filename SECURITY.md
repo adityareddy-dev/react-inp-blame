@@ -15,7 +15,7 @@ in that release's notes unless you ask for it not to be.
 
 ## Versions
 
-No version is published to npm yet. Once 0.1.0 is, fixes go into the latest 0.x release only.
+Fixes go into the latest 0.x release on npm only.
 
 ## What counts
 
