@@ -18,6 +18,10 @@ const CLIENT_SETTINGS = 'REACT_INP_BLAME_NEXT';
 // to (16.3.0, PR #93785). Checked here rather than as a peer range, so that installing the package
 // never fails resolution: a prerelease of a later version passes this and a semver range refuses it.
 const NEXT_FLOOR = { major: 16, minor: 3 };
+// This wrapper's own option names. Next.js has neither as a config key, so one of them in the first
+// argument is the options object passed where the config goes: Next.js drops it with "Unrecognized
+// key(s) in object", nothing installs, and the library looks broken. Caught here instead.
+const OPTION_KEYS = ['enabled', 'runtime'];
 
 /**
  * The Next.js the project has, read from its own node_modules. Null when there is none to read or the
@@ -41,6 +45,19 @@ function checkNextVersion() {
   throw new Error(
     `withInpBlame needs Next.js ${NEXT_FLOOR.major}.${NEXT_FLOOR.minor} or later, which is where instrumentationClientInject arrived, and this project has ${found.version}. ` +
       "Upgrade Next.js, or install the library from the app itself with `import 'react-inp-blame/auto'` as the first import of instrumentation-client.ts.",
+  );
+}
+
+/** Throws when the first argument is this wrapper's options rather than a Next.js config. */
+function checkNotTheOptions(nextConfig) {
+  if (nextConfig === null || typeof nextConfig !== 'object') return;
+  const misplaced = OPTION_KEYS.filter((key) => Object.hasOwn(nextConfig, key));
+  if (misplaced.length === 0) return;
+  const names = misplaced.map((key) => `\`${key}\``).join(' and ');
+  const example = misplaced.includes('runtime') ? '{ runtime: { overlay: true } }' : '{ enabled: true }';
+  throw new TypeError(
+    `withInpBlame: ${names} ${misplaced.length === 1 ? 'is an option of this wrapper' : 'are options of this wrapper'}, not a Next.js config key, and the options are the second argument. ` +
+      `Write withInpBlame(nextConfig, ${example}).`,
   );
 }
 
@@ -68,6 +85,7 @@ function installOptions(runtime) {
 }
 
 function withInpBlame(nextConfig = {}, options = {}) {
+  checkNotTheOptions(nextConfig);
   const { enabled = 'development', runtime = true } = options;
   const install = installOptions(runtime);
   // Off means the config comes back as it went in, so the build carries nothing from here.

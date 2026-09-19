@@ -57,6 +57,7 @@ const LABEL_CHARS = 40;
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
 const TEXT_NODE = 3;
+const COMMENT_NODE = 8;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
 const FRIENDLY: Record<string, string> = {
   click: 'click',
@@ -459,7 +460,15 @@ function firstText(el: Element): string {
   for (let looked = 0; node && looked < LABEL_NODES; looked++) {
     if (node.nodeType === TEXT_NODE && /\S/.test(node.nodeValue ?? '')) {
       let text = node.nodeValue ?? '';
-      for (let next = node.nextSibling; next && next.nodeType === TEXT_NODE && text.length < LABEL_CHARS; next = next.nextSibling) text += next.nodeValue ?? '';
+      for (let next = node.nextSibling; next && text.length < LABEL_CHARS; next = next.nextSibling) {
+        // Server-rendered HTML separates two adjacent text children with an empty comment, so that
+        // hydration can tell them apart, and the comment stays in the DOM. It is a separator inside
+        // one run of text, not the end of it: skipping it is what makes the label read the same
+        // under Next.js as under a client-only render.
+        if (next.nodeType === COMMENT_NODE) continue;
+        if (next.nodeType !== TEXT_NODE) break;
+        text += next.nodeValue ?? '';
+      }
       return text;
     }
     node = nextNode(node, el);

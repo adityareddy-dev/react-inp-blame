@@ -81,6 +81,29 @@ test("the project's own Turbopack rules, webpack(), injected modules and env are
   assert.equal(config.env.API_URL, 'https://api.example');
 });
 
+test('the options passed where the config goes are refused, and the message names the two-argument call', () => {
+  assert.throws(
+    () => wrapped('development', { runtime: { overlay: true } }),
+    (error: unknown) =>
+      error instanceof TypeError &&
+      error.message.includes('`runtime` is an option of this wrapper, not a Next.js config key') &&
+      error.message.includes('withInpBlame(nextConfig, { runtime: { overlay: true } })'),
+  );
+  assert.throws(() => wrapped('production', { enabled: true }), /`enabled` is an option of this wrapper.*withInpBlame\(nextConfig, \{ enabled: true \}\)/s);
+  assert.throws(() => wrapped('development', { enabled: 'production', runtime: false }), /`enabled` and `runtime` are options of this wrapper/);
+  // Refused whichever run it is, including the ones `enabled` would leave out: the call is wrong either way.
+  assert.throws(() => wrapped('production', { runtime: true }, { enabled: false }), /not a Next\.js config key/);
+  // A config that has neither key is a config, and a function config is never the options object.
+  assert.deepEqual(added(wrapped('development', { reactStrictMode: true })), EVERYTHING);
+});
+
+test('a function config that returns the options where the config goes is refused too', async () => {
+  await assert.rejects(
+    () => wrappedFunction('development', () => ({ runtime: true }), 'phase-development-server', {}),
+    /`runtime` is an option of this wrapper/,
+  );
+});
+
 /** What withInpBlame returns for a config written as a function: Next.js calls it with the phase while NODE_ENV is still set. */
 async function wrappedFunction(
   nodeEnv: 'development' | 'production',

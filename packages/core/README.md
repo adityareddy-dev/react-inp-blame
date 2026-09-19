@@ -1,29 +1,70 @@
 # react-inp-blame
 
-Names the React component behind a slow interaction. It joins the browser's Event Timing and Long
-Animation Frames entries to React's fiber tree, and says where the time went:
+When a click, tap or key press in your React app is slow, this names the component or the handler
+behind it and says where the time went.
+
+![The demo's sign-in page: a click on Log in, the badge showing the page's INP, the panel opening, and one row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/main/docs/media/overlay.gif)
+
+**[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow
+on purpose. Click something and read what the badge blames.
+
+    npm install react-inp-blame
+
+## Start with Next.js 16.3 or later
+
+    // next.config.ts
+    import { withInpBlame } from 'react-inp-blame/next';
+
+    // Your config first, this library's options second. They are not Next.js config keys.
+    export default withInpBlame({ /* your config */ }, { runtime: { overlay: true } });
+
+## Start with Vite
+
+    // vite.config.ts
+    import { defineConfig } from 'vite';
+    import react from '@vitejs/plugin-react';
+    import { inpBlame } from 'react-inp-blame/vite';
+
+    export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: true } })] });
+
+**What you will see.** Reload, then click something slow. A small dark badge appears in the corner,
+bottom-right by default, with the page's INP so far in milliseconds: green at 200 or under, amber up
+to 500, red above. INP, Interaction to Next Paint, is the Core Web Vital for responsiveness: how long
+a click, tap or key press took to reach the next frame drawn, at the page's slowest. Click the badge
+for a panel of the recent slow interactions, newest first, and click a row for the whole explanation.
+From the demo's sign-in page, in development:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
     after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
     PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
 
-No dependencies. React 17 to 19 (react-dom). Browsers with Event Timing's `interactionId`
-(Chrome 96, Firefox 144, Safari 26.2); only Chromium has Long Animation Frames. Anywhere else
-`install()` installs nothing, and `stats()` says why.
-
-    npm install react-inp-blame
+`overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
+`#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
+production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
+defaults to `'development'`, so a production build carries nothing from either plugin until you say
+`enabled: true` or `enabled: 'production'`.
 
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
+
+# Reference
+
+No dependencies. React 17 to 19 (react-dom). Browsers with Event Timing's `interactionId`
+(Chrome 96, Firefox 144, Safari 26.2); only Chromium has Long Animation Frames, the API that says
+which scripts ran in a slow frame and how much layout they forced. Anywhere else `install()` installs
+nothing, and `stats()` says why.
 
 ## Next.js
 
     // next.config.ts
     import { withInpBlame } from 'react-inp-blame/next';
-    export default withInpBlame({ /* your config */ });
+    export default withInpBlame({ /* your config */ }, { enabled: true, runtime: { overlay: 'query' } });
 
-That is the whole setup, on Next.js 16.3 or later. `withInpBlame` adds `react-inp-blame/next-client`
+That is the whole setup, on Next.js 16.3 or later. The Next.js config is the first argument and this
+library's options are the second; passing the options first throws, because Next.js has no `enabled`
+or `runtime` config key and would drop them without installing anything.
+`withInpBlame` adds `react-inp-blame/next-client`
 to `instrumentationClientInject`, so Next.js installs the library before hydration, which the
 library needs, and a loader, under Turbopack and webpack, that stamps `displayName` on components
 so their names survive the production minifier. `enabled` decides which runs get both:
@@ -34,7 +75,8 @@ are plain data. `runtime: false` leaves the client module out, for an app that i
 `instrumentation-client.ts`; the navigation join below goes with it, since the client module is what
 hears navigations.
 
-On the App Router the client module also hears each navigation: every report carries
+On the App Router the client module also hears each navigation, meaning each route change the
+framework makes in the page with no new document: every report carries
 `navigationURL` and `navigationType`, a click that started a navigation names it in
 `startedNavigation`, and `inp()` starts over at each soft navigation. The Pages Router loads the injected
 module too (read in Next.js 16.3.5's source, not tested), so it gets attribution without the navigation
@@ -44,13 +86,16 @@ join.
 
     // vite.config.ts
     import { defineConfig } from 'vite';
+    import react from '@vitejs/plugin-react';
     import { inpBlame } from 'react-inp-blame/vite';
 
-    export default defineConfig({ plugins: [inpBlame()] });
+    export default defineConfig({ plugins: [react(), inpBlame({ enabled: true, runtime: { overlay: 'query' } })] });
 
-`inpBlame` returns two plugins. One adds a module script ahead of the page's own that calls
+`inpBlame` takes one argument, its own options, and returns two plugins. One adds a module script
+ahead of the page's own that calls
 `install()`, so React registers with the library's hook whatever the entry module imports first;
-the other stamps `displayName` on the app's components. `enabled` and `runtime` work as they do for
+the other stamps `displayName` on the app's components. It goes beside the React plugin, not instead
+of it. `enabled` and `runtime` work as they do for
 Next.js, with `'development'` meaning the dev server and `'production'` meaning `vite build`, and
 `pages` picks the HTML pages that get the script.
 
@@ -111,9 +156,10 @@ has renamed them and the path reads `a > b (button.tile)`.
 - `install(options?)` installs once per page and returns the API; every later call, from any copy
   of the package on the page, returns the same one. `react-inp-blame/auto` calls it on import, and
   the Vite plugins and the Next.js wrapper call it with their `runtime` options.
-  Options: `overlay`, `threshold` (40 ms), `labels` (`'auto'`), `hook` (`'auto'`), `sampleRate`
-  (1), `walkBudget` (5000), `inputWindow` (1500 ms), `devtoolsTrack` (true), `debugGlobal`
-  (`true` puts the API on `window.__REACT_INP_BLAME__`).
+  Options: `overlay` (false), `threshold` (40 ms), `labels` (`'auto'`), `hook` (`'auto'`),
+  `sampleRate` (1), `walkBudget` (5000 component fibers per commit, so one huge render cannot cost
+  more than that), `inputWindow` (1500 ms), `devtoolsTrack` (true), `debugGlobal` (false; set it to
+  `true` to put the API on `window.__REACT_INP_BLAME__`, or to a string to name the property).
 - `onInteraction(fn)` hears each report, and each later revision of it, in a task after the one that
   published it, and returns the unsubscribe. It is the one way to hear reports. A panel that renders
   what it hears is safe: the update your listener makes while it runs is never read as part of an
@@ -124,7 +170,14 @@ has renamed them and the path reads `a > b (button.tile)`.
   unsupported, what the library has cost), `dispose()`, and `debug.commits()` and `debug.hook()`,
   which are for debugging and may change in any version.
 - `mountOverlay(options?)` shows the on-page badge and panel; their code loads when shown.
-- `fiberFromNode`, `ownerChain` and `handlerName` are the lookups reports are built from.
+- `fiberFromNode`, `ownerChain` and `handlerName` are the lookups reports are built from. They read
+  React's fiber tree, the internal tree React keeps of the rendered components, through the hook
+  React exposes for developer tools.
+
+`target.handler` is the name of the function on the element's event prop, or the prop's own name when
+that function has no name worth printing. An inline `onClick={() => ...}` therefore reads as
+`onClick`, and so does a handler the minifier renamed: name the function if you want the report to
+name it.
 
 Reports are frozen and carry `schemaVersion: 1`. When a late Event Timing entry, a long animation
 frame or a later render joins one, the next revision arrives as a new object with `revision`

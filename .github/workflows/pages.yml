@@ -1,0 +1,59 @@
+name: Demo on GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    # The demo is the library on a page, so a change to either rebuilds it. Nothing else does.
+    paths:
+      - 'apps/demo/**'
+      - 'packages/core/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Read the repository, mint the token deploy-pages exchanges for the deployment, and nothing else.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and a push while one is running supersedes it rather than queueing.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # The demo's Vite config keeps `enabled: true` and the overlay on, so the production build it
+      # makes carries the library, which is the point of the page. --base rewrites every asset URL
+      # for the repository subpath; the demo routes on the hash, so no 404 fallback is needed.
+      - name: Build apps/demo for the repository subpath
+        env:
+          INP_DEMO_HOSTED: '1'
+        run: npm run build -w apps/demo -- --base=/react-inp-blame/
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/demo/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

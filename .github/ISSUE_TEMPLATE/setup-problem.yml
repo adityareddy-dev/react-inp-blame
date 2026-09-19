@@ -1,0 +1,41 @@
+name: Setup problem
+description: The library will not install, will not build, or nothing appears on the page.
+labels: ['setup']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two quick checks first. `stats()` says whether the library installed at all and why not:
+        turn on `debugGlobal: true` and read `__REACT_INP_BLAME__.stats()`. And with Next.js,
+        the options are the **second** argument, `withInpBlame(nextConfig, { runtime: { overlay: true } })`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What you did and what happened
+      description: The steps from a fresh install, and where it stopped.
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Your next.config or vite.config
+      description: The whole file, or the part that calls `withInpBlame` or `inpBlame`.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: The error, or what stats() says
+      description: The build output, the console warnings, or `__REACT_INP_BLAME__.stats()`.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: react-inp-blame, the framework, react and react-dom, and Node.
+      placeholder: react-inp-blame 0.1.1, next 16.3.5, react 19.3.0, node 24.19
+    validations:
+      required: true

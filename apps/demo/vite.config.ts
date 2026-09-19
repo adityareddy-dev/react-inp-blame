@@ -5,6 +5,22 @@ import { inpBlame } from 'react-inp-blame/vite';
 const core = (f: string) => fileURLToPath(new URL(`../../packages/core/src/${f}`, import.meta.url));
 const page = (f: string) => fileURLToPath(new URL(`./${f}`, import.meta.url));
 
+// Only the build that goes to GitHub Pages, which .github/workflows/pages.yml sets this for. A stranger
+// arriving there has no README beside the page, so it says what the page is and that the delays are put
+// there on purpose. Off everywhere else, so the specs and the dev server see the demo unchanged.
+const hostedBanner = {
+  name: 'react-inp-blame-demo:hosted-banner',
+  apply: 'build' as const,
+  transformIndexHtml: (html: string) =>
+    process.env.INP_DEMO_HOSTED !== '1'
+      ? html
+      : html.replace(
+          '<div id="root"></div>',
+          `<p class="hosted-banner">This page is the demo for <a href="https://github.com/adityareddy-dev/react-inp-blame">react-inp-blame</a>, ` +
+            `and everything on it is slow on purpose. Click something and read what the badge in the corner blames.</p>\n    <div id="root"></div>`,
+        ),
+};
+
 export default defineConfig({
   plugins: [
     inpBlame({
@@ -16,6 +32,7 @@ export default defineConfig({
       // devtools-hook.html loads the library itself, before or after React DevTools and Fast Refresh.
       pages: (path) => path !== '/devtools-hook.html',
     }),
+    hostedBanner,
   ],
   resolve: {
     alias: [

@@ -1,0 +1,70 @@
+name: Wrong or missing blame
+description: A slow interaction got no report, or the report named the wrong thing.
+labels: ['blame']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The report is what makes this diagnosable. Open the badge, or turn on
+        `debugGlobal: true` and run `JSON.stringify(__REACT_INP_BLAME__.last(), null, 2)`
+        in the console right after the slow interaction. `reports()` gives the last 50.
+        Reports carry the URL of the page and the label of the element you clicked, so read
+        them through before pasting.
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what you got
+      description: Which component or handler you believe was slow, and what the report said instead. Say "no report at all" if nothing appeared.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: The report
+      description: The JSON from `last()` or `reports()`. If there is no report, paste `stats()` instead.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: react-inp-blame, react and react-dom versions
+      placeholder: react-inp-blame 0.1.1, react 19.3.0, react-dom 19.3.0
+    validations:
+      required: true
+  - type: dropdown
+    id: bundler
+    attributes:
+      label: Bundler
+      options:
+        - Next.js, Turbopack
+        - Next.js, webpack
+        - Vite
+        - Another bundler, with react-inp-blame/auto
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Development or production build
+      options:
+        - Development
+        - Production
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      description: Long Animation Frames are Chromium only, which changes what a report can say.
+      placeholder: Chrome 147 on Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: The component, if you can share it
+      description: The handler and the element that was clicked, cut down as far as it still reproduces.
+      render: tsx

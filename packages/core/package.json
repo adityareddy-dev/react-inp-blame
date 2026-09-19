@@ -68,7 +68,7 @@
     "prepack": "npm run build",
     "test:unit": "node --import ./test/ts-imports.ts --test test/*.test.ts"
   },
-  "keywords": ["react", "inp", "web-vitals", "performance", "event-timing", "long-animation-frames", "devtools", "nextjs", "vite"],
+  "keywords": ["react", "inp", "interaction-to-next-paint", "web-vitals", "core-web-vitals", "performance", "profiling", "event-timing", "long-animation-frames", "devtools", "nextjs", "vite"],
   "peerDependencies": {
     "next": "*",
     "react": "*",

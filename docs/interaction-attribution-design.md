@@ -370,7 +370,11 @@ React handler prop for the event type is looked up on the same chain, so "no Rea
 names it by its tag and a name of at most 40 characters, and its whole `textContent` is never read,
 because a click can land on a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
 form field's placeholder, name or type, or its data-testid or data-test), and, where text is
-allowed, from the first run of text of an element with no aria-label that is not a form field.
+allowed, from the first run of text of an element with no aria-label that is not a form field. A run
+is the adjacent text nodes React renders an interpolated string as, `Add to cart ({n})` as three, and
+it takes in the empty comments the server renderer puts between them to keep hydration straight:
+without that, the same button would be labelled `Add to cart (` after hydration and
+`Add to cart (3)` after a client-only render.
 Text is allowed under a development build of React and wherever `install({ labels: 'text' })`
 asks for it, not by default under a production build: an element's text can be a person's name
 or email (a clicked table cell), and production reports are the ones forwarded to Sentry, Faro

@@ -1,23 +1,83 @@
 # react-inp-blame
 
-Interaction attribution for React: when a click, tap or key press is slow, it names the component or handler
-behind it and says where the time went. It joins the browser's Event Timing entries (what INP is built on)
-and Long Animation Frames (which scripts ran, and how much layout they forced) to React's fiber tree, read
-through the hook React keeps for developer tools. From the demo's sign-in page, in development:
+When a click, tap or key press in your React app is slow, this names the component or the handler behind
+it and says where the time went.
+
+![The demo's sign-in page: a click on Log in, the badge showing the page's INP, the panel opening, and one row expanding into the explanation](docs/media/overlay.gif)
+
+**[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow on
+purpose. Click something and read what the badge blames.
+
+    npm install react-inp-blame
+
+## Start with Next.js 16.3 or later
+
+```ts
+// next.config.ts
+import { withInpBlame } from 'react-inp-blame/next';
+
+// Your config first, this library's options second. They are not Next.js config keys.
+export default withInpBlame({ /* your config */ }, { runtime: { overlay: true } });
+```
+
+## Start with Vite
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { inpBlame } from 'react-inp-blame/vite';
+
+export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: true } })] });
+```
+
+**What you will see.** Reload, then click something slow. A small dark badge appears in the corner,
+bottom-right by default, with the page's INP so far in milliseconds: green at 200 or under, amber up to
+500, red above. Click the badge for a panel of the recent slow interactions, newest first, and click a
+row for the whole explanation. From the demo's sign-in page, in development:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
     after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
     PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
 
-    npm install react-inp-blame
+`overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
+`#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
+production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
+defaults to `'development'`, so a production build carries nothing from either plugin until you say
+`enabled: true` or `enabled: 'production'`.
+
+If you would rather read reports than look at a badge, drop `overlay` and subscribe:
+
+```ts
+import { onInteraction } from 'react-inp-blame';
+
+onInteraction((report) => console.log(report.verdict, report.explanation.blame));
+```
+
+---
+
+# Reference
+
+Terms this page uses: **INP** (Interaction to Next Paint) is the Core Web Vital for responsiveness: how
+long a click, tap or key press took to reach the next frame drawn, at the page's slowest, with the worst
+few left out once a page has had many. **Event
+Timing** is the browser API INP is built on. **Long Animation Frames** is a second, Chromium-only API that
+says which scripts ran in a slow frame and how much layout they forced. React's **fiber tree** is the
+internal tree React keeps of your rendered components; the library reads it through the hook React
+exposes for developer tools. A **soft navigation** is a route change the framework makes in the page,
+with no new document.
 
 ## Install with Next.js 16.3 or later
+
+`withInpBlame(nextConfig, options)`: your Next.js config first, this library's options second. Passing the
+options as the first argument throws, because Next.js has no `enabled` or `runtime` config key and would
+silently drop them.
 
 ```ts
 // next.config.ts
 import { withInpBlame } from 'react-inp-blame/next';
-export default withInpBlame({ /* your config */ });
+export default withInpBlame({ /* your config */ }, { enabled: true, runtime: { overlay: 'query' } });
 ```
 
 `withInpBlame` appends `react-inp-blame/next-client` to `instrumentationClientInject`, which Next.js imports
@@ -42,12 +102,15 @@ not tested), so it gets attribution without navigations.
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 import { inpBlame } from 'react-inp-blame/vite';
-export default defineConfig({ plugins: [inpBlame()] });
+
+export default defineConfig({ plugins: [react(), inpBlame({ enabled: true, runtime: { overlay: 'query' } })] });
 ```
 
-`inpBlame()` returns two plugins: a module script at the top of each HTML page that calls `install()`, so
-React registers with the library's hook whatever your entry imports first, and the `displayName` transform.
+`inpBlame()` takes one argument, its own options, and returns two plugins: a module script at the top of each
+HTML page that calls `install()`, so React registers with the library's hook whatever your entry imports
+first, and the `displayName` transform. Add it beside your React plugin, not instead of it.
 `enabled` defaults to `'development'` here too (the dev server; `'production'` is `vite build`, `true` both,
 `false` adds no plugins), `runtime` is as for Next.js, and `pages(path)` picks the pages that get the script.
 With another bundler, make `import 'react-inp-blame/auto'` the first import of your entry module; for names,
@@ -175,6 +238,10 @@ interface InteractionReport {
   verdict: string;
 }
 ```
+
+`target.handler` is the name of the function on the element's event prop, or the prop's own name when that
+function has no name worth printing. An inline `onClick={() => ...}` therefore reads as `onClick`, and so
+does a handler the minifier renamed: name the function if you want the report to name it.
 
 `duration` is the longest single Event Timing entry, as web-vitals measures it; `holdMs` is how much longer
 the span from press to release ran. Reports are frozen: a late entry, frame or render that joins one reaches
@@ -338,4 +405,4 @@ field is named by its first run of text. Development builds use text by default.
 `target.selector` has the tag, the `id` if there is one, and `data-test` or `data-testid` or else two classes,
 and `navigationURL` and `startedNavigation.url` are full URLs, query string included.
 
-[Design notes](docs/interaction-attribution-design.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · MIT license
+[Design notes](docs/interaction-attribution-design.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · MIT license
