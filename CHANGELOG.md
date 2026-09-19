@@ -19,10 +19,15 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 - `withInpBlame` threw nothing when the options were passed as its first argument, where the Next.js
   config goes. Next.js dropped them with "Unrecognized key(s) in object", nothing installed, and the
-  library looked broken. It now refuses that call and names the two-argument form.
-- A label read from an element's text stopped at the first empty comment React's server renderer
-  leaves between two adjacent text children, so a hydrated `Slow click ({count})` was labelled
-  `Slow click (`. Those comments are separators inside one run of text and are now skipped.
+  library looked broken. It now refuses that call and quotes the two-argument form with the caller's
+  own values.
+- `withInpBlame` and `inpBlame` ignored an option they do not have, so `{ overlay: true }` written a
+  level too high showed nothing and said nothing. Both now refuse an unknown key, list the ones they
+  take, and, when the key is an `install()` option, say it belongs under `runtime`.
+- A label read from an element's text stopped at the first `<!-- -->` React's server renderer leaves
+  between two adjacent text children, so a hydrated `Slow click ({count})` was labelled
+  `Slow click (`. Those comments are separators inside one run of text and are now skipped, up to a
+  fixed number of siblings.
 
 ## [0.1.1] - 2026-09-19
 

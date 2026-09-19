@@ -10,16 +10,14 @@ on:
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
-# Read the repository, mint the token deploy-pages exchanges for the deployment, and nothing else.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# One deployment at a time, and a push while one is running supersedes it rather than queueing.
+# One deployment at a time. A queued run waits rather than cancelling the one in flight, because
+# cancelling a production deployment half way is worse than publishing a commit that is one behind.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -32,6 +30,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # Before anything is built, so a repository with Pages switched off fails in seconds rather
+      # than after a full install and two builds.
+      - uses: actions/configure-pages@v6
       - run: npm ci
       - run: npm run build
       # The demo's Vite config keeps `enabled: true` and the overlay on, so the production build it
@@ -41,7 +42,6 @@ jobs:
         env:
           INP_DEMO_HOSTED: '1'
         run: npm run build -w apps/demo -- --base=/react-inp-blame/
-      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
           path: apps/demo/dist
@@ -51,6 +51,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Only this job writes: `pages` to publish, `id-token` for the token deploy-pages exchanges.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}

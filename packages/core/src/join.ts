@@ -56,6 +56,9 @@ const FRAME_MS = 16;
 const LABEL_CHARS = 40;
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
+// Siblings joined into that run once it starts, the separators between them counted: an interpolated
+// string is a handful of nodes, so a long row of them is a list, not a label.
+const RUN_NODES = 16;
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
@@ -460,11 +463,12 @@ function firstText(el: Element): string {
   for (let looked = 0; node && looked < LABEL_NODES; looked++) {
     if (node.nodeType === TEXT_NODE && /\S/.test(node.nodeValue ?? '')) {
       let text = node.nodeValue ?? '';
-      for (let next = node.nextSibling; next && text.length < LABEL_CHARS; next = next.nextSibling) {
-        // Server-rendered HTML separates two adjacent text children with an empty comment, so that
-        // hydration can tell them apart, and the comment stays in the DOM. It is a separator inside
-        // one run of text, not the end of it: skipping it is what makes the label read the same
-        // under Next.js as under a client-only render.
+      let joined = 0;
+      for (let next = node.nextSibling; next && joined < RUN_NODES && text.length < LABEL_CHARS; next = next.nextSibling, joined++) {
+        // Server-rendered HTML separates two adjacent text children with `<!-- -->`, a comment
+        // holding a single space, so that hydration can tell them apart, and it stays in the DOM.
+        // It is a separator inside one run of text, not the end of it: skipping it is what makes
+        // the label read the same under Next.js as under a client-only render.
         if (next.nodeType === COMMENT_NODE) continue;
         if (next.nodeType !== TEXT_NODE) break;
         text += next.nodeValue ?? '';

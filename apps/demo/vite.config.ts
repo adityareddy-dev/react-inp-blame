@@ -11,8 +11,10 @@ const page = (f: string) => fileURLToPath(new URL(`./${f}`, import.meta.url));
 const hostedBanner = {
   name: 'react-inp-blame-demo:hosted-banner',
   apply: 'build' as const,
-  transformIndexHtml: (html: string) =>
-    process.env.INP_DEMO_HOSTED !== '1'
+  // The demo builds two pages, and devtools-hook.html has a `<div id="root">` of its own. Only the
+  // page a visitor lands on gets the banner.
+  transformIndexHtml: (html: string, ctx: { path: string }) =>
+    process.env.INP_DEMO_HOSTED !== '1' || ctx.path !== '/index.html'
       ? html
       : html.replace(
           '<div id="root"></div>',

@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 import type { InstallOptions } from './dist/index.js';
 
+/** The wrapper's own options, its second argument. A key that is not one of these throws at config time. */
 export interface WithInpBlameOptions {
   /**
    * Which runs of Next get anything from this wrapper: 'development' (`next dev`), 'production'

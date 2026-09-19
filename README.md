@@ -34,7 +34,9 @@ export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: 
 **What you will see.** Reload, then click something slow. A small dark badge appears in the corner,
 bottom-right by default, with the page's INP so far in milliseconds: green at 200 or under, amber up to
 500, red above. Click the badge for a panel of the recent slow interactions, newest first, and click a
-row for the whole explanation. From the demo's sign-in page, in development:
+row for the whole explanation. The demo above sets `position: 'bottom-left'`, which is why its badge
+sits on the left: its own explanation column has the right-hand side. From the demo's sign-in page,
+in development:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms

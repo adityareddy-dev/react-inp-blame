@@ -67,9 +67,9 @@ function text(value: string): Record<string, unknown> {
   return { nodeType: 3, nodeValue: value, parentNode: null, parentElement: null, nextSibling: null, firstChild: null };
 }
 
-/** The empty comment React's server renderer puts between two adjacent text children, kept by hydration. */
+/** `<!-- -->`, the comment React's server renderer puts between two adjacent text children, kept by hydration. */
 function separator(): Record<string, unknown> {
-  return { nodeType: 8, nodeValue: '', parentNode: null, parentElement: null, nextSibling: null, firstChild: null };
+  return { nodeType: 8, nodeValue: ' ', parentNode: null, parentElement: null, nextSibling: null, firstChild: null };
 }
 
 /** A Long Animation Frames script, as the observer summarises one. */
@@ -212,8 +212,11 @@ test('with text allowed, the label is the aria-label or the first run of text, a
   const label = (target: Record<string, unknown>) => labelOf(target, 'text');
   // React renders `Add to cart ({count})` as three adjacent text nodes.
   assert.equal(label(element('button', [text('Add to cart ('), text('3'), text(')')])), 'button "Add to cart (3)"');
-  // The same button hydrated from server HTML, where React separated those three with empty comments.
+  // The same button hydrated from server HTML, where React separated those three with `<!-- -->`.
   assert.equal(label(element('button', [text('Add to cart ('), separator(), text('3'), separator(), text(')')])), 'button "Add to cart (3)"');
+  // Skipping separators is not a way to walk a whole element: the run stops after a fixed number of siblings.
+  const separated = [text('Hi'), ...Array.from({ length: 40 }, separator), text('there')];
+  assert.equal(label(element('span', separated)), 'span "Hi"');
   assert.equal(label(element('button', [element('svg', []), text('  Close  ')])), 'button "Close"');
   assert.equal(label(element('button', [text('×')], { 'aria-label': 'Remove item' })), 'button "Remove item"');
   assert.equal(label(element('p', [text('A'.repeat(60))])), `p "${'A'.repeat(40)}"`);

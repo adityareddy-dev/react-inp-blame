@@ -1,6 +1,6 @@
 name: Wrong or missing blame
 description: A slow interaction got no report, or the report named the wrong thing.
-labels: ['blame']
+labels: ['bug']
 body:
   - type: markdown
     attributes:

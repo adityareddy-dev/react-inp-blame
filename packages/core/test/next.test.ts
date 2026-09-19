@@ -90,11 +90,34 @@ test('the options passed where the config goes are refused, and the message name
       error.message.includes('withInpBlame(nextConfig, { runtime: { overlay: true } })'),
   );
   assert.throws(() => wrapped('production', { enabled: true }), /`enabled` is an option of this wrapper.*withInpBlame\(nextConfig, \{ enabled: true \}\)/s);
-  assert.throws(() => wrapped('development', { enabled: 'production', runtime: false }), /`enabled` and `runtime` are options of this wrapper/);
+  // Two keys, and the example is the caller's own values rather than an invented pair.
+  assert.throws(
+    () => wrapped('development', { enabled: 'production', runtime: false }),
+    (error: unknown) =>
+      error instanceof TypeError &&
+      error.message.includes('`enabled` and `runtime` are options of this wrapper, not Next.js config keys') &&
+      error.message.includes('withInpBlame(nextConfig, { enabled: "production", runtime: false })'),
+  );
   // Refused whichever run it is, including the ones `enabled` would leave out: the call is wrong either way.
   assert.throws(() => wrapped('production', { runtime: true }, { enabled: false }), /not a Next\.js config key/);
   // A config that has neither key is a config, and a function config is never the options object.
   assert.deepEqual(added(wrapped('development', { reactStrictMode: true })), EVERYTHING);
+});
+
+test('an option this wrapper does not have is refused, and an install() option is sent under runtime', () => {
+  assert.throws(
+    () => wrapped('development', {}, { overlay: true } as never),
+    (error: unknown) =>
+      error instanceof TypeError &&
+      error.message.includes("`overlay` is not one of this wrapper's options, which are `enabled` and `runtime`") &&
+      error.message.includes('withInpBlame(nextConfig, { runtime: { overlay: true } })'),
+  );
+  // The value is the caller's, whatever shape it has.
+  assert.throws(() => wrapped('development', {}, { debugGlobal: '__inp' } as never), /withInpBlame\(nextConfig, \{ runtime: \{ debugGlobal: "__inp" \} \}\)/);
+  // A key that is nobody's option gets the list and nothing more, since there is nowhere to send it.
+  assert.throws(() => wrapped('development', {}, { enable: true } as never), (error: unknown) => error instanceof TypeError && !error.message.includes('install()'));
+  // Refused before `enabled` can leave the run out, so a typo cannot hide until someone builds for production.
+  assert.throws(() => wrapped('production', {}, { overlay: true } as never), /not one of this wrapper's options/);
 });
 
 test('a function config that returns the options where the config goes is refused too', async () => {

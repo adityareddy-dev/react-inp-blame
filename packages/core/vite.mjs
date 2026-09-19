@@ -17,6 +17,10 @@ const INSTALL_MODULE = 'virtual:react-inp-blame/install';
 const RESOLVED_INSTALL_MODULE = `\0${INSTALL_MODULE}`;
 const COMPONENT_FILE = /\.[jt]sx$/;
 const ENABLED = ['development', 'production', true, false];
+const OPTION_KEYS = ['enabled', 'runtime', 'pages'];
+// install()'s own options, which belong under `runtime`. Listed so that `{ overlay: true }` at the top
+// level, which these plugins would otherwise ignore into silence, is named for what it is.
+const INSTALL_KEYS = ['overlay', 'threshold', 'labels', 'hook', 'sampleRate', 'walkBudget', 'inputWindow', 'devtoolsTrack', 'debugGlobal'];
 
 /** The options install() gets: {} for `runtime: true`, the object itself, null for `runtime: false`. */
 function installOptions(runtime) {
@@ -26,7 +30,30 @@ function installOptions(runtime) {
   throw new TypeError(`inpBlame: runtime is true, false or the options for install(), not ${JSON.stringify(runtime)}.`);
 }
 
-export function inpBlame({ enabled = 'development', runtime = true, pages = () => true } = {}) {
+/** An object literal as it would be written in a config file, so an error can quote the caller's own values. */
+function asWritten(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return JSON.stringify(value);
+  const keys = Object.keys(value);
+  return keys.length === 0 ? '{}' : `{ ${keys.map((key) => `${key}: ${asWritten(value[key])}`).join(', ')} }`;
+}
+
+/**
+ * Throws on an option these plugins do not have. An unknown key is otherwise ignored in silence,
+ * which looks exactly like the library not working, and the likeliest one is an install() option
+ * written a level too high.
+ */
+function checkOptionKeys(options) {
+  const unknown = Object.keys(options).find((key) => !OPTION_KEYS.includes(key));
+  if (unknown === undefined) return;
+  const belongs = INSTALL_KEYS.includes(unknown)
+    ? ` It is an option of install(), so it goes under \`runtime\`: inpBlame({ runtime: ${asWritten({ [unknown]: options[unknown] })} }).`
+    : '';
+  throw new TypeError(`inpBlame: \`${unknown}\` is not one of this plugin's options, which are \`enabled\`, \`runtime\` and \`pages\`.${belongs}`);
+}
+
+export function inpBlame(options = {}) {
+  checkOptionKeys(options);
+  const { enabled = 'development', runtime = true, pages = () => true } = options;
   if (!ENABLED.includes(enabled)) {
     throw new TypeError(`inpBlame: enabled is 'development', 'production', true or false, not ${JSON.stringify(enabled)}.`);
   }

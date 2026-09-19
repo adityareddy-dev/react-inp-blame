@@ -1,6 +1,6 @@
 name: Setup problem
 description: The library will not install, will not build, or nothing appears on the page.
-labels: ['setup']
+labels: ['question']
 body:
   - type: markdown
     attributes:

@@ -22,6 +22,9 @@ const NEXT_FLOOR = { major: 16, minor: 3 };
 // argument is the options object passed where the config goes: Next.js drops it with "Unrecognized
 // key(s) in object", nothing installs, and the library looks broken. Caught here instead.
 const OPTION_KEYS = ['enabled', 'runtime'];
+// install()'s own options, which belong under `runtime`. Listed so that `{ overlay: true }` at the top
+// level, which this wrapper would otherwise ignore into silence, is named for what it is.
+const INSTALL_KEYS = ['overlay', 'threshold', 'labels', 'hook', 'sampleRate', 'walkBudget', 'inputWindow', 'devtoolsTrack', 'debugGlobal'];
 
 /**
  * The Next.js the project has, read from its own node_modules. Null when there is none to read or the
@@ -48,17 +51,40 @@ function checkNextVersion() {
   );
 }
 
+/** An object literal as it would be written in a config file, so an error can quote the caller's own values. */
+function asWritten(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return JSON.stringify(value);
+  const keys = Object.keys(value);
+  return keys.length === 0 ? '{}' : `{ ${keys.map((key) => `${key}: ${asWritten(value[key])}`).join(', ')} }`;
+}
+
+/** The caller's own `{ enabled, runtime }`, or whichever of them this is about, as a literal. */
+const theseKeys = (source, keys) => asWritten(Object.fromEntries(keys.map((key) => [key, source[key]])));
+
 /** Throws when the first argument is this wrapper's options rather than a Next.js config. */
 function checkNotTheOptions(nextConfig) {
   if (nextConfig === null || typeof nextConfig !== 'object') return;
   const misplaced = OPTION_KEYS.filter((key) => Object.hasOwn(nextConfig, key));
   if (misplaced.length === 0) return;
   const names = misplaced.map((key) => `\`${key}\``).join(' and ');
-  const example = misplaced.includes('runtime') ? '{ runtime: { overlay: true } }' : '{ enabled: true }';
+  const subject = misplaced.length === 1 ? `${names} is an option of this wrapper, not a Next.js config key` : `${names} are options of this wrapper, not Next.js config keys`;
   throw new TypeError(
-    `withInpBlame: ${names} ${misplaced.length === 1 ? 'is an option of this wrapper' : 'are options of this wrapper'}, not a Next.js config key, and the options are the second argument. ` +
-      `Write withInpBlame(nextConfig, ${example}).`,
+    `withInpBlame: ${subject}, and the options are the second argument. Write withInpBlame(nextConfig, ${theseKeys(nextConfig, misplaced)}).`,
   );
+}
+
+/**
+ * Throws on an option this wrapper does not have. An unknown key is otherwise ignored in silence,
+ * which looks exactly like the library not working, and the likeliest one is an install() option
+ * written a level too high.
+ */
+function checkOptionKeys(options) {
+  const unknown = Object.keys(options).find((key) => !OPTION_KEYS.includes(key));
+  if (unknown === undefined) return;
+  const belongs = INSTALL_KEYS.includes(unknown)
+    ? ` It is an option of install(), so it goes under \`runtime\`: withInpBlame(nextConfig, { runtime: ${theseKeys(options, [unknown])} }).`
+    : '';
+  throw new TypeError(`withInpBlame: \`${unknown}\` is not one of this wrapper's options, which are \`enabled\` and \`runtime\`.${belongs}`);
 }
 
 function turbopackRule() {
@@ -86,6 +112,7 @@ function installOptions(runtime) {
 
 function withInpBlame(nextConfig = {}, options = {}) {
   checkNotTheOptions(nextConfig);
+  checkOptionKeys(options);
   const { enabled = 'development', runtime = true } = options;
   const install = installOptions(runtime);
   // Off means the config comes back as it went in, so the build carries nothing from here.

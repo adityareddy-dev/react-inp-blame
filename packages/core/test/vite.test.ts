@@ -75,3 +75,19 @@ test("the transform stamps displayName on the app's component files, and leaves 
   assert.equal(transform.transform(source, '/app/node_modules/ui/Cart.jsx'), null);
   assert.equal(transform.transform(source, '/app/src/cart.ts'), null);
 });
+
+test('an option these plugins do not have is refused, and an install() option is sent under runtime', () => {
+  assert.throws(
+    () => inpBlame({ overlay: true } as never),
+    (error: unknown) =>
+      error instanceof TypeError &&
+      error.message.includes("`overlay` is not one of this plugin's options, which are `enabled`, `runtime` and `pages`") &&
+      error.message.includes('inpBlame({ runtime: { overlay: true } })'),
+  );
+  // The value is the caller's, whatever shape it has.
+  assert.throws(() => inpBlame({ overlay: { position: 'bottom-left' } } as never), /inpBlame\(\{ runtime: \{ overlay: \{ position: "bottom-left" \} \} \}\)/);
+  // A key that is nobody's option gets the list and nothing more, since there is nowhere to send it.
+  assert.throws(() => inpBlame({ page: () => true } as never), (error: unknown) => error instanceof TypeError && !error.message.includes('install()'));
+  // Refused even where the plugins would add nothing, so a typo cannot hide behind enabled: false.
+  assert.throws(() => inpBlame({ enabled: false, overlay: true } as never), /not one of this plugin's options/);
+});

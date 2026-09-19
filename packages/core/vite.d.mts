@@ -1,6 +1,7 @@
 import type { Plugin } from 'vite';
 import type { InstallOptions } from './dist/index.js';
 
+/** The plugins' own options. A key that is not one of these throws at config time. */
 export interface InpBlameOptions {
   /**
    * Which runs of Vite get anything from these plugins: 'development' (the dev server), 'production'
