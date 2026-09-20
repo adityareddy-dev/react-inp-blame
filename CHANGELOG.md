@@ -46,6 +46,70 @@ it changes when a field is removed or changes meaning, which a minor release may
   between two adjacent text children, so a hydrated `Slow click ({count})` was labelled
   `Slow click (`. Those comments are separators inside one run of text and are now skipped, up to a
   fixed number of siblings.
+- **An interaction slower than the join window was reported as one React never rendered for.** A commit
+  was joined to an input only when it landed within 1.5 s of that input, measured from the input itself,
+  so a click that spent 2.5 s inside React had its commit dropped and the report read "React didn't
+  render anything", with confidence `measured`. A commit React makes inside an input's dispatch is now
+  that input's however long the dispatch has run, and a commit outside any dispatch is measured from the
+  end of the last commit inside that input's dispatch rather than from the input. That is not the end of
+  the dispatch, which the library cannot see: a handler that works for two seconds and commits nothing
+  leaves the window running from the input, and a transition it starts afterwards is still dropped.
+  A dropped commit that ran while the interaction's own handlers were running is counted on the report as
+  `unjoinedCommits`: the report then says React rendered during the interaction and that those commits
+  could not be tied to it, and nothing it says about React's work is `measured`. A commit outside those
+  handlers, a clock ticking elsewhere on the page, is not counted against the interaction.
+  `InteractionReport` carries a new required field, `unjoinedCommits`, so a report object built by hand
+  rather than by `buildReport` has to set it; `InputRecord` carries a new `work` field; reports stay at
+  `schemaVersion: 1`.
+- **Arrow-function components lost their names in production.** The `displayName` loader matched only
+  `function Foo(` and `const Foo = memo(...)`, so `const Foo = (props) => …`, the form most components
+  are written in, reached the minifier unnamed and the blame named `t` or `Wr`. It now stamps any
+  top-level capitalised binding whose value is a function, including the `React.memo`, `forwardRef` and
+  generic forms, reading the source with strings, templates, comments, regular expressions and JSX
+  masked out. Across Excalidraw and two TanStack Table examples (301 files) that took the components it
+  names from 57 to 256, and every component the corpus can identify in those files, 316 of 316, now has
+  a name, counting the 60 the apps already name themselves with a `displayName` of their own. It also
+  reads the top level as brace depth rather than as indentation and skips a name the module imports.
+  Two passes that were quadratic are linear: a 1 MB run of word characters used not to finish, and
+  10,000 components in one file took 8 seconds. Both are now under 100 ms.
+- **A stamp could throw at load and take the page down.** The stamp was a bare
+  `Foo.displayName = "Foo"`, which fails on a frozen component, on a read-only `displayName`, on
+  anything that is not an object, and on a name the loader read wrong; a module is strict, so that is
+  a page that does not load rather than a name that does not appear. Evaluating 76 stamped modules
+  under Node, in both the order Next.js transforms in and the order Vite does, 22 of them threw. The
+  stamp now checks the value first, with `typeof Foo === "function" && Object.isExtensible(Foo) && …`
+  for a function and a `try` for a `memo` or `forwardRef` object, and it never replaces a `displayName`
+  your own code has set, including one from a naming HOC. All 76 load. The loader also stops naming a
+  called function expression (`const Foo = function () {…}()`, `.call`, `.bind`), skips a module whose
+  first statement is `"use server"`, and reads three shapes correctly that it used to misread: a
+  pattern after `if (…)`, a backtick in JSX text, and a named function expression written at column 0
+  inside `memo(` or an array. What the guard costs is tree shaking under terser and SWC, which could
+  drop an unused component under the bare assignment; Rollup still drops it, esbuild still keeps it,
+  and the 301-file corpus gives exactly the same names as before. See Known limits in the README.
+- **A click on a checkbox, a radio or a select reported `handler: null`.** The event-to-prop table had
+  one entry per native event and did not know that React fires `onChange` from the *click* on a checkbox
+  or a radio, from `change` on a select or a file input, and from `input` on a text field. It now
+  follows react-dom's own ChangeEventPlugin per control, forwards a click on a label's own text to the
+  control the label wraps, and falls back from a pointer prop to the mouse prop of the same name.
+  A click that lands on something interactive inside a label, an anchor, a button or a second control,
+  is that element's: the browser forwards nothing there, and the label's own `onClick` wins over the
+  control it wraps. `onSubmit` is reached from a key press only on Enter in a field or on a button,
+  which is what implicit submission is, so `handlerOf` and `handlerName` take the key as a third
+  argument; without it a key press reaches no `onSubmit`. Every one of these would rather return null
+  than name a handler that did not run.
+- **A render could be credited to an interaction two steps back.** A commit made outside any dispatch
+  is stamped with whatever input the ring last held, so sorting a table and then changing its page size
+  told the sort click it had re-rendered 417 components a second after it had painted. A follow-up now
+  attaches only when no newer input arrived before that commit, and the follow-up window runs from the
+  paint rather than from the input, so a slow interaction keeps the render that followed it. What is
+  fixed is the case with a real user input behind the second render: the input ring is the whole of the
+  evidence, so a page-size change made by script, which fires no trusted input of its own, still leaves
+  its render attached to the click before it.
+- **An inferred blame read like a measured one.** Every sentence the explanation can produce is now
+  paired with its confidence: an inferred blame says "most likely" in the headline sentence and in the
+  overlay's short line, and names a profiling build of React as what would make it exact, but only where
+  a build with no render durations is what made it a reading. A blame that names nothing has nothing to
+  hedge and does not.
 
 ## [0.1.1] - 2026-09-19
 

@@ -385,28 +385,168 @@ export function ownersOf(fiber: Fiber | null, limit = 8): string[] {
   return out;
 }
 
-const handlerProp: Record<string, string[]> = {
+/**
+ * The React props a native event can reach, in the order React would run them, nearest prop on the
+ * chain first. React's own plugins decide this: SimpleEventPlugin maps a native event to the prop of
+ * the same name (`click` to `onClick`, `submit` to `onSubmit`), and ChangeEventPlugin adds `onChange`
+ * on top for form controls, from a different native event per control (see `firesChange`).
+ *
+ * Only the event's own prop is unconditional. Everything else React dispatches from this event rather
+ * than for it is added by `propsFor`, and only where React really would: `onChange` on a form control,
+ * `onSubmit` on Enter. The rule for the whole table is that a fallback which is sometimes right is
+ * worse than nothing, because a named handler reads as a fact.
+ *
+ * `mousedown` and `mouseup` are not here. The ring records pointer events (`INPUT_TYPES` in hook.ts)
+ * and Event Timing names the pointer ones, so a mouse event never reaches this table; an app that
+ * wrote `onMouseDown` is still named, from the `pointerdown` row's fallback.
+ */
+const handlerProp: Record<string, readonly string[]> = {
   click: ['onClick', 'onSubmit'],
   pointerdown: ['onPointerDown', 'onMouseDown'],
   pointerup: ['onPointerUp', 'onMouseUp'],
-  mousedown: ['onMouseDown'],
-  mouseup: ['onMouseUp'],
-  keydown: ['onKeyDown', 'onChange', 'onInput'],
-  keyup: ['onKeyUp', 'onChange', 'onInput'],
-  keypress: ['onKeyPress', 'onChange', 'onInput'],
+  keydown: ['onKeyDown'],
+  keyup: ['onKeyUp'],
+  keypress: ['onKeyPress'],
   input: ['onChange', 'onInput'],
   change: ['onChange'],
+  submit: ['onSubmit'],
 };
 
-/** Name of the first React handler prop for this event type on the target chain. */
-export function handlerName(node: Node | null, eventType: string): string | null {
-  return handlerOf(fiberFromNode(node), eventType);
+// What a key event can reach besides its own prop, and the click on a toggle that React turns into an
+// onChange. Both are added by `propsFor` only where React would fire them.
+const TYPING = ['onChange', 'onInput'];
+const CLICK_ON_TOGGLE = ['onClick', 'onChange', 'onSubmit'];
+// `KeyboardEvent.code` for the two Enter keys, and `key` for both, since the ring stores the code and
+// a caller with the event in hand may pass either.
+const ENTER_KEYS = ['Enter', 'NumpadEnter'];
+
+// The `type` values React treats as a text field, so that typing in one fires onChange: react-dom's
+// `supportedInputTypes`, which `isTextInputElement` reads.
+const TEXT_INPUT_TYPES = ['color', 'date', 'datetime-local', 'email', 'month', 'number', 'password', 'range', 'search', 'tel', 'text', 'time', 'url', 'week'];
+const TOGGLE_INPUT_TYPES = ['checkbox', 'radio'];
+
+/**
+ * Whether React's ChangeEventPlugin turns this native event on this element into an `onChange`.
+ * Taken from its `extractEvents` in react-dom 19.3.0 (`cjs/react-dom-client.development.js`, the
+ * branch around `getTargetInstForClickEvent`), which picks the native event per control:
+ *
+ * - `select`, and `input type="file"`: `change`.
+ * - a text field (`textarea`, or an `input` whose type is in `supportedInputTypes`): `input`, and
+ *   `change` where the browser has no input event.
+ * - `input type="checkbox"` and `type="radio"`: **`click`**, which is why a ticked checkbox used to
+ *   report no handler at all. React reads the checked state after the click and fires onChange if it
+ *   moved, so the click is the event and `onChange` is the prop.
+ *
+ * A click on a label's own text is forwarded by the browser to the control the label wraps, and React
+ * fires onChange from that forwarded click, so `handlerOf` finishes the walk at that control.
+ */
+function firesChange(fiber: Fiber | null, eventType: string): boolean {
+  const host = nearestHost(fiber);
+  if (!host) return false;
+  const tag = typeof host.type === 'string' ? host.type : '';
+  const props = host.memoizedProps;
+  const type = typeof props?.type === 'string' ? props.type.toLowerCase() : 'text';
+  if (tag === 'select' || (tag === 'input' && type === 'file')) return eventType === 'change';
+  if (tag === 'textarea' || (tag === 'input' && TEXT_INPUT_TYPES.includes(type))) return eventType === 'input' || eventType === 'change';
+  if (tag === 'input' && TOGGLE_INPUT_TYPES.includes(type)) return eventType === 'click';
+  return false;
 }
 
-/** Same, starting from a fiber. */
-export function handlerOf(fiber: Fiber | null, eventType: string): string | null {
-  const props = handlerProp[eventType];
-  if (!props) return null;
+/** The DOM element the event landed on, as a fiber: a host fiber has its tag name as `type`. */
+function nearestHost(fiber: Fiber | null): Fiber | null {
+  let f = fiber;
+  let hops = 0;
+  while (f && hops++ < MAX_HOPS) {
+    if (typeof f.type === 'string') return f;
+    f = f.return;
+  }
+  return null;
+}
+
+/** Whether React turns any native event on this element into an `onChange`: it is a form control. */
+function isFormControl(fiber: Fiber | null): boolean {
+  return firesChange(fiber, 'input') || firesChange(fiber, 'change') || firesChange(fiber, 'click');
+}
+
+/**
+ * Whether this key press submits the form it is in, so that `onSubmit` is a handler it really reaches.
+ * That is implicit submission: Enter in a field or on a button. In a textarea Enter is a newline, and
+ * on anything that is not a control it is nothing at all, so a keystroke there reaches no onSubmit.
+ * An unknown key is treated as not Enter: most keys are not, and a wrong name is worse than no name.
+ */
+function submitsOnEnter(fiber: Fiber | null, key: string | null | undefined): boolean {
+  if (!key || !ENTER_KEYS.includes(key)) return false;
+  const host = nearestHost(fiber);
+  const tag = typeof host?.type === 'string' ? host.type : '';
+  if (tag !== 'input' && tag !== 'button') return false;
+  const type = typeof host?.memoizedProps?.type === 'string' ? host.memoizedProps.type.toLowerCase() : '';
+  return type !== 'button' && type !== 'reset';
+}
+
+/**
+ * The props this event can reach on `fiber`'s chain: its own prop always, plus the ones React
+ * dispatches from it on this particular element. `key` is the `code` or `key` of a key event, and
+ * decides whether `onSubmit` is among them.
+ */
+function propsFor(fiber: Fiber | null, eventType: string, key: string | null | undefined): readonly string[] | undefined {
+  const base = handlerProp[eventType];
+  if (!base) return undefined;
+  if (eventType === 'keydown' || eventType === 'keyup' || eventType === 'keypress') {
+    const props = base.slice();
+    // A keystroke fires onChange only in something React watches for changes; on a div it fires none.
+    if (isFormControl(fiber)) props.push(...TYPING);
+    if (eventType !== 'keyup' && submitsOnEnter(fiber, key)) props.push('onSubmit');
+    return props;
+  }
+  if (base.includes('onChange') || !firesChange(fiber, eventType)) return base;
+  // Only `click` gets here, from a checkbox or a radio. onChange goes after the click's own prop and
+  // ahead of the form fallback, so a control with an onClick is still named by it.
+  return CLICK_ON_TOGGLE;
+}
+
+// Fibers looked at inside a label to find the control its click is forwarded to. A label holds a
+// control and a few words; anything larger is not what this is for.
+const MAX_LABEL_FIBERS = 64;
+// The elements a browser never forwards a label's click past: a click that lands on one of these, or
+// inside one, activates it and nothing else. `label` is in the list so that the inner label of two
+// nested ones wins, which is also what the browser does.
+const INTERACTIVE = ['input', 'select', 'textarea', 'button', 'a', 'label'];
+
+/**
+ * The label whose click is forwarded to a control, starting from where the click landed, or null.
+ *
+ * A click on a label's own text is forwarded by the browser to the control the label labels, and every
+ * handler React fires is then that control's. A click on interactive content inside the label is not
+ * forwarded at all: an anchor, a button or a second control keeps the click, which is why the walk
+ * stops at the first of those. A label with no control in it, or one whose control is elsewhere on the
+ * page through `htmlFor`, has nothing to forward to and the ordinary walk up is the whole answer.
+ */
+function forwardingLabel(fiber: Fiber | null, eventType: string): Fiber | null {
+  if (eventType !== 'click') return null;
+  let f = fiber;
+  let hops = 0;
+  while (f && hops++ < MAX_HOPS) {
+    if (typeof f.type === 'string' && INTERACTIVE.includes(f.type)) return f.type === 'label' ? f : null;
+    f = f.return;
+  }
+  return null;
+}
+
+/** The control a label's click is forwarded to: the first form control in its subtree, or null. */
+function labelledControl(label: Fiber): Fiber | null {
+  const stack: Fiber[] = label.child ? [label.child] : [];
+  let seen = 0;
+  while (stack.length && seen++ < MAX_LABEL_FIBERS) {
+    const node = stack.pop() as Fiber;
+    if (node.type === 'input' || node.type === 'select' || node.type === 'textarea') return node;
+    if (node.sibling) stack.push(node.sibling);
+    if (node.child) stack.push(node.child);
+  }
+  return null;
+}
+
+/** The first of `props` set on `fiber` or an ancestor, as a name. `stop` is the last fiber looked at. */
+function firstHandler(fiber: Fiber | null, props: readonly string[], stop: Fiber | null): string | null {
   let f = fiber;
   let hops = 0;
   while (f && hops++ < MAX_HOPS) {
@@ -421,9 +561,34 @@ export function handlerOf(fiber: Fiber | null, eventType: string): string | null
         }
       }
     }
+    if (f === stop) return null;
     f = f.return;
   }
   return null;
+}
+
+/** Name of the first React handler prop for this event type on the target chain. */
+export function handlerName(node: Node | null, eventType: string, key?: string | null): string | null {
+  return handlerOf(fiberFromNode(node), eventType, key);
+}
+
+/**
+ * Same, starting from a fiber. `key` is the `code` or `key` of a key event where the caller has it;
+ * without it a key press reaches no onSubmit, since there is no way to tell Enter from any other key.
+ */
+export function handlerOf(fiber: Fiber | null, eventType: string, key?: string | null): string | null {
+  const props = propsFor(fiber, eventType, key);
+  if (!props) return null;
+  const label = forwardingLabel(fiber, eventType);
+  if (label) {
+    // Anything at or below the label handles the click itself; only when nothing there does is the
+    // click the browser's to forward.
+    const own = firstHandler(fiber, props, label);
+    if (own) return own;
+    const control = labelledControl(label);
+    if (control) return firstHandler(control, propsFor(control, eventType, key) ?? props, null);
+  }
+  return firstHandler(fiber, props, null);
 }
 
 /** What the walk needs besides the fiber tree: what React passed with the commit, how its build marks measured trees, and where the input landed. */

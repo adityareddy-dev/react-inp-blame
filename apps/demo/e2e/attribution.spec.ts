@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { CommitSummary, HookInfo, InteractionReport, Stats } from 'react-inp-blame';
-import { clearReports, lastReport, settle, waitForFrames } from './page';
+import { clearReports, lastReport, settle, testAttribute, waitForFrames } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
 // A render blamed from React's durations is measured; production builds have only counts to go on.
@@ -150,6 +150,59 @@ test('cascading effect: the heavy second render is named, before or after the pa
   expect(heavy.joinedBy).toBe('exact');
   if (r.followUps.includes(heavy)) expect(heavy.at).toBeGreaterThan(r.end);
   else expect(heavy.at).toBeLessThanOrEqual(r.end);
+});
+
+test('slow render: a click that spends 2.5 seconds inside React is blamed on the render, not on nothing', async ({ page }) => {
+  // The render runs inside the click's own dispatch and commits seconds after the click. Joining a
+  // commit only to an input it landed close behind used to drop it, and the report then said React
+  // had not rendered anything, as a measurement.
+  const r = await interact(page, 'slow-render', () => page.click('[data-test=trigger]', { timeout: 30_000 }));
+
+  expect(r.duration).toBeGreaterThan(1_000);
+  expect(r.commits.length, r.verdict).toBeGreaterThanOrEqual(1);
+  expect(r.unjoinedCommits).toBe(0);
+  const c = r.commits[0];
+  expect(c.components[0].name).toBe('Section');
+  expect(c.components[0].count).toBeGreaterThanOrEqual(250);
+  expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'SlowRender', confidence: renderConfidence });
+  expect(r.verdict).not.toContain("didn't render anything");
+  expect(r.target?.component).toBe('SlowRender');
+
+  // The overlay's short line says as much as the sentence does: a blame worked out from component
+  // counts is shown as the likeliest reading, and one React timed itself is not hedged.
+  await page.click('#react-inp-blame .badge');
+  const blame = page.locator('#react-inp-blame .panel .row').first().locator('.blame').first();
+  await expect(blame).toContainText('SlowRender');
+  if (prod) await expect(blame).toContainText('most likely');
+  else await expect(blame).not.toContainText('most likely');
+  await page.keyboard.press('Escape');
+});
+
+test('slow render: a keystroke that spends 2.5 seconds inside React is the key press\'s work, not an unjoined commit', async ({ page }) => {
+  // React runs a text field's onChange from the native `input` event, which the browser dispatches
+  // inside the keydown. Reading only the events Event Timing gives an interactionId to left
+  // `window.event` unrecognised there, so the render of the keystroke was not stamped with the key
+  // press and the report said React had rendered something it could not tie to the typing.
+  const r = await interact(page, 'slow-render', () => page.type('[data-test=tag]', 'x', { timeout: 30_000 }));
+
+  expect(r.unjoinedCommits, r.verdict).toBe(0);
+  expect(r.commits.length + r.followUps.length, r.verdict).toBeGreaterThanOrEqual(1);
+  const c = [...r.commits, ...r.followUps].reduce((a, b) => (b.rendered > a.rendered ? b : a));
+  expect(c.components[0].name).toBe('Section');
+  expect(c.components[0].count).toBeGreaterThanOrEqual(250);
+  expect(r.verdict).not.toContain('could not be tied to');
+  if (!prod) expect(r.target?.handler).toBe('retitle');
+});
+
+test('slow render: ticking a checkbox is the onChange handler, which React fires from the click', async ({ page }) => {
+  // A checkbox has no change event of its own in React: ChangeEventPlugin reads the click. Looking
+  // only for an onClick left every checkbox in the demo reporting no handler at all.
+  const r = await interact(page, 'slow-render', () => page.click('[data-test=archived]', { timeout: 30_000 }));
+
+  expect(r.target?.selector).toContain(testAttribute('archived'));
+  if (prod) expect(r.target?.handler).toBeTruthy();
+  else expect(r.target?.handler).toBe('includeArchived');
+  expect(r.explanation.blame.kind).toBe('render');
 });
 
 // The sign-in page's "What took time" panel re-renders whenever it hears a report. Those renders land

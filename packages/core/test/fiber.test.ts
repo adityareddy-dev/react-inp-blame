@@ -333,6 +333,125 @@ test('a handler is named by its function, or by its prop when the minifier left 
   assert.equal(handlerOf(button(minified) as any, 'click'), 'onClick');
 });
 
+/** A host fiber for `<tag …props>`, with `parent` above it as React's `return` chain has it. */
+const host = (tag: string, props: Record<string, unknown>, parent?: Record<string, unknown>) => ({ ...fiber(5, tag), memoizedProps: props, return: parent ?? null });
+/** A handler the minifier stripped the name off, so the prop it sits on is what names it. */
+const anon = () => Object.defineProperty(() => {}, 'name', { value: '' });
+
+test('React fires onChange from the click on a checkbox or a radio, so that is the handler the click is given', () => {
+  // react-dom's ChangeEventPlugin listens to `click` for these two and to nothing else; before this the
+  // table had only onClick and onSubmit for a click, and every ticked checkbox reported no handler.
+  for (const type of ['checkbox', 'radio']) {
+    assert.equal(handlerOf(host('input', { type, onChange: anon() }) as any, 'click'), 'onChange');
+  }
+  // The element's own onClick still wins, and onSubmit stays the last resort behind onChange.
+  const both = host('input', { type: 'checkbox', onClick: anon(), onChange: anon() });
+  assert.equal(handlerOf(both as any, 'click'), 'onClick');
+  const inForm = host('input', { type: 'checkbox', onChange: anon() }, host('form', { onSubmit: anon() }));
+  assert.equal(handlerOf(inForm as any, 'click'), 'onChange');
+});
+
+test("a click on a label's text is the control the label wraps, which is where the handler is", () => {
+  // The browser forwards the click, so the interaction the user had is the checkbox's, not the span's.
+  const box: Record<string, unknown> = { ...fiber(5, 'input'), memoizedProps: { type: 'checkbox', onChange: anon() } };
+  const text: Record<string, unknown> = { ...fiber(5, 'span'), memoizedProps: {} };
+  fiber(5, 'label', [box, text]);
+  assert.equal(handlerOf(text as any, 'click'), 'onChange');
+  // A label with no control in it is left where it is, and the walk up still applies.
+  const bare: Record<string, unknown> = { ...fiber(5, 'span'), memoizedProps: {} };
+  fiber(5, 'label', [bare]).memoizedProps = { onClick: anon() };
+  assert.equal(handlerOf(bare as any, 'click'), 'onClick');
+});
+
+test('a click on something interactive inside a label is that element\'s, because the browser forwards nothing', () => {
+  // Four shapes a real form has, all of which naming the labelled control got wrong. A browser
+  // forwards a label's click only when the click was the label's to give away: an anchor, a button or
+  // a second control keeps it, and so does the label's own onClick.
+  const named = (fn: () => void) => Object.defineProperty(fn, 'name', { value: fn.name });
+
+  // "I accept the <a>terms</a>" beside a checkbox: the anchor opens the terms, the box is untouched.
+  function openTerms() {}
+  function tick() {}
+  const accept: Record<string, unknown> = { ...fiber(5, 'input'), memoizedProps: { type: 'checkbox', onChange: named(tick) } };
+  const terms: Record<string, unknown> = { ...fiber(5, 'a'), memoizedProps: { onClick: named(openTerms) } };
+  fiber(5, 'label', [accept, terms]);
+  assert.equal(handlerOf(terms as any, 'click'), 'openTerms');
+
+  // A button inside a label that also holds a text field: the click is the button's, and a text field
+  // has no click handler of React's at all, so naming it was naming a handler that never ran.
+  function clearField() {}
+  const field: Record<string, unknown> = { ...fiber(5, 'input'), memoizedProps: { type: 'text', onChange: anon() } };
+  const clear: Record<string, unknown> = { ...fiber(5, 'button'), memoizedProps: { onClick: named(clearField) } };
+  fiber(5, 'label', [field, clear]);
+  assert.equal(handlerOf(clear as any, 'click'), 'clearField');
+
+  // Two checkboxes in one label: the click on the second is the second one's.
+  function toggleA() {}
+  function toggleB() {}
+  const first: Record<string, unknown> = { ...fiber(5, 'input'), memoizedProps: { type: 'checkbox', onChange: named(toggleA) } };
+  const second: Record<string, unknown> = { ...fiber(5, 'input'), memoizedProps: { type: 'checkbox', onChange: named(toggleB) } };
+  fiber(5, 'label', [first, second]);
+  assert.equal(handlerOf(second as any, 'click'), 'toggleB');
+
+  // A label with its own onClick: that handler runs, and it is not the checkbox's onChange.
+  function expand() {}
+  const inner: Record<string, unknown> = { ...fiber(5, 'input'), memoizedProps: { type: 'checkbox', onChange: anon() } };
+  const caption: Record<string, unknown> = { ...fiber(5, 'span'), memoizedProps: {} };
+  fiber(5, 'label', [inner, caption]).memoizedProps = { onClick: named(expand) };
+  assert.equal(handlerOf(caption as any, 'click'), 'expand');
+});
+
+test('a click that is not on one of those controls does not reach an onChange up the tree', () => {
+  // Every click inside a form with an onChange would otherwise be named after it.
+  const button = host('button', {}, host('form', { onChange: anon() }));
+  assert.equal(handlerOf(button as any, 'click'), null);
+  // A text field is React's onChange from `input` and `change`, not from a click.
+  const text = host('input', { type: 'text', onChange: anon() });
+  assert.equal(handlerOf(text as any, 'click'), null);
+  assert.equal(handlerOf(text as any, 'input'), 'onChange');
+  assert.equal(handlerOf(text as any, 'change'), 'onChange');
+});
+
+test('a select, a file input and a textarea are named by the event React reads each of them from', () => {
+  assert.equal(handlerOf(host('select', { onChange: anon() }) as any, 'change'), 'onChange');
+  assert.equal(handlerOf(host('input', { type: 'file', onChange: anon() }) as any, 'change'), 'onChange');
+  assert.equal(handlerOf(host('textarea', { onChange: anon() }) as any, 'input'), 'onChange');
+  // A select has no input event in React's plugin, so a click on it is not an onChange either.
+  assert.equal(handlerOf(host('select', { onChange: anon() }) as any, 'click'), null);
+});
+
+test('only Enter in a field reaches onSubmit: every other keystroke in a form never submitted it', () => {
+  // A form's onSubmit used to be named for any key in any field, so a report for typing an address
+  // blamed saveOrder, which had not run. Implicit submission is Enter in a field or on a button.
+  const field = host('input', { type: 'text' }, host('form', { onSubmit: anon() }));
+  assert.equal(handlerOf(field as any, 'keydown', 'Enter'), 'onSubmit');
+  assert.equal(handlerOf(field as any, 'keydown', 'NumpadEnter'), 'onSubmit');
+  assert.equal(handlerOf(field as any, 'keydown', 'KeyA'), null);
+  // Without the key there is no way to tell, and a wrong name is worse than no name.
+  assert.equal(handlerOf(field as any, 'keydown'), null);
+  // Enter in a textarea is a newline, and on a div it is nothing at all.
+  const area = host('textarea', {}, host('form', { onSubmit: anon() }));
+  assert.equal(handlerOf(area as any, 'keydown', 'Enter'), null);
+  const div = host('div', {}, host('form', { onSubmit: anon() }));
+  assert.equal(handlerOf(div as any, 'keydown', 'Enter'), null);
+  // The release is never the submission: the browser submits on the keydown.
+  assert.equal(handlerOf(field as any, 'keyup', 'Enter'), null);
+  // The field's own handlers come first, whatever the key.
+  const typed = host('input', { type: 'text', onChange: anon() }, host('form', { onSubmit: anon() }));
+  assert.equal(handlerOf(typed as any, 'keydown', 'Enter'), 'onChange');
+  assert.equal(handlerOf(typed as any, 'keydown', 'KeyA'), 'onChange');
+  assert.equal(handlerOf(host('input', { type: 'text', onKeyDown: anon() }) as any, 'keydown', 'KeyA'), 'onKeyDown');
+  // A keystroke outside a control fires no onChange of React's, so an onChange up the tree is not it.
+  assert.equal(handlerOf(host('div', {}, host('form', { onChange: anon() })) as any, 'keydown', 'KeyA'), null);
+});
+
+test('a pointer event falls back to the mouse prop, the way React dispatches both', () => {
+  assert.equal(handlerOf(host('button', { onMouseDown: anon() }) as any, 'pointerdown'), 'onMouseDown');
+  assert.equal(handlerOf(host('button', { onMouseUp: anon() }) as any, 'pointerup'), 'onMouseUp');
+  // A mouse event never reaches here: the ring records pointer events and Event Timing names those.
+  assert.equal(handlerOf(host('button', { onPointerDown: anon() }) as any, 'mousedown'), null);
+});
+
 test('outside ProfileMode a development tree reports render counts, not a 0 ms render', () => {
   // Development builds give every fiber actualDuration = 0 and only measure trees in ProfileMode.
   function Row() {}

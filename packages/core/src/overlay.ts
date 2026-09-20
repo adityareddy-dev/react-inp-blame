@@ -2,7 +2,7 @@ import { heaviest } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
-import type { CommitSummary, InteractionReport, OverlayOptions, Phase } from './types.js';
+import type { Blame, CommitSummary, InteractionReport, OverlayOptions, Phase } from './types.js';
 
 /**
  * The on-page badge and panel. Plain DOM inside a shadow root: no React, so it renders even
@@ -334,6 +334,13 @@ function top(c: CommitSummary): string {
 
 function blameLine(r: InteractionReport): string {
   const b = r.explanation.blame;
+  // An inferred blame is the likeliest reading of component counts and phase times, not a measurement.
+  // The row says so in two words; the cause sentence under it says what would make it exact.
+  const line = blameText(b);
+  return b.confidence === 'inferred' && b.kind !== 'none' ? `most likely ${line}` : line;
+}
+
+function blameText(b: Blame): string {
   const ms = b.ms != null ? ` &middot; ${Math.round(b.ms)} ms` : '';
   switch (b.kind) {
     case 'render':

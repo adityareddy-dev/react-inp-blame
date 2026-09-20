@@ -1,11 +1,13 @@
 import { heaviest } from './commits.js';
 import { elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
+import { joinWindow } from './hook.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InputRecord, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
 
+/** How long after the paint a commit can still be counted as that interaction's later render, ms. */
 export const FOLLOW_UP_WINDOW = 1500;
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
 // they agree to the timer's resolution; 1 ms covers the coarsening.
@@ -185,9 +187,56 @@ function ringInput(inputs: readonly InputRecord[], stamps: number[]): InputRecor
   return inputs.find((i) => stamps.some((s) => near(s, i.ts))) ?? null;
 }
 
+/**
+ * Is this input one of the interaction's own? Its own timestamp matching an entry is the plain case.
+ * The press it released matching one is the other: a click is a pointerdown, a pointerup and a click,
+ * and only the entries slow enough to be observed arrive, so a gesture whose pointerdown was the only
+ * entry still owns the pointerup and the click that finished it.
+ */
+function ownInput(i: InputRecord, stamps: number[]): boolean {
+  return stamps.some((s) => near(s, i.ts) || near(s, i.gestureTs));
+}
+
 /** Every input of this interaction the ring still holds, oldest first. A click is a pointerdown, a pointerup and a click. */
 function ringInputs(inputs: readonly InputRecord[], stamps: number[]): InputRecord[] {
-  return inputs.filter((i) => stamps.some((s) => near(s, i.ts)));
+  return inputs.filter((i) => ownInput(i, stamps));
+}
+
+/**
+ * Whether a newer interaction had already begun when this commit ran, so the commit is at best
+ * ambiguous and must not be attached to this report as a later render.
+ *
+ * A commit is stamped with the newest input at the time, so one stamped with this interaction's input
+ * normally is its work. Normally is not always: a commit made during an event Event Timing gives no
+ * interactionId to, or outside any dispatch, is stamped with whatever the ring last held, and that can
+ * be an interaction two steps back. Sorting a table and then changing its page size made exactly that
+ * report, where the sort click was told it had re-rendered 417 components a second after its paint and
+ * the page-size change was what had done it.
+ *
+ * The ring is the evidence: an input that is not one of this interaction's own, that arrived after all
+ * of them and before the commit, means something newer was under way. With nothing newer in the ring
+ * the commit belongs where its stamp says.
+ */
+function newerInputBefore(inputs: readonly InputRecord[], stamps: number[], at: number): boolean {
+  const last = ringInputs(inputs, stamps).reduce((a, i) => Math.max(a, i.ts), Math.max(...stamps));
+  return inputs.some((i) => !ownInput(i, stamps) && i.ts > last + STAMP_TOLERANCE && i.ts <= at);
+}
+
+/**
+ * Commits the hook saw during this interaction and could not join to it, over the inputs the ring
+ * still holds.
+ *
+ * The hook drops a commit that lands past the join window and keeps the time it ran at, because at
+ * that point there is no Event Timing entry to judge it against. Here there is. A commit counts only
+ * if it ran while one of the interaction's own entries was in its processing phase, which is where
+ * this interaction's handlers were on the stack: React rendering then is something this interaction
+ * caused, whatever this library failed to tie it to. A commit outside every such span is somebody
+ * else's work, and a page with a clock ticking once a second is full of them. Counting those turned an
+ * honest fast click into "3 commits could not be tied to this click" and cost it its `measured`.
+ */
+function unjoinedCommits(inputs: readonly InputRecord[], stamps: number[], entries: readonly InteractionTiming[]): number {
+  const during = (at: number) => entries.some((e) => at >= e.processingStart - STAMP_TOLERANCE && at <= e.processingEnd + STAMP_TOLERANCE);
+  return ringInputs(inputs, stamps).reduce((a, i) => a + i.work.unjoined.filter(during).length, 0);
 }
 
 /**
@@ -263,7 +312,10 @@ export function buildReport(
   if (fiber) {
     owners = ownersOf(fiber);
     for (const e of sorted) {
-      handler = handlerOf(fiber, e.name);
+      // An Event Timing entry does not say which key was pressed; the ring entry for the same event
+      // does, and which key it was decides whether the press could have submitted a form.
+      const pressed = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime))?.press;
+      handler = handlerOf(fiber, e.name, typeof pressed === 'string' ? pressed : null);
       if (handler) break;
     }
   } else if (ring) {
@@ -285,7 +337,7 @@ export function buildReport(
       // part of what INP measured for it; `holdMs` covers that time.
       if (c.at < start - STAMP_TOLERANCE) continue;
       if (c.at <= paintBound) inWindow.push(joined(c, 'exact'));
-      else if (c.at - start <= FOLLOW_UP_WINDOW && worthMentioning(c)) followUps.push(joined(c, 'exact'));
+      else if (isFollowUp(c, end, inputs, stamps)) followUps.push(joined(c, 'exact'));
     } else if (c.at >= processingStart - STAMP_TOLERANCE && c.at <= paintBound && !claimedElsewhere(c, inputs, stamps)) {
       // No stamp matched, but it ran between this interaction's handlers and its paint.
       inWindow.push(joined(c, 'overlap'));
@@ -318,6 +370,7 @@ export function buildReport(
     startedNavigation: navigationStartedBy(navigations, stamps),
     commits: Object.freeze(inWindow),
     followUps: Object.freeze(followUps),
+    unjoinedCommits: unjoinedCommits(inputs, stamps, entries),
     frames: frames && Object.freeze(frames.filter((f) => f.start < end && f.start + f.duration > start)),
     laterFrames: frames && framesForLater(followUps, frames),
     revision: 0,
@@ -428,9 +481,20 @@ export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): R
   return { ...r, frames: inWindow ?? r.frames, laterFrames: later ?? r.laterFrames, revision: r.revision + 1 };
 }
 
+/**
+ * A commit that landed after the paint and is worth a sentence, close enough to the paint to be this
+ * interaction's own doing, with no newer interaction under way to have caused it instead. The window
+ * runs from the paint, not from the input: an interaction that took three seconds still gets the
+ * render its effects schedule a moment after it.
+ */
+function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: number[]): boolean {
+  return c.at - end <= FOLLOW_UP_WINDOW && worthMentioning(c) && !newerInputBefore(inputs, stamps, c.at);
+}
+
 /** Does this commit belong to the report's input, landing after its paint? */
-export function isLaterRender(r: ReportData, c: CommitSummary): boolean {
-  return c.at > r.end && c.at - r.start <= FOLLOW_UP_WINDOW && stampMatches(c, r.entries.map((e) => e.startTime)) && worthMentioning(c);
+export function isLaterRender(r: ReportData, c: CommitSummary, inputs: readonly InputRecord[] = []): boolean {
+  const stamps = r.entries.map((e) => e.startTime);
+  return c.at > r.end && stampMatches(c, stamps) && isFollowUp(c, r.end, inputs, stamps);
 }
 
 /** The next revision of a report, with a later render attached; null when it holds that render already. */
@@ -616,6 +680,18 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
   return best && best.ms >= SCRIPT_MIN_MS ? best : null;
 }
 
+/**
+ * The word that marks a sentence as a reading rather than a measurement. Every blame that names
+ * something and carries `confidence: 'inferred'` uses it, so the sentence and the data never
+ * disagree; a blame of kind 'none' names nothing and has nothing to hedge.
+ */
+const HEDGE = 'most likely';
+/** What would turn a blame read off component counts into a measured one. */
+const PROFILING_BUILD = 'A profiling build of React would give exact numbers.';
+
+/** The measured sentence, or the hedged one when the blame is a reading. */
+const say = (confidence: Blame['confidence'], measured: string, likely: string): string => (confidence === 'measured' ? measured : likely);
+
 /** The report in plain words. Frozen, like the report it explains. */
 export function explain(r: InteractionReport): Explanation {
   const rating = rateInp(r.duration);
@@ -627,6 +703,24 @@ export function explain(r: InteractionReport): Explanation {
   const component = r.target?.component ?? null;
   const handler = handlerName ? handlerPhrase(handlerName, kind) : null;
   const outsideName = handler || `code outside React (the ${kind} handler or other scripts)`;
+  // React did render during the interaction and this library could not tell which interaction those
+  // renders belonged to. Saying it rendered nothing would be false, and nothing said about what React
+  // did here is a measurement.
+  const unjoined = r.unjoinedCommits > 0;
+  const renderedNothing = unjoined
+    ? `React rendered during it, but ${plural(r.unjoinedCommits, 'commit')} could not be tied to this ${kind}`
+    : `React didn't render anything`;
+  /**
+   * How sure a sentence about React's work can be. A commit that could not be tied to the interaction
+   * is missing evidence, so nothing said about what React did here is a measurement, however good the
+   * commits that did join are. The phases (waiting, painting) are the browser's numbers and keep
+   * their own confidence.
+   */
+  const measuredFrom = (...cs: readonly CommitSummary[]): Blame['confidence'] => (!unjoined && cs.every(measuredCommit) ? 'measured' : 'inferred');
+  // A build that records no render durations is the one reason for an inference with a remedy worth
+  // naming in the sentence. The others (a clock too coarse to time single components, a walk cut at
+  // its budget, a commit joined by its timing rather than its input) each already have a note below.
+  const profiling = r.commits.some((x) => !x.hasDurations) ? ` ${PROFILING_BUILD}` : '';
 
   const processingStart = r.start + r.inputDelay;
   const processingEnd = processingStart + r.processing + r.walkMs;
@@ -672,23 +766,33 @@ export function explain(r: InteractionReport): Explanation {
   let blame: Blame;
   if (hydrationTook) {
     const { boundary, commit } = hydrationTook;
+    const confidence = measuredFrom(commit);
     const first = `The ${kind} landed on server-rendered HTML that had not been hydrated yet, so React hydrated ${boundaryPhrase(boundary)} first`;
     cause =
-      boundary.ms != null
-        ? `${first}: ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.`
-        : `${first}, ${plural(commit.rendered, 'component')}. This React build records no render durations, so how much of the ${ms(r.processing)} of working time that took is not measured.`;
-    blame = { kind: 'hydration', name: boundaryPhrase(boundary), detail: mostlyOf(commit), ms: boundary.ms, confidence: measuredCommit(commit) ? 'measured' : 'inferred' };
+      boundary.ms == null
+        ? `${first}, ${plural(commit.rendered, 'component')}: ${HEDGE} what the ${ms(r.processing)} of working time went on. This React build records no render durations, so that is read from the component count.${profiling}`
+        : say(confidence, `${first}: ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.`, `${first}, ${HEDGE} ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.${profiling}`);
+    blame = { kind: 'hydration', name: boundaryPhrase(boundary), detail: mostlyOf(commit), ms: boundary.ms, confidence };
   } else if (c && outsideMatters && outside > renderTotal) {
+    const confidence = measuredFrom(...r.commits);
     const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
-    cause = `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.`;
-    blame = { kind: 'handler', name: handlerName, detail: component, ms: outside, confidence: r.commits.every(measuredCommit) ? 'measured' : 'inferred' };
+    cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${profiling}`);
+    blame = { kind: 'handler', name: handlerName, detail: component, ms: outside, confidence };
   } else if (c && renderMatters) {
-    cause = hasDurations ? `React spent ${ms(c.total)} ${renderPhrase(c)}.` : `React was ${renderPhrase(c)}.`;
+    const confidence = measuredFrom(c);
+    // Without durations the blame rests on the component count alone, which is why it is a reading:
+    // 600 cheap components can outrank the one expensive component that actually took the time.
+    const likely = hasDurations
+      ? // The measured render is the claim; the working time is context. Saying React spent all of it
+        // rendering and then that other code ran for a third of it was two claims that cannot both hold.
+        `React ${HEDGE} spent about ${ms(c.total)} of the ${ms(r.processing)} of working time ${renderPhrase(c)}.`
+      : `React was ${HEDGE} ${renderPhrase(c)}. This React build records no render durations, so that is read from the component counts, not measured.`;
+    cause = say(confidence, `React spent ${ms(c.total)} ${renderPhrase(c)}.`, `${likely}${profiling}`);
     if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
-    blame = { kind: 'render', name: leafOf(c), detail: mostlyOf(c), ms: hasDurations ? c.total : null, confidence: measuredCommit(c) ? 'measured' : 'inferred' };
+    blame = { kind: 'render', name: leafOf(c), detail: mostlyOf(c), ms: hasDurations ? c.total : null, confidence };
   } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
     const howLittle = c.rendered === 0 ? 'React rendered nothing' : `React re-rendered only ${plural(c.rendered, 'component')}`;
-    cause = `${cap(handler)} most likely took the ${ms(r.processing)}: ${howLittle}. A profiling build of React would give exact numbers.`;
+    cause = `${cap(handler)} ${HEDGE} took the ${ms(r.processing)}: ${howLittle}.${profiling}`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
     cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
@@ -697,21 +801,27 @@ export function explain(r: InteractionReport): Explanation {
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`;
     blame = { kind: 'painting', name: lateScript ? scriptBlameName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (anyScript) {
-    const small = c ? `React's render was small (${renderPhrase(c)})` : `React didn't render anything`;
+    // A script is what is left once React is ruled out, so a commit that could not be tied to the
+    // interaction is exactly what stops this from being a finding.
+    const confidence = unjoined ? 'inferred' : 'measured';
+    const small = c ? `React's render was small (${renderPhrase(c)})` : renderedNothing;
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(anyScript.ms) < Math.round(anyScript.script.duration) ? ' of it' : '';
-    cause = `${small}; ${scriptPhrase(anyScript.script)} ran for ${ms(anyScript.ms)}${ofIt}.`;
-    blame = { kind: 'script', name: scriptBlameName(anyScript.script), detail: ranAsHandler(anyScript.script) ? component : null, ms: anyScript.ms, confidence: 'measured' };
+    const ran = `${scriptPhrase(anyScript.script)} ran for ${ms(anyScript.ms)}${ofIt}`;
+    cause = say(confidence, `${small}; ${ran}.`, `${small}; ${HEDGE} ${ran}.`);
+    blame = { kind: 'script', name: scriptBlameName(anyScript.script), detail: ranAsHandler(anyScript.script) ? component : null, ms: anyScript.ms, confidence };
   } else if (r.frames) {
     cause = c
       ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
-      : `React didn't render anything and no long task was recorded, so the time went to waiting and painting.`;
-    blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' };
+      : `${renderedNothing} and no long task was recorded, so the time went to waiting and painting.`;
+    // Nothing is named, so there is nothing to hedge; the confidence says whether the absence of a
+    // long task was itself observed or merely assumed.
+    blame = { kind: 'none', name: null, detail: null, ms: null, confidence: unjoined ? 'inferred' : 'measured' };
   } else {
     // Without Long Animation Frames there is no record to say no long task ran.
     cause = c
       ? `React's render was small (${renderPhrase(c)}); this browser does not report long tasks, so what else ran is unknown.`
-      : `React didn't render anything; this browser does not report long tasks, so what ran instead is unknown.`;
+      : `${renderedNothing}; this browser does not report long tasks, so what ran instead is unknown.`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   }
 
@@ -722,6 +832,11 @@ export function explain(r: InteractionReport): Explanation {
     cause = `This ${kind} landed on server-rendered HTML that React had not hydrated yet, so React did not dispatch it and no React handler ran for it. ${cause}`;
   }
 
+  if (unjoined) {
+    notes.push(
+      `React committed ${plural(r.unjoinedCommits, 'time')} while this ${kind} was being handled that could not be tied to it, so what it rendered is left out of this report. That happens when the commit landed more than ${ms(joinWindow() ?? FOLLOW_UP_WINDOW)} after the last commit inside the ${kind}'s own dispatch, with no way to tell it from an unrelated update.`,
+    );
+  }
   if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
   if (r.hydration?.kind === 'waited' && blame.kind !== 'hydration') {
     // Saying it was not what took the time is a measurement. Where the build records no durations

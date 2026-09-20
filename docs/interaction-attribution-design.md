@@ -77,6 +77,7 @@ production build it asserts that a handler name exists, not which prop it came f
 | Big list: 3000 unvirtualised rows filtered per keystroke | render blame on BigList, Row ×1440 | same |
 | Lifted state: unrelated heavy sibling re-renders per keystroke | render blame on Sidebar, NavItem ×600 | same |
 | Cascading effect: derived state set from useEffect | a cheap commit, then the heavy one rendering Detail ×400, joined by its exact input stamp | same |
+| Slow render: 250 sections rebuilt during render | render blame on SlowRender, Section ×250, about 2.5 s of it, and the checkbox beside it named by the onChange React fires from its click | same names, blame from render counts |
 | Control: memoised rows, stable callbacks | at most 3 components rendered, and under 100ms wherever it is reported at all | same |
 
 What the library itself costs is under "What it costs" below.
@@ -387,6 +388,54 @@ itself was not enough: React 18 and 19 clear a deleted fiber's `return` and `mem
 deletion's effects run, which is before the entry arrives, and a click that deleted its own row was
 reported with no component, no owners and no handler at all.
 
+**Which prop a native event maps to.** The table is in `fiber.ts`, and it is read off React's own event
+plugins in the installed react-dom 19.3.0 (`cjs/react-dom-client.development.js`): SimpleEventPlugin for
+the events that map one to one, and ChangeEventPlugin's `extractEvents` for the controls whose `onChange`
+comes from something other than a `change` event. The walk starts at the element the event landed on and
+climbs the fiber chain, taking the first of these props it finds:
+
+| native event | props looked for, in order |
+| --- | --- |
+| `click` | `onClick`, `onSubmit` |
+| `click` on `input[type=checkbox]` or `[type=radio]` | `onClick`, `onChange`, `onSubmit` |
+| `pointerdown` / `pointerup` | `onPointerDown`, `onMouseDown` / `onPointerUp`, `onMouseUp` |
+| `keydown` | `onKeyDown` |
+| `keydown` in a form control | `onKeyDown`, `onChange`, `onInput` |
+| `keydown` of Enter in a field or on a button | the same, then `onSubmit` |
+| `keyup`, `keypress` | `onKeyUp` / `onKeyPress`, and the same two additions |
+| `input` | `onChange`, `onInput` |
+| `change` | `onChange` |
+| `submit` | `onSubmit` |
+
+Only the event's own prop is unconditional. Everything else is a prop React dispatches *from* this event
+rather than *for* it, and each is added only where React really would: `onChange` on a control React
+watches for changes, `onSubmit` on the key that submits a form. A fallback that is sometimes right is
+worse than none, because a named handler reads as a fact. There are no `mousedown` or `mouseup` rows:
+the ring records pointer events and Event Timing names those, so a mouse event never reaches the table,
+while an app that wrote `onMouseDown` is still named from the `pointerdown` row.
+
+ChangeEventPlugin picks a different native event per control, which is the row that matters: `select` and
+`input[type=file]` fire `onChange` from `change`; a text field (a `textarea`, or an input whose type is in
+`supportedInputTypes`, which `isTextInputElement` reads) fires it from `input`, and from `change` where the
+browser has no input event; and `input[type=checkbox]` and `[type=radio]` fire it from the **`click`**, in
+`getTargetInstForClickEvent`, because React compares the checked state after the click rather than
+listening for a change. Until 2026-09-19 the table had one row per event and no notion of the element, so
+every ticked checkbox, chosen radio and changed select in a real app reported `handler: null` while its
+onChange sat one fiber away. `onChange` is only ever reached for an event React would fire it from, which
+is what keeps every click inside a form with an `onChange` from being named after it.
+
+A click on a `<label>`'s own text is forwarded by the browser to the control the label labels, and every
+handler React fires is then that control's, so the walk finishes at that control rather than at the text
+that was clicked. A click on interactive content inside the label is not forwarded at all: an anchor, a
+button or a second control keeps it, and so does the label's own `onClick`. The walk therefore stops at
+the first `input`, `select`, `textarea`, `button`, `a` or nested `label` between the target and the
+label, and forwards only when nothing at or below the label handled the click. Read the other way round,
+as it was between 2026-09-19's first pass and this one, an "I accept the terms" label reported the
+checkbox's `tick` for a click that opened the terms, a button inside a label reported nothing, the second
+checkbox in a label reported the first one's handler, and a label with its own `onClick` reported the
+checkbox's `onChange`. A label whose control is elsewhere on the page through `htmlFor` has nothing to
+forward to and is left where it is.
+
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every
 commit is stamped with the input being dispatched when it ran: `window.event`, which is
@@ -405,6 +454,41 @@ interaction, not part of it. Before or after the paint is decided against the pa
 closed the headline entry, with the exact `processingEnd` as the other bound: durations are
 rounded to 8 ms, `processingEnd` is not, so a commit inside the handlers is never misfiled as
 a follow-up.
+
+**The window, and what it is measured from.** A commit React makes inside an input's dispatch is that
+input's, however long the dispatch has been running. A commit outside any dispatch joins the newest
+input the ring holds while it lands within `inputWindow` (1.5 s by default) of the input's own
+timestamp, until React commits inside its dispatch, and then of the end of the last such commit.
+Until 2026-09-19 both were measured from the input's timestamp, so a click that
+spent 2.5 s inside React had its one commit thrown out by the same check that throws out an unrelated
+background update, and the report read "React didn't render anything" with confidence `measured`. That
+was wrong, and stated as a fact.
+
+The new rule has two failure modes, and the anchor is the name of both.
+
+- The old one, in a smaller form: an unrelated commit landing inside the window is still read as this
+  interaction's follow-up render, now anchored to the end of the interaction's work rather than to the
+  input, which is a longer reach on a slow interaction. Only a dispatch moves the anchor, so a chain of
+  follow-ups cannot hold the window open indefinitely, and the check below on newer inputs closes the
+  common case.
+- The anchor is the end of the **last commit inside the dispatch**, which is not the end of the
+  dispatch. The hook is called after a commit and at no other time, so the end of the dispatch is not a
+  moment it can see; a handler that runs for two seconds and commits nothing leaves the anchor on the
+  input itself, and a transition that handler starts can land outside the window and be dropped. Moving
+  the anchor properly would mean a second window listener per event type, in the bubble phase, to mark
+  where each dispatch ended. That is a real change to what the library installs on the page, for a case
+  the count below already reports honestly, so the wording is what changed here and not the rule.
+
+A commit the gate drops is not silent. The input keeps the time it ran at, capped at 16, and a report
+counts the ones that ran while one of its own Event Timing entries was in its processing phase, which
+is where the interaction's handlers were on the stack. `unjoinedCommits` is that count, and while it is
+above zero nothing the report says about React's work is `'measured'`: the sentence says React rendered
+during the interaction and that those commits could not be tied to it. Counting every dropped commit
+instead, which is what 2026-09-19 first did, made a page with a clock in it unreadable: holding a button
+for four seconds while a 1 s clock ticked reported "3 commits could not be tied to this click" on an
+honest, fast, fully measured click, and took its `measured` away. A page with a clock in it has to be
+able to get a measured "React didn't render anything", and the processing spans are what make that
+possible.
 
 A root's first commit, which mounts it or hydrates its server-rendered HTML, and any commit that
 hydrates a Suspense boundary, are the page starting up rather than an input's work. They join an
@@ -579,9 +663,21 @@ render was slow" from "your layout effect forced layout 400 times". Only Chromiu
 Firefox and Safari a report's `frames` and `laterFrames` are `null`, and the explanation leaves
 out the forced-layout and script sentences rather than implying none happened.
 
-**Follow-ups.** Commits that land after the paint but within 1.5 s, stamped with the same
+**Follow-ups.** Commits that land after the paint but within 1.5 s of it, stamped with the same
 input, with no newer input in between. Effects, transitions and data-driven re-renders show
-up here.
+up here. The window runs from the paint, not from the input, so an interaction that took three seconds
+still gets the render its effects schedule a moment after it. "No newer input in between" is checked
+against the ring, not against the stamp alone: a commit made outside any dispatch carries whatever
+input the ring last held, and that can be an interaction two steps back. Sorting a table in the
+TanStack Table example and then changing its page size a second later made exactly that report, where
+the sort click was told it had re-rendered 417 components a second after its paint, when the page-size
+change had done it. So when an input that is not one of this interaction's own arrived after all of
+them and before the commit, the commit is attached to nothing: the library cannot tell whose it is, and
+a wrong attachment reads as a finding. The ring is the whole of that evidence, which bounds the check:
+an update with no user input behind it at all, a timer firing, a message from a socket, or a test
+script setting a select's value and dispatching `change` itself, is invisible to it and is still read
+as this interaction's follow-up render. The harness's `page-size-50` step is the third of those, which
+is why the `tt-fuzzy` sort click still collects that render.
 
 **Saying it in plain words.** Every report carries an `explanation`: a headline ("264 ms
 click"), a rating on the INP thresholds in web-vitals' words (good to 200 ms, needs improvement to
@@ -805,7 +901,7 @@ field scores strength synchronously in its change handler; the login click hashe
 password on the main thread before the request; and the profile grid's tiles each measure
 the grid in a layout effect. A "What took time" panel lists every step in the order it
 happened, key presses grouped per field, the server wait shown between the click and the
-profile render, and the page's INP so far at the bottom. `#lab/...` keeps the six isolated
+profile render, and the page's INP so far at the bottom. `#lab/...` keeps the seven isolated
 anti-patterns with a "what's wrong / the fix" note each. Both have Playwright coverage.
 
 **Margins.** A demo test should pass because the library attributed the scenario, not because the
@@ -847,16 +943,118 @@ What needs help:
   `react-inp-blame/vite` runs the same function as a transform. Proven on Next 16.3.5 in
   production, 2026-09-14. Cost is about 30 bytes per component; the alternatives are worse:
   `next build --no-mangling` keeps every name (+9.6% gzip on react-dom alone), and an SWC
-  plugin has to be rebuilt against each Next release's swc_core. The regex handles
-  top-level `function Foo(`, `export default function Foo(` and `const Foo = memo(` or
-  `forwardRef(`; anything else needs a real parser. Handler names are a different problem:
-  LoAF's `sourceFunctionName`
+  plugin has to be rebuilt against each Next release's swc_core.
+
+  What it stamps, since 2026-09-19: any capitalised binding declared at the start of a line whose value
+  is a function. `function Foo`, `export default function Foo`, `const Foo = (props) => …`, `const Foo =
+  function () {}`, a typed `const Foo: React.FC<Props> = …`, a generic `const Foo = <T,>(props: T) => …`,
+  and the `memo`, `React.memo`, `forwardRef`, `memo<Props>(…)` and `memo(forwardRef(…))` forms. Until
+  then it matched `function Foo(` and `const Foo = memo(` or `forwardRef(` only, so the form most
+  components are written in, an arrow function bound to a const, reached the minifier unnamed.
+  A function expression that is **called** is not one of these shapes: `const Version = function () {
+  return 5; }()`, and the `.call`, `.bind` and index forms, bind whatever that produced rather than the
+  function that was written. Nor is anything in a module whose first statement is `"use server"`, where
+  every export is an endpoint and the bundler rewrites the module into a table of them; `"use client"`
+  modules are ordinary modules and are stamped as usual.
+
+  It still reads the source as text, with no parser dependency: strings, templates, comments and regular
+  expressions are masked to blanks that keep their offsets, so a declaration written inside one is not a
+  declaration. JSX is what makes that hard, because `<br />`, `</div>` and `<Icon/>` each put a slash
+  where an expression could begin, and reading one as a regular expression swallows the rest of the file.
+  A slash opens a regular expression only after a short list of operators and keywords, and never before
+  `>`. The list has `)` in it, but only for the bracket that closes an `if (…)`, a `while (…)` or a
+  `for (…)`, where what follows is a statement: `if (s) /}/.test(s)` read as division leaves a brace
+  that closes a block, and everything below it then looks like the top level. Backticks get the same
+  treatment as slashes, because a backtick in JSX text, the kind that puts a keystroke in a code span,
+  otherwise pairs with the next one in the file, which is usually a real template's opening one, and the
+  template's contents, which are often a code sample, are then read as code. A backtick opens a template
+  only where a value can begin, and a tagged template only where its tag can, so a `styled.div` or `css`
+  template still masks its contents and a code span in prose does not open one. Anything unterminated degrades locally rather than
+  blanking what follows it: a `d="M 145 75` attribute continued on the next line, and an apostrophe in
+  JSX text, cost their own character and nothing more. A name the module writes to again, declares
+  twice, or already gives a `displayName`, is left alone, and so is one the module imports. The top
+  level is read as brace depth rather than as indentation, because a declaration inside a function, a
+  class body or a namespace can be written at column 0 too, and the module's last line cannot reach it;
+  where the file has both, the binding that line would reach is the imported one, which is another
+  module's component. A `function Foo(…)` at column 0 also has to be where a statement can begin, since
+  a named function expression inside `memo(` or an array literal can be written there and declares
+  nothing at all.
+
+  Two things in it were quadratic and are not any more. The scan used to read an identifier back from
+  every character, so a 1 MB run of word characters never finished, and each name found cost its own
+  regular expression pass over the file, so 10,000 components in one file took 8 seconds. The scan now
+  carries the start of the identifier along and reads at most ten characters back, the name tests are
+  three passes whatever the number of names, and an unclosed bracket is read for at most 4 KB rather
+  than to the end of the file. Measured after: 1 MB of word characters 28 ms, 10,000 components 66 ms.
+
+  **A stamp must never be able to throw; tree shaking comes second.** Those are in that order because a
+  module is strict, so a property store that fails is not ignored, it throws at load and takes the page
+  with it, and a transform that reads text rather than a syntax tree will name something that is not
+  what it took it for. Evaluating 76 stamped modules under Node, in both build orders, a bare
+  `Foo.displayName = "Foo"` threw in 22 of them: a called function expression that returned a number or
+  null, a component frozen through a helper or a `forEach`, a `displayName` already defined as
+  read-only, a user's own `memo` that returned nothing, and names the scan had read wrong. So the two
+  forms since 2026-09-19 check the value before they write it, and neither replaces a name that is
+  already there:
+
+  ```js
+  typeof Foo === "function" && Object.isExtensible(Foo) && !Object.getOwnPropertyDescriptor(Foo, "displayName") && (Foo.displayName = "Foo");
+  try { if (Bar.displayName == null) Bar.displayName = "Bar"; } catch (e) {}
+  ```
+
+  The first is for a function, whose value `typeof` can prove, and `typeof` on a name that turns out not
+  to exist is not an error either. The second is for a `memo` or `forwardRef` binding, whose value is an
+  object that `typeof` proves nothing about. It reads `displayName` rather than asking for the property
+  descriptor, because React defines `displayName` on a memo object in a development build as an accessor
+  that starts out undefined: the descriptor is there from the start, so the descriptor test would mean
+  never naming a memo component in development. Measured on the seven-export icons module with one
+  function and one memo imported, and on the same module through each minifier:
+
+  | form | Rollup | esbuild | terser | SWC | can throw on |
+  | --- | --- | --- | --- | --- | --- |
+  | `Foo.displayName = "Foo"`, until 2026-09-19 | drops unused | keeps | drops unused | drops unused | every value that is not an extensible object |
+  | `typeof` guard, shipped for functions | drops unused | keeps | keeps | keeps | a Proxy whose set trap throws |
+  | `try` wrapper, shipped for memo and forwardRef | keeps | keeps | keeps the arrow, drops the declaration | drops unused | nothing |
+
+  The bundler columns are that seven-export module; the minifier columns are a three-component module
+  the minifier sees whole, since terser and SWC only ever see what the bundler decided to keep. Rollup
+  drops the whole guarded expression along with the component nobody imported, exactly as it dropped the
+  bare assignment; esbuild keeps every stamp under every form, since it does not drop a property store on
+  a module-level binding. What the guard costs is terser and SWC, which could drop an unused component
+  under a bare assignment and cannot under this. The memo and forwardRef bindings are kept by every
+  bundler under every form anyway, because the wrapper call is not something they can prove away, so the
+  `try` there costs nothing that was not already lost. The `/*#__PURE__*/ Object.defineProperty` form shakes
+  in both bundlers and is worse than any of these: both then drop every stamp whether the component is
+  used or not, so no name survives minification and the transform does nothing at all. The remaining
+  cost is stated in both READMEs, and it only applies where the plugin or the loader is turned on, which
+  for `enabled: 'development'` is not the production build.
+
+  Measured over the Excalidraw app and two TanStack Table examples, 301 files with JSX that a parser
+  accepts: the names stamped went from 57 to 256, all 316 components the corpus can identify now carry
+  one, counting the 60 those apps name themselves with a `displayName` of their own, and re-parsing
+  every transformed file broke 0 of 301. The guards changed none of that: the same 314 files give the
+  same names, none added and none dropped. What
+  it still misses there is 6 capitalised classes, and capitalised bindings built by a call it does not
+  know: 89 `createIcon(…)`, 14 `createToolButton(…)`, 10 `React.createContext(…)`, 7 `Object.assign(…)`,
+  2 `dynamic(…)`, 2 `withInternalFallback(…)`, and one each of `clsx`, `createContext`, `defineTools`,
+  `filter` and `join`. Most of those are not components, which is why that list is not a to-do: telling
+  the ones that are from the ones that are not needs a scope analysis rather than a wider pattern.
+
+  What is still open, and is stated in both READMEs. A naming HOC that sets a `displayName` keeps it,
+  since the stamp does not replace a name that is there, but one that names a component some other way,
+  on a prototype or through a wrapper it returns, can still be overwritten. A file that begins with a
+  hashbang, and a file whose last line is a `sourceMappingURL` comment rather than code, are stamped
+  correctly by this transform but have not been put through webpack or Turbopack to see what those make
+  of the result.
+
+  Handler names are a different problem: LoAF's `sourceFunctionName`
   plus `sourceURL` and character position can be resolved through source maps offline, which
   is a RUM-side feature, not a browser-side one.
 - **Durations.** Only `react-dom/profiling` records them. Counts and the hot path are
   usually enough to name the culprit; durations tell you how bad.
-- **Budget.** The walk is bounded (`walkBudget`, default 5000 component fibers) and only runs
-  when an input event landed within the last 1.5 s (`inputWindow`). `sampleRate` (0 to 1) rolls
+- **Budget.** The walk is bounded (`walkBudget`, default 5000 component fibers) and only runs for a
+  commit an input can claim: one React made inside an input's dispatch, or one within `inputWindow`
+  (1.5 s) of the end of the newest input's own work. `sampleRate` (0 to 1) rolls
   once per page load, and a page that loses installs nothing at all. Reports carry
   `overheadMs`, and `stats()` carries `walkTotalMs`, `reportTotalMs` and `installMs`, so the
   cost is visible in the data rather than assumed.

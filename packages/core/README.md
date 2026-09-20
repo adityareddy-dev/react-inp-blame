@@ -68,7 +68,11 @@ or `runtime` config key and would drop them without installing anything.
 `withInpBlame` adds `react-inp-blame/next-client`
 to `instrumentationClientInject`, so Next.js installs the library before hydration, which the
 library needs, and a loader, under Turbopack and webpack, that stamps `displayName` on components
-so their names survive the production minifier. `enabled` decides which runs get both:
+so their names survive the production minifier. The stamp is a guarded assignment after the module's
+code, which costs a module its tree shaking in some bundlers: a component nobody imported is kept,
+because the assignment names it and a bundler cannot always prove a property store is safe to drop.
+Measured on seven exports with two imported, Rollup drops the unused ones and esbuild keeps them;
+terser and SWC keep whatever the bundler handed them. Leave `enabled` at `'development'` to keep the names out of the production build entirely. `enabled` decides which runs get both:
 `'development'` (`next dev`, the default), `'production'` (`next build`), `true` for both, `false`
 for neither; a run it leaves out gets the config back untouched. `runtime` takes the options for
 `install()`, such as `{ overlay: 'query' }`. They reach the browser inlined through `env`, so they
