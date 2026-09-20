@@ -193,6 +193,56 @@ form field's placeholder, name or type, or its data-testid or data-test. The tex
 shows can be someone's name or email, and reports are made to be forwarded, so reading it is
 opt-in there: `install({ labels: 'text' })`. Development builds read it by default.
 
+## Clicks that land before hydration
+
+Every App Router page is server-rendered, so a click can land on HTML React has not hydrated yet. The
+browser reports a slow click, React DevTools shows nothing, and the element has no fiber to be named
+after. When the library can see which piece of server-rendered HTML the click landed on,
+`report.hydration` says so and which of the two things happened:
+
+```ts
+hydration: { kind: 'waited' | 'not-hydrated'; scope: 'root' | 'boundary';
+             owner: string | null; ms: number | null } | null
+```
+
+**React hydrated it inside the click** (`kind: 'waited'`). On React 18 and 19 a discrete event that lands
+on a boundary waiting to hydrate makes React hydrate that boundary synchronously, inside the event's own
+dispatch, before the event reaches any handler. That wait is working time, and the report names it:
+
+> 264 ms click on button "Add to cart". The click landed on server-rendered HTML that had not been
+> hydrated yet, so React hydrated the Suspense boundary in ProductPage first: 208 ms of the 236 ms of
+> working time.
+
+`blame.kind` is then `'hydration'` and `blame.name` is the boundary. The hydrating time is a named part of
+the `Working` phase (`phases[1].parts`), not a fourth phase beside it, so the three phases go on adding up
+to the interaction. A hydration too small to be the story keeps `report.hydration` and its place in the
+phase bar but leaves the blame where it belongs, with a note beside it: 8 ms of hydrating in front of a
+400 ms handler is not why the click was slow. Under 5 ms, where React's own render is too small for this
+library to call it the story at all, only `report.hydration` and the note say it happened.
+
+**It was still waiting** (`kind: 'not-hydrated'`). React 18 and 19 stop the propagation of a discrete event
+they could not unblock instead of dispatching it, so no React handler runs. Almost no working time goes by,
+so the blame stays on where the time actually went, and the hydration leads the sentence:
+
+> This click landed on server-rendered HTML that React had not hydrated yet, so React did not dispatch it
+> and no React handler ran for it. The click waited 380 ms before its handler could start: the main thread
+> was busy with something else.
+
+A Suspense boundary has no name of its own, so `owner` is the nearest component holding it; write that
+boundary inside a client component if you want a name you recognise. `scope: 'root'` is a whole root that
+had not hydrated, which has no component above it and reads as "the page".
+
+**What it does not say.** A click that lands before `hydrateRoot` has run at all: nothing on the page
+carries a mark of React yet, so there is nothing to read and `report.hydration` is `null`. A boundary React gave up on and rendered on the client instead, where the
+server HTML the click landed on was thrown away: that is not a hydration and is not reported as one.
+Whether the element had a handler at all, which is why the sentence says no React handler ran rather than
+that a click was lost.
+
+In a production build React records no render durations, so `ms` is `null`: which boundary hydrated, and
+how many components it took, are measured; how long it took is not. `next build --profile` gives the
+durations back. React 17 is left out altogether: it has no dehydrated Suspense state, and the one hydration
+flag it keeps is cleared before it calls the hook, so nothing there is ever reported as a hydration.
+
 ## Size
 
 Measured 2026-09-15 with rolldown 1.2.8, minified ESM for the browser, gzip at its default level:

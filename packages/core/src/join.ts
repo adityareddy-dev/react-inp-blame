@@ -4,7 +4,7 @@ import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
-import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, InputRecord, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
+import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InputRecord, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
 
 export const FOLLOW_UP_WINDOW = 1500;
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
@@ -185,6 +185,31 @@ function ringInput(inputs: readonly InputRecord[], stamps: number[]): InputRecor
   return inputs.find((i) => stamps.some((s) => near(s, i.ts))) ?? null;
 }
 
+/** Every input of this interaction the ring still holds, oldest first. A click is a pointerdown, a pointerup and a click. */
+function ringInputs(inputs: readonly InputRecord[], stamps: number[]): InputRecord[] {
+  return inputs.filter((i) => stamps.some((s) => near(s, i.ts)));
+}
+
+/**
+ * Server-rendered HTML the interaction landed on before React had hydrated it, or null.
+ *
+ * React hydrating it inside the interaction is the case with a time on it: one commit of the
+ * interaction ended the wait its input started in, and `ms` is what that commit spent rendering.
+ * Without such a commit, the case left is the one where nothing of React ran: every input of the
+ * interaction that the ring still holds landed on HTML that was still waiting. Reading the newest of
+ * them, rather than the first, is what keeps a pointerdown before hydration from speaking for a click
+ * after it.
+ */
+function hydrationOf(commits: readonly CommitSummary[], inputs: readonly InputRecord[], stamps: number[]): Hydration | null {
+  // At most one commit carries it: the boundary an input waited on is credited to the commit that
+  // hydrated it and to no other, so there is nothing here to pick between or to add up.
+  const hydrating = commits.find((c) => c.hydratedTarget != null) ?? null;
+  if (hydrating?.hydratedTarget) return Object.freeze({ ...hydrating.hydratedTarget, kind: 'waited', ms: hydrating.hasDurations ? hydrating.total : null });
+  const landed = ringInputs(inputs, stamps);
+  const still = landed.length > 0 && landed.every((i) => i.dehydrated != null) ? landed[landed.length - 1]?.dehydrated : null;
+  return still ? Object.freeze({ ...still, kind: 'not-hydrated', ms: null }) : null;
+}
+
 /** The element an interaction landed on: an entry's target, or the node the ring kept when the entries' target has left the DOM. */
 export function interactionTarget(entries: readonly InteractionTiming[], inputs: readonly InputRecord[]): Node | null {
   return entryTarget(entries) ?? ringInput(inputs, entries.map((e) => e.startTime))?.target ?? null;
@@ -287,6 +312,7 @@ export function buildReport(
     walkMs,
     presentation: end - processingEnd,
     target: targetNode ? describeTarget(targetNode, owners, handler, labels) : null,
+    hydration: hydrationOf(inWindow, inputs, stamps),
     navigationURL: navigation?.url ?? '',
     navigationType: navigation?.type ?? 'navigate',
     startedNavigation: navigationStartedBy(navigations, stamps),
@@ -523,6 +549,10 @@ function renderPhrase(c: CommitSummary): string {
   const verb = c.hydrated ? 'hydrating' : 're-rendering';
   const leaf = leafOf(c);
   const top = c.components[0];
+  // React commits with nothing rendered: a retry that found the boundary still blocked, or an update
+  // every component bailed out of. Calling that a re-render of no components reads as a bug in the
+  // report rather than as what it is.
+  if (c.rendered === 0) return 'committing without rendering a component';
   if (c.rendered === 1) return `${verb} ${leaf}`;
   let mostly = '';
   if (top && top.count > 1) {
@@ -530,6 +560,16 @@ function renderPhrase(c: CommitSummary): string {
     mostly = top.name === leaf ? ` (${top.count} of them${time})` : `, mostly ${top.name} (${top.count} of them${time})`;
   }
   return `${verb} ${plural(c.rendered, 'component')} inside ${leaf}${mostly}`;
+}
+
+/**
+ * "the Suspense boundary in ProductPage": a Suspense boundary has no name of its own, so it is named
+ * by the nearest component that holds it. "the page" where a whole root was waiting, which has no
+ * component above it to be named after.
+ */
+function boundaryPhrase(h: Hydration): string {
+  if (h.scope === 'root') return 'the page';
+  return h.owner ? `the Suspense boundary in ${h.owner}` : 'a Suspense boundary';
 }
 
 /** A Long Animation Frames script as one window of the interaction sees it. */
@@ -616,11 +656,29 @@ export function explain(r: InteractionReport): Explanation {
   // click that re-rendered 10 components and took 260 ms was slow in its handler.
   const renderMatters = !!c && (hasDurations ? renderTotal >= RENDER_MIN_MS : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS));
 
+  // A click can land on server-rendered HTML React has not reached yet, which is the commonest cause
+  // of a slow first interaction in a server-rendered app. When React hydrated it inside the
+  // interaction, that hydration is the story, ahead of what it rendered or what the handler did.
+  const hydrating = r.commits.find((x) => x.hydratedTarget != null) ?? null;
+  const waited = r.hydration?.kind === 'waited' && hydrating && carriesWork(hydrating) ? { boundary: r.hydration, commit: hydrating } : null;
+  // It takes the blame only when it is what the working time went on. A boundary that hydrated in
+  // 2 ms ahead of a 400 ms handler is worth the note below, not the verdict. Where the build records
+  // no durations there is no figure to weigh, and the commit carrying real work is the whole test.
+  const hydrationTook = waited && (waited.boundary.ms == null || (waited.boundary.ms >= RENDER_MIN_MS && waited.boundary.ms > outside)) ? waited : null;
+
   // The sentence and the data version of it are decided together, so a UI that shows the
   // short form never disagrees with the long one.
   let cause: string;
   let blame: Blame;
-  if (c && outsideMatters && outside > renderTotal) {
+  if (hydrationTook) {
+    const { boundary, commit } = hydrationTook;
+    const first = `The ${kind} landed on server-rendered HTML that had not been hydrated yet, so React hydrated ${boundaryPhrase(boundary)} first`;
+    cause =
+      boundary.ms != null
+        ? `${first}: ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.`
+        : `${first}, ${plural(commit.rendered, 'component')}. This React build records no render durations, so how much of the ${ms(r.processing)} of working time that took is not measured.`;
+    blame = { kind: 'hydration', name: boundaryPhrase(boundary), detail: mostlyOf(commit), ms: boundary.ms, confidence: measuredCommit(commit) ? 'measured' : 'inferred' };
+  } else if (c && outsideMatters && outside > renderTotal) {
     const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
     cause = `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: outside, confidence: r.commits.every(measuredCommit) ? 'measured' : 'inferred' };
@@ -629,7 +687,8 @@ export function explain(r: InteractionReport): Explanation {
     if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
     blame = { kind: 'render', name: leafOf(c), detail: mostlyOf(c), ms: hasDurations ? c.total : null, confidence: measuredCommit(c) ? 'measured' : 'inferred' };
   } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
-    cause = `${cap(handler)} most likely took the ${ms(r.processing)}: React re-rendered only ${plural(c.rendered, 'component')}. A profiling build of React would give exact numbers.`;
+    const howLittle = c.rendered === 0 ? 'React rendered nothing' : `React re-rendered only ${plural(c.rendered, 'component')}`;
+    cause = `${cap(handler)} most likely took the ${ms(r.processing)}: ${howLittle}. A profiling build of React would give exact numbers.`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
     cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
@@ -656,9 +715,24 @@ export function explain(r: InteractionReport): Explanation {
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   }
 
+  // React stops an event at a boundary it has not hydrated: it never dispatches it, so hardly any
+  // working time goes by and the slow part is the wait before it or the paint after. That verdict
+  // still holds and stands above; this goes in front of it, because it is the thing worth knowing.
+  if (r.hydration?.kind === 'not-hydrated') {
+    cause = `This ${kind} landed on server-rendered HTML that React had not hydrated yet, so React did not dispatch it and no React handler ran for it. ${cause}`;
+  }
+
   if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
+  if (r.hydration?.kind === 'waited' && blame.kind !== 'hydration') {
+    // Saying it was not what took the time is a measurement. Where the build records no durations
+    // nobody measured it, and the sentence would be a guess dressed as a finding.
+    const notTheStory = r.hydration.ms == null ? '' : ' That was not what took the time here.';
+    notes.push(`It landed on server-rendered HTML that had not been hydrated yet, and React hydrated ${boundaryPhrase(r.hydration)} during it.${notTheStory}`);
+  }
   if (c) {
-    const real = r.commits.filter(carriesWork).length;
+    // A hydration is not a re-render: it is the first render of that HTML on the client, and counting
+    // it here would tell every click that waited for one to go looking for an effect that updates state.
+    const real = r.commits.filter((x) => carriesWork(x) && x.hydratedTarget == null).length;
     if (real > 1) notes.push(`React rendered ${real} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
     if (r.inputDelay > LONG_TASK_MS && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
     if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
@@ -687,9 +761,13 @@ export function explain(r: InteractionReport): Explanation {
     notes.push(`The ${ms(r.duration)} includes ${ms(r.walkMs)} that react-inp-blame itself spent reading what React rendered; it is not counted as working time.`);
   }
 
+  // Hydrating runs inside the event's own dispatch, so it is part of the working time rather than a
+  // fourth phase beside it: the three phases go on adding up to the interaction the way they always did.
+  const hydrationMs = waited && waited.boundary.ms != null ? Math.min(waited.boundary.ms, r.processing) : 0;
+  const working: Phase = { label: 'Working', ms: r.processing, hint: 'Event handlers and React rendering.' };
   const phases: Phase[] = [
     { label: 'Waiting', ms: r.inputDelay, hint: 'Before the handler could start. The main thread was busy.' },
-    { label: 'Working', ms: r.processing, hint: 'Event handlers and React rendering.' },
+    hydrationMs > 0 ? { ...working, parts: Object.freeze([Object.freeze({ label: 'Hydrating', ms: hydrationMs, hint: 'React hydrating server-rendered HTML the interaction landed on, before it could be handled.' })]) } : working,
     { label: 'Updating the screen', ms: r.presentation, hint: 'From the end of the handlers to the next painted frame.' },
   ];
   return Object.freeze({

@@ -19,6 +19,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
     inputType: 'click',
     rendered: 30,
     hydrated: false,
+    hydratedTarget: null,
     truncated: false,
     roots: ['List'],
     hotPath: ['List'],
@@ -34,7 +35,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
 }
 
 function input(ts: number, type: string, extra: Partial<InputRecord> = {}): InputRecord {
-  return { ts, type, gestureTs: ts, press: undefined, target: null, owners: [], handler: null, ...extra };
+  return { ts, type, gestureTs: ts, press: undefined, target: null, owners: [], handler: null, dehydrated: null, ...extra };
 }
 
 /** A detached DOM element as the label reads it. Its textContent throws: a label must never need all of it. */
@@ -365,4 +366,114 @@ test('a report is placed in the navigation its interaction began in, and names t
   // Only the press was slow enough to be observed; the click it released still names the navigation.
   assert.deepEqual(placeOf([entry('pointerdown', 990, 24, 991, 1006)]), { navigationURL: home.url, navigationType: 'navigate', startedNavigation: toCart });
   assert.deepEqual(placeOf([entry('click', 3000, 64, 3002, 3050)]), { navigationURL: cart.url, navigationType: 'soft-navigation', startedNavigation: null });
+});
+
+test('a click that waited for React to hydrate the boundary it landed in is blamed on that, and the wait is part of the working time', () => {
+  // 120 ms click: 3 ms before the handler could start, then React hydrating the boundary the button
+  // was inside, then the paint.
+  const hydration = commit(50, 0, { hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' }, rendered: 40, total: 90 });
+  const r = report([entry('click', 0, 120, 3, 100)], [hydration], []);
+
+  assert.deepEqual(r.hydration, { kind: 'waited', scope: 'boundary', owner: 'ProductPage', ms: 90 });
+  assert.equal(r.explanation.cause, 'The click landed on server-rendered HTML that had not been hydrated yet, so React hydrated the Suspense boundary in ProductPage first: 90 ms of the 97 ms of working time.');
+  assert.deepEqual(r.explanation.blame, { kind: 'hydration', name: 'the Suspense boundary in ProductPage', detail: 'Row ×30', ms: 90, confidence: 'measured' });
+
+  // The hydration is a named part of the working time, so the three phases still add up to the interaction.
+  const phases = r.explanation.phases;
+  assert.deepEqual(phases.map((p) => [p.label, p.ms]), [['Waiting', 3], ['Working', 97], ['Updating the screen', 20]]);
+  assert.deepEqual(phases[1]?.parts, [{ label: 'Hydrating', ms: 90, hint: 'React hydrating server-rendered HTML the interaction landed on, before it could be handled.' }]);
+});
+
+test('a production build says React hydrated the boundary and stops short of saying how long it took', () => {
+  const hydration = commit(50, 0, { hydrated: true, hydratedTarget: { scope: 'root', owner: null }, rendered: 40, hasDurations: false, total: 0, components: [] });
+  const r = report([entry('click', 0, 120, 3, 100)], [hydration], []);
+
+  assert.deepEqual(r.hydration, { kind: 'waited', scope: 'root', owner: null, ms: null });
+  assert.equal(
+    r.explanation.cause,
+    'The click landed on server-rendered HTML that had not been hydrated yet, so React hydrated the page first, 40 components. This React build records no render durations, so how much of the 97 ms of working time that took is not measured.',
+  );
+  assert.equal(r.explanation.blame.ms, null);
+  assert.equal(r.explanation.phases[1]?.parts, undefined);
+});
+
+test('a hydration commit the interaction did not wait for is a note, not the blame', () => {
+  // A boundary elsewhere on the page hydrated during the click: hydratedTarget is null, so the
+  // ordinary render blame stands and the hydration is only worth a sentence.
+  const elsewhere = commit(50, 0, { hydrated: true, total: 90 });
+  const r = report([entry('click', 0, 120, 3, 100)], [elsewhere], []);
+  assert.equal(r.hydration, null);
+  assert.equal(r.explanation.blame.kind, 'render');
+});
+
+test('a click on HTML React never hydrated says so first, and still says where the time went', () => {
+  // React stops an event at a boundary it has not reached, so almost no working time goes by: the
+  // 400 ms was spent waiting for the main thread. The blame stays on that, because that is what a
+  // blame is for; the hydration is the sentence in front of it.
+  const button = input(0, 'click', { dehydrated: { scope: 'boundary', owner: 'ProductPage' } });
+  const r = report([entry('click', 0, 400, 380, 385)], [], [], [button]);
+
+  assert.deepEqual(r.hydration, { kind: 'not-hydrated', scope: 'boundary', owner: 'ProductPage', ms: null });
+  assert.equal(
+    r.explanation.cause,
+    'This click landed on server-rendered HTML that React had not hydrated yet, so React did not dispatch it and no React handler ran for it. The click waited 380 ms before its handler could start: the main thread was busy with something else.',
+  );
+  assert.deepEqual(r.explanation.blame, { kind: 'waiting', name: null, detail: null, ms: 380, confidence: 'measured' });
+});
+
+test('a hydration too small to be the story is a note beside the ordinary blame, not the blame', () => {
+  // 8 ms of hydrating in front of a 369 ms handler. The boundary is still reported on r.hydration and
+  // still shown in the phase bar; what it is not is the answer to why the click was slow.
+  const hydration = commit(50, 0, { hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' }, rendered: 3, total: 8 });
+  const r = report([entry('click', 0, 400, 3, 380)], [hydration], []);
+
+  assert.deepEqual(r.hydration, { kind: 'waited', scope: 'boundary', owner: 'ProductPage', ms: 8 });
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.ok(r.explanation.notes.includes('It landed on server-rendered HTML that had not been hydrated yet, and React hydrated the Suspense boundary in ProductPage during it. That was not what took the time here.'));
+  assert.deepEqual(r.explanation.phases[1]?.parts?.map((p) => [p.label, p.ms]), [['Hydrating', 8]]);
+});
+
+test('a commit that rendered no component at all is not described as a re-render of none', () => {
+  // React commits with nothing rendered: a retry that found the boundary still blocked, which is what
+  // a click on HTML React cannot hydrate leaves behind.
+  const empty = commit(50, 0, { rendered: 0, components: [], total: 90, roots: ['app'], hotPath: ['app'] });
+  const r = report([entry('click', 0, 120, 3, 100)], [empty], []);
+  assert.equal(r.explanation.cause, 'React spent 90 ms committing without rendering a component.');
+});
+
+test('a production build does not say the hydration was not what took the time, having measured neither', () => {
+  // Same note without durations. Whether the hydration or the handler took the 97 ms is exactly what
+  // this build cannot say, so the note stops at what happened.
+  const hydration = commit(50, 0, { hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' }, rendered: 1, hasDurations: false, total: 0, components: [] });
+  const r = report([entry('click', 0, 120, 3, 100)], [hydration], [], loginClick('handleLogin'));
+
+  assert.deepEqual(r.hydration, { kind: 'waited', scope: 'boundary', owner: 'ProductPage', ms: null });
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.ok(r.explanation.notes.includes('It landed on server-rendered HTML that had not been hydrated yet, and React hydrated the Suspense boundary in ProductPage during it.'));
+  assert.equal(r.explanation.notes.some((n) => n.includes('That was not what took the time here')), false);
+});
+
+test('the commit that hydrated is not counted as one of the renders before the screen updated', () => {
+  // Hydrating a boundary and then rendering what the handler changed is two commits, and the second
+  // is the only render. Counting both would send every such click looking for an effect loop.
+  const hydration = commit(50, 0, { hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' }, rendered: 3, total: 8 });
+  const handled = commit(70, 0, { rendered: 4, total: 12 });
+  const r = report([entry('click', 0, 400, 3, 380)], [hydration, handled], []);
+
+  assert.equal(r.commits.length, 2);
+  assert.equal(r.explanation.notes.some((n) => n.includes('React rendered')), false);
+  // Two commits that are both ordinary renders still earn the note.
+  const twice = report([entry('click', 0, 400, 3, 380)], [commit(50, 0, { rendered: 3, total: 8 }), handled], []);
+  assert.ok(twice.explanation.notes.some((n) => n.includes('React rendered 2 times before the screen updated')));
+});
+
+test('a press before hydration and a click after it is not a click on HTML React never hydrated', () => {
+  // The pointerdown landed on HTML that was waiting; by the click React had hydrated it and handled
+  // it. Reading the newest input of the interaction, not the first, is what keeps the two apart.
+  const entries = [entry('pointerdown', 0, 40, 1, 5), entry('click', 20, 100, 22, 100)];
+  const waiting = input(0, 'pointerdown', { dehydrated: { scope: 'root', owner: null } });
+  const handled = input(20, 'click', { handler: 'onClick' });
+  assert.equal(report(entries, [], [], [waiting, handled]).hydration, null);
+  // Both still waiting is the case the sentence is for.
+  assert.equal(report(entries, [], [], [waiting, input(20, 'click', { dehydrated: { scope: 'root', owner: null } })]).hydration?.kind, 'not-hydrated');
 });

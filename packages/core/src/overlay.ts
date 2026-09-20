@@ -2,7 +2,7 @@ import { heaviest } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
-import type { Blame, CommitSummary, InteractionReport, OverlayOptions } from './types.js';
+import type { CommitSummary, InteractionReport, OverlayOptions, Phase } from './types.js';
 
 /**
  * The on-page badge and panel. Plain DOM inside a shadow root: no React, so it renders even
@@ -67,6 +67,7 @@ const CSS = `
 .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.08); margin: 9px 0 0 16px; }
 .bar i { display: block; height: 100%; }
 .p0 { background: #6b7280; } .p1 { background: #818cf8; } .p2 { background: #2dd4bf; }
+.ph { background: #c084fc; }
 .more { margin: 10px 0 0 16px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,.1); font-size: 12px; color: #c3c7d1; cursor: default; }
 .more p { margin: 0 0 7px; }
 .more .note { color: #9aa0ad; padding-left: 9px; border-left: 2px solid rgba(255,255,255,.14); }
@@ -139,9 +140,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const R = RATING[r.explanation.rating];
     const title = titleFor(r);
     const total = Math.max(r.duration, 1);
-    const bar = r.explanation.phases
-      .map((p, i) => `<i class="p${i}" style="width:${((p.ms / total) * 100).toFixed(1)}%" title="${esc(p.label)}: ${Math.round(p.ms)} ms"></i>`)
-      .join('');
+    const bar = phaseBar(r.explanation.phases, total);
     const later = laterRender(r);
     const n = g.reports.length;
     const meta = n > 1 ? `<div class="meta">${n} key presses &middot; slowest ${Math.round(r.duration)} ms &middot; typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms</div>` : '';
@@ -149,7 +148,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       `<div class="row" data-id="${r.interactionId}">` +
       `<div class="r1"><i class="dot" style="background:${R.color}"></i><span class="t">${esc(title)}</span><span class="ms" style="color:${R.color}">${Math.round(r.duration)} ms</span></div>` +
       meta +
-      `<div class="blame">${blameLine(r.explanation.blame)}</div>` +
+      `<div class="blame">${blameLine(r)}</div>` +
       (later ? `<div class="blame later">then <b>${esc(where(later))}</b> re-rendered after the paint &middot; ${esc(top(later))}${later.hasDurations ? ` &middot; ${Math.round(later.total)} ms` : ''}</div>` : '') +
       `<div class="bar">${bar}</div>` +
       (expanded.has(r.interactionId) ? more(r) : '') +
@@ -163,7 +162,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const main = r.commits.length ? heaviest(r.commits) : null;
     const before = main && carriesWork(main) ? main : null;
     const later = laterRender(r);
-    const legend = x.phases.map((p, i) => `<span title="${esc(p.hint)}"><i class="p${i}"></i>${esc(p.label)} ${Math.round(p.ms)} ms</span>`).join('');
+    const legend = x.phases.flatMap((p, i) => [swatch(`p${i}`, p), ...(p.parts ?? []).map((part) => swatch('ph', part))]).join('');
     return (
       `<div class="more">` +
       `<div class="legend">${legend}</div>` +
@@ -302,6 +301,29 @@ function costText(ms: number): string {
   return ms < 0.05 ? 'under 0.1 ms' : `${ms.toFixed(1)} ms`;
 }
 
+/**
+ * The phase bar. A phase with named parts draws them first, then what is left of it, so the
+ * hydration inside the working time is a band of its own without the bar adding up to any more
+ * than the interaction.
+ */
+function phaseBar(phases: readonly Phase[], total: number): string {
+  return phases
+    .map((p, i) => {
+      const parts = p.parts ?? [];
+      const rest = Math.max(0, p.ms - parts.reduce((a, x) => a + x.ms, 0));
+      return parts.map((part) => band('ph', part.label, part.ms, total)).join('') + band(`p${i}`, p.label, rest, total);
+    })
+    .join('');
+}
+
+function band(cls: string, label: string, ms: number, total: number): string {
+  return `<i class="${cls}" style="width:${((ms / total) * 100).toFixed(1)}%" title="${esc(label)}: ${Math.round(ms)} ms"></i>`;
+}
+
+function swatch(cls: string, p: Phase): string {
+  return `<span title="${esc(p.hint)}"><i class="${cls}"></i>${esc(p.label)} ${Math.round(p.ms)} ms</span>`;
+}
+
 function where(c: CommitSummary): string {
   return c.hotPath[c.hotPath.length - 1] ?? c.roots[0] ?? 'the tree';
 }
@@ -310,13 +332,18 @@ function top(c: CommitSummary): string {
   return t ? `${t.name} ×${t.count}` : `${c.rendered} components`;
 }
 
-function blameLine(b: Blame): string {
+function blameLine(r: InteractionReport): string {
+  const b = r.explanation.blame;
   const ms = b.ms != null ? ` &middot; ${Math.round(b.ms)} ms` : '';
   switch (b.kind) {
     case 'render':
       return `<b>${esc(b.name ?? 'the tree')}</b> re-rendered${b.detail ? ` &middot; ${esc(b.detail)}` : ''}${ms}`;
     case 'handler':
       return `<b>${esc(b.name ?? 'the handler')}</b>${b.detail ? ` in ${esc(b.detail)}` : ''}${ms} in the handler`;
+    // Only a hydration React finished inside the interaction takes the blame. HTML that was still
+    // waiting is a sentence in front of whatever did take the time, which the cause line carries.
+    case 'hydration':
+      return `waited for React to hydrate <b>${esc(b.name ?? 'the page')}</b>${ms}${b.detail ? ` &middot; ${esc(b.detail)}` : ''}`;
     case 'waiting':
       return `main thread was busy${ms} before the handler could start`;
     case 'painting':

@@ -1,4 +1,4 @@
-import type { CommitSummary, InputStamp, RenderedComponent } from './types.js';
+import type { CommitSummary, HydrationBoundary, InputStamp, RenderedComponent } from './types.js';
 
 // React work tags, stable across 17, 18 and 19.
 const FunctionComponent = 0;
@@ -37,6 +37,31 @@ const COARSE_CLOCK_SAMPLES = 8;
 // Each reading on such a clock is off by up to a millisecond: a quarter or more of a component that
 // averaged under 4 ms, which is where per-component times stop saying anything.
 const COARSE_CLOCK_MEAN_MS = 4;
+const COMMENT_NODE = 8;
+// The comment nodes React's server renderer puts around a boundary's HTML, and the ones that close
+// them. React 19's getParentHydrationBoundary counts these exact five openers against these two
+// closers: `$` complete, `$?` still streaming, `$!` errored on the server, `$~` queued, and `&` an
+// Activity boundary. React 18 emits only the first three and `/$`, which are a subset of these.
+const BOUNDARY_STARTS = ['$', '$?', '$!', '$~', '&'];
+const BOUNDARY_ENDS = ['/$', '/&'];
+// The two fibers React caches on an opening comment and keeps a dehydrated instance on. Activity is
+// React 19 only; its state carries `dehydrated` the same way a Suspense boundary's does, which is what
+// React's own getActivityInstanceFromFiber reads.
+const ActivityComponent = 31;
+// The tag of the DehydratedFragment fiber React deletes when it gives up on hydrating a boundary and
+// renders it on the client instead. Same value on React 18 and 19.
+const DehydratedFragment = 18;
+// The fiber flag React sets on a root whose server HTML it threw away to render on the client, so that
+// the commit is a client render rather than a hydration. 256 on React 18 and 19.
+const ForceClientRender = 0b100000000;
+// The fiber flag React sets on the child of a boundary it is hydrating, and clears when that work
+// commits. 4096 on React 18 and 19: `var Hydrating = 4096` in react-dom 18.3.1, and in React 19.3 the
+// same bit inside the combined literal 134221824 the compiled build writes. React sets it beside the
+// hydrating child (`primaryChildFragment.flags |= Hydrating`) and clears it in
+// `commitReconciliationEffects`, so it marks exactly the window between a boundary finishing its
+// hydration render and that render reaching the screen. React reads it the same way, as
+// `Placement | Hydrating` (4098) in `getNearestMountedFiber`, to tell committed from uncommitted.
+const Hydrating = 0b1000000000000;
 
 const wholeMs = (ms: number) => Math.abs(ms - Math.round(ms)) < 1e-6;
 
@@ -56,11 +81,15 @@ export interface Fiber {
   memoizedProps: Record<string, unknown> | null;
   /** Read only to tell hydration: a HostRoot's `isDehydrated`, a Suspense boundary's `dehydrated`. */
   memoizedState: unknown;
+  /** Read only on a HostRoot, where it is the FiberRoot, to reach the root's current fiber. */
+  stateNode?: unknown;
   return: Fiber | null;
   child: Fiber | null;
   sibling: Fiber | null;
   /** The same fiber in the other tree: current if this is work in progress, and the reverse. */
   alternate: Fiber | null;
+  /** Children React deleted in this commit. Read only to tell a boundary React hydrated from one it gave up on. */
+  deletions?: Fiber[] | null;
   /** ms React spent rendering this fiber's subtree in the commit; absent in production builds. */
   actualDuration?: number;
 }
@@ -106,17 +135,198 @@ export function rootShapeProblem(root: unknown): string | null {
   return null;
 }
 
+/** The fiber React stored on this node itself, under the `__reactFiber$<key>` property it caches instances on. */
+function fiberOn(node: Node): Fiber | null {
+  return expando(node, '__reactFiber$');
+}
+
+/**
+ * The HostRoot fiber React stored on this node itself. React writes it on the container element when
+ * `createRoot` or `hydrateRoot` is called, before anything renders, so it is there on a page whose
+ * HTML has not been hydrated yet.
+ */
+function containerFiberOn(node: Node): Fiber | null {
+  return expando(node, '__reactContainer$');
+}
+
+/**
+ * The last key found for each prefix. React appends one random string per copy of react-dom on the
+ * page, so a remembered key is a first guess and not an answer: a node from a second copy misses it
+ * and falls back to the scan, which is what the page did on every node before.
+ */
+const expandoKeys: Record<string, string | undefined> = {};
+
+function expando(node: Node, prefix: string): Fiber | null {
+  const o = node as unknown as Record<string, Fiber | undefined>;
+  const known = expandoKeys[prefix];
+  if (known !== undefined && known in o) return o[known] ?? null;
+  for (const k of Object.keys(node)) {
+    if (k.charCodeAt(0) === 95 && k.startsWith(prefix)) {
+      expandoKeys[prefix] = k;
+      return o[k] ?? null;
+    }
+  }
+  return null;
+}
+
 /** The fiber React stored on a DOM node, climbing to the nearest ancestor that has one. */
 export function fiberFromNode(node: Node | null): Fiber | null {
   let n = node;
   let hops = 0;
   while (n && hops++ < MAX_HOPS) {
-    for (const k of Object.keys(n)) {
-      if (k.charCodeAt(0) === 95 && k.startsWith('__reactFiber$')) return (n as unknown as Record<string, Fiber>)[k] ?? null;
-    }
+    const fiber = fiberOn(n);
+    if (fiber) return fiber;
     n = n.parentNode;
   }
   return null;
+}
+
+/**
+ * Server-rendered HTML React has not hydrated that encloses `node`, or null when React has reached it.
+ *
+ * Every read here answers one question: what is on the screen now. An `alternate` on its own cannot
+ * answer it, because it is the state before a commit only for the fibers React worked on in that
+ * commit, and holds a hydration from months of clicks ago otherwise. Where the two trees disagree,
+ * `boundaryIsDehydrated` below settles it the way React does, by the flag that says a hydration has
+ * rendered but not yet committed.
+ *
+ * It follows React's `getClosestInstanceFromNode` to a fiber and then climbs. A node React has not
+ * reached carries no fiber, and the fiber then comes from the comment opening the boundary around it
+ * (`<!--$-->` complete, `<!--$?-->` still streaming, `<!--$!-->` errored, `<!--/$-->` closing), which
+ * React caches it on. A fiber *on* the node is not the end of the question: React caches fibers on
+ * the nodes of a boundary as it hydrates them, and that hydration can be interrupted and left
+ * uncommitted, so the boundary above still has to be asked.
+ *
+ * Where nothing has a fiber at all, the container element is the only mark React has left: it carries
+ * a HostRoot fiber from the moment `hydrateRoot` is called. Before that call there is nothing on the
+ * page to read, and nothing is said.
+ */
+export function dehydratedAround(node: Node | null): HydrationBoundary | null {
+  const fiber = closestFiber(node);
+  return fiber ? dehydratedAbove(fiber) : containerRootDehydrated(node);
+}
+
+/** React's `getClosestInstanceFromNode`: the fiber on the node, or the one on the boundary enclosing it. */
+function closestFiber(node: Node | null): Fiber | null {
+  let n = node;
+  let hops = 0;
+  while (n && hops++ < MAX_HOPS) {
+    const own = fiberOn(n);
+    if (own) return own;
+    const opening = openingComment(n);
+    const onComment = opening && fiberOn(opening);
+    if (onComment) return onComment;
+    n = n.parentNode;
+  }
+  return null;
+}
+
+/**
+ * The innermost boundary at or above this fiber that still holds server-rendered HTML, or the root
+ * when it is the root that is still waiting. Null once React has reached everything above the fiber.
+ */
+function dehydratedAbove(fiber: Fiber): HydrationBoundary | null {
+  let f: Fiber | null = fiber;
+  for (let hops = 0; f && hops < MAX_DEPTH; f = f.return, hops++) {
+    if (boundaryIsDehydrated(f)) return { scope: 'boundary', owner: ownersOf(f.return, 1)[0] ?? null };
+    if (f.tag === HostRoot) return rootFiberIsDehydrated(f) ? { scope: 'root', owner: null } : null;
+  }
+  return null;
+}
+
+/** The root of the tree this node is in, when nothing in it has a fiber yet. */
+function containerRootDehydrated(node: Node | null): HydrationBoundary | null {
+  let n = node;
+  let hops = 0;
+  while (n && hops++ < MAX_HOPS) {
+    const container = containerFiberOn(n);
+    if (container) return rootFiberIsDehydrated(container) ? { scope: 'root', owner: null } : null;
+    n = n.parentNode;
+  }
+  return null;
+}
+
+/**
+ * Whether a root is still server-rendered HTML, asked of a HostRoot fiber.
+ *
+ * Read through `stateNode`, the FiberRoot, to the root's *current* fiber, because the fiber React
+ * writes on a container is the one `createFiberRoot` made: it becomes the alternate on the first
+ * commit and goes on saying `isDehydrated: true` for as long as it lives. React's own
+ * `findInstanceBlockingTarget` reads exactly that on React 19, and `isRootDehydrated` on React 18.
+ */
+function rootFiberIsDehydrated(f: Fiber): boolean {
+  const current = (f.stateNode as { current?: Fiber } | null | undefined)?.current ?? f;
+  return (current.memoizedState as { isDehydrated?: unknown } | null | undefined)?.isDehydrated === true;
+}
+
+/** A Suspense or Activity state that still holds a server-rendered instance. */
+const holdsServerHtml = (state: unknown) => (state as { dehydrated?: unknown } | null | undefined)?.dehydrated != null;
+
+/**
+ * Whether the boundary a fiber stands for still holds server-rendered HTML.
+ *
+ * The two trees can disagree, and which of them is on the screen is the whole question. React nulls a
+ * boundary's state in `completeDehydratedSuspenseBoundary` ("This boundary did not suspend so it's now
+ * hydrated and unsuspended"), which runs at the end of the *render*. A time-sliced pass can finish one
+ * boundary and still be rendering the next, so for that window one tree says hydrated and the other
+ * says server HTML, and the page is still showing the server's. The same split is left behind for good
+ * once a boundary has committed, because the old fiber keeps its dehydrated state for as long as it
+ * lives, and a subtree React bails out of never gets a fresh one.
+ *
+ * The flag React itself uses tells the two apart. `Hydrating` sits on the hydrating side's child from
+ * the render until `commitReconciliationEffects` clears it in the commit, so it is set exactly while
+ * that work has not reached the screen. React's `getNearestMountedFiber` asks the same question the
+ * same way. Where both trees agree, or there is only one, there is nothing to tell apart.
+ */
+function boundaryIsDehydrated(f: Fiber): boolean {
+  if (f.tag !== SuspenseComponent && f.tag !== ActivityComponent) return false;
+  const own = holdsServerHtml(f.memoizedState);
+  if (f.alternate === null) return own;
+  const other = holdsServerHtml(f.alternate.memoizedState);
+  if (own === other) return own;
+  const hydratedSide = own ? f.alternate : f;
+  return ((hydratedSide.child?.flags ?? 0) & Hydrating) !== 0;
+}
+
+/**
+ * The comment node opening the boundary `node` sits directly inside, found by walking back over its
+ * siblings and counting the boundaries that close and open on the way. React's own
+ * `getParentHydrationBoundary` does exactly this, over the same markers.
+ */
+function openingComment(node: Node): Node | null {
+  let depth = 0;
+  for (let n = node.previousSibling; n; n = n.previousSibling) {
+    if (n.nodeType !== COMMENT_NODE) continue;
+    const data = (n as Comment).data;
+    if (BOUNDARY_ENDS.indexOf(data) >= 0) depth++;
+    else if (BOUNDARY_STARTS.indexOf(data) >= 0) {
+      if (depth === 0) return n;
+      depth--;
+    }
+  }
+  return null;
+}
+
+/**
+ * The server-rendered HTML an input landed on, once React has hydrated it, or null while it is still
+ * waiting. `waited` is what `dehydratedAround` said about the target when the input was recorded, and
+ * the answer is that same boundary or nothing: this only decides *when* the wait ended.
+ *
+ * It is the same question `dehydratedAround` answered when the input was recorded, asked again now
+ * that the commit has landed. Asking the page again is the point: a verdict read from the fiber tree
+ * alone would call every later click on that part of the page a hydration, because a boundary that
+ * hydrated long ago keeps a dehydrated alternate until a render passes through its parent.
+ */
+export function hydratedSince(target: Node | null, waited: HydrationBoundary | null): HydrationBoundary | null {
+  if (waited === null || target === null) return null;
+  // React threw the server HTML away and rendered the boundary on the client instead: it removed the
+  // nodes it had rendered from, the target among them. Nothing was hydrated, so nothing is said.
+  if (target.isConnected === false) return null;
+  // Still waiting: this commit is not the one that ended it.
+  if (dehydratedAround(target) !== null) return null;
+  // React caches a fiber on every node it hydrates, so a target it reached has one at or above it.
+  if (fiberFromNode(target) === null) return null;
+  return waited;
 }
 
 export function isComponent(f: Fiber): boolean {
@@ -216,12 +426,18 @@ export function handlerOf(fiber: Fiber | null, eventType: string): string | null
   return null;
 }
 
-/** What React passed with a commit besides the root, and how its build marks measured trees. */
+/** What the walk needs besides the fiber tree: what React passed with the commit, how its build marks measured trees, and where the input landed. */
 export interface CommitContext {
   /** `profileModeBit` for the renderer's React major. */
   profileMode: number;
   priority: number | undefined;
   didError: boolean;
+  /**
+   * The server-rendered HTML the input landed on that this commit hydrated, from `hydratedSince`.
+   * Decided from the DOM beside the input rather than from the tree, and passed in, so that a
+   * boundary hydrating elsewhere on the page is never taken for the one the input waited on.
+   */
+  hydratedTarget: HydrationBoundary | null;
 }
 
 interface Agg {
@@ -243,18 +459,35 @@ interface Tally {
 /** A commit as its walk reads it: everything but the time the walk took, which only the caller can measure. */
 export type CommitWalk = Omit<CommitSummary, 'walkMs' | 'joinedBy'>;
 
-/** A HostRoot whose previous state was server-rendered HTML waiting to hydrate, which React 18 and 19 mark `isDehydrated`. */
+/**
+ * A HostRoot whose previous state was server-rendered HTML waiting to hydrate, which React 18 and 19
+ * mark `isDehydrated` on the root's `memoizedState`. `ForceClientRender` says React threw that HTML
+ * away and rendered the root on the client instead, which is not a hydration; React's own
+ * `commitPassiveMountOnFiber` reads the same two.
+ *
+ * React 17 has neither: it keeps a plain `hydrate` boolean on the FiberRoot and clears it during the
+ * mutation phase, before the hook is called, so there is nothing left to read. Hydration is therefore
+ * never reported on React 17.
+ */
 function hydratesRoot(root: Fiber): boolean {
   const before = root.alternate?.memoizedState as { isDehydrated?: unknown } | null | undefined;
-  return before?.isDehydrated === true;
+  return before?.isDehydrated === true && (root.flags & ForceClientRender) === 0;
 }
 
-/** A Suspense boundary whose server-rendered content hydrated in this commit: dehydrated before it, not after. */
+/**
+ * A Suspense or Activity boundary whose server-rendered content hydrated in this commit: dehydrated
+ * before it, not after, which is React 19's own `isHydratingParent`. A boundary React gave up on
+ * instead, rendering it on the client, ends the commit the same way, and is told apart by the
+ * `DehydratedFragment` child it deleted on the way, the discriminator React 19 uses itself.
+ *
+ * `alternate` is only the state before the commit for a fiber React worked on in it, and the walk
+ * asks this of no other: it stops descending at a fiber whose child list its alternate still shares,
+ * so a fiber it reaches is one React either rendered or cloned, and either way gave a fresh alternate.
+ */
 function hydratesBoundary(f: Fiber): boolean {
-  if (f.tag !== SuspenseComponent || f.alternate === null) return false;
-  const before = f.alternate.memoizedState as { dehydrated?: unknown } | null;
-  const after = f.memoizedState as { dehydrated?: unknown } | null;
-  return before != null && before.dehydrated != null && (after == null || after.dehydrated == null);
+  if ((f.tag !== SuspenseComponent && f.tag !== ActivityComponent) || f.alternate === null) return false;
+  if (!holdsServerHtml(f.alternate.memoizedState) || holdsServerHtml(f.memoizedState)) return false;
+  return f.deletions?.[0]?.tag !== DehydratedFragment;
 }
 
 /**
@@ -276,6 +509,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   let fractional = false;
   // A root hydrating is known from the root; a Suspense boundary hydrating, only by finding it.
   let hydrated = hydratesRoot(rootFiber);
+  const { hydratedTarget } = context;
 
   function visit(f: Fiber, depth: number): Agg[] {
     const comp = countsAsComponent(f);
@@ -389,7 +623,8 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     gestureTs: input.gestureTs,
     inputType: input.type,
     rendered,
-    hydrated,
+    hydrated: hydrated || hydratedTarget != null,
+    hydratedTarget: hydratedTarget && Object.freeze(hydratedTarget),
     truncated,
     roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),

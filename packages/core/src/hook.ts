@@ -1,6 +1,6 @@
-import { fiberFromNode, handlerOf, ownersOf, profileModeBit, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
+import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, ownersOf, profileModeBit, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
 import { shared } from './session.js';
-import type { CommitSummary, HookInfo, InputRecord, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
+import type { CommitSummary, HookInfo, HydrationBoundary, InputRecord, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
 import { warnOnce } from './warn.js';
 
@@ -163,10 +163,31 @@ function record(e: DispatchedInput): InputRecord {
     target,
     owners: Object.freeze(ownersOf(fiber)),
     handler: handlerOf(fiber, e.type),
+    // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting
+    // inside a page React has otherwise hydrated, and then the target's nearest fiber is the hydrated
+    // ancestor above the boundary. React reads the same markers on every event it dispatches.
+    dehydrated: frozen(dehydratedAround(target)),
   };
   state.inputs.push(rec);
   if (state.inputs.length > RING_SIZE) state.inputs.shift();
   return rec;
+}
+
+const frozen = <T>(x: T | null): T | null => (x === null ? null : Object.freeze(x));
+
+/** Inputs whose wait for server-rendered HTML has already been credited to a commit, so it is credited once. */
+const credited = new WeakSet<InputRecord>();
+
+/**
+ * The server-rendered HTML this input landed on, if this is the commit that hydrated it. Asked of
+ * the DOM, which the commit has already updated, and answered at most once per input: a later commit
+ * in the same window finds the page hydrated and is not a second hydration of it.
+ */
+function creditHydration(input: InputRecord): HydrationBoundary | null {
+  if (input.dehydrated == null || credited.has(input)) return null;
+  const done = hydratedSince(input.target, input.dehydrated);
+  if (done) credited.add(input);
+  return done;
 }
 
 /** The pointerdown or keydown this event releases, by pointerId or key code; the newest press as a fallback. */
@@ -379,7 +400,7 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   // Outside an interaction window this is the whole cost: a few lookups and one subtraction.
   if (!input || now - input.ts > options.inputWindow) return;
   const t0 = performance.now();
-  const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true });
+  const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true, hydratedTarget: creditHydration(input) });
   const summary: CommitSummary = Object.freeze({ ...walk, walkMs: performance.now() - t0 });
   state.walkTotalMs += summary.walkMs;
   state.walks++;

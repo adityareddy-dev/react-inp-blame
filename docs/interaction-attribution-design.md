@@ -413,9 +413,156 @@ discrete event on a boundary that has not hydrated yet, and such a commit says i
 re-rendered. Until 2026-09-15 they were stamped with the newest input like any other commit, so on
 React 17, 18 and 19 alike a click on server-rendered HTML collected the whole hydration commit as its
 "second React render", and a quiet first tap was published on the strength of it. README.md carried that
-as a known limit. This is the first half of a hydration verdict: it reads a root's `isDehydrated` state
-and a boundary's `dehydrated` one. What is still unbuilt is the rest of it, reporting the wait as a phase
-of its own and naming the Suspense boundary people waited for.
+as a known limit. The rest of the verdict, reporting the wait as its own part of the working time and
+naming the boundary people waited for, is the section below.
+
+### Clicks that land before hydration
+
+Every App Router page is server-rendered, so a click can land on HTML React has not reached. The element
+has no fiber, so until 2026-09-19 the report had nothing to say about the commonest cause of a slow first
+interaction in a Next.js app. Two cases are now told apart, and `report.hydration` carries them as data.
+
+Both cases start from the same question, asked of the page beside the input: *what is the innermost
+piece of server-rendered HTML enclosing this element that React has not reached yet?* It is asked once
+when the input is recorded, and again on each commit until the answer changes. `dehydratedAround`
+answers it by following React's own `getClosestInstanceFromNode` to a fiber, from the element or from
+the comment opening the boundary around it, and then climbing to the innermost Suspense or Activity
+boundary that still holds a dehydrated instance, or to the root.
+
+*Every read asks what is on the screen now.* This is the whole of the correctness argument, and it was
+got wrong twice in opposite directions.
+
+The first attempt read `alternate`, which is the state before the commit **only for the fibers React
+worked on in that commit**, which is why React itself only ever asks it of a `finishedWork` inside its
+own commit traversal. A boundary that hydrated at page load keeps a dehydrated alternate until some
+later render passes through its parent, and a verdict read from that alternate calls every click in that
+part of the page a hydration, for as long as nothing re-renders there. A click that updates something
+outside the boundary, a cart badge in a header, never re-renders there at all. There is a demo route and
+an e2e test for exactly that click.
+
+The correction went too far and refused to look at the alternate at all, which missed the case where the
+two trees disagree **because a hydration has rendered and not yet committed**. React nulls a boundary's
+state at the end of its render, in `completeDehydratedSuspenseBoundary`, not in the commit. A
+time-sliced pass that hydrates two boundaries finishes the first while it is still rendering the second,
+and for that window one tree says hydrated, the other says server HTML, and the page is showing the
+server's. A click there is blocked by React and hydrated inside the event, which is exactly the case
+this section exists to report, so reading the hydrated side and stopping would report nothing.
+
+What settles it is the flag React uses for the same purpose. `Hydrating` (4096) sits on the hydrating
+side's child from the render until `commitReconciliationEffects` clears it in the commit, so it marks
+exactly the window in which that work has not reached the screen; `getNearestMountedFiber` asks the same
+question the same way, as `Placement | Hydrating`. So: where the two trees agree, or there is only one,
+that is the answer; where they disagree, the boundary is still server HTML if and only if the hydrated
+side is still flagged. The three shapes are pinned by unit tests, and the uncommitted one by a unit test
+alone, because driving it from a route means hitting a window a few milliseconds wide.
+
+*A fiber on the element is not an answer either.* React caches a fiber on each node of a boundary as it
+hydrates it, during the render and before the commit, and a boundary the server reveals late is hydrated
+on an interruptible render on both 18 and 19, whatever marker it carries. So the button inside such a
+boundary carries a fiber while the boundary still holds the server's HTML, and the boundary above it has
+to be asked regardless.
+
+*React hydrated it inside the click.* The input recorded a boundary, and a commit of the interaction is
+the one after which the same question answers null. That commit is credited, once per input, and it is
+the only commit that can be: after it the page is hydrated and there is no second hydration of it to
+find. The boundary named is the one the input was inside, so a boundary streaming in elsewhere on the
+page is never blamed, and where an outer boundary hydrates first the inner one around the target is
+still the one named. The time is React's render duration for the credited commit, reported as a named
+part of the working time rather than as a fourth phase: `Phase.parts` was added for it, and the three
+phases add up to the interaction exactly as before, so reports stay at `schemaVersion: 1`. It takes the
+blame only when it is what the working time went on, at least `RENDER_MIN_MS` and more than the time
+outside React's render; a boundary that hydrated in 2 ms ahead of a 400 ms handler is a note beside the
+ordinary verdict instead.
+
+*It was still waiting.* Every input of the interaction the ring still holds landed on HTML that had not
+been hydrated, and no commit hydrated it. React stops a discrete event at a boundary it has not reached,
+so almost no working time goes by: the blame stays on whatever the time actually went to, the input
+delay or the paint, and the hydration sentence goes in front of it. That sentence says only what was
+seen, that React did not dispatch the event and no React handler ran for it. Reading the newest input of
+the interaction rather than the first is what keeps a pointerdown before hydration from speaking for a
+click after it.
+
+A Suspense boundary has no name of its own, so it is named after the nearest component holding it, which
+means a boundary written directly in a Server Component is named after whichever client component of the
+router happens to enclose it. The demo puts its boundary inside a client component for that reason. A
+root that has not hydrated has no component above it at all and reads as "the page".
+
+**What React does, read from the react-dom in this repository.**
+
+*React 19.3.0*, `node_modules/react-dom/cjs/react-dom-client.development.js`. A HostRoot's
+`memoizedState` is `{element, isDehydrated, cache}`; `createFiberRoot` sets `isDehydrated` from the
+hydrate flag and `updateHostRoot` swaps in a new object with it false. A dehydrated Suspense fiber
+(tag 13) has `memoizedState.dehydrated` set to the boundary's opening comment node, and `completeWork`
+clears the whole state to null when it hydrates. React's own `isHydratingParent` is the same predicate,
+dehydrated on the alternate and not on the current fiber, and it is called from `commitLayoutEffectOnFiber`
+and `commitMutationEffectsOnFiber` as `isHydratingParent(finishedWork.return.alternate, finishedWork.return)`:
+only ever of a fiber React worked on in that commit, which is why this library reads the current state
+first and consults the alternate only through the `Hydrating` flag described above. The walk's own
+"this commit hydrated something" flag does use it, and
+can, because the walk stops descending at a fiber whose alternate still shares its child list, so every
+fiber it reaches was either rendered or cloned in the commit. A boundary React gave up on ends the commit
+the same way a hydration does, and React tells the two apart by the `DehydratedFragment` child (tag 18)
+in `deletions`, which is what `commitPassiveMountOnFiber` reads. The `Hydrating` flag is 4096 here too,
+inside the combined literal `134221824` the compiled build writes at the two places it starts hydrating
+a boundary; `commitReconciliationEffects` strips it in the mutation phase, before `onCommitFiberRoot` is
+called, so a commit handed to the hook never carries it and it is only ever read live, off the page.
+Markers on the DOM: `internalInstanceKey` is
+`'__reactFiber$' + randomKey`, `internalContainerInstanceKey` is `'__reactContainer$' + randomKey`, and
+`getClosestInstanceFromNode` finds a boundary for unhydrated HTML through `getParentHydrationBoundary`,
+which walks back over the siblings counting five opening markers (`$`, `$?`, `$!`, `$~` and `&` for an
+Activity boundary) against two closing ones (`/$` and `/&`), and reads the boundary's fiber off the
+opening comment. This library counts the same seven, because counting fewer gets the depth wrong and
+hands back a boundary the node is not inside. The container fiber is not the one to read for a root:
+`findInstanceBlockingTarget` goes through it to `stateNode.current.memoizedState.isDehydrated`, because
+the fiber React writes on a container is the one `createFiberRoot` made, which becomes the alternate on
+the first commit and says `isDehydrated: true` for as long as it lives. Activity boundaries are tag 31,
+handled beside tag 13 in `findInstanceBlockingTarget`, `dispatchEvent` and `isHydratingParent`, and
+carry the same `memoizedState.dehydrated`; this library reads them the same way. For a discrete event, `dispatchEvent` attempts a
+synchronous hydration on the capture phase (`IS_CAPTURE_PHASE`, bit 4) by scheduling the root or the
+boundary at lane 2 and flushing sync work; if it is still blocked afterwards it calls
+`nativeEvent.stopPropagation()` and returns without dispatching, so no React handler runs. It does not
+call `preventDefault`, and there is no discrete replay queue. `queueIfContinuousEvent` queues five
+events for replay instead, at `SelectiveHydrationLane`: `focusin`, `dragenter`, `mouseover`,
+`pointerover` and `gotpointercapture`. React 18.3.1 queues the same five.
+
+*React 18.3.1*, `apps/demo-react18/node_modules/react-dom/cjs/react-dom.development.js`. The same
+shapes: `isDehydrated` on the root state from `createFiberRoot`, `memoizedState.dehydrated` on a tag 13
+fiber from `tryHydrate`, cleared in `completeDehydratedSuspenseBoundary`.
+`commitSuspenseHydrationCallbacks` compares the fiber's state with its alternate's exactly as this
+library does. `var Hydrating = 4096` is written out in this build; it is set as
+`primaryChildFragment.flags |= Hydrating` in `updateDehydratedSuspenseComponent` and cleared in
+`commitReconciliationEffects`, before the hook. Discrete events take `attemptSynchronousHydration` on the capture phase, which does a real
+`flushSync` at `SyncLane`; still blocked, the event gets `stopPropagation()` and is not dispatched. The
+discrete replay queue exists in the file but has no push site, so it never fills.
+
+*React 17.0.2*, `apps/demo-react17/node_modules/react-dom/cjs/react-dom.development.js`. There is no
+dehydrated Suspense state at all: `enableSuspenseServerRenderer` and `enableSelectiveHydration` were
+experimental in 17.0.2 stable, so the compiler stripped those branches and `tryHydrate` for a
+SuspenseComponent returns false unconditionally. Hydration stops at each Suspense boundary and its
+children are created on the client instead. The only hydration signal is a `hydrate` boolean on the
+FiberRoot, and `commitWork` clears it during the mutation phase, before `onCommitRoot` runs, so by the
+time the hook is called there is nothing left to read. React 17 therefore reports no hydration, which is
+why the matrix variants' reports are unchanged.
+
+**What cannot be known.** A click before `hydrateRoot` has run at all: nothing on the page carries a
+mark of React yet, not even the container, so there is nothing to read and no verdict is given. Why a boundary was still waiting: the library sees a dehydrated boundary,
+not whether React was blocked on code or on data. Whether the element had a handler for the event React
+did not dispatch, which is why the sentence says no React handler ran rather than that one was lost.
+Hydration that fell back to a client render, where React threw the server HTML away: the target goes out
+of the document with it, and the library says nothing rather than calling the client render a hydration.
+How long a hydration took in a production build, where React records no render durations, though which
+boundary hydrated and how many components it took are still measured and `next build --profile` gives the
+durations back. And a boundary written directly in a Server Component, which has no component of its own
+to be named after.
+
+**Two gaps that are reasoned about and not verified.** Both would leave a click reported as an ordinary
+one when it was really waiting on a hydration, and neither has been reproduced. React throttles a
+retry-lane commit for up to 300 ms after a fallback appeared, so one boundary on its own could sit
+rendered-but-not-committed for that long, which is the same shape the `Hydrating` flag covers above but
+through a different door; an attempt to drive it in a headless browser never caught the window. And a
+click during a root hydration that Next has put inside `startTransition(hydrateRoot)` would be
+time-sliced the same way: the verdict would name the innermost boundary around the target, and the time
+would count that boundary's commit only, not the rest of the root's.
 
 **Long Animation Frames.** Overlapping `long-animation-frame` entries supply the script
 attribution and `forcedStyleAndLayoutDuration`. A script counts for the part of it inside the
@@ -848,4 +995,4 @@ What is left is the list above: look at the Performance panel tracks by eye, and
 the library against a real application and against Next.js's own bench apps. The
 `react-inp-blame/web-vitals` entry landed on 2026-09-19 and has its own section; what it still wants is
 a run under Next.js's `useReportWebVitals`, which reports INP only when the page is hidden and so needs
-a test that can hide it. After those, the rest of the hydration verdict.
+a test that can hide it. The hydration verdict landed on 2026-09-19 and has its own section above.

@@ -8,6 +8,21 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Added
 
+- **A hydration verdict.** A click that lands on server-rendered HTML React has not hydrated yet is
+  named as that instead of going unexplained: `report.hydration` says whether React hydrated it inside
+  the click (`kind: 'waited'`, with the boundary and the time) or it was still waiting and no React
+  handler ran (`kind: 'not-hydrated'`). `explanation.blame.kind` gains `'hydration'`, a `Phase` may
+  carry `parts` so the hydrating time shows inside the working time without becoming a fourth phase,
+  and a commit carries `hydratedTarget`, the boundary it hydrated around the input's target. Reports
+  stay at `schemaVersion: 1`: the fields are new, and the phases add up as they did. React 18 and 19
+  only, and `apps/next-demo` has a streamed Suspense boundary that proves it under `next dev`, Turbopack
+  and webpack.
+
+  Two things to check when you take this. A `switch` over `explanation.blame.kind` that TypeScript
+  checks for exhaustiveness now has a case missing, `'hydration'`. And a report object your own code
+  builds, in a test fixture or a fake, needs the three new fields: `hydration` on the report,
+  `hydratedTarget` on a commit and `dehydrated` on an input record. A report stored before this release
+  and read back has them `undefined`; the library treats that as `null` throughout.
 - `react-inp-blame/web-vitals`: `generateTarget` puts a React component path where web-vitals writes a
   CSS selector, and `attributeINP(metric)` adds this library's report for the interaction to an INP
   metric as `attribution.react`. It imports nothing from web-vitals, `generateTarget` needs no
@@ -24,6 +39,9 @@ it changes when a field is removed or changes meaning, which a minor release may
 - `withInpBlame` and `inpBlame` ignored an option they do not have, so `{ overlay: true }` written a
   level too high showed nothing and said nothing. Both now refuse an unknown key, list the ones they
   take, and, when the key is an `install()` option, say it belongs under `runtime`.
+- A commit that rendered no component at all, which is what React's retry of a boundary it still cannot
+  hydrate leaves behind, was described as "re-rendering 0 components inside the app". It now says React
+  committed without rendering a component.
 - A label read from an element's text stopped at the first `<!-- -->` React's server renderer leaves
   between two adjacent text children, so a hydrated `Slow click ({count})` was labelled
   `Slow click (`. Those comments are separators inside one run of text and are now skipped, up to a

@@ -35,6 +35,11 @@ export interface InputRecord extends InputStamp {
   readonly owners: readonly string[];
   /** The React handler prop for this input's type on the target chain at dispatch, read then for the same reason. */
   readonly handler: string | null;
+  /**
+   * Server-rendered HTML enclosing the target that React had not hydrated when the input was
+   * dispatched; null when React had hydrated it, and on a page with no React root above the target.
+   */
+  readonly dehydrated: HydrationBoundary | null;
 }
 
 export interface CommitSummary {
@@ -61,6 +66,13 @@ export interface CommitSummary {
    * input's dispatch, hydrating so that it could handle that input.
    */
   readonly hydrated: boolean;
+  /**
+   * The server-rendered HTML this commit hydrated around the input's target: the innermost Suspense
+   * boundary enclosing that element, or the root when no boundary does. Null when the commit hydrated
+   * nothing the target was inside, which is what keeps a boundary hydrating elsewhere on the page off
+   * the interaction's blame.
+   */
+  readonly hydratedTarget: HydrationBoundary | null;
   /** The walk stopped early, at `walkBudget` component fibers or at a subtree deeper than it follows, so the counts are partial. */
   readonly truncated: boolean;
   /** The outermost components that rendered, at most 5. */
@@ -248,15 +260,60 @@ export interface Phase {
   readonly label: string;
   readonly ms: number;
   readonly hint: string;
+  /**
+   * Named pieces of this phase, when part of it is worth showing on its own (React hydrating
+   * inside the working time). Each is shorter than the phase that holds it, and together they
+   * never exceed it; the phases themselves keep adding up to the interaction as they always did.
+   */
+  readonly parts?: readonly Phase[];
+}
+
+/**
+ * Server-rendered HTML around the element an input landed on: the whole root, or the innermost
+ * Suspense boundary enclosing it.
+ */
+export interface HydrationBoundary {
+  /** 'root' when the HTML is a React root's own, 'boundary' when a Suspense boundary inside it holds it. */
+  readonly scope: 'root' | 'boundary';
+  /**
+   * The nearest named component enclosing it, so it can be pointed at: a Suspense boundary has no
+   * name of its own. Null when nothing above it is named, which a minified build without the
+   * `displayName` transform leaves.
+   */
+  readonly owner: string | null;
+}
+
+/**
+ * Server-rendered HTML the interaction landed on before React had hydrated it. Every App Router page
+ * is server-rendered, so a click can arrive while the HTML under the pointer is still waiting for React.
+ */
+export interface Hydration extends HydrationBoundary {
+  /**
+   * 'waited': React hydrated the HTML the input landed on while the input was being dispatched, so
+   * the input waited for that before it was handled. 'not-hydrated': at input time the target was
+   * inside server-rendered HTML React had not hydrated, and no React handler ran for this interaction.
+   */
+  readonly kind: 'waited' | 'not-hydrated';
+  /**
+   * What React spent hydrating it inside the interaction, ms. Null when the React build records no
+   * render durations (every production build), and for 'not-hydrated', where nothing was timed
+   * because nothing ran.
+   */
+  readonly ms: number | null;
 }
 
 /** Who is to blame, as data: the same call the cause sentence makes, for UIs to render short. */
 export interface Blame {
-  /** Where the time mostly went. */
-  readonly kind: 'render' | 'handler' | 'waiting' | 'painting' | 'script' | 'none';
-  /** The subtree that re-rendered, the handler that ran, or the script; null when unknown. */
+  /**
+   * Where the time mostly went. 'hydration' is React hydrating, inside the interaction, the
+   * server-rendered HTML the input landed on: the report's `hydration` names the boundary. An input
+   * that was never dispatched because its HTML was *still* waiting spent its time elsewhere, so it
+   * keeps the blame that says where, and `hydration.kind` is `'not-hydrated'`.
+   */
+  readonly kind: 'render' | 'handler' | 'hydration' | 'waiting' | 'painting' | 'script' | 'none';
+  /** The subtree that re-rendered, the handler that ran, the script, or the boundary that was hydrated; null when unknown. */
   readonly name: string | null;
-  /** For a render, what it was mostly made of ("LineItem ×800"); for a handler, its component. */
+  /** For a render or a hydration, what it was mostly made of ("LineItem ×800"); for a handler, its component. */
   readonly detail: string | null;
   /** How much of the interaction it accounts for, in ms; null when the build records no durations. */
   readonly ms: number | null;
@@ -354,6 +411,12 @@ export interface InteractionReport {
   readonly walkMs: number;
   readonly presentation: number;
   readonly target: TargetInfo | null;
+  /**
+   * Server-rendered HTML the interaction landed on before React had hydrated it; null when it landed
+   * on HTML React had already hydrated, which is every interaction on a client-rendered page and
+   * almost every one on a server-rendered page.
+   */
+  readonly hydration: Hydration | null;
   /**
    * The URL of the page the interaction happened on: the document's, or that of the latest soft
    * navigation that had begun when the interaction did. web-vitals' `Metric.navigationURL`, so a
