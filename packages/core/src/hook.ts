@@ -130,11 +130,14 @@ const state = shared<HookState>('hook', () => ({
   hearing: false,
 }));
 
-// The events Event Timing gives an interactionId to. Derived events (input, change, keypress,
-// submit) are dispatched inside one of these, so a commit during them is stamped with the
-// newest ring entry, which is the key or pointer that caused them.
+// The events Event Timing gives an interactionId to, and so the only ones an interaction is ever
+// named by. A derived event (`DERIVED_TYPES` below) is dispatched inside one of these, so a commit
+// during one is stamped with the newest ring entry, which is the key or pointer that caused it.
 export const INPUT_TYPES = ['pointerdown', 'pointerup', 'click', 'keydown', 'keyup'];
 const RING_SIZE = 8;
+// Times of commits that could not be joined to one input, kept per input. A page that commits in a
+// loop would otherwise grow this without end; the oldest are the least likely to be worth reporting.
+const MAX_UNJOINED = 16;
 // A press can be held this long and its release still counts as the same gesture.
 const PRESS_WINDOW = 5000;
 
@@ -162,7 +165,8 @@ function record(e: DispatchedInput): InputRecord {
     press: isKey ? e.code : e.pointerId,
     target,
     owners: Object.freeze(ownersOf(fiber)),
-    handler: handlerOf(fiber, e.type),
+    handler: handlerOf(fiber, e.type, isKey ? e.code : null),
+    work: { endedAt: e.timeStamp, unjoined: [] },
     // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting
     // inside a page React has otherwise hydrated, and then the target's nearest fiber is the hydrated
     // ancestor above the boundary. React reads the same markers on every event it dispatches.
@@ -209,12 +213,31 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
  * The input being dispatched right now: `window.event`, when it is one of INPUT_TYPES, whose
  * `timeStamp` is exactly its Event Timing entry's `startTime`. Recorded in the ring if the capture
  * listener has not seen it yet. Null outside an input's dispatch.
+ *
+ * A derived event counts as its input's dispatch. Typing is the case that matters: React's onChange
+ * for a text field runs during the native `input` event, not during the keydown, so `window.event`
+ * there is an `input` and the keystroke's own render would otherwise look like an unrelated commit.
+ * The browser dispatches each of these inside the input that caused it, so the newest ring entry is
+ * that input; `isTrusted` keeps a `change` or `submit` fired by script out.
  */
+const DERIVED_TYPES = ['input', 'beforeinput', 'change', 'submit', 'keypress'];
+
 export function dispatchedInput(): InputRecord | null {
   const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
-  if (!ev || !ev.isTrusted || INPUT_TYPES.indexOf(ev.type) < 0) return null;
+  if (!ev || !ev.isTrusted) return null;
+  if (DERIVED_TYPES.indexOf(ev.type) >= 0) return newestInput();
+  if (INPUT_TYPES.indexOf(ev.type) < 0) return null;
   const last = newestInput();
   return last && last.ts === ev.timeStamp ? last : record(ev);
+}
+
+/**
+ * How long after an input's own work a commit can still join it, as this page configured it
+ * (`inputWindow`), or null before install() has run. Reports quote it, so the number a note gives is
+ * the number the hook actually used rather than the default.
+ */
+export function joinWindow(): number | null {
+  return state.options?.inputWindow ?? null;
 }
 
 /** The newest input in the ring. */
@@ -398,12 +421,42 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   const firstCommit = root.current.alternate === null || root.current.alternate.child === null;
   const input = dispatched ?? (firstCommit ? null : newestInput());
   // Outside an interaction window this is the whole cost: a few lookups and one subtraction.
-  if (!input || now - input.ts > options.inputWindow) return;
+  if (!input) return;
+  // A commit React ran inside an input's own dispatch is that input's work however long it took to get
+  // there: the handler is still on the stack and nothing else can have caused it. Sorting 200,000 rows
+  // takes seconds on a throttled machine, and a window measured from the input dropped exactly those
+  // commits, leaving the slowest interactions looking as though React had never rendered.
+  //
+  // A commit outside any dispatch could be anyone's: an effect of this input, or a poll that happened
+  // to fire. It joins the newest input while it lands within `inputWindow` of `endedAt`, which is the
+  // input itself until React commits inside its dispatch and the end of the last such commit after
+  // that. Two failure modes, both of them the window's own:
+  //
+  // - An unrelated commit landing inside the window is read as the input's follow-up render. That one
+  //   the window always had; it is now anchored to the end of the interaction rather than its start.
+  // - `endedAt` is the end of the last commit inside the dispatch, not the end of the dispatch. A
+  //   handler that runs for two seconds and commits nothing leaves it on the input, so a transition it
+  //   starts can land outside the window and be dropped. Dropped is not silent: the time is kept and a
+  //   report whose interaction was still being handled then says React rendered something it could not
+  //   tie to the interaction. Moving `endedAt` to the end of the dispatch would need a second listener
+  //   per event type on the window, in the bubble phase, which is a bigger change than the case is.
+  if (!dispatched && now - input.work.endedAt > options.inputWindow) {
+    // Kept as times, not as a count: a page with a clock in it commits all day, and only a commit that
+    // landed while this interaction's own handlers were running says anything about this interaction.
+    // `join.ts` does that filtering; here there is no Event Timing entry to filter against yet.
+    const dropped = input.work.unjoined;
+    dropped.push(now);
+    if (dropped.length > MAX_UNJOINED) dropped.shift();
+    return;
+  }
   const t0 = performance.now();
   const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true, hydratedTarget: creditHydration(input) });
   const summary: CommitSummary = Object.freeze({ ...walk, walkMs: performance.now() - t0 });
   state.walkTotalMs += summary.walkMs;
   state.walks++;
+  // Only the dispatch extends the window. Were a joined follow-up to extend it too, one commit every
+  // second would keep an interaction's window open for as long as the page lived.
+  if (dispatched) input.work.endedAt = performance.now();
   if (summary.hydrated && !dispatched) return;
   if (state.commits.length >= MAX_COMMITS) state.commits.shift();
   state.commits.push(summary);

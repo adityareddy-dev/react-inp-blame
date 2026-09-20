@@ -445,11 +445,44 @@ oldest its `engines` allows, and imports and requires every subpath there; the c
   for each priority. An update of the app's own that lands on the same lane before React commits is rendered
   in that same commit and left out with it, which for an otherwise quiet interaction can mean no report.
 - Production React records no durations, so blame there rests on render counts and is `'inferred'`
-  (`react-dom/profiling` gives durations), and minified handlers are named by their prop.
-- The names loader matches `function Foo(` and `const Foo = memo(` or `forwardRef(`, exported or not, at the
-  start of a line; arrow functions, classes and `memo<Props>(` keep their minified names.
+  (`react-dom/profiling` gives durations), and minified handlers are named by their prop. An inferred blame
+  says "most likely" in its sentence and in the overlay; take it as the likeliest reading, not a measurement.
+- The names loader stamps any capitalised top-level binding whose value is a function, written at the start of
+  a line: `function Foo`, `const Foo = (props) => …`, `const Foo: React.FC = …`, `memo`, `forwardRef` and
+  their generic forms, exported or not. Still minified: classes, anything indented inside another block,
+  `export default () => …` with no name to stamp, a called function expression such as
+  `const Foo = function () {…}()`, everything in a `"use server"` module, and a component built by a wrapper
+  the loader does not know (`styled.div`, `observer(Row)`, an app's own `createIcon`). A name the module
+  writes to again, declares twice, imports or already gives a `displayName` is left alone, and so is one
+  declared inside braces, however far left it is written. A `displayName` your code sets is never replaced,
+  including one a naming HOC sets on the component itself; an HOC that names a component some other way can
+  still be overwritten.
+- **A stamped module keeps the components nobody imported, in esbuild, terser and SWC.** The stamp checks the
+  value before it writes to it, because a store that fails would throw at load in a strict module and take
+  the page with it, and a bundler that cannot prove a property store is side-effect free has to keep the
+  component it names. Measured on a module of seven exports with two imported: Rollup drops the unused ones
+  and their stamps (Vite's production build is Rollup), esbuild keeps them all, and terser and SWC keep the
+  ones the bundler handed them. `/*#__PURE__*/ Object.defineProperty` shakes everywhere and is worse, since
+  every stamp is then dropped and no name survives at all. The transform only runs where you add the plugin
+  or the loader, and only on your own files, so an app that minds can turn it off for the build and keep it
+  for development.
+- Two shapes the loader handles but nobody has put through a production bundler: a file that starts with a
+  hashbang, and a file whose last line is a `sourceMappingURL` comment, which the stamp then follows.
+- **A commit outside any dispatch joins the newest input when it lands within 1.5 s (`inputWindow`) of the end
+  of the last commit inside that input's dispatch**, or of the input itself where there was none. An unrelated
+  update landing in that window is read as the interaction's follow-up render. One that lands after a newer
+  input arrived is left out of the report, and one that lands past the window is dropped; a dropped commit
+  that ran while the interaction's own handlers were still running is counted as `unjoinedCommits`, which
+  makes everything the report says about React's work `'inferred'`. A commit outside those handlers, a clock
+  ticking elsewhere on the page, is not counted against the interaction at all. The input ring is the whole of
+  that evidence, so an update with no user input behind it, a timer or a message arriving, still reads as a
+  follow-up render of whatever interaction came last.
+- **The window runs from the last commit inside the dispatch, not from the end of the dispatch**, which the
+  library cannot see. A handler that works for two seconds and commits nothing leaves the window running from
+  the input, so a transition it starts afterwards can fall outside it. That render is then dropped and counted
+  rather than reported: the interaction says React rendered something it could not tie to it.
 - Waiting on the server is not a phase: the render showing the result joins as a later render within 1.5 s of
-  the input, or not at all.
+  the paint, or not at all.
 
 ## Labels and personal data
 

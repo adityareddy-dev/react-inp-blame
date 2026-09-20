@@ -9,6 +9,7 @@ import { Fine } from './scenarios/Fine';
 import { HandlerHog } from './scenarios/HandlerHog';
 import { LayoutThrash } from './scenarios/LayoutThrash';
 import { LiftedState } from './scenarios/LiftedState';
+import { SlowRender } from './scenarios/SlowRender';
 
 interface Scenario {
   title: string;
@@ -68,6 +69,14 @@ export const labScenarios: Record<string, Scenario> = {
     fix: 'Derive the details during render (useMemo), or set both pieces of state in the handler.',
     el: CascadingEffect,
   },
+  'slow-render': {
+    title: 'Slow render',
+    short: 'Seconds inside React',
+    what: 'Click "Rebuild report". The handler sets one number; React then renders for about 2.5 seconds.',
+    problem: 'Every section is rebuilt from scratch during render, so the cost grows with the page and none of it is visible in the handler.',
+    fix: 'Memoise what each section derives, or move the work off the render path and store the result.',
+    el: SlowRender,
+  },
   fine: {
     title: 'Done right',
     short: 'Same shapes, memoised',
@@ -85,7 +94,7 @@ export function Lab({ scenario }: { scenario: string }) {
     <>
       <div className="topbar">
         <span>
-          <b>Anti-pattern lab</b> · six slow interactions, each a named React mistake
+          <b>Anti-pattern lab</b> · seven slow interactions, each a named React mistake
         </span>
         <a href="#">← Sign-in demo</a>
       </div>

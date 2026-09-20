@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { attachLaterRender, buildReport, isLaterRender, refreshReport, sealReport, type LabelSource } from '../src/join.ts';
 import type { PageNavigation } from '../src/navigation.ts';
-import type { CommitSummary, FrameSummary, InputRecord, ScriptSummary } from '../src/types.ts';
+import type { CommitSummary, FrameSummary, InputRecord, InteractionReport, ScriptSummary } from '../src/types.ts';
 
 // Hand-built PerformanceEventTiming-like entries. Durations are multiples of 8 the way the
 // browser rounds them, except where the case under test says otherwise.
@@ -35,7 +35,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
 }
 
 function input(ts: number, type: string, extra: Partial<InputRecord> = {}): InputRecord {
-  return { ts, type, gestureTs: ts, press: undefined, target: null, owners: [], handler: null, dehydrated: null, ...extra };
+  return { ts, type, gestureTs: ts, press: undefined, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] }, ...extra };
 }
 
 /** A detached DOM element as the label reads it. Its textContent throws: a label must never need all of it. */
@@ -268,6 +268,45 @@ test('later renders attach only by an exact stamp', () => {
   assert.equal(isLaterRender(r, commit(2000, 0)), false);
 });
 
+test('a render that came after a newer interaction had started is not a follow-up of the older one', () => {
+  // Sorting a table and then changing its page size a second later: the page-size render is stamped
+  // with whatever input the ring last held, which used to hand it to the sort click, and the sort was
+  // reported as having re-rendered the whole table a second after it had finished.
+  const sortClick = [entry('click', 0, 120, 3, 100)];
+  const pageSizeRender = commit(1100, 0, { total: 400, rendered: 417 });
+  const sortOnly = [input(0, 'click')];
+  const thenPageSize = [input(0, 'click'), input(1000, 'pointerdown')];
+
+  assert.equal(isLaterRender(buildReport(sortClick, [], [], sortOnly), pageSizeRender, sortOnly), true);
+  assert.equal(isLaterRender(buildReport(sortClick, [], [], thenPageSize), pageSizeRender, thenPageSize), false);
+  // Same through buildReport, which is where a report already built picks its follow-ups up.
+  assert.deepEqual(buildReport(sortClick, [pageSizeRender], [], sortOnly).followUps, [joinedAs(pageSizeRender, 'exact')]);
+  assert.deepEqual(buildReport(sortClick, [pageSizeRender], [], thenPageSize).followUps, []);
+
+  // A render before that newer input still belongs to the click that caused it.
+  const own = commit(900, 0, { total: 40 });
+  assert.deepEqual(buildReport(sortClick, [own], [], thenPageSize).followUps, [joinedAs(own, 'exact')]);
+  // The interaction's own later entries are not a newer interaction: a press, a release and a click
+  // are one gesture, and a render after the last of them is still this gesture's.
+  const gesture = [input(0, 'pointerdown', { gestureTs: 0 }), input(60, 'pointerup', { gestureTs: 0 }), input(61, 'click', { gestureTs: 0 })];
+  const afterPress = buildReport(longPress, [commit(700, 61, { total: 40 })], [], gesture);
+  assert.equal(afterPress.followUps.length, 1);
+  // Only the pointerdown was slow enough to be observed, so the pointerup and the click that finished
+  // the same gesture are known only by the press they released. They are not a newer interaction.
+  const pressOnly = buildReport(longPress.slice(0, 1), [commit(700, 61, { gestureTs: 0, total: 40 })], [], gesture);
+  assert.equal(pressOnly.followUps.length, 1);
+});
+
+test('a follow-up window is measured from the paint, so a slow interaction still gets the render that followed it', () => {
+  // A 2.5 s interaction painting at 2503 ms, with its own follow-up 200 ms later. Measured from the
+  // start of the interaction the follow-up is 2.7 s old and would be thrown away.
+  const slow = [entry('click', 0, 2503, 3, 2480)];
+  const after = commit(2700, 0, { total: 40 });
+  assert.deepEqual(buildReport(slow, [after], [], [input(0, 'click')]).followUps, [joinedAs(after, 'exact')]);
+  // Past the window from the paint it is still dropped.
+  assert.deepEqual(buildReport(slow, [commit(4100, 0, { total: 40 })], [], [input(0, 'click')]).followUps, []);
+});
+
 test("the rating follows INP's thresholds", () => {
   assert.equal(report([entry('click', 0, 200, 1, 2)], [], []).explanation.rating, 'good');
   assert.equal(report([entry('click', 0, 208, 1, 2)], [], []).explanation.rating, 'needs-improvement');
@@ -343,8 +382,57 @@ test('a commit timed by a clock too coarse for its components is blamed on its t
   const r = report([entry('click', 0, 456, 3, 440)], [coarse], null);
   assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'OrderSummary', detail: 'LineItem ×800', ms: 417, confidence: 'inferred' });
   assert.equal(r.commits[0]?.coarseClock, true);
-  assert.equal(r.explanation.cause, 'React spent 417 ms re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them).');
+  // Inferred, so the sentence hedges. The remedy is the clock, not the build, and it is the note that
+  // names it: a profiling build would not make this commit's components timeable.
+  assert.match(r.explanation.cause, /most likely/);
+  assert.doesNotMatch(r.explanation.cause, /profiling build/);
   assert.ok(r.explanation.notes.some((note) => note.includes('clock steps in whole milliseconds')));
+});
+
+test('every sentence a blame can produce reads as inferred when the blame is inferred, and as a finding only when it was measured', () => {
+  // The audit: whatever branch the explanation takes, the sentence and the confidence say the same
+  // thing. An inferred blame names something the library worked out, so the sentence hedges; a
+  // measured one does not hedge, because hedging a measurement makes every sentence worthless.
+  const slow = [entry('click', 0, 120, 3, 100)];
+  const ring = loginClick('handleLogin');
+  const hydrated = (opts: Partial<CommitSummary>) => commit(50, 0, { hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' }, rendered: 40, total: 90, ...opts });
+  const unjoinable = [input(0, 'click', { work: { endedAt: 0, unjoined: [50] } })];
+  const cases: [string, InteractionReport][] = [
+    ['hydration measured', report(slow, [hydrated({})], [], ring)],
+    ['hydration inferred', report(slow, [hydrated({ hasDurations: false, total: 0, components: [] })], [], ring)],
+    ['handler measured', report(slow, [commit(50, 0, { total: 2 })], [], ring)],
+    ['handler inferred', report(slow, [commit(50, 999, { total: 2 })], [], ring)],
+    ['handler counted', report(slow, [commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], ring)],
+    ['render measured', report(slow, [commit(50, 0, { total: 90 })], [], ring)],
+    ['render truncated', report(slow, [commit(50, 0, { total: 90, truncated: true })], [], ring)],
+    ['render counted', report(slow, [commit(50, 0, { hasDurations: false, total: 0, rendered: 800 })], [], ring)],
+    ['waiting', report([entry('click', 0, 400, 380, 385)], [], [], ring)],
+    ['painting', report([entry('click', 0, 400, 3, 10)], [], [], ring)],
+    ['script measured', report([entry('click', 1000, 96, 1045, 1065)], [], [frame(700, 400, [script('TimerHandler:setTimeout', 745, 300)])], loginClick('handleLogin', 1000))],
+    ['script unjoined', report(slow, [], [frame(0, 119, [script('TimerHandler:setTimeout', 4, 90)])], unjoinable)],
+    ['nothing stood out', report([entry('click', 0, 40, 5, 10)], [], [], ring)],
+    ['no long task record', report([entry('click', 0, 40, 5, 10)], [], null, ring)],
+  ];
+  const seen = new Set<string>();
+  for (const [name, r] of cases) {
+    const { kind, confidence } = r.explanation.blame;
+    seen.add(kind);
+    if (kind === 'none') {
+      // Nothing is named, so there is nothing to hedge either way.
+      assert.doesNotMatch(r.explanation.cause, /most likely/, name);
+    } else if (confidence === 'inferred') {
+      assert.match(r.explanation.cause, /most likely/, name);
+      assert.match(r.verdict, /most likely/, name);
+    } else {
+      assert.doesNotMatch(r.explanation.cause, /most likely/, name);
+      // A measurement never offers the remedy for not having measured.
+      assert.doesNotMatch(r.explanation.cause, /profiling build/, name);
+    }
+    // The remedy is named only where a build with no durations is what made it a reading.
+    if (/profiling build/.test(r.explanation.cause)) assert.equal(r.commits.some((x) => !x.hasDurations), true, name);
+  }
+  // Every kind of blame the explanation can reach was audited.
+  assert.deepEqual([...seen].sort(), ['handler', 'hydration', 'none', 'painting', 'render', 'script', 'waiting']);
 });
 
 test('a commit that hydrated is described as hydrating, not re-rendering', () => {
@@ -389,10 +477,10 @@ test('a production build says React hydrated the boundary and stops short of say
   const r = report([entry('click', 0, 120, 3, 100)], [hydration], []);
 
   assert.deepEqual(r.hydration, { kind: 'waited', scope: 'root', owner: null, ms: null });
-  assert.equal(
-    r.explanation.cause,
-    'The click landed on server-rendered HTML that had not been hydrated yet, so React hydrated the page first, 40 components. This React build records no render durations, so how much of the 97 ms of working time that took is not measured.',
-  );
+  assert.equal(r.explanation.blame.confidence, 'inferred');
+  assert.match(r.explanation.cause, /most likely/);
+  assert.match(r.explanation.cause, /records no render durations/);
+  assert.match(r.explanation.cause, /A profiling build of React would give exact numbers\./);
   assert.equal(r.explanation.blame.ms, null);
   assert.equal(r.explanation.phases[1]?.parts, undefined);
 });

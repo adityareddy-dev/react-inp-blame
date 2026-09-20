@@ -162,6 +162,9 @@ const click = (interactionId: number, startTime: number, duration: number) => ({
 
 const slowClick = (duration: number) => click(7, 1000, duration);
 
+/** The press and release entries of the same gesture, which share the click's interactionId. */
+const pointer = (name: string, interactionId: number, startTime: number, duration: number) => ({ ...click(interactionId, startTime, duration), name });
+
 /** Where a report says its interaction happened, and the navigation it started. */
 const placeOf = (r: InteractionReport | null) => r && { navigationURL: r.navigationURL, navigationType: r.navigationType, startedNavigation: r.startedNavigation };
 
@@ -797,4 +800,163 @@ test('the shim follows a hook that replaces it before React registers, and repor
     assert.match(warn.mock.calls[0].arguments[0], /will not see this React/);
     api.dispose();
   });
+});
+
+test("a commit React makes inside an input's dispatch is that input's, however long the dispatch has been running", async (t) => {
+  // Sorting 200,000 rows takes seconds on a throttled machine. The commit still runs inside the click's
+  // own dispatch, so it is the click's work; a window measured from the input dropped exactly these.
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500 });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    const clicked = page.duringClick(() => {
+      clock.now = 3800;
+      commitAgain(root, 2700);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    const commits = api.debug.commits();
+    assert.equal(commits.length, 1);
+    assert.equal(commits[0]?.inputTs, clicked);
+    assert.equal(commits[0]?.sinceInput, 2800);
+    api.dispose();
+  });
+});
+
+test('a commit outside any dispatch joins the newest input while it lands inside the window, measured from the end of that input\'s own work', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500 });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    // The click, and the 2.7 s render inside its dispatch.
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.duringClick(() => {
+      clock.now = 3800;
+      commitAgain(root, 2700);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    // An effect of that render commits 200 ms later: 2.9 s after the input, well inside the window that
+    // now runs from the end of the click's own work.
+    clock.now = 4000;
+    commitAgain(root, 6);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    assert.equal(api.debug.commits().length, 2);
+    assert.equal(api.debug.commits()[1]?.at, 4000);
+    // A commit 1.6 s after that is past the window, and is counted rather than joined.
+    clock.now = 5700;
+    commitAgain(root, 6);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    assert.equal(api.debug.commits().length, 2);
+    api.dispose();
+  });
+});
+
+test('a report whose interaction had commits it could not be joined to says so, and no longer reads as measured', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40 });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    // A commit long after the click's own work, with nothing tying it to the click.
+    clock.now = 4000;
+    commitAgain(root, 300);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    assert.equal(api.debug.commits().length, 0);
+
+    page.paint([click(7, 1000, 3200)]);
+    const r = api.last();
+    assert.ok(r);
+    assert.equal(r.commits.length, 0);
+    assert.equal(r.unjoinedCommits, 1);
+    // Never "React didn't render anything", and never measured: React did render.
+    assert.doesNotMatch(r.explanation.cause, /didn't render anything/);
+    assert.match(r.explanation.cause, /could not be tied to this click/);
+    assert.equal(r.explanation.blame.confidence, 'inferred');
+    assert.ok(r.explanation.notes.some((note) => note.includes('could not be tied to it')));
+    api.dispose();
+  });
+});
+
+test("a commit inside a derived event's dispatch is the input that caused it, which is how typing gets its render", async (t) => {
+  // React's onChange for a text field runs during the native `input` event, not during the keydown, so
+  // `window.event` there is an `input`. Read as nothing, the keystroke's own render looked like an
+  // unrelated commit and a 2.7 s render joined nothing at all.
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500 });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 1000, target: null, code: 'KeyA' });
+    // The browser dispatches `input` inside the keydown; React commits from its onChange.
+    page.window.event = { isTrusted: true, type: 'input', timeStamp: 1002, target: null };
+    clock.now = 3800;
+    commitAgain(root, 2700);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    const commits = api.debug.commits();
+    assert.equal(commits.length, 1);
+    assert.equal(commits[0]?.inputTs, 1000);
+    assert.equal(commits[0]?.inputType, 'keydown');
+    // A `change` fired by script is not a user's input, and nothing of the sort joins the key press.
+    page.window.event = { isTrusted: false, type: 'change', timeStamp: 4000, target: null };
+    clock.now = 6000;
+    commitAgain(root, 5);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    assert.equal(api.debug.commits().length, 1);
+    api.dispose();
+  });
+});
+
+test('a commit from a clock elsewhere on the page is not counted against the interaction it happened to follow', async (t) => {
+  // A page with a clock in it commits once a second, all day. Holding a button for four seconds used to
+  // report "3 commits could not be tied to this click" on what was an honest, fast, fully measured
+  // click. Only a commit that ran while the interaction's own handlers were running says anything
+  // about it, and the Event Timing entries are what say when that was.
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40 });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('pointerdown', { isTrusted: true, type: 'pointerdown', timeStamp: 1000, target: null });
+    // Three ticks of the clock while the button is held, none of them inside a dispatch.
+    for (const at of [2600, 3600, 4600]) {
+      clock.now = at;
+      commitAgain(root, 3);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    }
+    clock.now = 5000;
+    page.fire('pointerup', { isTrusted: true, type: 'pointerup', timeStamp: 5000, target: null });
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 5001, target: null });
+    page.paint([pointer('pointerdown', 7, 1000, 60), pointer('pointerup', 7, 5000, 90), click(7, 5001, 90)]);
+    const r = api.last();
+    assert.ok(r);
+    assert.equal(r.unjoinedCommits, 0);
+    assert.equal(r.explanation.blame.confidence, 'measured');
+    assert.match(r.explanation.cause, /didn't render anything/);
+    assert.equal(r.explanation.notes.some((note) => note.includes('could not be tied to it')), false);
+    api.dispose();
+  }, { entryTypes: ['event', 'first-input', 'long-animation-frame'] });
 });

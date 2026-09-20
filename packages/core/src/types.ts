@@ -40,6 +40,32 @@ export interface InputRecord extends InputStamp {
    * dispatched; null when React had hydrated it, and on a page with no React root above the target.
    */
   readonly dehydrated: HydrationBoundary | null;
+  /** What React did about this input. The hook keeps it current as commits arrive; the record itself does not change. */
+  readonly work: InputWork;
+}
+
+/** The React work one input caused, as the DevTools hook saw it. */
+export interface InputWork {
+  /**
+   * Where the window for joining later commits is measured from: the input's `ts` until React commits
+   * inside its dispatch, then the end of the last such commit. A commit that arrives after the dispatch
+   * is joined to the input while it lands within `inputWindow` of this, so a slow interaction's
+   * follow-up render is still its own rather than cut off a fixed time after the input.
+   *
+   * It is the end of the last commit inside the dispatch, not the end of the dispatch. A handler that
+   * runs for two seconds and commits nothing leaves this on the input itself, and a render it starts
+   * afterwards can fall outside the window and be dropped. Dropped is not lost: the time is kept in
+   * `unjoined` and the report says React rendered something it could not tie to the interaction.
+   */
+  endedAt: number;
+  /**
+   * When commits React made while this was the newest input landed, for the ones not joined to it
+   * because they came past that window, newest last and capped. A report counts only those that ran
+   * inside one of its interaction's processing spans; on a page with a clock in it, most are the clock.
+   * A report with any says so and is never `measured`: React did render, and this library cannot say
+   * what the render belonged to.
+   */
+  unjoined: number[];
 }
 
 export interface CommitSummary {
@@ -431,6 +457,13 @@ export interface InteractionReport {
   readonly commits: readonly CommitSummary[];
   /** Commits that landed after that paint but still belong to this input (effects, transitions, cascades). INP does not count them; the user still waits for them. */
   readonly followUps: readonly CommitSummary[];
+  /**
+   * React commits that ran while this interaction's own handlers were running and could not be tied to
+   * it, and so were left out of `commits` and `followUps`. Above zero, the report knows React rendered
+   * and not what it rendered: the explanation says so and its blame is never `measured`. A commit made
+   * outside those handlers, by a timer or a clock elsewhere on the page, is not counted here.
+   */
+  readonly unjoinedCommits: number;
   /** Long animation frames overlapping the interaction. Null where the browser has no Long Animation Frames API (only Chromium has it), so forced layout and scripts are unknown, not absent. */
   readonly frames: readonly FrameSummary[] | null;
   /** Long animation frames overlapping the later renders; null like `frames`. */
@@ -477,7 +510,11 @@ export interface InstallOptions {
    * Default 5000.
    */
   walkBudget?: number;
-  /** Commits later than this many ms after the last input are not walked. Default 1500. */
+  /**
+   * How long after an input's own work ends a commit can still be that input's, in ms. Default 1500.
+   * A commit React makes inside the input's dispatch is always its own, however long the dispatch runs,
+   * so this bounds only the commits that arrive after it: effects, transitions and data that came back.
+   */
   inputWindow?: number;
   /** Expose the API on window (true = window.__REACT_INP_BLAME__, or give a name). */
   debugGlobal?: boolean | string;

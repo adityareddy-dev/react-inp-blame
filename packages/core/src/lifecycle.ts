@@ -177,7 +177,8 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       // A render that lands after the report was published (data arrived, an effect fired) still
       // belongs to that input if nothing newer happened. Attach it and publish the next revision.
       const last = published[published.length - 1];
-      if (last && isLaterRender(last.data, c)) {
+      const inputs = options.inputs();
+      if (last && isLaterRender(last.data, c, inputs)) {
         const next = attachLaterRender(last.data, c, frames);
         if (next) publish(revise(last, next, started).report);
         else spend(started);
@@ -187,7 +188,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       // reporting even though INP alone would not flag it.
       for (let i = quiet.length - 1; i >= 0; i--) {
         const held = quiet[i];
-        if (!held || !isLaterRender(held.data, c)) continue;
+        if (!held || !isLaterRender(held.data, c, inputs)) continue;
         const next = attachLaterRender(held.data, c, frames);
         if (!next) break;
         quiet.splice(i, 1);
