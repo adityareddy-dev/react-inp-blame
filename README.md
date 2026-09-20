@@ -116,7 +116,13 @@ first, and the `displayName` transform. Add it beside your React plugin, not ins
 `enabled` defaults to `'development'` here too (the dev server; `'production'` is `vite build`, `true` both,
 `false` adds no plugins), `runtime` is as for Next.js, and `pages(path)` picks the pages that get the script.
 With another bundler, make `import 'react-inp-blame/auto'` the first import of your entry module; for names,
-`react-inp-blame/display-names-loader` is a webpack-style loader with a `stamp(code)` export.
+`react-inp-blame/display-names-loader` is a webpack-style loader with a `stamp(code)` export. A first import
+is not a guarantee in a production build, though: a bundler may put react-dom in a chunk that evaluates
+before your entry's body does, and React looks for the hook only while it evaluates. Two builds where that
+happens are a `manualChunks` rule sending `node_modules` to a vendor chunk, and a second HTML page sharing a
+chunk with the first. On Vite and Next.js use the plugin and the wrapper, which put the install in a file the
+page loads before its own; anywhere else, check `stats().mode` and `debug.hook().renderers` in a built page
+once.
 
 ## With web-vitals
 

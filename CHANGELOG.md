@@ -32,6 +32,22 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Fixed
 
+- **A Vite production build could install the library after react-dom had already evaluated**, and
+  then nothing was attributed at all: React looks for the DevTools hook once, while it evaluates, so a
+  hook created after that is never registered with. `vite build` folds every module script of a page
+  into one entry module, and a module's imports are evaluated before its body, so the `install()` call
+  the plugin added ran after any chunk that evaluated react-dom on the way in. Which chunk that is, if
+  any, is the bundler's decision, so the same app could be right or wrong depending on how it split:
+  it was seen failing in this repo's React 17 demo built with Vite 8, and in a two-page build where
+  the modulepreload polyfill and react-dom share a chunk the entry imports first. The plugin now gives
+  the install call a chunk of its own and the page a `<script type="module">` of its own ahead of its
+  entry script, which is an order no bundler rearranges. Builds that can have no second script, a
+  single-file output format, `build.lib`, and the `nomodule` bundle `@vitejs/plugin-legacy` adds, keep
+  the inline import they had. The dev server is unchanged. Checked by loading built pages in Chromium
+  on Vite 5.4, 6.4, 7.3 and 8.3; see the Vite section of `docs/interaction-attribution-design.md` for
+  the results and for the one configuration this cannot fix. Both React matrix variants now run in CI
+  as production builds too.
+
 - `withInpBlame` threw nothing when the options were passed as its first argument, where the Next.js
   config goes. Next.js dropped them with "Unrecognized key(s) in object", nothing installed, and the
   library looked broken. It now refuses that call and quotes the two-argument form with the caller's

@@ -1174,8 +1174,94 @@ the React side to `{}`.
 **Vite.** `react-inp-blame/vite`: a module script ahead of the page's own that installs the
 library, so the order of imports in the entry module stops mattering, and the displayName transform.
 Vite runs a `transformIndexHtml` hook ordered `pre` before it reads the page's scripts, so the added
-script is served in development and bundled in production like the page's own, and module scripts
-run in document order. The demo and its React 17 and 18 variants install with it.
+script is served in development and bundled in production like the page's own. In development that
+is the whole job, because nothing is bundled and module scripts run in document order.
+
+A production build is different. Vite folds every module script of a page into one entry module, and
+JavaScript evaluates a module's imports before its body, so an `install()` call in that body runs
+after any chunk that evaluated react-dom on the way in. React looks for the hook once, while
+react-dom evaluates, and never again, so a hook created afterwards is never registered with. Nothing
+the plugin writes into the entry module can settle that, because the bundler decides what the entry
+imports and in what order. Two pages sharing a chunk is enough to settle it the wrong way: the
+modulepreload polyfill and react-dom end up in one shared chunk that the entry imports first.
+
+So the install call is given a file of its own and the page loads it as a script of its own.
+`buildStart` asks for the split with `this.emitFile({ type: 'chunk' })`, and a `transformIndexHtml`
+hook ordered `post`, which runs once the bundle exists, finds that chunk in `ctx.bundle` by its
+`facadeModuleId` and prepends `<script type="module" crossorigin src="…">` to the head. Document
+order between two module scripts is the one thing a bundler cannot rearrange. A module script with no
+`async` is deferred, and at "the end" of parsing the HTML Standard runs the deferred scripts in the
+order their elements were reached, waiting for each one's whole module graph before it runs and
+running it to completion before starting the next (HTML Standard, "The script element" §4.12.1 and
+"The end" §13.2.7; the install graph uses no top-level await, which is the one thing that would end
+that script before its work was done). Looking the chunk up by `facadeModuleId` rather than holding
+the reference `emitFile` returns also keeps the plugin correct when Vite 6 and later build several
+environments in parallel from one plugin instance.
+
+The inline `import 'virtual:react-inp-blame/install'` the `pre` hook used to add in builds as well is
+now the fallback for the outputs that can have no second script: `output.format: 'iife'` or `'umd'`,
+which are one file by definition and fail the build outright if asked to split, `build.lib`, and the
+SystemJS `nomodule` bundle `@vitejs/plugin-legacy` adds, where document order buys nothing and a
+second entry would only separate the install from the code that has to run after it. For that last
+one the plugin stands down entirely, on `config.plugins` containing a `vite:legacy` plugin. Keeping
+the inline form costs the one benefit an external script would otherwise bring under a Content
+Security Policy, so the README does not claim it. Where a page does get the script, `generateBundle`
+checks that some page's HTML names the chunk and deletes it otherwise, so a build whose every page is
+turned down by `pages` ships no stray file. `manifest: true` gains a row keyed
+`../virtual:react-inp-blame/install` with `isEntry: true`; the page's own row does not list it, so a
+framework that builds its HTML from `manifest.json` instead of from Vite's emitted page will not pick
+the script up.
+
+What went wrong here, and how far it reached. This repo's demo builds with Vite 8.3.0, whose bundler
+is Rolldown. Its React 17 variant failed 11 of 14 production specs with `hook.renderers` empty and
+`stats().mode` still reading `shim`, while the same specs passed in development and the React 18
+variant passed in both. React 17 has no `react-dom/client`, so `apps/demo/src/legacy-client.ts` shims
+`createRoot` over `ReactDOM.render` with a default import, and a default import of a CommonJS module
+builds its namespace object while the importing chunk evaluates, rather than at first use. That is
+what put react-dom ahead of `install()` there. It is not a rule about React versions or about default
+imports: in the small fixtures below a single React 17 page, and two of them, come out in the right
+order at HEAD on both Vite 5 and Vite 8, and React 18 through `react-dom/client` was never seen to
+lose on either. Which chunk evaluates first is the bundler's decision, and the point of the fix is to
+stop asking it the question.
+
+Checked by building each of these and loading the built pages in Chromium, on Vite 5.4.21, 6.4.3,
+7.3.6 and 8.3.0, with React 17.0.2 and a default import of `react-dom`. "Yes" means
+`__REACT_DEVTOOLS_GLOBAL_HOOK__.renderers` had the renderer in it after the page settled.
+
+| Build | 5.4.21 | 6.4.3 | 7.3.6 | 8.3.0 |
+| --- | --- | --- | --- | --- |
+| One page | yes | yes | yes | yes |
+| Two pages sharing a chunk | yes | yes | yes | yes |
+| Two pages, both entries eager on react-dom | yes | yes | yes | yes |
+| The same, `modulePreload.polyfill: false` | yes | yes | yes | yes |
+| One page, `modulePreload: false` | yes | yes | yes | yes |
+| Custom `entryFileNames` and `chunkFileNames`, with and without a hash | yes | yes | yes | yes |
+| `base: '/sub/'`, page at the root and in a subdirectory | yes | yes | yes | yes |
+| `base: './'` and `base: ''`, page at the root and in a subdirectory | yes | yes | yes | yes |
+| `html.cspNonce` set | yes | yes | yes | yes |
+| `output.inlineDynamicImports` | yes | yes | yes | yes |
+| `output.format: 'iife'` | yes | yes | yes | yes |
+| `@vitejs/plugin-legacy`, one page, module and `nomodule` paths | yes | yes | yes | yes |
+| `@vitejs/plugin-legacy`, two eager pages, module and `nomodule` paths | yes | yes | yes | yes |
+| `manualChunks` sending react and react-dom to `vendor` | yes | yes | yes | yes |
+| `manualChunks` sending all of `node_modules` to `vendor` | no | no | no | yes |
+| `build.lib`, default formats and `formats: ['es']` | builds, no stray file | same | same | same |
+| `build.ssr`, and a `consumer: 'server'` environment | no tag, no chunk | same | same | same |
+| A JavaScript entry with no HTML page | builds, no stray file | same | same | same |
+| `pages` turning a page down, or every page down | no script there, no stray file | same | same | same |
+| `createBuilder` with client, ssr and worker, in three orders | n/a | ok | ok | ok |
+| `build.watch`, first build and a rebuild | yes | yes | yes | yes |
+
+The one "no" is a limit, not a regression: it fails the same way at HEAD, and on Vite 8 it passes
+both before and after. `manualChunks: (id) => id.includes('node_modules') ? 'vendor' : undefined` puts
+react-dom and this library in the same chunk, and the install script's own import of that chunk
+evaluates react-dom first. Nothing the plugin can reach decides that. Exclude the library from the
+rule, or give it its own chunk, and the row passes, which is what the narrower `vendor` rule in the
+row above it does. The dev server output is byte for byte what it was before this change on all four
+versions, with no warnings.
+
+The demo and its React 17 and 18 variants install with the plugin, and both variants now run in CI as
+production builds as well as on the dev server.
 
 ## What is not done
 

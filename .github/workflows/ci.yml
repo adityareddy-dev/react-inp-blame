@@ -86,6 +86,13 @@ jobs:
           npm install
           npm test -w apps/demo-react18
           npm test -w apps/demo-react17
+      # Production too, because that is where the bundler decides what evaluates before the app's entry
+      # body, and where React 17 registered with no hook at all until the Vite plugin gave the install
+      # call a script of its own ahead of the page's. About a minute for the pair.
+      - name: Vite demo on React 18.3.1 and 17.0.2, production builds
+        run: |
+          npm run test:prod -w apps/demo-react18
+          npm run test:prod -w apps/demo-react17
       - name: Next.js, next dev
         run: npm test -w apps/next-demo
       - name: Next.js, Turbopack production build

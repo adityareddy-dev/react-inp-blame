@@ -105,7 +105,13 @@ Next.js, with `'development'` meaning the dev server and `'production'` meaning 
 `pages` picks the HTML pages that get the script.
 
 Anywhere else, make `import 'react-inp-blame/auto'` the first import of the entry module: it
-installs with the default options before react-dom loads.
+installs with the default options before react-dom loads. In a production build that is the right
+shape but not a guarantee, because a bundler may put react-dom in a chunk that evaluates before the
+entry's body does, and React looks for the hook only while it evaluates. Two builds where that
+happens are a `manualChunks` rule sending `node_modules` to a vendor chunk, and a second HTML page
+sharing a chunk with the first. The Vite plugin and the Next.js wrapper put the install in a file the
+page loads before its own; with another bundler, check `stats().mode` and `debug.hook().renderers` in
+a built page once.
 
 ## With web-vitals
 

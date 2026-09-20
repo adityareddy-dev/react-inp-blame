@@ -89,18 +89,31 @@ try {
 }
 `;
 
-// A page with no script of its own, so any script the built page loads is the one the plugin added.
-const VITE_PAGE = `<!doctype html>
+// Two pages, each with a script of its own, and both importing the same module. That gives the build a
+// chunk both entries import, which is where react-dom lands in a real app and where the page's install
+// used to lose the race. What the pages do is beside the point; the order of their script tags is not.
+const VITE_PAGES = ['index', 'second'];
+const vitePage = (name) => `<!doctype html>
 <html lang="en">
   <head>
-    <title>pack-smoke</title>
+    <title>pack-smoke ${name}</title>
   </head>
-  <body></body>
+  <body>
+    <script type="module" src="/src/${name}.js"></script>
+  </body>
 </html>
 `;
-const VITE_CONFIG = `import { inpBlame } from '${PACKAGE}/vite';
+const VITE_SHARED = "export const label = 'pack-smoke';\n";
+// The marker says which built file is the page's own entry, whatever the bundler named it.
+const VITE_MARKER = '__packSmokePage';
+const viteEntry = (name) => `import { label } from './shared.js';\n\nwindow.${VITE_MARKER} = '${name}:' + label;\n`;
+const VITE_CONFIG = `import path from 'node:path';
+import { inpBlame } from '${PACKAGE}/vite';
 
-export default { plugins: [inpBlame({ enabled: true })] };
+export default {
+  plugins: [inpBlame({ enabled: true })],
+  build: { rollupOptions: { input: { ${VITE_PAGES.map((name) => `${name}: path.resolve('${name}.html')`).join(', ')} } } },
+};
 `;
 
 const quoted = (text) => `"${text}"`;
@@ -244,18 +257,58 @@ function wrapsNextConfig(app) {
   assert.ok(injected, `withInpBlame({}) did not add ${PACKAGE}/next-client to instrumentationClientInject: ${JSON.stringify(config)}`);
 }
 
+// A bundled `import './chunk.js'`, with or without names in front of it, as a minifier leaves it.
+const STATIC_IMPORT = /\bfrom\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']/g;
+
+/** The code of every module the page's scripts load, following the static imports the bundler wrote. */
+function scriptsOf(dist, page) {
+  const queue = [...page.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(([, src]) => src.replace(/^\//, ''));
+  const seen = new Set();
+  const code = [];
+  while (queue.length > 0) {
+    const file = queue.shift();
+    if (seen.has(file) || !fs.existsSync(path.join(dist, file))) continue;
+    seen.add(file);
+    const source = fs.readFileSync(path.join(dist, file), 'utf8');
+    code.push(source);
+    for (const match of source.matchAll(STATIC_IMPORT)) {
+      const specifier = match[1] ?? match[2];
+      if (specifier.startsWith('.')) queue.push(path.posix.join(path.posix.dirname(file), specifier));
+    }
+  }
+  return code;
+}
+
 /**
  * A real `vite build`, because whether this Vite honours the form the plugin's `transformIndexHtml`
- * hook is written in shows only in the page it builds.
+ * hook is written in shows only in the pages it builds. Both pages have to install, and to install
+ * first: the plugin gives each one a script of its own ahead of the page's, and deferred module
+ * scripts run in document order, each graph evaluated in full before the next one starts. Inside a
+ * single entry there is no such guarantee, and with two pages sharing a chunk the bundler used to
+ * settle it the wrong way round.
  */
 function buildsWithVite(app) {
-  fs.writeFileSync(path.join(app, 'index.html'), VITE_PAGE);
+  const dist = path.join(app, 'dist');
+  fs.mkdirSync(path.join(app, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(app, 'src/shared.js'), VITE_SHARED);
+  for (const name of VITE_PAGES) {
+    fs.writeFileSync(path.join(app, `${name}.html`), vitePage(name));
+    fs.writeFileSync(path.join(app, `src/${name}.js`), viteEntry(name));
+  }
   fs.writeFileSync(path.join(app, 'vite.config.mjs'), VITE_CONFIG);
   node(app, [path.join('node_modules/vite', installed(app, 'vite').bin.vite), 'build']);
-  const page = fs.readFileSync(path.join(app, 'dist/index.html'), 'utf8');
-  const sources = [...page.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(([, src]) => src);
-  const installs = sources.some((src) => fs.readFileSync(path.join(app, 'dist', src), 'utf8').includes(HOOK_KEY));
-  assert.ok(installs, `no script of the built page installs the library:\n${page}`);
+
+  for (const name of VITE_PAGES) {
+    const page = fs.readFileSync(path.join(dist, `${name}.html`), 'utf8');
+    // Each script tag stands for everything it loads, since a module's imports are evaluated before
+    // its body. One of those graphs installs the library and one is the page's own code.
+    const graphs = [...page.matchAll(/<script\b[^>]*\bsrc="[^"]+"/g)].map(([tag]) => scriptsOf(dist, tag).join('\n'));
+    const installs = graphs.findIndex((code) => code.includes(HOOK_KEY));
+    const own = graphs.findIndex((code) => code.includes(VITE_MARKER));
+    assert.ok(installs !== -1, `nothing ${name}.html loads installs the library:\n${page}`);
+    assert.ok(own !== -1, `no script of ${name}.html is the page's own entry:\n${page}`);
+    assert.ok(installs < own, `${name}.html installs no earlier than its own entry, so react-dom can win:\n${page}`);
+  }
 }
 
 // Next.js is named alone because npm installs the peers a package asks for: each app gets the react and
