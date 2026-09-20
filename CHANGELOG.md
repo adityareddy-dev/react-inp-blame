@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-20
+
 ### Added
 
 - **A hydration verdict.** A click that lands on server-rendered HTML React has not hydrated yet is
@@ -195,6 +197,7 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/adityareddy-dev/react-inp-blame/releases/tag/v0.1.0
