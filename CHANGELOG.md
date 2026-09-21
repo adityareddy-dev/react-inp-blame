@@ -126,6 +126,49 @@ it changes when a field is removed or changes meaning, which a minor release may
   overlay's short line, and names a profiling build of React as what would make it exact, but only where
   a build with no render durations is what made it a reading. A blame that names nothing has nothing to
   hedge and does not.
+- **Forced layout could never be blamed on a production build, however large.** The one branch that
+  weighed anything against a render needed React's render durations to subtract them, and a production
+  build records none, so a layout the browser had measured came out as a footnote under a render nobody
+  had timed: 108 ms of layout inside 116 ms of working time was reported as a re-render of 181 components
+  with `ms: null`. `explanation.blame.kind` gains `'layout'`, taken from 50 ms when the layout is half the
+  window it was measured across, larger than React's render, larger than the time outside it, and not
+  outweighed by the screen update that followed; the sentence says what is left over ("leaving 8 ms for
+  React's render and commit, its layout effects and the click handler together"), which is what makes the
+  demotion of the render a measurement. Its `name` and `detail` are where the layout happened, not what
+  forced it, which nothing records: the joined commit's subtree and what it was mostly made of, dropped
+  for the invoker the browser charged the script to where that commit only overlapped the interaction in
+  time, was walked short of the end, or sat beside commits that could not be tied to the interaction at
+  all — the milliseconds are the browser's and stay `'measured'`, so the name is dropped rather than the
+  confidence lowered to cover it. The invoker stands for the whole layout only while one script holds
+  nine tenths of it, since `ms` is every script's total summed and a name beside it claims all of it;
+  below that `name` is `null`. The sentence names the largest script either way, with how much of the
+  total it holds. It is the only blame **about React's work** that keeps
+  `'measured'` in a production build — `'waiting'` and `'painting'` are the browser's own phases and never
+  depended on the build, and `'script'` does not either, though it is `'inferred'` whenever a commit could
+  not be tied to the interaction — and it is `'inferred'` only where a script ran past the window
+  and its forced layout had to be apportioned by time. A `switch` over `explanation.blame.kind` that
+  TypeScript checks for exhaustiveness now has a case missing.
+- **Two interactions of the same shape could get opposite verdicts.** The render was tested before the
+  screen update, so a component count decided which: paging a calendar forward one month (5 ms of working
+  time, 82 of the screen updating) read `render` and `'inferred'`, while toggling a theme (2 ms and 85)
+  read `painting` and `'measured'`. A render, a handler and a forced layout are all bounded by the working
+  time they ran in, so the screen update is now weighed against that window once, and every branch inside
+  it steps aside where the screen update is longer. Hydration is the exception and sits above the
+  comparison: an input that landed on un-hydrated HTML is worth saying whatever else took longer. Because
+  the comparison is the same one the painting branch asks, a branch it closes is a branch painting opens,
+  so a verdict is never refused for the screen update and then dropped below it to `'script'` or `'none'`.
+  A branch closed that way leaves a note naming what it would have blamed, so a 200 ms render inside a
+  425 ms interaction is still reported when the 215 ms of screen update after it takes the verdict.
+- **`where` named the innermost owner, which on a design-system app is never the app's own component.**
+  Across seven interactions on one real App Router site it printed `in header`, `in Primitive.button`
+  twice, `in Primitive.input`, `in Primitive.div` and `in _`, with the component the reader would
+  recognise sitting further up the same chain every time. `target.component` is now the nearest owner
+  whose name a reader could search their own code for: capitalised, as React requires of a component
+  name, so a column definition's `header: ({ table }) => …` no longer reads as an HTML tag; at least three
+  characters, since a minified dependency that ships no `displayName` leaves one and two character names;
+  and every part of a dotted name the same, so `Primitive.button`, which names the element that was
+  clicked, gives way to the component above it. `target.owners` still carries the whole chain, and where
+  nothing in it passes, the innermost owner is named as before. A name is never invented.
 
 ## [0.1.1] - 2026-09-19
 

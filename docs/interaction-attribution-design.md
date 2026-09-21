@@ -72,7 +72,7 @@ production build it asserts that a handler name exists, not which prop it came f
 | Scenario (anti-pattern) | What the report names | Production build |
 | --- | --- | --- |
 | Context storm: unstable context value | render blame on the OrderSummary subtree, LineItem ×800 | the same names through displayName stamping, blame from render counts |
-| Layout thrash: read after write in 400 layout effects | render blame on LayoutThrash, PriceTicker ×400, with the forced layout the long animation frame recorded | same |
+| Layout thrash: read after write in 400 layout effects | layout blame on the forced layout the long animation frame recorded, about 190 ms of a 250 ms working window, with LayoutThrash and PriceTicker ×400 named after it | same, and still `measured`: the browser times forced layout in every build |
 | Handler hog: 120ms in the click handler, no state change | no React render before the paint; script blame on the click handler computeChecksum | the handler named by its prop, component names intact |
 | Big list: 3000 unvirtualised rows filtered per keystroke | render blame on BigList, Row ×1440 | same |
 | Lifted state: unrelated heavy sibling re-renders per keystroke | render blame on Sidebar, NavItem ×600 | same |
@@ -107,6 +107,16 @@ Since 2026-09-14 `apps/demo/e2e/cross-browser.spec.ts` also runs in Firefox 148 
 `frames: null`, and a page whose `PerformanceObserver.supportedEntryTypes` lacks `event` gets
 nothing installed. Both time React's components with a clock too coarse for the demo's (see
 "Coarse clocks" below), so their development reports carry counts and inferred blame.
+
+**One smoke run outside the demo.** On 2026-09-20 the packed tarball was installed into a production
+build of a real Next.js App Router documentation site and driven through seven interactions. That run
+is cited below wherever it changed something, and only ever for *what the library said*: three runs
+of each build, unthrottled and at 4x CPU, on a machine somebody else was using, is not a measurement
+of that app, of an interaction, or of this library's cost, and no number taken from it appears here
+as one. Every verdict it produced came back identical across every run it recorded, which is what
+makes the sentences worth arguing with. Nothing
+outside the demo has been profiled, reproduced on a second machine, or hand-checked against a flame
+chart, and the evidence corpus that would do that is still not written.
 
 ## What it costs
 
@@ -663,6 +673,61 @@ render was slow" from "your layout effect forced layout 400 times". Only Chromiu
 Firefox and Safari a report's `frames` and `laterFrames` are `null`, and the explanation leaves
 out the forced-layout and script sentences rather than implying none happened.
 
+Forced layout inside the handlers can take the blame outright, as `blame.kind: 'layout'`, and until
+2026-09-20 it could not: the one branch that weighed anything against a render needed React's render
+durations to subtract them, and a production build has none, so however much layout the browser had
+measured it came out as a footnote under a render nobody had timed. On the shadcn/ui documentation
+site that happened on three of seven interactions, each one a Radix component reading geometry while
+opening: 108 ms of layout inside 116 ms of working time was reported as a re-render of 181 components
+with `ms: null`. The number it demoted was measured and the number it promoted did not exist. So a
+layout takes the blame from 50 ms, when it is half the window it was counted across — the working
+time plus this library's own walk, since the scripts run to the end of that and `processing` has it
+taken back out — and larger than both React's render and the working time left outside it, and the
+sentence is printed against that same window, or it reads "110 ms of the 100 ms of working time".
+So the sentence names that window rather than the working time — "the 116 ms spent handling the
+click" — and its numbers add up to it. Where the walk is worth a whole millisecond the remainder
+names it too, because the window it was taken from holds it. The sentence says what is left over —
+"the browser spent 108 ms of the 116 ms spent handling the click recalculating layout, leaving 8 ms
+for React's render and commit, its layout effects and the click handler together" — which is what
+makes the demotion of the
+render a measurement rather than a preference. Where React's render is itself timed higher than that
+remainder the two overlap, because geometry read inside a render body is charged to the render and to
+the layout both, and the sentence says that instead of printing a remainder that bounds nothing. It
+is the one blame *about React's work* that keeps `measured` under a production build — `waiting` and
+`painting` are the browser's own phases and never depended on the build, and neither does `script`,
+though that one turns `inferred` whenever a commit could not be tied to the interaction, since a
+script is what is left once React is ruled out and an unjoined commit is what stops React from being
+ruled out — and it is
+`inferred` only where a script ran on past the window and its forced layout had to be apportioned.
+
+Nothing names the read that forced the layout, so the blame's `name` says where it happened rather
+than what did it: the subtree of the commit the interaction joined. That name is worth less than the
+number beside it and the two are kept apart. The milliseconds are the browser's, so the confidence
+is about them alone — whether any of the total had to be apportioned — and it is never lowered to
+cover a doubtful name. The name is dropped instead, for the invoker the browser charged the script
+to, whenever the commit only overlapped the interaction in time, was walked short of the end, or sat
+beside commits that could not be tied to the interaction at all. Render durations play no part in
+that: a production build times nothing and its subtree names are no worse for it.
+
+The invoker is only a name for the whole layout while one script holds nine tenths of it. The
+browser charges forced layout per script, so a window holding three of them holds three totals, and
+`blame.ms` is their sum: printing one invoker beside that sum says that script cost the lot. Below
+the nine tenths there is no name — `name` is null — and nothing is claimed that the evidence does
+not carry.
+
+The invoker goes in the sentence either way ("It was charged to `IntersectionObserver.callback`", or
+"80 ms of it was charged to …" where it holds less), because a script that merely ran inside the
+same window is charged separately and looks identical from the React side, so the subtree alone can
+send a reader to a file with nothing to do with it.
+**Decided not to change the name on that basis**: the only held signal is the invoker string, and
+`ranAsHandler` is a time-window test an observer callback inside the window passes. The field that
+would settle it, LoAF's `invokerType`, is not captured, and adding it changes a published type on a
+guess about what Chromium reports for React's own dispatch. The sentence carries the doubt instead.
+
+The demo's layout-thrash scenario is the case: 400 layout effects writing a style and reading a size,
+about 190 ms of layout against a 48 ms render, named `LayoutThrash` with `PriceTicker ×400` beside
+it, exactly as the render blame it replaced was.
+
 **Follow-ups.** Commits that land after the paint but within 1.5 s of it, stamped with the same
 input, with no newer input in between. Effects, transitions and data-driven re-renders show
 up here. The window runs from the paint, not from the input, so an interaction that took three seconds
@@ -679,10 +744,21 @@ script setting a select's value and dispatching `change` itself, is invisible to
 as this interaction's follow-up render. The harness's `page-size-50` step is the third of those, which
 is why the `tt-fuzzy` sort click still collects that render.
 
+A run on the shadcn/ui documentation site on 2026-09-20 produced a fourth: resizing the viewport. A
+theme toggle was credited with a second render of 441 components inside `SidebarContent` 982 ms after
+its paint, and the render was the site's `useIsMobile` media query firing when the harness narrowed
+the window to 390 px for the step after it. The next click came 446 ms later still, so no newer input
+had arrived and the check above never had anything to fire on. It is the same limit, not a new one:
+the ring holds inputs, a resize is not one, and the commit's own stamp says the theme toggle because
+the theme toggle is the last input the ring held. Nothing here can tell that apart from the render an
+effect of the theme toggle might genuinely have scheduled a second later, and the window is 1.5 s
+because the renders worth reporting land inside it.
+
 **Saying it in plain words.** Every report carries an `explanation`: a headline ("264 ms
 click"), a rating on the INP thresholds in web-vitals' words (good to 200 ms, needs improvement to
 500 ms, poor beyond),
-where it happened (the element's own label and the component that owns it), one sentence for
+where it happened (the element's own label and the nearest component owning it that a reader could
+go and look for), one sentence for
 the cause, extra sentences only when they earn their place, and the time split into three
 phases a person can picture: waiting before the handler, working, updating the screen. The
 cause separates React's render time from the rest of the working time (the handler and other
@@ -693,11 +769,30 @@ show up in every report. The `verdict` string is the explanation joined into one
 are built the first time something reads them, and again after the report changes, not in the
 Event Timing callback, where the time would come out of the next interaction.
 
+**Nothing inside the working time is blamed for more than the working time.** A render, a handler and
+a forced layout all happened inside that window, so none of them can account for an interaction whose
+time went on the screen update instead. So the screen update is weighed against the working time
+itself, once, rather than against each branch's own claim in turn: where it is longer than the
+working time, and long enough to be blamed on its own, every branch inside that window steps aside.
+It is the same test the painting branch asks, which is what makes it safe — a branch closed here is
+a branch the painting branch opens, so a verdict can never be refused for the screen update and then
+fall past it to a script or to nothing at all. Weighing it claim by claim did exactly that: a 90 ms
+render inside 100 ms of working time, against a 95 ms screen update, lost the render branch to the
+95 and the painting branch to the 100, and came back as `none`. Without
+that rule the render was tested first and a component count decided the verdict: on the shadcn/ui
+site, paging a calendar forward one month (5 ms of working time, 82 of the screen updating) came back
+`render` and `inferred` because the commit touched 332 components, while toggling the theme (2 ms and
+85) came back `painting` and `measured` because its commit touched two. Two interactions of the same
+shape, one offered as a guess and the other as a measurement. They now read the same.
+
 **How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's render, and only
 when that is a quarter of the working time (committing the demo's 1441-row list takes a fifth of
 it outside React's durations); a render from 5 ms with durations, or from 10 components by counts
-and 50 beside a named handler; a Long Animation Frames script from 20 ms; waiting, painting and
+and 50 beside a named handler; forced layout from 50 ms and half the window it was counted across,
+with one script having to hold nine tenths of a window's forced layout before its name is used for
+all of it; a Long Animation
+Frames script from 20 ms; waiting, painting and
 working time known only by counts from 50 ms, the length of a long task. The hot path follows a
 child carrying 60% of its parent's work (`fiber.ts`). `explanation.blame.confidence` says what the
 call rests on. It is `'measured'` when the blame follows from timings of the interaction itself:
@@ -708,6 +803,24 @@ that only overlapped the interaction, a walk cut short, or no Long Animation Fra
 scripts out. `verdict`, `cause`, `notes`, `headline` and `where` are display text that may be
 reworded in any version; `blame`, `rating`, the phases' milliseconds and the report's own fields
 are the data, and the demo's specs assert on those.
+
+**Which end of the owner chain the sentence prints.** `where` named `target.owners[0]`, the innermost
+component enclosing the element, until 2026-09-20. On a design-system app that is never the app's
+own component: across seven interactions on the shadcn/ui documentation site it printed `in header`,
+`in Primitive.button` twice, `in Primitive.input`, `in Primitive.div` and `in _`, with
+`DataTableDemo`, `CalendarDemo` and `CommandMenuItem` sitting further up the same chain every time.
+So the report names the nearest owner whose name a reader could search their own code for, and the
+chain itself is untouched on `owners`. A name counts when React would accept it as a component name
+and a minifier has not cut it down: capitalised, three characters or more, and every part of a dotted
+name the same. That is three rules from three observations. `header` came from a column definition's
+`header: ({ table }) => …`, which is a property name lent to a render function and reads as an HTML
+tag; React's own rule is that a component name is capitalised, so a lowercase one is not a component
+anybody wrote. `_`, `ee`, `V`, `$` and `et` are what a minifier leaves on react-day-picker, next-themes
+and cmdk, none of which ship a `displayName`, and the display-names loader only stamps the app's own
+files. `Primitive.button` names the element that was clicked, so "button in Primitive.button" tells
+the reader nothing they did not write themselves. Where nothing in the chain passes, the innermost
+owner is printed as before: a name is never invented, and `in $` at least matches what a profiler
+would show.
 
 The working time leaves out this library's own walk. A commit during the handlers is walked
 inside that commit, so the browser counts the walk as processing; the report takes it back out
@@ -889,7 +1002,13 @@ the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in prod
 is large (50 components when a handler is named, 10 otherwise), and a named handler with a
 small render is blamed as "most likely", with the note that a profiling build would give exact
 numbers; its `confidence` is `'inferred'`. LoAF cannot separate the two: the handler and React's
-sync render run inside the same script entry. A minified handler keeps only the name of the prop
+sync render run inside the same script entry. It can separate out the forced layout inside that
+script, which is measured whatever the build records, so since 2026-09-20 a large forced layout
+outranks a render the build never timed and stays `'measured'` there. It is the only blame about
+React's own work that does; the phase blames (`waiting`, `painting`) and `script` come from the
+browser and never depended on the build at all, though `script` turns `inferred` when a commit could
+not be tied to the interaction, which has nothing to do with which build is running.
+A minified handler keeps only the name of the prop
 it was found on, so production sentences say "the onClick handler".
 
 ## The demo
@@ -927,7 +1046,8 @@ so it also arrives as a first-input entry at any duration.
 What works with a plain production React build, no profiling build, no DevTools:
 
 - which components rendered, how many, under which subtree (counts, not durations)
-- the target component and its owner chain
+- the target component and its owner chain, minus the names the minifier took
+- forced layout inside the handlers, measured, and blamed as such when it is the larger part of them
 - the name of the handler prop that fired
 - input delay, processing, presentation delay, forced layout, script attribution from LoAF
 - follow-up commits after the paint

@@ -45,6 +45,18 @@ const LATER_MIN_MS = 10;
 const LATER_MIN_COMPONENTS = 25;
 // Forced layout is worth a sentence from 4 ms, a quarter of a frame.
 const FORCED_LAYOUT_MIN_MS = 4;
+// It takes the blame instead from half of the window it was counted across, on top of the long task
+// above. Several things share that window (the handler, React's render, the commit, this library's own
+// read), so half of it is what makes the layout the answer rather than one line of it; it is weighed
+// against React's render, and a production build measures no render at all, which is exactly where
+// this has to hold.
+const FORCED_LAYOUT_MIN_SHARE = 0.5;
+// The browser charges forced layout per script, so a window holding several of them holds several
+// totals. One script has to account for nine tenths of the layout before its name is used as where
+// the layout happened: below that the name would be a claim about a cost the other scripts share, and
+// a reader following it optimises whichever one the library happened to sort first. The sentence
+// still names the largest and says how much of the total it holds, because that much is a fact.
+const FORCED_LAYOUT_ONE_SCRIPT_SHARE = 0.9;
 // The screen update gets a note of its own from 100 ms, half of INP's 200 ms budget for "good".
 const PRESENTATION_NOTE_MS = 100;
 // A press held around the interaction is worth a note from 100 ms; an ordinary click is shorter.
@@ -114,6 +126,14 @@ export const carriesWork = (c: CommitSummary) => (c.hasDurations ? c.total >= RE
 
 /** A commit whose numbers stand on their own: durations measured on a clock fine enough for them, joined by its exact input stamp, walked in full. */
 const measuredCommit = (c: CommitSummary) => c.hasDurations && !c.coarseClock && c.joinedBy === 'exact' && !c.truncated;
+
+/**
+ * A commit whose *names* stand on their own, which is a weaker thing to ask than `measuredCommit`:
+ * that it is this interaction's work and not something that merely overlapped it, and that the walk
+ * reached the end of the tree it is about to name. Render durations have nothing to do with it, so a
+ * production build's subtree and component counts are as good here as a profiling build's.
+ */
+const namesThisInteraction = (c: CommitSummary) => c.joinedBy === 'exact' && !c.truncated;
 
 /** Entries whose paint landed within 8 ms of each other were presented by one frame. */
 function groupByRenderTime(entries: readonly InteractionTiming[]): PaintGroup[] {
@@ -506,11 +526,32 @@ export function attachLaterRender(r: ReportData, c: CommitSummary, frames: reado
   return { ...r, followUps, laterFrames, overheadMs: r.overheadMs + c.walkMs, revision: r.revision + 1 };
 }
 
+/**
+ * A component name a reader could search their own code for. React treats only a capitalised name as
+ * a component, so `header`, the name a column definition's `header: ({ table }) => …` lends its
+ * render function, is a property name that reads as an HTML tag rather than a component anybody
+ * wrote. One and two character names are what a minifier leaves on a dependency that ships no
+ * `displayName`. A dotted name counts only when every part of it does, which is what keeps
+ * `Primitive.button` out: it names the element that was clicked, and "button in Primitive.button"
+ * tells a reader nothing they did not write themselves.
+ */
+const READABLE_NAME = /^[A-Z][A-Za-z0-9_$]{2,}$/;
+const readableName = (name: string): boolean => name.split('.').every((part) => READABLE_NAME.test(part));
+
+/**
+ * The owner a report names the target by: the nearest readable one. Where the chain holds no
+ * readable name the nearest owner is named anyway, because the alternative is inventing one, and
+ * `owners` keeps the chain whole either way.
+ */
+function namedOwner(owners: readonly string[]): string | null {
+  return owners.find(readableName) ?? owners[0] ?? null;
+}
+
 function describeTarget(node: Node, owners: readonly string[], handler: string | null, labels: LabelSource): TargetInfo {
   return Object.freeze({
     selector: selector(node),
     label: labelOf(node, labels),
-    component: owners[0] ?? null,
+    component: namedOwner(owners),
     owners: Object.isFrozen(owners) ? owners : Object.freeze(owners.slice()),
     handler,
   });
@@ -646,6 +687,8 @@ interface ScriptPart {
    * not when in the script it happened, so the share is an estimate: the one web-vitals makes.
    */
   readonly forcedLayout: number;
+  /** Whether the whole script lay inside the window, so its forced layout is its own figure rather than a share of one. */
+  readonly whole: boolean;
 }
 
 /**
@@ -665,13 +708,24 @@ function scriptParts(frames: readonly FrameSummary[], from: number, to: number):
       // A script that had finished before the window, or had not started by the end of it, is not part of it.
       if (script.start + script.duration < from || script.start > to) continue;
       const ms = Math.min(script.start + script.duration, to) - Math.max(from, script.start);
-      parts.push({ script, ms, forcedLayout: script.duration > 0 ? (ms / script.duration) * script.forcedLayout : 0 });
+      const whole = script.start >= from - STAMP_TOLERANCE && script.start + script.duration <= to + STAMP_TOLERANCE;
+      parts.push({ script, ms, forcedLayout: script.duration > 0 ? (ms / script.duration) * script.forcedLayout : 0, whole });
     }
   }
   return parts;
 }
 
 const forcedLayoutOf = (parts: readonly ScriptPart[]): number => parts.reduce((a, p) => a + p.forcedLayout, 0);
+
+/** Whether every script that forced layout in this window ran inside it, so none of the total was shared out by time. */
+const forcedLayoutMeasured = (parts: readonly ScriptPart[]): boolean => parts.every((p) => p.whole || p.forcedLayout === 0);
+
+/** The script the browser charged the most forced layout to in this window; null when none forced any. */
+function mostForcedLayout(parts: readonly ScriptPart[]): ScriptPart | null {
+  let best: ScriptPart | null = null;
+  for (const p of parts) if (p.forcedLayout > 0 && (!best || p.forcedLayout > best.forcedLayout)) best = p;
+  return best;
+}
 
 /** The longest part, if it is long enough to matter. */
 function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
@@ -733,7 +787,8 @@ export function explain(r: InteractionReport): Explanation {
 
   // A script counts for its part inside each window, and so does its forced layout.
   const frames = r.frames ?? [];
-  const forcedWhileHandling = forcedLayoutOf(scriptParts(frames, processingStart, processingEnd));
+  const whileHandling = scriptParts(frames, processingStart, processingEnd);
+  const forcedWhileHandling = forcedLayoutOf(whileHandling);
   const forcedAfterInput = forcedLayoutOf(scriptParts(frames, processingStart, r.end));
   const lateScript = longestPart(scriptParts(frames, processingEnd, r.end));
   const anyScript = longestPart(scriptParts(frames, r.start, r.end));
@@ -742,13 +797,84 @@ export function explain(r: InteractionReport): Explanation {
   const c = r.commits.length ? heaviest(r.commits) : null;
   const renderTotal = r.commits.reduce((a, x) => a + x.total, 0);
   const hasDurations = !!c && c.hasDurations;
+  /**
+   * The window the scripts, and so the forced layout, were counted across. It runs to the end of the
+   * library's own walk, because the walk happens inside the same script the handlers did, and
+   * `processing` has that walk taken back out of it. Anything printed against the forced layout is
+   * printed against this, or it reads as "110 ms of the 100 ms of working time".
+   */
+  const handledWindow = r.processing + r.walkMs;
   // Working time that was neither React's render phase nor forced layout: the handler itself,
-  // React committing what it rendered, or other scripts in the same task.
+  // React committing what it rendered, or other scripts in the same task. Subtracting React's render
+  // is what makes it the handler's, so a build that records no durations has no such figure: there
+  // this would be the whole working time wearing the handler's name. The walk is taken out too, by
+  // starting from `processing` rather than the window above: it is this library's time, not the app's.
   const outside = Math.max(0, r.processing - renderTotal - forcedWhileHandling);
   const outsideMatters = hasDurations && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler.
   const renderMatters = !!c && (hasDurations ? renderTotal >= RENDER_MIN_MS : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS));
+  /**
+   * Does the screen update outrank everything the working time holds? Nothing that happened in
+   * there can account for more of the interaction than the working time it ran in, so that is what
+   * the screen update is measured against — one comparison for the whole ladder, not one per rung
+   * against whatever that rung happened to claim. Two things follow. A render or a layout is no
+   * longer unseated by a screen update that beats it but not the time it sat in; and because this
+   * is the *same* test the screen update's own rung asks, a rung it closes is one the screen update
+   * is open to take. A longer wait before the handler can still take the verdict first, since that
+   * rung sits above the screen update's. What cannot happen is a verdict refused here landing below
+   * the screen update, which is where it turns into `script` or into nothing at all.
+   *
+   * It is also what keeps two interactions of the same shape from getting opposite verdicts on the
+   * strength of a component count: paging a calendar forward and toggling a theme were both 88 ms
+   * with 5 ms of working time and 82 of the screen updating, and only one of them came back a
+   * render. Under a long task the screen update is never blamed at all, so nothing gives way to it
+   * there.
+   */
+  const screenOutranks = r.presentation > LONG_TASK_MS && r.presentation > r.processing;
+  // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
+  // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
+  // build, where a render the library only counted used to outrank a layout it had timed.
+  const layoutMatters =
+    forcedWhileHandling >= LONG_TASK_MS &&
+    forcedWhileHandling >= FORCED_LAYOUT_MIN_SHARE * handledWindow &&
+    forcedWhileHandling > renderTotal &&
+    forcedWhileHandling > outside &&
+    !screenOutranks;
+
+  /**
+   * What the ladder would have named had the screen update not outrun the whole working time. The
+   * screen update winning the verdict is a tie-break, not a finding that the rest was nothing: a
+   * 200 ms render inside a 425 ms interaction is worth knowing about even when the 215 ms of screen
+   * update after it is worth more. So the rung the comparison closed leaves a note behind, the way a
+   * forced layout that lost to a bigger claim already does. It follows the ladder's own order below
+   * the layout rung, which needs no entry here because the forced-layout note further down already
+   * fires on every blame that is not a layout; so the note never names a rung the comparison did not
+   * close.
+   *
+   * It is held to the standard of the rung it stands in for: the same commit, the same duration that
+   * rung would have blamed, and the same hedge. A note is a claim like any other. It is only pushed
+   * where the verdict really is the screen update, because its wording ("... before that") is about
+   * the screen update. Hydration sits above the comparison and closes nothing, so repeating its
+   * milliseconds as a leftover would say them twice. A `waiting` verdict can take the blame with a
+   * rung closed, and there the note is dropped: known, and it wants its own phrasing, not this one.
+   */
+  const closedByTheScreen: string | null =
+    !screenOutranks || !c
+      ? null
+      : outsideMatters && outside > renderTotal
+        ? say(
+            measuredFrom(...r.commits),
+            `${cap(outsideName)} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time before that.`,
+            `${cap(outsideName)} ${HEDGE} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time before that.`,
+          )
+        : renderMatters
+          ? say(
+              measuredFrom(c),
+              `React still spent ${ms(c.total)} ${renderPhrase(c)} in the ${ms(r.processing)} of working time before that.`,
+              `React ${HEDGE} still ${hasDurations ? `spent about ${ms(c.total)} ` : ''}${renderPhrase(c)} in the ${ms(r.processing)} of working time before that.`,
+            )
+          : null;
 
   // A click can land on server-rendered HTML React has not reached yet, which is the commonest cause
   // of a slow first interaction in a server-rendered app. When React hydrated it inside the
@@ -773,12 +899,76 @@ export function explain(r: InteractionReport): Explanation {
         ? `${first}, ${plural(commit.rendered, 'component')}: ${HEDGE} what the ${ms(r.processing)} of working time went on. This React build records no render durations, so that is read from the component count.${profiling}`
         : say(confidence, `${first}: ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.`, `${first}, ${HEDGE} ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.${profiling}`);
     blame = { kind: 'hydration', name: boundaryPhrase(boundary), detail: mostlyOf(commit), ms: boundary.ms, confidence };
-  } else if (c && outsideMatters && outside > renderTotal) {
+  } else if (layoutMatters) {
+    // The number is the browser's and nothing React did changes it, so the confidence is about the
+    // measurement alone: whether any of the total had to be apportioned across the edge of the window.
+    const confidence = forcedLayoutMeasured(whileHandling) ? 'measured' : 'inferred';
+    const charged = mostForcedLayout(whileHandling);
+    const invoker = charged ? charged.script.invoker || charged.script.name || null : null;
+    // The name beside that number is not the browser's: it comes from a commit, and a commit that
+    // only overlapped the interaction in time, or was walked short of the end, or sits beside commits
+    // that could not be tied to this interaction at all, cannot say the layout happened in the
+    // subtree it names. Then the name is dropped rather than the confidence, because everything left
+    // — the milliseconds and the invoker — is still something the browser measured. Render durations
+    // are not part of this test: a production build records none and its names are no worse for it.
+    const named = c && !unjoined && namesThisInteraction(c) ? c : null;
+    // One script holding nearly all of the total is where the layout happened; several scripts
+    // sharing it means no one script is, and then nothing but the commit can name this.
+    const holdsMostOfIt = !!charged && charged.forcedLayout >= FORCED_LAYOUT_ONE_SCRIPT_SHARE * forcedWhileHandling;
+    /**
+     * Everything in the window the sentence is about: the handlers, React's render and commit, and
+     * this library's read of what React rendered. That is the window the browser counted the forced
+     * layout across, so it is the only one the layout can be subtracted from and leave a true
+     * remainder. It is deliberately not `processing`, which has the library's own read taken back
+     * out of it and is what the Working phase and the walk note both report.
+     */
+    const window = `${ms(handledWindow)} spent handling the ${kind}`;
+    // What is left of that window bounds everything else in it, React's render included, which is the
+    // whole of why this outranks a render the build never timed. Unless React's render is itself
+    // timed higher than that remainder: the browser charges forced layout to the script it happened
+    // in, and that can be a render body reading geometry, so the two overlap and the remainder bounds
+    // nothing. Claiming it did would contradict the sentence about the render next.
+    const left = Math.max(0, handledWindow - forcedWhileHandling);
+    // The remainder covers the walk because the window it came from does. Naming the walk only when
+    // it is worth a whole millisecond keeps it out of the sentence for every ordinary interaction.
+    const ourRead = r.walkMs >= 0.5 ? ", this library's read of what React rendered" : '';
+    const overlapping = hasDurations && renderTotal > left;
+    const rest = overlapping
+      ? "which overlaps React's own render: geometry read inside a render body is charged to both"
+      : `leaving ${ms(left)} for React's render and commit, its layout effects${ourRead} and the ${kind} handler together`;
+    const spent = `${ms(forcedWhileHandling)} of the ${window} recalculating layout, ${rest}`;
+    // Where the layout happened and where React was working are two different records, and the
+    // browser's is the one that is never a reading. Naming the subtree without it would point a
+    // reader at a file that need have nothing to do with the layout: an observer callback running
+    // inside the same window is charged separately and looks identical from the React side. The
+    // sentence says it whatever the blame is named after, because the cause is read on its own; and
+    // it prints the script's own share whenever the script does not hold nearly all of the total,
+    // since the total is several scripts' and the name beside it would claim all of it for one.
+    const chargedTo = invoker ? ` ${holdsMostOfIt ? 'It' : `${ms(charged!.forcedLayout)} of it`} was charged to ${invoker}.` : '';
+    // The clause about React is hedged on the same evidence the name is: a commit this interaction
+    // cannot claim, and, where the clause prints a duration, a duration that is not a measurement.
+    // A production build's component counts are measured by the walk, so they are not hedged here.
+    const reactSure = !!named && (!hasDurations || measuredFrom(named) === 'measured');
+    const maybe = reactSure ? '' : `${HEDGE} `;
+    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React was ${maybe}${renderPhrase(c)}`}.` : '';
+    cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo}${rendered} That happens when code reads an element's size right after changing styles, often in a layout effect.`;
+    // Nothing names the read that forced the layout. What is held is where it happened: the subtree
+    // of the commit this interaction joined, or, failing that, the script the browser charged it to
+    // — and that only while one script holds nearly all of it, since `ms` is the whole total and a
+    // name beside it is read as owning all of it.
+    blame = {
+      kind: 'layout',
+      name: named ? leafOf(named) : holdsMostOfIt ? invoker : null,
+      detail: named ? mostlyOf(named) : null,
+      ms: forcedWhileHandling,
+      confidence,
+    };
+  } else if (c && outsideMatters && outside > renderTotal && !screenOutranks) {
     const confidence = measuredFrom(...r.commits);
     const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
     cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${profiling}`);
     blame = { kind: 'handler', name: handlerName, detail: component, ms: outside, confidence };
-  } else if (c && renderMatters) {
+  } else if (c && renderMatters && !screenOutranks) {
     const confidence = measuredFrom(c);
     // Without durations the blame rests on the component count alone, which is why it is a reading:
     // 600 cheap components can outrank the one expensive component that actually took the time.
@@ -797,7 +987,9 @@ export function explain(r: InteractionReport): Explanation {
   } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
     cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
     blame = { kind: 'waiting', name: null, detail: null, ms: r.inputDelay, confidence: 'measured' };
-  } else if (r.presentation > LONG_TASK_MS && r.presentation > r.processing) {
+  } else if (screenOutranks) {
+    // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot
+    // be refused for the screen update and then fall past it.
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`;
     blame = { kind: 'painting', name: lateScript ? scriptBlameName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (anyScript) {
@@ -852,7 +1044,7 @@ export function explain(r: InteractionReport): Explanation {
     if (r.inputDelay > LONG_TASK_MS && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
     if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   }
-  if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS) {
+  if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
     notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
   }
   if (r.followUps.length) {
@@ -865,6 +1057,10 @@ export function explain(r: InteractionReport): Explanation {
   if (r.presentation > PRESENTATION_NOTE_MS && r.presentation > r.processing && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`);
   }
+  // The other half of that note: where the screen update did take the blame, the work it outranked
+  // is what this report would otherwise never mention. Only where it took it, though — a rung above
+  // the comparison that won anyway had nothing closed off, and its own time is already in the cause.
+  if (closedByTheScreen && blame.kind === 'painting') notes.push(closedByTheScreen);
   if (r.holdMs >= HOLD_NOTE_MS) {
     notes.push(`The whole ${kind}, from press to release, spanned ${ms(r.duration + r.holdMs)}; INP counts only its slowest part, so the rest is left out of the headline.`);
   }

@@ -243,6 +243,50 @@ test('a selector names the test attribute it was built from, with its value quot
   assert.equal(selectorOf(element('input', [], { 'data-test': 'say "hi"' })), 'input[data-test="say \\"hi\\""]');
 });
 
+/** What a click on a button the ring saw inside `owners` reports as its component and its `where`. */
+function clickedInside(owners: string[]): { component: string | null; owners: readonly string[]; where: string | null } {
+  const ring = [input(0, 'click', { target: element('button', []) as unknown as Node, owners })];
+  const r = report([entry('click', 0, 120, 3, 100)], [], [], ring);
+  return { component: r.target?.component ?? null, owners: r.target?.owners ?? [], where: r.explanation.where };
+}
+
+test('where names the nearest owner a reader could go and look for, and the whole chain stays in the data', () => {
+  // The innermost owner of a real app's element is usually its design system's, and in a production
+  // build it is often a name the minifier chose. These chains are the shadcn/ui documentation site's.
+  const table = ['header', 'TableHead', 'TableRow', 'TableHeader', 'Table', 'DataTableDemo'];
+  assert.deepEqual(clickedInside(table), { component: 'TableHead', owners: table, where: 'button in TableHead' });
+
+  // A component name is capitalised, by React's own rule. `header` is a column definition's render
+  // function taking its name from the property it was assigned to, and it reads as an HTML tag.
+  assert.equal(clickedInside(['header', 'Toolbar']).component, 'Toolbar');
+  // A dotted name counts only when every part of it does: `Primitive.button` names the element that
+  // was clicked, so "button in Primitive.button" says nothing the reader did not write themselves.
+  assert.equal(clickedInside(['Primitive.button', 'Primitive.span.SlotClone', 'RovingFocusGroupItem']).component, 'RovingFocusGroupItem');
+  // One and two character names are what a minifier leaves on a dependency that ships no displayName.
+  assert.equal(clickedInside(['_', 'ee', 'V', 'Q', 'Root', 'Calendar', 'CalendarDemo']).component, 'Root');
+  // The nearest owner is usually the readable one, and then nothing moves.
+  assert.equal(clickedInside(['Button', 'ModeSwitcher', 'x', 'f']).component, 'Button');
+  // With nothing readable in the chain the nearest is still named: a name is never invented.
+  assert.deepEqual(clickedInside(['$', '_']), { component: '$', owners: ['$', '_'], where: 'button in $' });
+  assert.deepEqual(clickedInside([]), { component: null, owners: [], where: 'button' });
+});
+
+test('a short or uncapitalised name is only ever passed over for one that is better, never dropped', () => {
+  // Real components are named this way and the rule reads them as minifier output or as HTML tags.
+  // Skipping one costs nothing while something better is above it, and the test is what is above,
+  // not the name: with nothing better there, the name is printed as it is.
+  for (const name of ['H1', 'H2', 'Li', 'Td', 'Tr', 'Ul', 'motion.div', 'styled.button']) {
+    assert.equal(clickedInside([name]).component, name, `${name} alone in the chain`);
+    assert.equal(clickedInside([name, 'x', '$']).component, name, `${name} with nothing readable above it`);
+    assert.equal(clickedInside([name, 'ProductCard']).component, 'ProductCard', `${name} below a component with a fuller name`);
+  }
+
+  // The honest limit of the rule. A short capitalised name is what a minifier leaves as often as it
+  // is what someone typed, and nothing in a name says which; both of these are taken at face value.
+  assert.equal(clickedInside(['Abc', 'ProductCard']).component, 'Abc');
+  assert.equal(clickedInside(['Xe1', 'ProductCard']).component, 'Xe1');
+});
+
 test('each revision is explained on first read, and a later render makes a new revision with its own verdict', () => {
   const data = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
   const later = commit(400, 0, { total: 40 });
@@ -340,6 +384,367 @@ test('a blame says whether it was measured or inferred', () => {
   assert.equal(report([entry('click', 0, 40, 5, 10)], [], null).explanation.blame.confidence, 'inferred');
 });
 
+test('forced layout the browser measured outranks a render no build timed', () => {
+  // Switching a tabbed code block on a documentation site: a 128 ms click whose 116 ms of working
+  // time was 108 ms of the browser recalculating layout, measured from a long animation frame,
+  // against a render a production build of React records no duration for at all. Blaming the render
+  // sends the reader memoising components when the fix is a layout read.
+  const tabs = [entry('click', 0, 128, 2, 118)];
+  const thrash = [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 108)])];
+  const rerender = commit(60, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 181,
+    roots: ['Tabs'],
+    hotPath: ['Tabs', 'RovingFocusGroupCollectionSlot.SlotClone'],
+    components: [{ name: 'TabsTrigger', count: 16, self: null, total: null }],
+  });
+  const r = report(tabs, [rerender], thrash, [input(0, 'click')]);
+
+  // Nothing names the read that forced the layout, but the subtree it happened in is held and is the
+  // only thing here a reader can open a file on, so it is what the blame carries.
+  assert.deepEqual(r.explanation.blame, {
+    kind: 'layout',
+    name: 'RovingFocusGroupCollectionSlot.SlotClone',
+    detail: 'TabsTrigger ×16',
+    ms: 108,
+    confidence: 'measured',
+  });
+  assert.equal(
+    r.explanation.cause,
+    'The browser spent 108 ms of the 116 ms spent handling the click recalculating layout, leaving 8 ms for' +
+      " React's render and commit, its layout effects and the click handler together." +
+      // Where the layout happened and where React was working are two records, and only the first is
+      // the browser's. The sentence carries both, so the subtree is never the only thing named.
+      ' It was charged to DIV#root.onmousedown.' +
+      ' React was re-rendering 181 components inside RovingFocusGroupCollectionSlot.SlotClone, mostly TabsTrigger (16 of them).' +
+      " That happens when code reads an element's size right after changing styles, often in a layout effect.",
+  );
+  // The note would say the same thing a second time.
+  assert.equal(r.explanation.notes.some((note) => note.includes('recalculating layout')), false);
+
+  // Half the working time is what makes it the answer rather than a note: under that the render keeps the blame.
+  const little = report(tabs, [rerender], [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 40)])], [input(0, 'click')]);
+  assert.equal(little.explanation.blame.kind, 'render');
+  assert.ok(little.explanation.notes.some((note) => note.includes('recalculating layout')));
+
+  // A render React did time, and timed higher than the layout, keeps it too.
+  const timed = report(tabs, [commit(60, 0, { total: 110, rendered: 181 })], thrash, [input(0, 'click')]);
+  assert.equal(timed.explanation.blame.kind, 'render');
+});
+
+test('a forced layout apportioned across the edge of the working time is the likeliest reading, not a measurement', () => {
+  // The API gives a script's forced layout as one total and never says when in the script it
+  // happened, so a script that ran on past the handlers has its layout shared out by time. That
+  // share is an estimate, and a blame built on it says so.
+  const tabs = [entry('click', 0, 128, 2, 118)];
+  const overran = [frame(0, 200, [script('DIV#root.onmousedown', 2, 180, 170)])];
+  const r = report(tabs, [], overran, [input(0, 'click')]);
+  assert.equal(r.explanation.blame.kind, 'layout');
+  assert.equal(r.explanation.blame.confidence, 'inferred');
+  assert.match(r.explanation.cause, /most likely/);
+  // No commit joined, so the only record of where it happened is the script the browser charged the
+  // layout to. That is the browser's own label for it, and there is nothing better held to use.
+  assert.equal(r.explanation.blame.name, 'DIV#root.onmousedown');
+  assert.equal(r.explanation.blame.detail, null);
+});
+
+test('a layout forced from inside a render body is not reported as time the render was left out of', () => {
+  // The browser charges forced layout to the script it happened in, and React's render durations are
+  // taken separately, so reading geometry in a render body puts the same milliseconds in both. The
+  // remainder bounds nothing then, and printing it contradicted the sentence about the render next.
+  const r = report(
+    [entry('click', 0, 128, 2, 118)],
+    [commit(60, 0, { total: 107, rendered: 181, roots: ['Tabs'], hotPath: ['Tabs', 'Measured'], components: [{ name: 'Row', count: 40, self: 90, total: 90 }] })],
+    [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 108)])],
+    [input(0, 'click')],
+  );
+  assert.equal(r.explanation.blame.kind, 'layout');
+  assert.match(r.explanation.cause, /which overlaps React's own render/);
+  assert.doesNotMatch(r.explanation.cause, /leaving/);
+});
+
+test("the share a forced layout has to reach is taken over the window it was counted in, the library's own walk included", () => {
+  // Scripts are counted to the end of the walk this library does inside the same task, and the walk
+  // is taken back out of the working time, so the two figures cover different spans. Measuring the
+  // share against the shorter one let a long walk carry a layout over the line.
+  const click = [entry('click', 0, 200, 2, 122)];
+  const walked = commit(60, 0, { walkMs: 20 });
+  const thrash = (forced: number) => [frame(0, 130, [script('DIV#root.onmousedown', 2, 120, forced)])];
+
+  // 100 ms of working time, 20 of walk, 52 ms of layout: half of the working time, not half of the
+  // 120 the layout was measured across.
+  const under = report(click, [walked], thrash(52), [input(0, 'click')]);
+  assert.equal(under.explanation.blame.kind, 'render');
+  assert.ok(under.explanation.notes.some((note) => note.includes('recalculating layout')));
+
+  const over = report(click, [walked], thrash(62), [input(0, 'click')]);
+  assert.equal(over.explanation.blame.kind, 'layout');
+});
+
+test('a forced layout is never reported as more of the working time than the working time it was measured across', () => {
+  // The scripts are counted to the end of the library's own walk and the working time has that walk
+  // taken back out, so printing one against the other read "110 ms of the 100 ms of working time".
+  const r = report(
+    [entry('click', 0, 200, 0, 120)],
+    [commit(90, 0, { walkMs: 20, hasDurations: false, total: 0, rendered: 40 })],
+    [frame(0, 130, [script('DIV#root.onclick', 0, 118, 110)])],
+    [input(0, 'click')],
+  );
+  assert.equal(r.explanation.blame.kind, 'layout');
+  assert.match(r.explanation.cause, /110 ms of the 120 ms/);
+  assert.doesNotMatch(r.explanation.cause, /of the 100 ms/);
+});
+
+test('a rung the screen update closes still says what it would have named', () => {
+  // A 200 ms render inside a 425 ms interaction, beaten by 215 ms of screen update. The screen
+  // update is the right verdict and the render is still worth knowing about, and the note that
+  // usually carries the screen update is suppressed here precisely because the screen update won.
+  const rendered = report([entry('click', 0, 425, 0, 210)], [commit(100, 0, { total: 200, rendered: 300 })], []);
+  assert.equal(rendered.explanation.blame.kind, 'painting');
+  assert.ok(
+    rendered.explanation.notes.some((note) => note.includes('200 ms') && note.includes('Row')),
+    `expected a note naming the render, got ${JSON.stringify(rendered.explanation.notes)}`,
+  );
+
+  // The same for the handler rung: 100 ms of the 110 ms of working time outside React, and 120 ms
+  // of screen update after it.
+  const handled = report([entry('click', 0, 230, 0, 110)], [commit(40, 0, { total: 10, rendered: 30 })], [], loginClick('handleLogin'));
+  assert.equal(handled.explanation.blame.kind, 'painting');
+  assert.ok(
+    handled.explanation.notes.some((note) => note.includes('handleLogin') && note.includes('100 ms')),
+    `expected a note naming the handler, got ${JSON.stringify(handled.explanation.notes)}`,
+  );
+});
+
+test('a layout blame names a React subtree only while the commit it came from is tied to this interaction', () => {
+  // The forced layout is the browser's measurement whatever React did. The name beside it is not:
+  // it comes from a commit, and a commit React made during the interaction that could not be tied
+  // to it leaves no way to know the layout happened in the subtree being named.
+  const tabs = [entry('click', 0, 128, 2, 118)];
+  const thrash = [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 108)])];
+  const rerender = commit(60, 0, { hasDurations: false, total: 0, rendered: 181, roots: ['Tabs'], hotPath: ['Tabs', 'TabsList'], components: [{ name: 'TabsTrigger', count: 16, self: null, total: null }] });
+
+  const loose = report(tabs, [rerender], thrash, [input(0, 'click', { work: { endedAt: 0, unjoined: [60] } })]);
+  // The number and the invoker are both the browser's, so nothing in the blame is a reading and the
+  // confidence stays what the measurement is. What is dropped is the name that was not measured.
+  assert.deepEqual(loose.explanation.blame, { kind: 'layout', name: 'DIV#root.onmousedown', detail: null, ms: 108, confidence: 'measured' });
+
+  // A production build times no render, which says nothing about whether the commit is this
+  // interaction's. Those names are still good and are still printed.
+  const tight = report(tabs, [rerender], thrash, [input(0, 'click')]);
+  assert.equal(tight.explanation.blame.name, 'TabsList');
+  assert.equal(tight.explanation.blame.detail, 'TabsTrigger ×16');
+  assert.equal(tight.explanation.blame.confidence, 'measured');
+
+  // A commit joined by overlapping the interaction in time, or one whose walk was cut short, is the
+  // same missing evidence in a different form.
+  const overlapped = report(tabs, [{ ...rerender, inputTs: 999, gestureTs: 999, sinceInput: 0 }], thrash, [input(0, 'click')]);
+  assert.equal(overlapped.commits[0].joinedBy, 'overlap');
+  assert.equal(overlapped.explanation.blame.name, 'DIV#root.onmousedown');
+  const cut = report(tabs, [{ ...rerender, truncated: true }], thrash, [input(0, 'click')]);
+  assert.equal(cut.explanation.blame.name, 'DIV#root.onmousedown');
+});
+
+test('a layout blame says which script the browser charged the layout to, whatever the commit is called', () => {
+  // The blame's name is the subtree the reader can open a file on, and the browser charged the
+  // layout to something else entirely: an observer callback that ran inside the same window. The
+  // name alone would send the reader to the wrong file, so the sentence carries the invoker.
+  const r = report(
+    [entry('click', 0, 200, 2, 122)],
+    [commit(60, 0, { total: 10, rendered: 4, roots: ['Header'], hotPath: ['Header', 'ThemeToggle'], components: [{ name: 'Icon', count: 4, self: 2, total: 2 }] })],
+    [frame(0, 130, [script('DIV#root.onclick', 2, 18, 0), script('IntersectionObserver.callback', 25, 95, 70)])],
+    [input(0, 'click')],
+  );
+  assert.equal(r.explanation.blame.kind, 'layout');
+  assert.equal(r.explanation.blame.name, 'ThemeToggle');
+  assert.match(r.explanation.cause, /It was charged to IntersectionObserver\.callback\./);
+
+  // With nothing but the invoker to go on the blame is named after it, and the sentence still says
+  // so: the cause is read on its own, by people who never see the blame's fields.
+  const alone = report([entry('click', 0, 200, 2, 122)], [], [frame(0, 130, [script('IntersectionObserver.callback', 25, 95, 70)])], [input(0, 'click')]);
+  assert.equal(alone.explanation.blame.name, 'IntersectionObserver.callback');
+  assert.match(alone.explanation.cause, /It was charged to IntersectionObserver\.callback\./);
+});
+
+test('a forced layout several scripts share is not credited to the largest of them', () => {
+  // Two scripts forcing layout in the same window. Naming one of them beside the total tells the
+  // reader that script cost 220 ms when it cost 120, and sends them to optimise the wrong one.
+  const r = report(
+    [entry('click', 0, 400, 2, 302)],
+    [commit(60, 0, { total: 10, rendered: 4, roots: ['Header'], hotPath: ['Header', 'ThemeToggle'], components: [{ name: 'Icon', count: 4, self: 2, total: 2 }] })],
+    [frame(0, 320, [script('DIV#root.onclick', 2, 140, 120), script('IntersectionObserver.callback', 150, 140, 100)])],
+    [input(0, 'click')],
+  );
+  assert.equal(r.explanation.blame.kind, 'layout');
+  assert.equal(r.explanation.blame.ms, 220);
+  // The share, not the total, beside the name of the script that holds it.
+  assert.match(r.explanation.cause, /120 ms of it was charged to DIV#root\.onclick\./);
+
+  // And where the blame has only an invoker to be named after, no one script holds enough of the
+  // total to wear it: 80 of 225 is not where the layout happened, it is where some of it happened.
+  const spread = report(
+    [entry('click', 0, 500, 2, 402)],
+    [],
+    [frame(0, 420, [script('DIV#root.onclick', 2, 100, 80), script('IntersectionObserver.callback', 110, 100, 75), script('ResizeObserver.callback', 220, 100, 70)])],
+    [input(0, 'click')],
+  );
+  assert.equal(spread.explanation.blame.kind, 'layout');
+  assert.equal(Math.round(spread.explanation.blame.ms!), 225);
+  assert.equal(spread.explanation.blame.name, null);
+  assert.match(spread.explanation.cause, /80 ms of it was charged to DIV#root\.onclick\./);
+
+  // One script holding effectively all of it is still named plainly, with no share to split out.
+  const single = report(
+    [entry('click', 0, 400, 2, 202)],
+    [],
+    [frame(0, 220, [script('DIV#root.onclick', 2, 140, 120), script('IntersectionObserver.callback', 150, 50, 2)])],
+    [input(0, 'click')],
+  );
+  assert.equal(single.explanation.blame.name, 'DIV#root.onclick');
+  assert.match(single.explanation.cause, /It was charged to DIV#root\.onclick\./);
+});
+
+test('the note standing in for a closed rung is hedged exactly as that rung would have been', () => {
+  // The note says what the verdict would have been, so it is worth no more than that verdict was.
+  // A commit that only overlapped the interaction in time, one walked short of the end, and one
+  // beside commits that could not be tied to the interaction are all readings, not measurements.
+  const click = [entry('click', 0, 425, 0, 210)];
+  const heavy = commit(100, 0, { total: 200, rendered: 300 });
+  const noteOf = (r: InteractionReport) => r.explanation.notes.find((n) => n.includes('before that.')) ?? '';
+
+  assert.match(noteOf(report(click, [heavy], [])), /^React still spent 200 ms re-rendering/);
+  assert.match(noteOf(report(click, [{ ...heavy, inputTs: 999, gestureTs: 999 }], [], [input(0, 'click')])), /most likely/);
+  assert.match(noteOf(report(click, [{ ...heavy, truncated: true }], [])), /most likely/);
+  assert.match(noteOf(report(click, [heavy], [], [input(0, 'click', { work: { endedAt: 0, unjoined: [100] } })])), /most likely/);
+
+  // The handler note is hedged on the same evidence its own rung is.
+  const handled = [entry('click', 0, 230, 0, 110)];
+  const small = commit(40, 0, { total: 10, rendered: 30 });
+  const handlerNote = (r: InteractionReport) => r.explanation.notes.find((n) => n.includes('handleLogin')) ?? '';
+  assert.doesNotMatch(handlerNote(report(handled, [small], [], loginClick('handleLogin'))), /most likely/);
+  assert.match(handlerNote(report(handled, [{ ...small, truncated: true }], [], loginClick('handleLogin'))), /most likely/);
+});
+
+test('the note standing in for a closed rung is not printed when no rung was closed', () => {
+  // Hydration is decided above the screen-update comparison, so nothing was closed by it. Printing
+  // the note anyway reported the same 200 ms twice, once as the verdict and once as a leftover.
+  const r = report(
+    [entry('click', 0, 700, 0, 300)],
+    [commit(100, 0, { total: 200, rendered: 300, hydrated: true, hydratedTarget: 'Shell' })],
+    [],
+    [input(0, 'click', { dehydrated: { boundary: 'Shell', kind: 'waited', ms: 200 } as never })],
+  );
+  assert.equal(r.explanation.blame.kind, 'hydration');
+  assert.equal(
+    r.explanation.notes.some((n) => n.startsWith('React still')),
+    false,
+    `expected no closed-rung note, got ${JSON.stringify(r.explanation.notes)}`,
+  );
+});
+
+test('the note standing in for a closed render rung counts the commit it names, not every commit', () => {
+  // The rung it replaces blames one commit and prints that commit's own total. Summing every commit
+  // into the note put 200 ms beside a phrase describing the 80 ms one.
+  const r = report(
+    [entry('click', 0, 425, 0, 210)],
+    [commit(40, 0, { total: 60, rendered: 20 }), commit(70, 0, { total: 60, rendered: 20 }), commit(100, 0, { total: 80, rendered: 300 })],
+    [],
+  );
+  assert.equal(r.explanation.blame.kind, 'painting');
+  const note = r.explanation.notes.find((n) => n.startsWith('React still')) ?? '';
+  assert.match(note, /React still spent 80 ms re-rendering 300 components/);
+  assert.doesNotMatch(note, /200 ms/);
+});
+
+test('the layout sentence names one window, and the numbers in it add up to that window', () => {
+  // The scripts are counted to the end of the library's own walk; the working time has that walk
+  // taken back out; the Working phase and the walk note both say so. Printing the layout against
+  // one of those and subtracting against the other gave three numbers for one window.
+  const r = report(
+    [entry('click', 0, 200, 0, 120)],
+    [commit(90, 0, { walkMs: 20, hasDurations: false, total: 0, rendered: 40 })],
+    [frame(0, 130, [script('DIV#root.onclick', 0, 118, 110)])],
+    [input(0, 'click')],
+  );
+  assert.equal(r.explanation.blame.kind, 'layout');
+  // 110 and 10 make the 120 the sentence names, and what the 10 covers includes the walk, because
+  // the window it is taken from does.
+  assert.match(r.explanation.cause, /110 ms of the 120 ms spent handling the click/);
+  assert.match(r.explanation.cause, /leaving 10 ms for/);
+  assert.match(r.explanation.cause, /read of what React rendered/);
+  assert.doesNotMatch(r.explanation.cause, /120 ms of working time/);
+
+  // With no walk worth counting the window is the working time and the sentence says nothing extra.
+  const clean = report([entry('click', 0, 200, 0, 120)], [commit(90, 0, { hasDurations: false, total: 0, rendered: 40 })], [frame(0, 130, [script('DIV#root.onclick', 0, 118, 110)])], [input(0, 'click')]);
+  assert.match(clean.explanation.cause, /110 ms of the 120 ms spent handling the click/);
+  assert.doesNotMatch(clean.explanation.cause, /read of what React rendered/);
+});
+
+test('two interactions of the same shape get the same verdict, whatever the component counts', () => {
+  // Paging a calendar forward one month and toggling the page's theme: both an 88 ms click, both a
+  // handful of milliseconds of working time and 82 ms of the screen updating. The only difference is
+  // how many components the joined commit touched, and the render was tested before the screen
+  // update, so one came back a render and inferred and the other painting and measured.
+  const click = [entry('click', 0, 88, 1, 6)];
+  const ring = loginClick('onClick');
+  const paging = commit(4, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 332,
+    roots: ['Calendar'],
+    hotPath: ['Calendar', '$'],
+    components: [{ name: 'et', count: 113, self: null, total: null }],
+  });
+  const toggling = commit(4, 0, { hasDurations: false, total: 0, rendered: 2, components: [] });
+
+  const calendar = report(click, [paging], [], ring);
+  const theme = report(click, [toggling], [], ring);
+  const painting = { kind: 'painting', name: null, detail: null, ms: 82, confidence: 'measured' };
+  assert.deepEqual(calendar.explanation.blame, painting);
+  assert.deepEqual(theme.explanation.blame, painting);
+  assert.equal(calendar.explanation.cause, theme.explanation.cause);
+
+  // A render is still the answer where the working time is what the interaction spent.
+  const working = report([entry('click', 0, 120, 3, 100)], [paging], [], ring);
+  assert.equal(working.explanation.blame.kind, 'render');
+});
+
+test('the screen update takes the blame off a rung only by taking it, never by emptying the ladder', () => {
+  // 100 ms of working time against a 95 ms screen update. The screen update is longer than the
+  // render it would displace and shorter than the working time that render sat in, which used to be
+  // the one gap where the ladder rejected the render and then rejected the screen update too.
+  const measured = report([entry('click', 0, 200, 5, 105)], [commit(60, 0, { total: 90, rendered: 300 })], []);
+  assert.deepEqual(measured.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 90, confidence: 'measured' });
+
+  // The same shape with long animation frames recorded, where the fall was further: past the screen
+  // update to the script the render itself ran inside, which blames the handler for React's work.
+  const observed = report(
+    [entry('click', 0, 400, 5, 205)],
+    [commit(60, 0, { total: 190, rendered: 300 })],
+    [frame(0, 400, [script('DIV#root.onclick', 5, 199)])],
+  );
+  assert.deepEqual(observed.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 190, confidence: 'measured' });
+
+  // And the screen update still wins where it is longer than everything the working time holds.
+  const painted = report([entry('click', 0, 200, 5, 45)], [commit(20, 0, { total: 30, rendered: 300 })], []);
+  assert.equal(painted.explanation.blame.kind, 'painting');
+  assert.equal(painted.explanation.blame.ms, 155);
+});
+
+test('a measured forced layout is not unseated by a screen update shorter than the time it ran in', () => {
+  // A production build: 120 ms of working time, 70 of it recalculating layout, and a 78 ms screen
+  // update. 78 beats the 70 without beating the 120 the 70 happened inside, and the layout used to
+  // lose to that and land on the script it was charged to, which is the whole defect again.
+  const r = report(
+    [entry('click', 0, 200, 2, 122)],
+    [commit(60, 0, { hasDurations: false, total: 0, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] })],
+    [frame(0, 130, [script('DIV#root.onclick', 2, 120, 70)])],
+    [input(0, 'click')],
+  );
+  assert.deepEqual(r.explanation.blame, { kind: 'layout', name: 'List', detail: 'Row ×3', ms: 70, confidence: 'measured' });
+});
+
 test('a render under 1 ms reads "under 1 ms", and a handler known only by its prop reads "the onClick handler"', () => {
   const slowClick = [entry('click', 0, 120, 3, 100)];
   const development = report(slowClick, [commit(50, 0, { total: 0.3, rendered: 2 })], [], loginClick('handleLogin'));
@@ -406,6 +811,8 @@ test('every sentence a blame can produce reads as inferred when the blame is inf
     ['render measured', report(slow, [commit(50, 0, { total: 90 })], [], ring)],
     ['render truncated', report(slow, [commit(50, 0, { total: 90, truncated: true })], [], ring)],
     ['render counted', report(slow, [commit(50, 0, { hasDurations: false, total: 0, rendered: 800 })], [], ring)],
+    ['layout measured', report([entry('click', 0, 128, 2, 118)], [], [frame(0, 128, [script('DIV#root.onclick', 2, 116, 108)])], ring)],
+    ['layout apportioned', report([entry('click', 0, 128, 2, 118)], [], [frame(0, 200, [script('DIV#root.onclick', 2, 180, 170)])], ring)],
     ['waiting', report([entry('click', 0, 400, 380, 385)], [], [], ring)],
     ['painting', report([entry('click', 0, 400, 3, 10)], [], [], ring)],
     ['script measured', report([entry('click', 1000, 96, 1045, 1065)], [], [frame(700, 400, [script('TimerHandler:setTimeout', 745, 300)])], loginClick('handleLogin', 1000))],
@@ -432,7 +839,7 @@ test('every sentence a blame can produce reads as inferred when the blame is inf
     if (/profiling build/.test(r.explanation.cause)) assert.equal(r.commits.some((x) => !x.hasDurations), true, name);
   }
   // Every kind of blame the explanation can reach was audited.
-  assert.deepEqual([...seen].sort(), ['handler', 'hydration', 'none', 'painting', 'render', 'script', 'waiting']);
+  assert.deepEqual([...seen].sort(), ['handler', 'hydration', 'layout', 'none', 'painting', 'render', 'script', 'waiting']);
 });
 
 test('a commit that hydrated is described as hydrating, not re-rendering', () => {

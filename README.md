@@ -240,7 +240,7 @@ interface InteractionReport {
   frames: FrameSummary[] | null; laterFrames: FrameSummary[] | null; // null without Long Animation Frames
   overheadMs: number;                                    // this library's own time on the interaction
   explanation: {
-    blame: { kind: 'render' | 'handler' | 'hydration' | 'waiting' | 'painting' | 'script' | 'none';
+    blame: { kind: 'render' | 'handler' | 'hydration' | 'layout' | 'waiting' | 'painting' | 'script' | 'none';
              name: string | null; detail: string | null; ms: number | null;
              confidence: 'measured' | 'inferred' };
     rating: 'good' | 'needs-improvement' | 'poor';
@@ -254,6 +254,12 @@ interface InteractionReport {
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when that
 function has no name worth printing. An inline `onClick={() => ...}` therefore reads as `onClick`, and so
 does a handler the minifier renamed: name the function if you want the report to name it.
+
+`target.component` is the nearest component enclosing the element whose name a reader could search their own
+code for: one React would accept as a component name (capitalised), that a minifier has not cut down to a
+letter or two, and whose every dotted part is the same, so a design system's `Primitive.button` gives way to
+the `TabsTrigger` above it. `target.owners` keeps the whole chain, innermost first, whatever the names are,
+and where nothing in it passes, `component` is the innermost owner as it always was.
 
 `duration` is the longest single Event Timing entry, as web-vitals measures it; `holdMs` is how much longer
 the span from press to release ran. Reports are frozen: a late entry, frame or render that joins one reaches
@@ -338,7 +344,7 @@ since the page loaded after a back/forward cache restore.
 | Production-safe | yes¹ | yes | no² | yes | no: development and profiling builds |
 | Names the rendered subtree, not just the target's owner | yes | no³ | yes | no: a CSS selector | yes, in development⁴ |
 | Follow-up renders after the paint | yes | no | not told apart⁵ | no | drawn, not joined to the interaction |
-| Forced-layout split | yes, with Long Animation Frames | no | no: reads no Long Animation Frames | partly⁶ | no |
+| Forced-layout split | yes, from Long Animation Frames, and it can be the verdict rather than a footnote | no | no: reads no Long Animation Frames | partly⁶ | no |
 | Plain-language verdict | yes | no | no | no | no |
 | Zero dependencies | yes | no | no (11 in 0.5.7) | yes | part of React |
 | Needs a build step for names | in production builds: the plugins add it | yes | not in development⁷ | no names | not in development |
@@ -453,6 +459,27 @@ oldest its `engines` allows, and imports and requires every subpath there; the c
 - Production React records no durations, so blame there rests on render counts and is `'inferred'`
   (`react-dom/profiling` gives durations), and minified handlers are named by their prop. An inferred blame
   says "most likely" in its sentence and in the overlay; take it as the likeliest reading, not a measurement.
+  The exceptions are what the browser times itself and the build cannot change: waiting, the screen update,
+  a Long Animation Frames script, and forced layout inside the handlers, which stay `'measured'` in a
+  production build. The build is not the only thing that can lower a confidence, though: a script blame is
+  `'inferred'` whenever a commit could not be tied to the interaction, since a script is what is left once
+  React is ruled out and an unjoined commit is exactly what stops React from being ruled out.
+- **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only, and its
+  share of a script that ran on past the handlers is apportioned by time rather than measured, so such a
+  blame is `'inferred'`. Where the browser reports no long animation frames the report says nothing about
+  layout at all, rather than implying none happened. Nothing records *which* read forced the layout, so a
+  `'layout'` blame's `name` and `detail` say where it happened instead: the joined commit's subtree and
+  what it was mostly made of. That name is dropped for the browser's own invoker where no commit joined,
+  or where the one that did only overlapped the interaction in time, was walked short of the end, or sat
+  beside commits that could not be tied to the interaction — and the invoker itself only while one script
+  holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
+  it, `name` is `null` and the cause names the largest with the share it holds. The milliseconds are the
+  browser's either way, so `confidence` is about them alone and is never lowered to cover a doubtful name.
+- **`where` names the nearest owner with a readable name, not always the innermost one.** A component whose
+  real name is one or two characters (`Td`, `Li`), or lowercase in any part of it (`header`, `motion.div`,
+  `UI.list`), is passed over for the next one out — but only if there is one, so a chain holding nothing
+  better prints the name as it stands. A short capitalised name cannot be told from minifier output, so
+  `Abc` is taken at face value either way. The full chain is on `target.owners`.
 - The names loader stamps any capitalised top-level binding whose value is a function, written at the start of
   a line: `function Foo`, `const Foo = (props) => …`, `const Foo: React.FC = …`, `memo`, `forwardRef` and
   their generic forms, exported or not. Still minified: classes, anything indented inside another block,
@@ -481,8 +508,10 @@ oldest its `engines` allows, and imports and requires every subpath there; the c
   that ran while the interaction's own handlers were still running is counted as `unjoinedCommits`, which
   makes everything the report says about React's work `'inferred'`. A commit outside those handlers, a clock
   ticking elsewhere on the page, is not counted against the interaction at all. The input ring is the whole of
-  that evidence, so an update with no user input behind it, a timer or a message arriving, still reads as a
-  follow-up render of whatever interaction came last.
+  that evidence, so an update with no user input behind it, a timer, a message arriving or a viewport resize
+  still reads as a follow-up render of whatever interaction came last. Narrowing a window to a phone width
+  and re-rendering a media-query hook is the case that has been seen: 441 components were reported as a
+  second render of the click before it, a second after that click had painted.
 - **The window runs from the last commit inside the dispatch, not from the end of the dispatch**, which the
   library cannot see. A handler that works for two seconds and commits nothing leaves the window running from
   the input, so a transition it starts afterwards can fall outside it. That render is then dropped and counted

@@ -71,7 +71,7 @@ test('context storm: blames the OrderSummary subtree, LineItem x800', async ({ p
   expect(r.verdict).toBeTruthy();
 });
 
-test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
+test('layout thrash: the forced layout is the verdict, the PriceTicker rows the sentence after it', async ({ page }) => {
   const r = await interact(page, 'layout-thrash', async () => {
     await page.click('[data-test=trigger]');
     // The long animation frame carrying the forced layout can arrive just after the report is
@@ -93,7 +93,15 @@ test('layout thrash: PriceTicker rows plus forced layout', async ({ page }) => {
   expect(r.frames, 'Chromium reports long animation frames').not.toBeNull();
   const forced = r.frames!.reduce((a, f) => a + f.forcedLayout, 0);
   expect(forced).toBeGreaterThan(4);
-  expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'LayoutThrash', detail: 'PriceTicker ×400', confidence: renderConfidence });
+  // What took the time changed and where it happened did not. The 400 layout effects reading
+  // geometry are what this scenario is, and they outweigh the render they happen in; the subtree is
+  // still named, because it is the file the reader has to open either way.
+  expect(r.explanation.blame).toMatchObject({ kind: 'layout', name: 'LayoutThrash', detail: 'PriceTicker ×400', confidence: 'measured' });
+  expect(r.explanation.blame.ms!).toBeGreaterThan(prod ? 4 : r.commits[0].total);
+  // Forced layout is measured from a long animation frame, which a production build reports as fully
+  // as a development one, so unlike the render blames this one keeps `measured` in both. That is the
+  // claim the design doc's production column makes, checked here in the build it is about.
+  if (prod) expect(r.commits[0].hasDurations).toBe(false);
 });
 
 test('handler hog: no React render, the click handler is named', async ({ page }) => {
