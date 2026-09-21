@@ -41,7 +41,8 @@ const SCRIPT_MIN_MS = 20;
 const LONG_TASK_MS = 50;
 // A script the input waited behind gives a waiting blame its name from half of the wait. Under that
 // the wait was mostly something the browser did not list (another frame's work, rendering, garbage
-// collection), and the name would send the reader after the smaller part of it.
+// collection), and the name would send the reader after the smaller part of it. The same half holds
+// for the listener that names a handler blame React had no name for.
 const WAITED_BEHIND_MIN_SHARE = 0.5;
 // A later render is worth a sentence from 10 ms or 25 components. Less is the page settling after the
 // paint, a spinner going away or a status line changing, which is not what anyone was waiting for.
@@ -72,6 +73,12 @@ const FRAME_MS = 16;
 // rows, and reading all of its text would cost more than the rest of the report, so at most its
 // first run of text is read, and at most 40 characters of the name inside a label are kept.
 const LABEL_CHARS = 40;
+// What a click on something inside it activates, by tag and by ARIA role.
+const CONTROL_TAGS = ['button', 'a', 'summary', 'label', 'input', 'select', 'textarea'];
+const CONTROL_ROLES = ['button', 'link', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'option', 'checkbox', 'radio', 'switch'];
+// How far above the element that control is looked for: an icon is a few levels deep (a path in a
+// group in an svg in a span), and a control further away than that is a card, not a button.
+const CONTROL_ANCESTORS = 5;
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
 // Siblings joined into that run once it starts, the separators between them counted: an interpolated
@@ -568,8 +575,9 @@ function describeTarget(node: Node, owners: readonly string[], handler: string |
  * form field is named by its first run of text before those data attributes are tried.
  */
 function labelOf(node: Node, labels: LabelSource): string | null {
-  const el = elementOf(node);
-  if (!el) return null;
+  const landed = elementOf(node);
+  if (!landed) return null;
+  const el = controlAround(landed);
   const tag = el.tagName.toLowerCase();
   const word = tag === 'a' ? 'link' : tag;
   const field = tag === 'input' || tag === 'textarea' || tag === 'select';
@@ -581,6 +589,20 @@ function labelOf(node: Node, labels: LabelSource): string | null {
     written('data-test');
   const label = name ? clip(name) : '';
   return label ? `${word} "${label}"` : word;
+}
+
+/**
+ * The control a click landed inside, or the element itself when there is none close by. A click on an
+ * icon button lands on the icon: the `line` or `path` of an svg, a `span`, an `img`. That is the
+ * event's target and what the selector says, and it names nothing anyone would recognise, so the label
+ * is the button's. Only the label moves: the selector stays the element the browser reported.
+ */
+function controlAround(el: Element): Element {
+  let at: Element | null = el;
+  for (let up = 0; at && up <= CONTROL_ANCESTORS; up++, at = at.parentElement) {
+    if (CONTROL_TAGS.includes(at.tagName.toLowerCase()) || CONTROL_ROLES.includes(at.getAttribute('role') ?? '')) return at;
+  }
+  return el;
 }
 
 /** Whitespace collapsed, cut at 40 characters. */
@@ -971,7 +993,18 @@ export function explain(r: InteractionReport): Explanation {
     const confidence = measuredFrom(...r.commits);
     const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
     cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${profiling}`);
-    blame = { kind: 'handler', name: handlerName, detail: component, ms: outside, confidence };
+    // A listener React did not attach (a shortcut bound on the document, a library's own listener) has
+    // no React name, and "code outside React" sends nobody anywhere. The browser still says which
+    // listener it ran and from which file, so the sentence passes that on as what the browser
+    // recorded. It is not said to be the 190 ms: the script's time can hold React's render too.
+    const listener = handlerName ? null : longestPart(whileHandling);
+    const listenerName = listener ? listener.script.invoker || listener.script.name || null : null;
+    if (listener && listenerName) cause += ` The longest script the browser recorded in that time was ${listenerName}${listener.script.source ? ` (${listener.script.source})` : ''}, ${ms(listener.ms)}.`;
+    // It names the blame only where it covers most of the time being blamed.
+    const blamedListener = listener && listener.ms >= WAITED_BEHIND_MIN_SHARE * outside ? listenerName : null;
+    // The component is the target's, which is where a React handler lives. A listener on the document
+    // lives nowhere in the tree, so a name that came from the browser goes without one.
+    blame = { kind: 'handler', name: handlerName ?? blamedListener, detail: blamedListener && !handlerName ? null : component, ms: outside, confidence };
   } else if (c && renderMatters && !screenOutranks) {
     const confidence = measuredFrom(c);
     // Without durations the blame rests on the component count alone, which is why it is a reading:

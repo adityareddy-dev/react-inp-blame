@@ -269,7 +269,10 @@ export interface FrameSummary {
 export interface TargetInfo {
   /** A CSS selector for the element: its tag, its id if it has one, then its `data-test` or `data-testid` attribute, or else up to two of its classes. */
   readonly selector: string | null;
-  /** Human label for the element: its tag and a name of at most 40 characters, from what `InstallOptions.labels` allows. e.g. 'button "Add to cart"' or 'input "filter rows"'. */
+  /**
+   * Human label for the element: its tag and a name of at most 40 characters, from what `InstallOptions.labels` allows. e.g. 'button "Add to cart"' or 'input "filter rows"'.
+   * A click that landed on something inside a control (the svg of an icon button) is labelled by the control; `selector` stays the element it landed on.
+   */
   readonly label: string | null;
   /**
    * The nearest component enclosing the event target that a reader could go and look for: one React
@@ -353,12 +356,14 @@ export interface Blame {
    * one of them is where the layout happened and this is null. The cause sentence names the largest
    * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script
    * the input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that
-   * filled at least half of the wait; null otherwise.
+   * filled at least half of the wait; null otherwise. A 'handler' React has no name for (a listener
+   * bound on the document, say) takes the invoker of the longest script in the working time on the
+   * same terms: "#document.onkeydown".
    */
   readonly name: string | null;
   /**
    * For a render or a hydration, what it was mostly made of ("LineItem ×800"); for a handler, its
-   * component. For a 'layout', what that same commit was mostly made of, wherever `name` came from
+   * component, or null where the name is a listener the browser recorded rather than a React handler. For a 'layout', what that same commit was mostly made of, wherever `name` came from
    * that commit, and null wherever `name` did not, since a script has no component counts.
    */
   readonly detail: string | null;

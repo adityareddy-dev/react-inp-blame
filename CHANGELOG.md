@@ -16,6 +16,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   before otherwise; the overlay row shows it. Found on TanStack Table's fuzzy filter example at a
   million rows, where a key press waited 843 ms behind a debounced filter. With no script on record
   the old sentence stands.
+- **A slow listener React did not attach gets a name.** A shortcut bound on the document has no React
+  handler, so a `handler` verdict could only say "code outside React". The sentence now adds the
+  longest script the browser recorded in the working time, with its file ("#document.onkeydown
+  (excalidraw/reactUtils.ts), 115 ms"), and `blame.name` carries that invoker when it covers at least
+  half of the time blamed; `blame.detail` is then `null`, since a document listener lives in no
+  component. A handler React does name is unchanged. Found on Excalidraw's undo at 1,536 shapes.
+- **A click on an icon is labelled by its button.** A click on an icon button lands on the svg's
+  `line` or `path`, and the report said "click on line". `target.label` now comes from the control
+  within five ancestors of where the click landed (a button, link, summary, label, form field, or an
+  element with a control's ARIA role), so it reads `button "main-menu-trigger"`. `target.selector` is
+  still the element the browser reported.
 
 ## [0.2.0] - 2026-09-20
 

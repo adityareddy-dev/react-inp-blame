@@ -237,6 +237,29 @@ test("with attributes only, the label comes from what the page's code wrote on t
   assert.equal(label(element('div', [], { 'aria-label': 'B'.repeat(60) })), `div "${'B'.repeat(40)}"`);
 });
 
+test('a click on an icon is labelled by the control it is inside, and its selector stays the element it landed on', () => {
+  // The hamburger of a menu button: the click lands on a line of its svg.
+  const line = element('line', []);
+  element('button', [element('svg', [element('g', [line])])], { 'data-testid': 'main-menu-trigger' });
+  assert.equal(labelOf(line, 'attributes'), 'button "main-menu-trigger"');
+  assert.equal(buildReport([entry('click', 0, 120, 3, 100, { target: line })], [], []).target?.selector, 'line');
+
+  // A div given a role is a control too.
+  const glyph = element('span', []);
+  element('div', [glyph], { role: 'menuitem', 'aria-label': 'Export image' });
+  assert.equal(labelOf(glyph, 'attributes'), 'div "Export image"');
+
+  // Nothing close by that a click activates: the element keeps its own label.
+  const cell = element('td', [], { 'data-test': 'email-cell' });
+  element('tr', [cell]);
+  assert.equal(labelOf(cell, 'attributes'), 'td "email-cell"');
+
+  // A link six levels up is a card around the content, not the thing that was clicked.
+  const deep = element('em', []);
+  element('a', [element('div', [element('div', [element('div', [element('div', [element('p', [deep])])])])])], { 'aria-label': 'Open article' });
+  assert.equal(labelOf(deep, 'attributes'), 'em');
+});
+
 test('a selector names the test attribute it was built from, with its value quoted', () => {
   const selectorOf = (target: Record<string, unknown>) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], []).target?.selector;
   assert.equal(selectorOf(element('button', [], { 'data-testid': 'add to cart' })), 'button[data-testid="add to cart"]');
@@ -801,6 +824,31 @@ test('an input that waited behind a script says which script, and gives it the b
   const bare = report([entry('click', 1000, 400, 1380, 1385)], [], [], []);
   assert.match(bare.explanation.cause, /the main thread was busy with something else\.$/);
   assert.equal(bare.explanation.blame.name, null);
+});
+
+test('a slow listener React did not attach is named by what the browser recorded for it', () => {
+  // An undo shortcut bound on the document: the key's handlers ran from 7467 to 7672, React rendered
+  // for 15 ms of that, and the browser charged 116 ms to the document's keydown listener.
+  const shortcut = { ...script('#document.onkeydown', 7475, 116), source: 'editor/shortcuts.ts' };
+  const undo = [frame(7467, 270, [shortcut, script('FrameRequestCallback', 7680, 40)])];
+  const pressed = [input(7467, 'keydown', { target: element('div', []) as unknown as Node, owners: ['App'] })];
+  const r = report([entry('keydown', 7467, 312, 7467, 7672)], [commit(7600, 7467, { total: 15, rendered: 161 })], undo, pressed);
+  assert.match(r.explanation.cause, /^Code outside React \(the key press handler or other scripts\) ran for about 190 ms; /);
+  assert.match(r.explanation.cause, / The longest script the browser recorded in that time was #document\.onkeydown \(editor\/shortcuts\.ts\), 116 ms\.$/);
+  assert.deepEqual(r.explanation.blame, { kind: 'handler', name: '#document.onkeydown', detail: null, ms: 190, confidence: 'measured' });
+
+  // A handler React does name keeps its name, and the sentence says nothing about the listener it
+  // was dispatched from: that one is React's own, on the root.
+  const named = report([entry('click', 1000, 230, 1002, 1200)], [commit(1150, 1000, { total: 4, rendered: 2 })], [frame(1000, 230, [script('DIV#root.onclick', 1002, 198)])], loginClick('handleLogin', 1000));
+  assert.equal(named.explanation.blame.name, 'handleLogin');
+  assert.doesNotMatch(named.explanation.cause, /longest script/);
+
+  // A listener that held under half of the time being blamed is in the sentence and is not the name.
+  const minor = [frame(7467, 270, [{ ...shortcut, duration: 60 }])];
+  const partly = report([entry('keydown', 7467, 312, 7467, 7672)], [commit(7600, 7467, { total: 15, rendered: 161 })], minor, pressed);
+  assert.match(partly.explanation.cause, /#document\.onkeydown \(editor\/shortcuts\.ts\), 60 ms\.$/);
+  assert.equal(partly.explanation.blame.name, null);
+  assert.equal(partly.explanation.blame.detail, 'App');
 });
 
 test('a commit timed by a clock too coarse for its components is blamed on its total, as inferred, with no per-component milliseconds', () => {
