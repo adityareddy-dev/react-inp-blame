@@ -742,7 +742,8 @@ shape, one offered as a guess and the other as a measurement. They now read the 
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's render, and only
 when that is a quarter of the working time (committing the demo's 1441-row list takes a fifth of
 it outside React's durations); a render from 5 ms with durations, or from 10 components by counts
-and 50 beside a named handler; forced layout from 50 ms and half the window it was counted across,
+and 50 beside a named handler; forced layout from 50 ms, or 25 ms without render durations, and half the
+window it was counted across, and never over a longer wait before the handlers,
 with one script having to hold nine tenths of a window's forced layout before its name is used for
 all of it; a Long Animation
 Frames script from 20 ms; waiting, painting and

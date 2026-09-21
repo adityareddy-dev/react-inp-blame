@@ -16,6 +16,7 @@ it changes when a field is removed or changes meaning, which a minor release may
   element with a control's ARIA role), so it reads `button "main-menu-trigger"`. `target.selector` is
   still the element the browser reported.
 
+
 ## [0.2.0] - 2026-09-20
 
 ### Added
