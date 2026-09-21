@@ -27,6 +27,13 @@ it changes when a field is removed or changes meaning, which a minor release may
   within five ancestors of where the click landed (a button, link, summary, label, form field, or an
   element with a control's ARIA role), so it reads `button "main-menu-trigger"`. `target.selector` is
   still the element the browser reported.
+- **Forced layout takes the blame from 25 ms where no render was timed.** That is a production
+  build, or an interaction no commit joined. The floor was 50 ms everywhere, which left a band where
+  a measured layout lost to a render known only by its component count: opening a Sheet on the shadcn docs spent 44 to 49 ms of
+  55 ms of working time on layout and was reported as a render, and the Dialog beside it changed
+  verdict between runs at 49 and 50 ms. It still has to be half the window it was counted across. A
+  commit with render durations keeps the 50 ms floor. In every build a layout no longer takes the
+  blame from a longer wait before the handlers: that is a `waiting` verdict, as it is for a handler.
 
 ## [0.2.0] - 2026-09-20
 

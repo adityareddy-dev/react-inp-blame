@@ -680,7 +680,9 @@ measured it came out as a footnote under a render nobody had timed. On the shadc
 site that happened on three of seven interactions, each one a Radix component reading geometry while
 opening: 108 ms of layout inside 116 ms of working time was reported as a re-render of 181 components
 with `ms: null`. The number it demoted was measured and the number it promoted did not exist. So a
-layout takes the blame from 50 ms, when it is half the window it was counted across — the working
+layout takes the blame from 50 ms (from 25 ms where no render was timed, a production build or no
+commit joined, where it is the only measured duration in the window and a 50 ms floor flipped a sheet opening on the shadcn docs between
+render and layout at 49 and 50 ms), when it is half the window it was counted across — the working
 time plus this library's own walk, since the scripts run to the end of that and `processing` has it
 taken back out — and larger than both React's render and the working time left outside it, and the
 sentence is printed against that same window, or it reads "110 ms of the 100 ms of working time".
@@ -789,7 +791,8 @@ shape, one offered as a guess and the other as a measurement. They now read the 
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's render, and only
 when that is a quarter of the working time (committing the demo's 1441-row list takes a fifth of
 it outside React's durations); a render from 5 ms with durations, or from 10 components by counts
-and 50 beside a named handler; forced layout from 50 ms and half the window it was counted across,
+and 50 beside a named handler; forced layout from 50 ms, or 25 ms without render durations, and half the
+window it was counted across, and never over a longer wait before the handlers,
 with one script having to hold nine tenths of a window's forced layout before its name is used for
 all of it; a Long Animation
 Frames script from 20 ms; waiting, painting and

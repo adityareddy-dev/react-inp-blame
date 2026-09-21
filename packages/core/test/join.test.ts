@@ -456,6 +456,38 @@ test('forced layout the browser measured outranks a render no build timed', () =
   assert.equal(timed.explanation.blame.kind, 'render');
 });
 
+test('without render durations a forced layout under a long task still takes the blame from 25 ms', () => {
+  // Opening a sheet on a documentation site, production build: a 64 ms click, 55 ms of working time,
+  // 47 ms of it layout. At a 50 ms floor the same click came back a render on one run and a layout
+  // on the next, on a millisecond or two of difference.
+  const open = [entry('click', 0, 64, 2, 57)];
+  const counted = commit(30, 0, { hasDurations: false, total: 0, rendered: 59, roots: ['Dialog'], hotPath: ['Dialog', 'DismissableLayer'] });
+  const layout = (forced: number) => report(open, [counted], [frame(0, 64, [script('#document.onclick', 2, 55, forced)])], [input(0, 'click')]).explanation.blame;
+
+  assert.deepEqual({ kind: layout(47).kind, ms: layout(47).ms, confidence: layout(47).confidence }, { kind: 'layout', ms: 47, confidence: 'measured' });
+  assert.equal(layout(50).kind, 'layout');
+  // Half the window still has to be layout.
+  assert.equal(layout(26).kind, 'render');
+
+  // Under 25 ms it did not make anything slow, whatever share of a short window it holds.
+  const quick = report([entry('click', 0, 40, 2, 32)], [counted], [frame(0, 40, [script('#document.onclick', 2, 30, 24)])], [input(0, 'click')]);
+  assert.equal(quick.explanation.blame.kind, 'render');
+
+  // A build that times its renders keeps the long task floor: two measured numbers are a fair fight.
+  const timed = report(open, [commit(30, 0, { total: 4, rendered: 59 })], [frame(0, 64, [script('#document.onclick', 2, 55, 47)])], [input(0, 'click')]);
+  assert.equal(timed.explanation.blame.kind, 'script');
+
+  // A click that waited 300 ms behind another task and then spent 26 of its 50 ms on layout was slow
+  // in the wait, with or without a commit.
+  const behind = report(
+    [entry('click', 0, 352, 300, 350)],
+    [],
+    [frame(0, 352, [script('other.task', 0, 300, 0), script('#document.onclick', 300, 50, 26)])],
+    [input(0, 'click')],
+  );
+  assert.equal(behind.explanation.blame.kind, 'waiting');
+});
+
 test('a forced layout apportioned across the edge of the working time is the likeliest reading, not a measurement', () => {
   // The API gives a script's forced layout as one total and never says when in the script it
   // happened, so a script that ran on past the handlers has its layout shared out by time. That

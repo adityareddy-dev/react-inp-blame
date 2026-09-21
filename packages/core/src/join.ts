@@ -56,6 +56,12 @@ const FORCED_LAYOUT_MIN_MS = 4;
 // against React's render, and a production build measures no render at all, which is exactly where
 // this has to hold.
 const FORCED_LAYOUT_MIN_SHARE = 0.5;
+// Where no render was timed (a production build, or no commit joined at all), the long task is too
+// high a bar: on the shadcn docs a sheet opened with 44 to 49 ms of layout in 55 ms of working time,
+// and the blame went to a render known only by its counts, then back to the layout on the run where
+// it reached 50. There the layout is the only measured duration in the window, so it is held to what
+// the handler is: under 25 ms it did not make the interaction slow on its own.
+const FORCED_LAYOUT_MIN_MS_NO_DURATIONS = HANDLER_MIN_MS;
 // The browser charges forced layout per script, so a window holding several of them holds several
 // totals. One script has to account for nine tenths of the layout before its name is used as where
 // the layout happened: below that the name would be a claim about a cost the other scripts share, and
@@ -862,10 +868,13 @@ export function explain(r: InteractionReport): Explanation {
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
   const layoutMatters =
-    forcedWhileHandling >= LONG_TASK_MS &&
+    forcedWhileHandling >= (hasDurations ? LONG_TASK_MS : FORCED_LAYOUT_MIN_MS_NO_DURATIONS) &&
     forcedWhileHandling >= FORCED_LAYOUT_MIN_SHARE * handledWindow &&
     forcedWhileHandling > renderTotal &&
     forcedWhileHandling > outside &&
+    // A longer wait before the handlers is the answer, as it is for the handler rung: 26 ms of layout
+    // at the end of a 300 ms wait did not make the click slow.
+    r.processing >= r.inputDelay &&
     !screenOutranks;
 
   /**
