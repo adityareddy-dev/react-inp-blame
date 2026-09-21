@@ -272,8 +272,12 @@ export interface TargetInfo {
   /** Human label for the element: its tag and a name of at most 40 characters, from what `InstallOptions.labels` allows. e.g. 'button "Add to cart"' or 'input "filter rows"'. */
   readonly label: string | null;
   /**
-   * The nearest component enclosing the event target, by the tree React rendered it in. That is not
-   * React's owner chain: a button that Page passes into Card as children is in Card.
+   * The nearest component enclosing the event target that a reader could go and look for: one React
+   * would accept as a component name, that a minifier has not cut down to a letter or two, and whose
+   * every dotted part is the same (`Primitive.button` names the element, not a component). The
+   * nearest owner of all where the chain holds no such name, and null where there is no chain.
+   * Enclosing follows the tree React rendered the element in, which is not React's owner chain: a
+   * button that Page passes into Card as children is in Card.
    */
   readonly component: string | null;
   /** The components enclosing the target, nearest first, by the same tree. */
@@ -334,12 +338,27 @@ export interface Blame {
    * Where the time mostly went. 'hydration' is React hydrating, inside the interaction, the
    * server-rendered HTML the input landed on: the report's `hydration` names the boundary. An input
    * that was never dispatched because its HTML was *still* waiting spent its time elsewhere, so it
-   * keeps the blame that says where, and `hydration.kind` is `'not-hydrated'`.
+   * keeps the blame that says where, and `hydration.kind` is `'not-hydrated'`. 'layout' is the
+   * browser recalculating layout inside the handlers, which a Long Animation Frames entry measures
+   * in every build, React's durations or not.
    */
-  readonly kind: 'render' | 'handler' | 'hydration' | 'waiting' | 'painting' | 'script' | 'none';
-  /** The subtree that re-rendered, the handler that ran, the script, or the boundary that was hydrated; null when unknown. */
+  readonly kind: 'render' | 'handler' | 'hydration' | 'layout' | 'waiting' | 'painting' | 'script' | 'none';
+  /**
+   * The subtree that re-rendered, the handler that ran, the script, or the boundary that was
+   * hydrated; null when unknown. For a 'layout' it is where the layout was forced, never what forced
+   * it, because no source says that. That is the subtree of a commit the interaction can claim: one
+   * joined by its own input stamp, walked to the end, with no commit of the interaction left
+   * unjoined. Failing that it is the invoker the browser charged the script to ("DIV#root.onclick"),
+   * and only while one script holds nearly all of `ms`; where several scripts share the total, no
+   * one of them is where the layout happened and this is null. The cause sentence names the largest
+   * either way, with how much of the total it holds.
+   */
   readonly name: string | null;
-  /** For a render or a hydration, what it was mostly made of ("LineItem ×800"); for a handler, its component. */
+  /**
+   * For a render or a hydration, what it was mostly made of ("LineItem ×800"); for a handler, its
+   * component. For a 'layout', what that same commit was mostly made of, wherever `name` came from
+   * that commit, and null wherever `name` did not, since a script has no component counts.
+   */
   readonly detail: string | null;
   /** How much of the interaction it accounts for, in ms; null when the build records no durations. */
   readonly ms: number | null;
@@ -352,6 +371,12 @@ export interface Blame {
    * 'inferred': it is the likeliest reading of weaker evidence. Render counts without durations
    * (production builds, or a clock too coarse to time components), a commit that only overlapped
    * the interaction in time, a walk cut short, or no Long Animation Frames to rule scripts out.
+   *
+   * A 'layout' is the one kind whose confidence is not about its `name` at all. The milliseconds
+   * come from a Long Animation Frames entry and are 'measured' unless part of the total had to be
+   * apportioned across the edge of the window, which no React build changes. Where the commit that
+   * would have named it cannot be trusted to, the name is dropped for the browser's own invoker
+   * rather than the confidence being lowered, so a 'measured' layout never carries a guessed name.
    */
   readonly confidence: 'measured' | 'inferred';
 }

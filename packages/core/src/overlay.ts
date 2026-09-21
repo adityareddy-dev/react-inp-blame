@@ -351,6 +351,11 @@ function blameText(b: Blame): string {
     // waiting is a sentence in front of whatever did take the time, which the cause line carries.
     case 'hydration':
       return `waited for React to hydrate <b>${esc(b.name ?? 'the page')}</b>${ms}${b.detail ? ` &middot; ${esc(b.detail)}` : ''}`;
+    // Nothing names the read that forced the layout: the browser gives a total per script and never
+    // says which line caused it. The name is where it happened, the subtree or the script, and it is
+    // null where several scripts shared the total; the row then says only what was measured.
+    case 'layout':
+      return `browser recalculated layout${ms}${b.name ? ` in <b>${esc(b.name)}</b>` : ''}${b.detail ? ` &middot; ${esc(b.detail)}` : ''}`;
     case 'waiting':
       return `main thread was busy${ms} before the handler could start`;
     case 'painting':
