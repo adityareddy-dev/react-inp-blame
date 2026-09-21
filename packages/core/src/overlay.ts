@@ -357,7 +357,7 @@ function blameText(b: Blame): string {
     case 'layout':
       return `browser recalculated layout${ms}${b.name ? ` in <b>${esc(b.name)}</b>` : ''}${b.detail ? ` &middot; ${esc(b.detail)}` : ''}`;
     case 'waiting':
-      return `main thread was busy${ms} before the handler could start`;
+      return `main thread was busy${ms} before the handler could start${b.name ? ` &middot; <b>${esc(b.name)}</b>` : ''}`;
     case 'painting':
       return `screen took${ms} to update${b.name ? ` &middot; <b>${esc(b.name)}</b>` : ''}`;
     case 'script':
