@@ -34,6 +34,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   verdict between runs at 49 and 50 ms. It still has to be half the window it was counted across. A
   commit with render durations keeps the 50 ms floor. In every build a layout no longer takes the
   blame from a longer wait before the handlers: that is a `waiting` verdict, as it is for a handler.
+- **Text nobody can see is not a label.** With `labels: 'text'` a key press with nothing focused lands
+  on the body, and the body's first text in a Vite page is its `noscript` line, so the report read
+  `key press on body "You need to enable JavaScript to run thi"`. The first run of text now skips
+  `noscript`, `script`, `style` and `template`. Found on twenty's record table.
 
 ## [0.2.0] - 2026-09-20
 

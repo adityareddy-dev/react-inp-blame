@@ -85,6 +85,8 @@ const CONTROL_ROLES = ['button', 'link', 'menuitem', 'menuitemcheckbox', 'menuit
 // How far above the element that control is looked for: an icon is a few levels deep (a path in a
 // group in an svg in a span), and a control further away than that is a card, not a button.
 const CONTROL_ANCESTORS = 5;
+// Elements whose text is never on the screen, so it cannot be what a reader knows the target by.
+const UNSEEN_TEXT_TAGS = ['noscript', 'script', 'style', 'template'];
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
 // Siblings joined into that run once it starts, the separators between them counted: an interpolated
@@ -645,7 +647,9 @@ function firstText(el: Element): string {
 
 /** The node after `node` in document order, without leaving `root`. */
 function nextNode(node: Node, root: Node): Node | null {
-  if (node.firstChild) return node.firstChild;
+  // Text nobody can see names nothing: a key press with nothing focused lands on the body, and the
+  // first text in a Vite or CRA page's body is its noscript line, "You need to enable JavaScript".
+  if (node.firstChild && !UNSEEN_TEXT_TAGS.includes((node as Element).tagName?.toLowerCase() ?? '')) return node.firstChild;
   for (let n: Node | null = node; n && n !== root; n = n.parentNode) if (n.nextSibling) return n.nextSibling;
   return null;
 }

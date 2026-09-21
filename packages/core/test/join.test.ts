@@ -219,6 +219,9 @@ test('with text allowed, the label is the aria-label or the first run of text, a
   const separated = [text('Hi'), ...Array.from({ length: 40 }, separator), text('there')];
   assert.equal(label(element('span', separated)), 'span "Hi"');
   assert.equal(label(element('button', [element('svg', []), text('  Close  ')])), 'button "Close"');
+  // A key press with nothing focused lands on the body, whose first text is often the noscript line.
+  assert.equal(label(element('body', [element('noscript', [text('You need to enable JavaScript to run this app.')]), element('div', [text('Companies')])])), 'body "Companies"');
+  assert.equal(label(element('body', [element('noscript', [text('You need to enable JavaScript.')]), element('script', [text('var a = 1')])])), 'body');
   assert.equal(label(element('button', [text('×')], { 'aria-label': 'Remove item' })), 'button "Remove item"');
   assert.equal(label(element('p', [text('A'.repeat(60))])), `p "${'A'.repeat(40)}"`);
   // A click on a table body of 3000 rows reads the first row's text and stops.
