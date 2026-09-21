@@ -775,6 +775,34 @@ test('a script the input waited behind is not its handler, and counts only for i
   assert.deepEqual(overran.explanation.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 34, confidence: 'measured' });
 });
 
+test('an input that waited behind a script says which script, and gives it the blame only when it filled most of the wait', () => {
+  // A key pressed at 7011 while a debounced filter, started by a timer at 6655, ran on until 7772. The
+  // key's own handler ran from 7773 to 7778 and the screen updated at 7811.
+  const debounce = { ...script('TimerHandler:setTimeout', 6655, 1117), source: 'deps/debouncer.js' };
+  const busy = [frame(6651, 1123, [debounce, script('INPUT.onkeydown', 7773, 5)])];
+  const r = report([entry('keydown', 7011, 800, 7773, 7778)], [], busy, []);
+  assert.equal(
+    r.explanation.cause,
+    'The key press waited 762 ms before its handler could start: a script (TimerHandler:setTimeout, deps/debouncer.js) was already running when the key press came and held the main thread for 761 ms of that wait.',
+  );
+  assert.deepEqual(r.explanation.blame, { kind: 'waiting', name: 'TimerHandler:setTimeout', detail: null, ms: 762, confidence: 'measured' });
+
+  // A click at 1000 whose handler started at 1380. A 30 ms timer ran inside that wait, from 1100; the
+  // browser listed nothing else. The timer is in the sentence with its own figure, and is not the blame.
+  const small = report([entry('click', 1000, 400, 1380, 1385)], [], [frame(1090, 60, [script('TimerHandler:setTimeout', 1100, 30)])], []);
+  assert.match(small.explanation.cause, /a script \(TimerHandler:setTimeout, app\.js\) ran first and held the main thread for 30 ms of that wait\.$/);
+  assert.deepEqual(small.explanation.blame, { kind: 'waiting', name: null, detail: null, ms: 380, confidence: 'measured' });
+
+  // A script that ran through the whole wait is said to, rather than repeating the figure.
+  const through = report([entry('click', 1000, 400, 1380, 1385)], [], [frame(900, 490, [script('TimerHandler:setTimeout', 905, 480)])], []);
+  assert.match(through.explanation.cause, /was already running when the click came and held the main thread for all of that wait\.$/);
+
+  // With no script on record the sentence says only what was measured.
+  const bare = report([entry('click', 1000, 400, 1380, 1385)], [], [], []);
+  assert.match(bare.explanation.cause, /the main thread was busy with something else\.$/);
+  assert.equal(bare.explanation.blame.name, null);
+});
+
 test('a commit timed by a clock too coarse for its components is blamed on its total, as inferred, with no per-component milliseconds', () => {
   const coarse = commit(430, 0, {
     coarseClock: true,
@@ -814,6 +842,7 @@ test('every sentence a blame can produce reads as inferred when the blame is inf
     ['layout measured', report([entry('click', 0, 128, 2, 118)], [], [frame(0, 128, [script('DIV#root.onclick', 2, 116, 108)])], ring)],
     ['layout apportioned', report([entry('click', 0, 128, 2, 118)], [], [frame(0, 200, [script('DIV#root.onclick', 2, 180, 170)])], ring)],
     ['waiting', report([entry('click', 0, 400, 380, 385)], [], [], ring)],
+    ['waiting behind a script', report([entry('click', 1000, 400, 1380, 1385)], [], [frame(900, 490, [script('TimerHandler:setTimeout', 905, 470)])], loginClick('handleLogin', 1000))],
     ['painting', report([entry('click', 0, 400, 3, 10)], [], [], ring)],
     ['script measured', report([entry('click', 1000, 96, 1045, 1065)], [], [frame(700, 400, [script('TimerHandler:setTimeout', 745, 300)])], loginClick('handleLogin', 1000))],
     ['script unjoined', report(slow, [], [frame(0, 119, [script('TimerHandler:setTimeout', 4, 90)])], unjoinable)],

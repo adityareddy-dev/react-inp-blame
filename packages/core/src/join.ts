@@ -39,6 +39,10 @@ const SCRIPT_MIN_MS = 20;
 // Waiting, the screen update, and working time without durations are blamed from 50 ms, the length
 // of a long task: the least the browser itself calls long.
 const LONG_TASK_MS = 50;
+// A script the input waited behind gives a waiting blame its name from half of the wait. Under that
+// the wait was mostly something the browser did not list (another frame's work, rendering, garbage
+// collection), and the name would send the reader after the smaller part of it.
+const WAITED_BEHIND_MIN_SHARE = 0.5;
 // A later render is worth a sentence from 10 ms or 25 components. Less is the page settling after the
 // paint, a spinner going away or a status line changing, which is not what anyone was waiting for.
 const LATER_MIN_MS = 10;
@@ -985,8 +989,22 @@ export function explain(r: InteractionReport): Explanation {
     cause = `${cap(handler)} ${HEDGE} took the ${ms(r.processing)}: ${howLittle}.${profiling}`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
-    cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
-    blame = { kind: 'waiting', name: null, detail: null, ms: r.inputDelay, confidence: 'measured' };
+    // What the input waited behind is usually on record: the long animation frame that was open when
+    // it came lists its scripts, and the one that filled the wait is the thing to go and look at. It is
+    // counted for its part inside the wait only, since what it did before the input came delayed nobody.
+    const behind = longestPart(scriptParts(frames, r.start, processingStart));
+    if (behind) {
+      const s = behind.script;
+      const already = s.start < r.start - STAMP_TOLERANCE;
+      const what = `a script (${s.invoker || s.name || 'unknown'}${s.source ? `, ${s.source}` : ''})`;
+      cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: ${what} ${already ? `was already running when the ${kind} came and` : 'ran first and'} held the main thread for ${Math.round(behind.ms) >= Math.round(r.inputDelay) ? 'all' : ms(behind.ms)} of that wait.`;
+    } else {
+      cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
+    }
+    // The milliseconds are the wait, so the script only gets its name on them when it filled most of
+    // it. A 30 ms timer inside a 400 ms wait is in the sentence, with its own figure, and is not the blame.
+    const named = behind && behind.ms >= WAITED_BEHIND_MIN_SHARE * r.inputDelay ? behind.script.invoker || behind.script.name || null : null;
+    blame = { kind: 'waiting', name: named, detail: null, ms: r.inputDelay, confidence: 'measured' };
   } else if (screenOutranks) {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot
     // be refused for the screen update and then fall past it.

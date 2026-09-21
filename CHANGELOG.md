@@ -6,6 +6,17 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Changed
+
+- **A wait names what the input waited behind.** A `waiting` verdict used to end "the main thread was
+  busy with something else", even where the long animation frame that was open when the input came
+  listed the script that kept it. The sentence now names that script, says whether it was already
+  running or ran first, and how much of the wait it held. `explanation.blame.name` carries the script's
+  invoker (`"TimerHandler:setTimeout"`) when it filled at least half of the wait, and is `null` as
+  before otherwise; the overlay row shows it. Found on TanStack Table's fuzzy filter example at a
+  million rows, where a key press waited 843 ms behind a debounced filter. With no script on record
+  the old sentence stands.
+
 ## [0.2.0] - 2026-09-20
 
 ### Added

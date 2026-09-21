@@ -351,7 +351,9 @@ export interface Blame {
    * unjoined. Failing that it is the invoker the browser charged the script to ("DIV#root.onclick"),
    * and only while one script holds nearly all of `ms`; where several scripts share the total, no
    * one of them is where the layout happened and this is null. The cause sentence names the largest
-   * either way, with how much of the total it holds.
+   * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script
+   * the input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that
+   * filled at least half of the wait; null otherwise.
    */
   readonly name: string | null;
   /**
