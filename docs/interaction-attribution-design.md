@@ -1254,6 +1254,20 @@ runs web-vitals 6.2.2's attribution build in the page beside the library, in dev
 builds, and holds `attributeINP(metric).react.blame` against the library's own report for the same
 interaction.
 
+Under Next.js's `useReportWebVitals`, which runs the web-vitals 4 Next.js vendors and reports INP only
+once the page is hidden, `apps/next-demo/e2e/web-vitals.spec.ts` runs the README's snippet on
+`app/vitals` under `next dev` and both production bundlers. A slow click is followed by a quicker key
+press that is reported too, the spec hides the page, and the metric's `react` must be the click's: its
+`interactionId`, its `blame`, and `VitalsPage > Rows` as the path, so the join is on the interaction
+web-vitals chose and not on the latest report. It passed 5 of 5 in development and 3 of 3 under each
+production bundler on 2026-09-22.
+
+One thing it found belongs to web-vitals, not here. web-vitals 4 reads the entries it hears in an idle
+callback, and on hide it reports before running a callback still waiting, so a page hidden in that gap
+reports no INP at all. Hiding one frame after a click did that in one run of three; in all three the
+library already had its report. The spec waits for an idle callback before it hides the page, which
+runs after the one web-vitals posted.
+
 ## Distribution: where this can live
 
 Written with the prototype on 2026-09-12 and cut back since to what ships. Three ideas that stood here
@@ -1393,13 +1407,13 @@ production builds as well as on the dev server.
   colours, the tooltip and that the measures are cleared again, in development and production builds
   and behind a Chrome 133 user agent. Opening `apps/demo/traces/context-storm-dev.json` in the panel
   beside React's own tracks is still to do.
-- **Nothing has run against a real application**, only the synthetic demo, and nothing on Next.js's own
-  bench apps.
+- **Real applications have been run by hand, not in CI**: Excalidraw, two TanStack Table examples, the
+  shadcn/ui documentation site and twenty, from 2026-09-20. What they turned up is in the sections
+  above and in the changelog. Nothing has run on Next.js's own bench apps.
 
 ## Next steps
 
-What is left is the list above: look at the Performance panel tracks by eye, and run
-the library against a real application and against Next.js's own bench apps. The
-`react-inp-blame/web-vitals` entry landed on 2026-09-19 and has its own section; what it still wants is
-a run under Next.js's `useReportWebVitals`, which reports INP only when the page is hidden and so needs
-a test that can hide it. The hydration verdict landed on 2026-09-19 and has its own section above.
+What is left is the list above: look at the Performance panel tracks by eye, and run the library
+against Next.js's own bench apps. The `react-inp-blame/web-vitals` entry landed on 2026-09-19 and has
+its own section, which now includes a run under Next.js's `useReportWebVitals`. The hydration verdict
+landed on 2026-09-19 and has its own section above.
