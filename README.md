@@ -429,15 +429,19 @@ its own React does not switch off the app's own. Reports carry on without compon
   `__reactFiber$` key.
 
 Supported: react-dom 17, 18 and 19; only react-dom commits are walked. CI runs the demo's suites on React 19.3
-in development and production builds, its attribution spec on React 18.3.1 and 17.0.2 (legacy root), and the
-Next.js check on 16.3.5 under `next dev` and both production bundlers, and on `next@canary`, whose App Router
-brings a React canary, on every push and once a day, in a job allowed to fail. It also installs the package as
-packed for npm into apps with no peers, with Next.js 15, with Next.js 16.3.5 and with Vite 5, on Node 20.19, the
-oldest its `engines` allows, and imports and requires every subpath there; the canary job installs it beside
-`next@canary` as well. No job runs `react@canary` alone.
+in development and production builds, its attribution and input-delay specs on React 19.2.8, 19.1.9, 18.3.1,
+18.2.0 and 17.0.2 (legacy root), and the Next.js check on 16.3.5 under `next dev` and both production bundlers,
+and on `next@canary`, whose App Router brings a React canary, on every push and once a day, in a job allowed to
+fail. It also installs the package as packed for npm into apps with no peers, with Next.js 15, with Next.js
+16.3.5 and with Vite 5, on Node 20.19, the oldest its `engines` allows, and imports and requires every subpath
+there; the canary job installs it beside `next@canary` as well. No job runs `react@canary` alone.
 
 ## Known limits
 
+- **Frameworks that render their own HTML have no setup yet**: React Router 7 and Remix in framework mode,
+  TanStack Start, Astro. The Vite plugin puts its install script in the page through `index.html`, and they do
+  not serve one, so the library most likely never installs there and says so after three seconds in the
+  console. Not tried yet. React Native is out of scope, only react-dom commits are walked.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.

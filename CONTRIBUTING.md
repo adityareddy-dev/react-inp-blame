@@ -10,7 +10,7 @@ we can agree on the approach before you spend time on it.
   `apps/demo/e2e`.
 - `apps/next-demo`: the Next.js check, `e2e/load-order.spec.ts`, run under `next dev` and two
   production builds.
-- `scripts/react-matrix.mjs`: generates the React 18 and 17 copies of the demo.
+- `scripts/react-matrix.mjs`: generates the copies of the demo pinned to React 19.2, 19.1, 18.3, 18.2 and 17.
 - `scripts/pack-smoke.mjs`: installs the packed tarball into throwaway apps and checks it there.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
 
@@ -56,14 +56,14 @@ The Vite demo runs every spec in Chromium, and `cross-browser.spec.ts` in Firefo
 It imports the library's source, so it needs no build. The Next.js app uses the package as built, so
 run `npm run build` before its suites.
 
-The React matrix runs the demo's attribution spec against React 18.3.1 and React 17.0.2 (legacy root):
+The React matrix runs the demo's attribution and input-delay specs against React 19.2.8, 19.1.9, 18.3.1,
+18.2.0 and 17.0.2 (legacy root):
 
     node scripts/react-matrix.mjs
     npm install
-    npm test -w apps/demo-react18
-    npm test -w apps/demo-react17
+    npm test -w apps/demo-react192   # or demo-react191, demo-react18, demo-react182, demo-react17
 
-`apps/demo-react18` and `apps/demo-react17` are generated and gitignored. Change `apps/demo` and run
+The `apps/demo-react*` folders are generated and gitignored. Change `apps/demo` and run
 the script again rather than editing them. The `npm install` links the new workspaces; it should not
 change `package-lock.json`.
 
