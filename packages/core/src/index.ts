@@ -1,11 +1,11 @@
 import { createTimeline } from './devtools.js';
-import { checkHookReplaced, clearCommits, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.js';
+import { checkHookReplaced, clearCommits, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
-import { FOLLOW_UP_WINDOW, type LabelSource } from './join.js';
+import type { LabelSource } from './join.js';
 import { createLifecycle } from './lifecycle.js';
 import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
-import { EVENT_TIMING_FLOOR_MS, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
+import { observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
 import { incompatibleCopy } from './session.js';
@@ -92,7 +92,7 @@ function installNow(opts: InstallOptions): Api {
     threshold: opts.threshold ?? DEFAULT_THRESHOLD,
     devtoolsTrack: opts.devtoolsTrack ?? true,
     walkBudget: opts.walkBudget ?? DEFAULT_WALK_BUDGET,
-    inputWindow: opts.inputWindow ?? FOLLOW_UP_WINDOW,
+    inputWindow: opts.inputWindow ?? DEFAULT_INPUT_WINDOW,
     debugGlobal: opts.debugGlobal ?? false,
     hook: opts.hook ?? 'auto',
     sampleRate: opts.sampleRate ?? 1,
@@ -193,7 +193,7 @@ function installNow(opts: InstallOptions): Api {
   const stopFrames = frames ? observeFrames(frames, lifecycle.onFrame) : () => {};
   // Observe at the browser's floor so short interactions with a heavy later render are not lost, and
   // so the INP estimate sees every interaction it can; everything else under the threshold stays quiet.
-  const stopEvents = observeEventTiming(EVENT_TIMING_FLOOR_MS, (batch) => {
+  const stopEvents = observeEventTiming((batch) => {
     checkHookReplaced();
     lifecycle.onEntries(batch);
   });

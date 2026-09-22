@@ -1,4 +1,5 @@
-import { heaviest } from './commits.js';
+import { heaviest, leafName } from './commits.js';
+import { ms } from './join.js';
 import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 import { parseReactVersion } from './version.js';
@@ -30,8 +31,6 @@ const BLOCKING_PRIORITIES = [1, 2];
 // Interactions whose drawn headline is remembered: every one the lifecycle can still revise, so a
 // revision of a report is never drawn as if it were new.
 const REMEMBERED_HEADLINES = MAX_REPORTS + MAX_QUIET;
-
-const ms = (n: number): string => `${Math.round(n)} ms`;
 
 export interface Timeline {
   /** Draws what is new about a report: its interaction entry when first seen or when its headline moved, and every render not drawn yet. */
@@ -86,7 +85,7 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
   const x = r.explanation;
   // The commit the verdict's blame names, so the entry's name never contradicts its tooltip.
   const main = r.commits.length ? heaviest(r.commits) : null;
-  const leaf = main ? main.hotPath[main.hotPath.length - 1] || main.roots[0] || '' : '';
+  const leaf = main ? (leafName(main) ?? '') : '';
   const properties: [string, string][] = [
     ['Total', ms(r.duration)],
     ['Waiting before the handler', ms(r.inputDelay)],
@@ -110,7 +109,7 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
 /** One entry for one React commit joined to the report. */
 function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boolean, readPriorities: boolean): void {
   const later = c.at > r.end;
-  const name = c.hotPath[c.hotPath.length - 1] || c.roots[0] || 'root';
+  const name = leafName(c) ?? 'root';
   const label = `${later ? 'Later render' : c.hydrated ? 'Hydration' : 'React render'} · ${name} (${c.rendered} components)`;
   const start = Math.max(r.start, c.hasDurations ? c.at - c.total : c.at - 0.5);
   const color = renderColor(c, later, readPriorities);

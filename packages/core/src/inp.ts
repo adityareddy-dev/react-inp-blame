@@ -18,8 +18,8 @@ export interface InpEstimate {
 }
 
 /** INP's thresholds, web-vitals' `INPThresholds`: good up to the first, needs improvement up to the second. */
-export const GOOD_INP_MS = 200;
-export const NEEDS_IMPROVEMENT_INP_MS = 500;
+const GOOD_INP_MS = 200;
+const NEEDS_IMPROVEMENT_INP_MS = 500;
 
 export function rateInp(ms: number): Rating {
   return ms <= GOOD_INP_MS ? 'good' : ms <= NEEDS_IMPROVEMENT_INP_MS ? 'needs-improvement' : 'poor';

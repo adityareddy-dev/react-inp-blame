@@ -6,6 +6,11 @@ import { warnOnce } from './warn.js';
 
 const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 const MAX_COMMITS = 300;
+/**
+ * `inputWindow` by default, ms. It is measured from the end of the input's own work; `FOLLOW_UP_WINDOW`
+ * in join.ts is the same length but measured from the paint, and changing one does not change the other.
+ */
+export const DEFAULT_INPUT_WINDOW = 1500;
 
 /** Where React and every devtool look for the hook: `window`. */
 interface HookHolder {
@@ -134,6 +139,7 @@ const state = shared<HookState>('hook', () => ({
 // named by. A derived event (`DERIVED_TYPES` below) is dispatched inside one of these, so a commit
 // during one is stamped with the newest ring entry, which is the key or pointer that caused it.
 export const INPUT_TYPES = ['pointerdown', 'pointerup', 'click', 'keydown', 'keyup'];
+const DERIVED_TYPES = ['input', 'beforeinput', 'change', 'submit', 'keypress'];
 const RING_SIZE = 8;
 // Times of commits that could not be joined to one input, kept per input. A page that commits in a
 // loop would otherwise grow this without end; the oldest are the least likely to be worth reporting.
@@ -220,8 +226,6 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
  * The browser dispatches each of these inside the input that caused it, so the newest ring entry is
  * that input; `isTrusted` keeps a `change` or `submit` fired by script out.
  */
-const DERIVED_TYPES = ['input', 'beforeinput', 'change', 'submit', 'keypress'];
-
 export function dispatchedInput(): InputRecord | null {
   const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
   if (!ev || !ev.isTrusted) return null;
@@ -233,8 +237,9 @@ export function dispatchedInput(): InputRecord | null {
 
 /**
  * How long after an input's own work a commit can still join it, as this page configured it
- * (`inputWindow`), or null before install() has run. Reports quote it, so the number a note gives is
- * the number the hook actually used rather than the default.
+ * (`inputWindow`), or null before install() has run. Reports quote it when their explanation is first
+ * read, so while the hook is installed a note gives the number the hook actually used rather than the
+ * default; a report first read after dispose() quotes the default.
  */
 export function joinWindow(): number | null {
   return state.options?.inputWindow ?? null;

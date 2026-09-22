@@ -66,7 +66,7 @@ function commit(at: number, rendered: number, total: number, components: CommitS
 test('a first click that paints under the 16 ms floor still gets its later render reported', () => {
   const handed: any[][] = [];
   inBrowser((paint) => {
-    observeEventTiming(16, (entries) => handed.push(entries));
+    observeEventTiming((entries) => handed.push(entries));
     // Painted 8 ms after the press: no event entry reaches the observer, only the first-input one.
     paint(click(8));
   });
@@ -88,7 +88,7 @@ test('a first click that paints under the 16 ms floor still gets its later rende
 test('a first click that also cleared the 16 ms floor is handed over once, not twice', () => {
   const handed: any[][] = [];
   inBrowser((paint) => {
-    observeEventTiming(16, (entries) => handed.push(entries));
+    observeEventTiming((entries) => handed.push(entries));
     const [down, up, clicked, copy] = click(16);
     paint([down, up, clicked]);
     // The copy on its own must not reach the caller: it would rebuild the report for nothing.
@@ -104,7 +104,7 @@ test('a first click that also cleared the 16 ms floor is handed over once, not t
 test('a first input replayed to an install() that ran after it is handed over when its event entry never comes', () => {
   const handed: any[][] = [];
   inBrowser((paint) => {
-    observeEventTiming(16, (entries) => handed.push(entries));
+    observeEventTiming((entries) => handed.push(entries));
     // `buffered: true` replays `event` entries only from 104 ms, and `first-input` at any duration, so a
     // 56 ms first click reaches a late observer as its first-input entry alone.
     paint([timing('first-input', 'pointerdown', 56, 1001, 1040)]);

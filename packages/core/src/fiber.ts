@@ -329,12 +329,12 @@ export function hydratedSince(target: Node | null, waited: HydrationBoundary | n
   return waited;
 }
 
-export function isComponent(f: Fiber): boolean {
+function isComponent(f: Fiber): boolean {
   const t = f.tag;
   return t === FunctionComponent || t === ClassComponent || t === ForwardRef || t === MemoComponent || t === SimpleMemoComponent;
 }
 
-export function componentName(f: Fiber): string | null {
+function componentName(f: Fiber): string | null {
   // memo(fn) without a compare function is a SimpleMemoComponent: fiber.type is the inner
   // function (anonymous once minified) while the memo object, which carries displayName,
   // sits on elementType. Prefer elementType, fall back to type.

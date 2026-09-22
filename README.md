@@ -36,7 +36,7 @@ bottom-right by default, with the page's INP so far in milliseconds: green at 20
 500, red above. Click the badge for a panel of the recent slow interactions, newest first, and click a
 row for the whole explanation. The demo above sets `position: 'bottom-left'`, which is why its badge
 sits on the left: its own explanation column has the right-hand side. From the demo's sign-in page,
-in development:
+in development, this is `report.verdict`, which the row spreads over its header and body:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
@@ -52,8 +52,10 @@ defaults to `'development'`, so a production build carries nothing from either p
 If you would rather read reports than look at a badge, drop `overlay` and subscribe:
 
 ```ts
+// Next.js: instrumentation-client.ts or any client module. Vite: the entry module.
 import { onInteraction } from 'react-inp-blame';
 
+// A report can come again as a later revision when more data joins it: keep the latest per interactionId.
 onInteraction((report) => console.log(report.verdict, report.explanation.blame));
 ```
 
@@ -79,7 +81,10 @@ silently drop them.
 ```ts
 // next.config.ts
 import { withInpBlame } from 'react-inp-blame/next';
-export default withInpBlame({ /* your config */ }, { enabled: true, runtime: { overlay: 'query' } });
+export default withInpBlame({ /* your config */ }, {
+  enabled: true,                 // production builds too; the default is development only
+  runtime: { overlay: 'query' }, // the badge only on request, such as ?inp-blame in the URL
+});
 ```
 
 `withInpBlame` appends `react-inp-blame/next-client` to `instrumentationClientInject`, which Next.js imports
@@ -93,11 +98,11 @@ names unless you pass `enabled: true` or `enabled: 'production'`.**
 | --- | --- | --- | --- | --- |
 | Runs that get the runtime and the loader | `next dev` | `next build` and `next start` | both | none: the config comes back untouched |
 
-`runtime` is `true` (the defaults), the options for [`install()`](#installoptions), inlined through `env` and
-so plain data, or `false` for the loader alone. On the App Router, reports follow soft navigations in
-`navigationURL` and `navigationType`, name the one a click started in `startedNavigation`, and the INP
-estimate starts over at each. The Pages Router loads the injected module too (read in Next.js 16.3.5's source,
-not tested), so it gets attribution without navigations.
+`runtime` defaults to `true`, which is [`install()`](#installoptions) with its defaults. It also takes the
+options for `install()`, inlined through `env` and so plain data, or `false` for the loader alone. On the
+App Router, reports follow soft navigations in `navigationURL` and `navigationType`, name the one a click
+started in `startedNavigation`, and the INP estimate starts over at each. The Pages Router loads the injected
+module too (read in Next.js 16.3.5's source, not tested), so it gets attribution without navigations.
 
 ## Install with Vite
 
@@ -107,22 +112,52 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { inpBlame } from 'react-inp-blame/vite';
 
-export default defineConfig({ plugins: [react(), inpBlame({ enabled: true, runtime: { overlay: 'query' } })] });
+export default defineConfig({
+  plugins: [
+    react(),
+    inpBlame({
+      enabled: true,                 // production builds too; the default is development only
+      runtime: { overlay: 'query' }, // the badge only on request, such as ?inp-blame in the URL
+    }),
+  ],
+});
 ```
 
-`inpBlame()` takes one argument, its own options, and returns two plugins: a module script at the top of each
-HTML page that calls `install()`, so React registers with the library's hook whatever your entry imports
-first, and the `displayName` transform. Add it beside your React plugin, not instead of it.
+`inpBlame()` takes one argument, its own options, and returns an array of plugins, which goes in `plugins` as
+it is. It holds the install, a module script at the top of each HTML page that calls `install()`, so React
+registers with the library's hook whatever your entry imports first (in a build the call usually gets a chunk
+and a script tag of its own), and the `displayName` transform, which is all that `runtime: false` leaves. Add
+it beside your React plugin, not instead of it.
 `enabled` defaults to `'development'` here too (the dev server; `'production'` is `vite build`, `true` both,
 `false` adds no plugins), `runtime` is as for Next.js, and `pages(path)` picks the pages that get the script.
-With another bundler, make `import 'react-inp-blame/auto'` the first import of your entry module; for names,
-`react-inp-blame/display-names-loader` is a webpack-style loader with a `stamp(code)` export. A first import
-is not a guarantee in a production build, though: a bundler may put react-dom in a chunk that evaluates
-before your entry's body does, and React looks for the hook only while it evaluates. Two builds where that
-happens are a `manualChunks` rule sending `node_modules` to a vendor chunk, and a second HTML page sharing a
-chunk with the first. On Vite and Next.js use the plugin and the wrapper, which put the install in a file the
-page loads before its own; anywhere else, check `stats().mode` and `debug.hook().renderers` in a built page
-once.
+
+**No HTML page in the build** (Laravel, Rails, Django, or any backend that writes the page from
+`manifest.json`). The plugin has no page to put its script in, so it installs nothing, on the dev server or
+in a build, and says nothing about it. Keep it for names with `inpBlame({ runtime: false })`, and give the
+install an entry of its own that each page loads first: a file such as `inp-blame.ts` holding
+`import 'react-inp-blame/auto'` or your own `install()` call. List it first in the build's inputs
+(`build.rollupOptions.input`, or your backend plugin's, such as `laravel({ input: [...] })`) and first in the
+page, as `@vite(['resources/js/inp-blame.ts', 'resources/js/app.tsx'])` does. Module scripts run in document
+order, which is what the plugin's own script relies on. `enabled` then decides only where names are stamped:
+that entry installs in every run that loads it. A first import inside the app's own entry is not enough once
+a second entry shares react-dom with it.
+
+**webpack or Rspack.** Make `import 'react-inp-blame/auto'` the first import of your entry module. That holds
+even with a `splitChunks` vendor chunk, because these bundlers run a module when it is first required, not
+when its chunk loads. For names, add this rule to `module.rules`:
+`{ test: /\.[jt]sx$/, exclude: /node_modules/, enforce: 'pre', use: ['react-inp-blame/display-names-loader'] }`.
+`enforce: 'pre'` is what matters, as it is in the Next.js wrapper. The loader reads your source as text, so
+after babel-loader or ts-loader it drops their source map, and where they compile down to ES5 (Babel 7's
+preset-env with no targets, for one) it finds `var Foo = function…` where you wrote `const Foo = () =>` and
+names none of those components.
+
+With another bundler, make that import the first import of your entry module; for names, the loader's
+`stamp(code)` export does the same work. A first import is not a guarantee there in a production build,
+though: a bundler may put react-dom in a chunk that evaluates before your entry's body does, and React looks
+for the hook only while it evaluates. Two builds where that happens are a `manualChunks` rule sending
+`node_modules` to a vendor chunk, and a second HTML page sharing a chunk with the first. On Vite and Next.js
+use the plugin and the wrapper, which put the install in a file the page loads before its own; anywhere else,
+check `stats().mode` and `debug.hook().renderers` in a built page once.
 
 ## With web-vitals
 
@@ -180,7 +215,18 @@ rendered before and after the paint. `overlay: 'query'` shows it only when the U
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`: that is how to open it on a production
 page. `{ position, open, max }` sets the corner, whether the panel starts open and how many rows it keeps
 (20). It is plain DOM in a shadow root, so it never causes a React render, and its code is a chunk loaded
-after `install()` returns, only when shown. `mountOverlay(options)` shows it after an `/auto` import.
+after `install()` returns, only when shown. `mountOverlay(options)` shows it after an `/auto` import. The shadow
+root is an open one on `#react-inp-blame`, but a test that wants the reports should read them through
+[`debugGlobal`](#installoptions) rather than from the panel's DOM, which may change between versions.
+
+**Content Security Policy.** The badge and panel need `style-src 'unsafe-inline'`. They style their shadow
+root with a `<style>` element that carries no nonce, and set `style` attributes (dot colours, bar widths)
+through `innerHTML` with values that change with every report, so a `style-src` of nonces and hashes blocks
+them: the badge is then an unstyled button at the foot of the page, and the console reports the violation.
+The runtime still installs and measures, so on such a page read reports with `onInteraction` or the
+Performance panel track. On Vite, `html.cspNonce` puts the nonce on the plugin's script in development and in
+a build, and the badge's chunk loads through that script's import, so a nonce-based `script-src` needs
+nothing more.
 
 ## API
 
@@ -210,7 +256,7 @@ their first value, with a warning, until `dispose()`.
 | `hook` | `'auto'` | `'chain'` wraps an existing `__REACT_DEVTOOLS_GLOBAL_HOOK__` and never creates one; `'shim'` creates one unless one exists; `'auto'` chains or creates |
 | `sampleRate` | `1` | Share of page loads that install anything |
 | `walkBudget` | `5000` | Component fibers visited per commit |
-| `inputWindow` | `1500` | Commits more than this many ms after the last input are not walked |
+| `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside a dispatch are always walked |
 | `devtoolsTrack` | `true` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track |
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
 
@@ -237,6 +283,7 @@ interface InteractionReport {
   navigationURL: string; navigationType: NavigationType; // web-vitals' names and values
   startedNavigation: { url: string; type: 'push' | 'replace' | 'traverse' } | null;
   commits: CommitSummary[]; followUps: CommitSummary[];   // before the paint; after it, within 1.5 s
+  unjoinedCommits: number;                               // commits in its handlers that could not be tied to it
   frames: FrameSummary[] | null; laterFrames: FrameSummary[] | null; // null without Long Animation Frames
   overheadMs: number;                                    // this library's own time on the interaction
   explanation: {
@@ -420,13 +467,20 @@ its own React does not switch off the app's own. Reports carry on without compon
   which commits the page's own report listeners caused while they ran, so a panel that shows reports is not
   read as part of one. An update a listener defers to a later task is an ordinary render and is read like
   any other.
-- On fibers: `tag` (components are 0, 1, 11, 14 and 15; the root is 3, a Suspense boundary 13), `flags` (the
-  `PerformedWork` bit, 1), `mode` (the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19), `child`, `sibling`,
-  `return`, `alternate` (the same `child` there means the fiber bailed out), `actualDuration`, `elementType`
-  and `type` (for names: `displayName` or `name`, through `render` for forwardRef and `type` for memo),
-  `memoizedProps` (the event's handler prop, such as `onClick`) and `memoizedState` (whether a root or a
-  boundary was still server-rendered HTML: `isDehydrated` and `dehydrated`). On DOM nodes: React's
-  `__reactFiber$` key.
+- On fibers: `tag` (components are 0, 1, 11, 14 and 15; the root is 3, a Suspense boundary 13, an Activity
+  boundary 31 on React 19, and 18 is the DehydratedFragment React deletes when it gives up hydrating a boundary),
+  `flags` (the `PerformedWork` bit, 1; on the root `ForceClientRender`, 256, which says React threw its server
+  HTML away; and `Hydrating`, 4096, on the child of a boundary whose hydration has rendered but not
+  committed), `mode` (the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19), `child`, `sibling`, `return`,
+  `alternate` (the same `child` there means the fiber bailed out), `deletions` (only on a Suspense or Activity
+  boundary, to tell one React hydrated from one it rendered on the client), `actualDuration`, `elementType`
+  and `type` (for names: `displayName` or `name`, through `render` for forwardRef and `type` for memo; on a
+  DOM element's fiber, its tag name), `memoizedProps` (the event's handler prop, such as `onClick`, and a
+  form control's `type`), `memoizedState` (whether a root or a boundary was still server-rendered HTML:
+  `isDehydrated` and `dehydrated`), and the root fiber's `stateNode`, the FiberRoot, to reach its `current`.
+- On DOM nodes: React's `__reactFiber$` key, and `__reactContainer$` on the element `createRoot` or
+  `hydrateRoot` was given. In server-rendered HTML: the comments React puts around a boundary, `$`, `$?`,
+  `$!`, `$~` and `&` opening it and `/$` and `/&` closing it.
 
 Supported: react-dom 17, 18 and 19; only react-dom commits are walked. CI runs the demo's suites on React 19.3
 in development and production builds, its attribution and input-delay specs on React 19.2.8, 19.1.9, 18.3.1,
@@ -440,8 +494,8 @@ there; the canary job installs it beside `next@canary` as well. No job runs `rea
 
 - **Frameworks that render their own HTML have no setup yet**: React Router 7 and Remix in framework mode,
   TanStack Start, Astro. The Vite plugin puts its install script in the page through `index.html`, and they do
-  not serve one, so the library most likely never installs there and says so after three seconds in the
-  console. Not tried yet. React Native is out of scope, only react-dom commits are walked.
+  not serve one, so the library most likely never installs there, and nothing says so. Not tried yet. React
+  Native is out of scope, only react-dom commits are walked.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.
@@ -526,8 +580,12 @@ there; the canary job installs it beside `next@canary` as well. No job runs `rea
 ## Labels and personal data
 
 `target.label` names the element by its tag and a name of at most 40 characters, and never reads a form
-field's value or an element's whole text. Under a production build of React it uses only what your code
-wrote on the element:
+field's value or an element's whole text. A click that lands inside a control is labelled by that control,
+tag and name included: the first of the element and its five nearest ancestors that is a `button`, a link,
+`summary`, `label`, `input`, `select` or `textarea`, or has the ARIA role `button`, `link`, `menuitem`,
+`menuitemcheckbox`, `menuitemradio`, `tab`, `option`, `checkbox`, `radio` or `switch`. A click on the `path`
+of an icon button reads `button "Close"`, not `path`, and `target.selector` stays the element the browser
+reported. Under a production build of React the label uses only what your code wrote on the element:
 `aria-label`, a form field's `placeholder`, `name` or `type`, or `data-testid` or `data-test`. An element's
 text can be a person's name or email, and reports are made to be forwarded to error trackers and analytics, so
 text is opt-in there: with `install({ labels: 'text' })` an element with no `aria-label` that is not a form

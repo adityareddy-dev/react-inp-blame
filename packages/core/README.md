@@ -74,11 +74,11 @@ because the assignment names it and a bundler cannot always prove a property sto
 Measured on seven exports with two imported, Rollup drops the unused ones and esbuild keeps them;
 terser and SWC keep whatever the bundler handed them. Leave `enabled` at `'development'` to keep the names out of the production build entirely. `enabled` decides which runs get both:
 `'development'` (`next dev`, the default), `'production'` (`next build`), `true` for both, `false`
-for neither; a run it leaves out gets the config back untouched. `runtime` takes the options for
-`install()`, such as `{ overlay: 'query' }`. They reach the browser inlined through `env`, so they
-are plain data. `runtime: false` leaves the client module out, for an app that installs from its own
-`instrumentation-client.ts`; the navigation join below goes with it, since the client module is what
-hears navigations.
+for neither; a run it leaves out gets the config back untouched. `runtime` defaults to `true`, which
+is `install()` with its default options; it also takes those options, such as `{ overlay: 'query' }`.
+They reach the browser inlined through `env`, so they are plain data. `runtime: false` leaves the
+client module out, for an app that installs from its own `instrumentation-client.ts`; the navigation
+join below goes with it, since the client module is what hears navigations.
 
 On the App Router the client module also hears each navigation, meaning each route change the
 framework makes in the page with no new document: every report carries
@@ -96,11 +96,12 @@ join.
 
     export default defineConfig({ plugins: [react(), inpBlame({ enabled: true, runtime: { overlay: 'query' } })] });
 
-`inpBlame` takes one argument, its own options, and returns two plugins. One adds a module script
-ahead of the page's own that calls
-`install()`, so React registers with the library's hook whatever the entry module imports first;
-the other stamps `displayName` on the app's components. It goes beside the React plugin, not instead
-of it. `enabled` and `runtime` work as they do for
+`inpBlame` takes one argument, its own options, and returns an array of plugins. Those for the runtime
+add a module script ahead of the page's own that calls `install()`, so React registers with the
+library's hook whatever the entry module imports first; in a build the call gets a chunk of its own,
+which a separate script tag loads. The last one stamps `displayName` on the app's components, and is
+all that `runtime: false` leaves. They go beside the React plugin, not instead of it. `enabled` and
+`runtime` work as they do for
 Next.js, with `'development'` meaning the dev server and `'production'` meaning `vite build`, and
 `pages` picks the HTML pages that get the script.
 
@@ -112,6 +113,13 @@ happens are a `manualChunks` rule sending `node_modules` to a vendor chunk, and 
 sharing a chunk with the first. The Vite plugin and the Next.js wrapper put the install in a file the
 page loads before its own; with another bundler, check `stats().mode` and `debug.hook().renderers` in
 a built page once.
+
+For component names in a production build, `react-inp-blame/display-names-loader` is a webpack-style
+loader with a `stamp(code)` export. It is written for the source before Babel or TypeScript compiles
+it, so under webpack or Rspack give it `enforce: 'pre'`, as `withInpBlame` does:
+
+    // webpack.config.js or rspack.config.js, in module.rules
+    { test: /\.[jt]sx$/, exclude: /node_modules/, enforce: 'pre', use: ['react-inp-blame/display-names-loader'] }
 
 ## With web-vitals
 
@@ -157,8 +165,10 @@ has renamed them and the path reads `a > b (button.tile)`.
 
 ## API
 
+    // Any module the browser runs: instrumentation-client.ts on Next.js, the entry module on Vite
     import { onInteraction } from 'react-inp-blame';
 
+    // Hears a report again, revision one higher, each time later data joins it: key on report.interactionId
     onInteraction((report) => {
       const { blame, rating } = report.explanation;                // data: kind, name, ms, confidence
       console.log(blame.kind, blame.name, rating, report.verdict); // the verdict is display text, reworded in any version
@@ -197,11 +207,15 @@ data; `verdict` and the other sentences are display text. `navigationURL` and `n
 which page the interaction happened on, with web-vitals' names and values, and `startedNavigation`
 names the soft navigation it started, if it started one.
 
-A report's `target.label` names the clicked element by its tag and a name of at most 40 characters. Under
-a production build of React it comes only from what the page's code wrote on the element: its aria-label, a
-form field's placeholder, name or type, or its data-testid or data-test. The text an element
-shows can be someone's name or email, and reports are made to be forwarded, so reading it is
-opt-in there: `install({ labels: 'text' })`. Development builds read it by default.
+A report's `target.label` names the clicked element, or the control it sits in, by its tag and a name of
+at most 40 characters. A control is a button, link, summary, label or form field, or an element with a
+control's ARIA role such as `button`, `link` or `tab`, within five ancestors of the click, so a click on
+the `path` of an icon button is labelled by the button; `target.selector` stays the element the click
+landed on. Under a production build of React the name comes only from what the page's code wrote on the
+element it names: its aria-label, a form field's placeholder, name or type, or its data-testid or
+data-test. The text an element shows can be someone's name or email, and reports are made to be
+forwarded, so reading it is opt-in there: `install({ labels: 'text' })`. Development builds read it by
+default.
 
 ## Clicks that land before hydration
 
