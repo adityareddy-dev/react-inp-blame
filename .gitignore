@@ -10,3 +10,6 @@ traces/
 next-env.d.ts
 apps/demo-react*/
 *.tsbuildinfo
+# Written by `next dev` when it detects an AI coding agent
+apps/next-demo/AGENTS.md
+apps/next-demo/CLAUDE.md
