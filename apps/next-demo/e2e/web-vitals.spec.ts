@@ -6,13 +6,13 @@ const prod = process.env.INP_MODE === 'prod';
 const run = prod ? 'prod' : 'dev';
 
 // app/vitals is the README's Next.js snippet: useReportWebVitals, with attributeINP adding the React side.
-// The web-vitals 4 that Next.js vendors reports INP only once the page is hidden, so the test hides it
-// the way web-vitals' own tests do, by answering `hidden` and dispatching the event.
+// The web-vitals Next.js vendors reports INP only once the page is hidden, so the test hides it the way
+// web-vitals' own tests do, by answering `hidden` and dispatching the event.
 //
-// It hides the page only once web-vitals has taken the entries in. web-vitals 4 reads delivered entries
-// in an idle callback, and on hide it reports before running a callback still waiting, so a page hidden
-// in that gap reports no INP at all; seen once in three runs that hid the page one frame after a click.
-// That is web-vitals' to fix, and there is no metric then for this library to add to.
+// It hides the page only once web-vitals has taken the entries in. Every current web-vitals reads
+// delivered entries in an idle callback, and on hide it reports before running a callback still waiting,
+// so a page hidden in that gap reports no INP at all. That is web-vitals' to fix, and there is no metric
+// then for this library to add to.
 
 interface Reported {
   name: 'INP';

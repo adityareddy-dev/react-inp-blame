@@ -97,7 +97,8 @@ later is not joined at all (read in aidenybai/react-scan at 0fb3186,
 `packages/scan/src/core/notifications/`, on 2026-09-15).
 
 The same suite runs unchanged against React 18.3.1 and 17.0.2 (`scripts/react-matrix.mjs`
-generates the pinned variants); fiber tags, the `PerformedWork` flag and `onCommitFiberRoot` are the
+generates the pinned variants, and since 2026-09-22 also 19.2.8, 19.1.9 and 18.2.0: 19.2 alone is
+about half of react-dom's downloads); fiber tags, the `PerformedWork` flag and `onCommitFiberRoot` are the
 same across the three majors, and so are the verdicts. Two things are not: the `ProfileMode` bit moved
 (8 on React 17, 2 on 18 and 19), and React 17 takes any hook for React DevTools where 18 and 19 look
 for `checkDCE`.
@@ -1254,19 +1255,23 @@ runs web-vitals 6.2.2's attribution build in the page beside the library, in dev
 builds, and holds `attributeINP(metric).react.blame` against the library's own report for the same
 interaction.
 
-Under Next.js's `useReportWebVitals`, which runs the web-vitals 4 Next.js vendors and reports INP only
-once the page is hidden, `apps/next-demo/e2e/web-vitals.spec.ts` runs the README's snippet on
+Under Next.js's `useReportWebVitals`, which runs the web-vitals Next.js vendors (4.2.1 in 16.3) and reports
+INP only once the page is hidden, `apps/next-demo/e2e/web-vitals.spec.ts` runs the README's snippet on
 `app/vitals` under `next dev` and both production bundlers. A slow click is followed by a quicker key
 press that is reported too, the spec hides the page, and the metric's `react` must be the click's: its
 `interactionId`, its `blame`, and `VitalsPage > Rows` as the path, so the join is on the interaction
 web-vitals chose and not on the latest report. It passed 5 of 5 in development and 3 of 3 under each
 production bundler on 2026-09-22.
 
-One thing it found belongs to web-vitals, not here. web-vitals 4 reads the entries it hears in an idle
-callback, and on hide it reports before running a callback still waiting, so a page hidden in that gap
-reports no INP at all. Hiding one frame after a click did that in one run of three; in all three the
-library already had its report. The spec waits for an idle callback before it hides the page, which
-runs after the one web-vitals posted.
+One thing it found belongs to web-vitals, not here. In every current web-vitals, 4.2.1 in Next.js 16.3,
+6.2.1 on Next.js canary and 6.2.2, a page hidden while web-vitals still has an idle callback pending
+reports no INP, or the smaller value from before. `onINP`'s own hide handler reports first, before that
+callback has set the value, and the callback then reports without forcing it, which does nothing. It
+happens every time with the stubbed hide web-vitals' own tests use, a real hide was not produced here.
+Their tests always wait for idle before hiding, so they never reach it. The spec waits for an idle
+callback before it hides the page, which runs after the one web-vitals posted. An earlier version of
+this paragraph put a loss seen when hiding one frame after a click down to the same thing. That was a
+different case, the entry arrived after the hide.
 
 ## Distribution: where this can live
 
@@ -1397,8 +1402,8 @@ rule, or give it its own chunk, and the row passes, which is what the narrower `
 row above it does. The dev server output is byte for byte what it was before this change on all four
 versions, with no warnings.
 
-The demo and its React 17 and 18 variants install with the plugin, and both variants now run in CI as
-production builds as well as on the dev server.
+The demo and its React variants install with the plugin, and every variant runs in CI as a production
+build as well as on the dev server.
 
 ## What is not done
 

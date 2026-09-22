@@ -1,6 +1,7 @@
-// Creates apps/demo-react18 and apps/demo-react17: copies of the demo pinned to older
-// React versions, so the same Playwright suite runs against each. npm nests the
-// conflicting react/react-dom under the variant's own node_modules.
+// Creates apps/demo-react192, demo-react191, demo-react18, demo-react182 and demo-react17: copies of
+// the demo pinned to older React versions, so the same Playwright suite runs against each. npm nests
+// the conflicting react/react-dom under the variant's own node_modules. 19.2 is there cause it is
+// about half of react-dom's downloads, more than the 19.3 the demo itself runs.
 //
 //   node scripts/react-matrix.mjs        # (re)create the variants
 //   npm install                          # picks up the new workspaces
@@ -14,7 +15,10 @@ const src = path.join(root, 'apps/demo');
 const demo = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'));
 // Ports of their own, clear of the demo's (5177, 5178) and of the Next.js suites' (5197, 5198, 5199).
 const variants = [
+  { name: 'demo-react192', react: '19.2.8', port: 5189, legacy: false, label: 'react192' },
+  { name: 'demo-react191', react: '19.1.9', port: 5191, legacy: false, label: 'react191' },
   { name: 'demo-react18', react: '18.3.1', port: 5187, legacy: false, label: 'react18' },
+  { name: 'demo-react182', react: '18.2.0', port: 5193, legacy: false, label: 'react182' },
   { name: 'demo-react17', react: '17.0.2', port: 5195, legacy: true, label: 'react17' },
 ];
 const copy = ['src', 'e2e', 'index.html', 'devtools-hook.html', 'tsconfig.json', 'vite.config.ts', 'playwright.config.ts'];
