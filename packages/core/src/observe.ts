@@ -1,7 +1,7 @@
 import type { FrameSummary, ScriptSummary } from './types.js';
 
 /** The browser sends no `event` entry for an interaction under this many ms, whatever threshold an observer asks for. */
-export const EVENT_TIMING_FLOOR_MS = 16;
+const EVENT_TIMING_FLOOR_MS = 16;
 /** Long animation frames kept to join to reports. A report keeps the frames it joined for as long as it is kept itself. */
 const MAX_FRAMES = 60;
 
@@ -55,9 +55,8 @@ export function supportsLongAnimationFrames(): boolean {
  * duration, carrying its interactionId, so that type is observed too (web-vitals' onINP does
  * the same). When its `event` entry has been handed over, the copy adds nothing and is dropped.
  */
-export function observeEventTiming(threshold: number, onBatch: (entries: InteractionTiming[]) => void): () => void {
+export function observeEventTiming(onBatch: (entries: InteractionTiming[]) => void): () => void {
   if (typeof PerformanceObserver === 'undefined') return () => {};
-  const floor = Math.max(EVENT_TIMING_FLOOR_MS, threshold);
   const firstInput = supportedEntryTypes().includes('first-input');
   // The interactionIds of `event` entries handed over, kept until the page's first-input entry comes.
   // Deciding on the copy's duration is not enough: `buffered: true` replays `event` entries to a late
@@ -75,7 +74,7 @@ export function observeEventTiming(threshold: number, onBatch: (entries: Interac
     });
     if (batch.length) onBatch(batch);
   });
-  const events: EventTimingObserverInit = { type: 'event', buffered: true, durationThreshold: floor };
+  const events: EventTimingObserverInit = { type: 'event', buffered: true, durationThreshold: EVENT_TIMING_FLOOR_MS };
   try {
     po.observe(events);
   } catch {

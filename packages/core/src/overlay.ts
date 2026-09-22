@@ -1,4 +1,4 @@
-import { heaviest } from './commits.js';
+import { heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
@@ -124,15 +124,18 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       badge.innerHTML = `<i class="dot" style="background:${R.color}"></i>INP <span class="ms">${Math.round(inp.value)} ms</span>`;
     }
     if (panel.hidden) return;
+    // The panel is rebuilt below, so the row header that has the focus is given it back afterwards.
+    const focused = root.activeElement?.closest<HTMLElement>('.row')?.dataset.id;
     const groups = groupRows(all).slice(-max).reverse();
     const cost = all.length ? all.reduce((a, r) => a + r.overheadMs, 0) / all.length : 0;
     const head = inp
-      ? `<div><div class="big">${Math.round(inp.value)}<small>ms</small>${tag(inp.rating)}</div><div class="sub">Page INP so far${inp.report ? `, from ${esc(titleFor(inp.report).toLowerCase())}` : ''} &middot; ${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}</div></div>`
+      ? `<div><div class="big">${Math.round(inp.value)}<small>ms</small>${tag(inp.rating)}</div><div class="sub">Page INP so far${inp.report ? `, from ${esc(inSentence(titleFor(inp.report)))}` : ''} &middot; ${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}</div></div>`
       : `<div><div class="big">&mdash;<small>ms</small></div><div class="sub">Interaction to Next Paint. Nothing slow yet.</div></div>`;
     panel.innerHTML =
       `<div class="head">${head}<button class="x" type="button" aria-label="Close">&times;</button></div>` +
       (groups.length ? groups.map(row).join('') : `<div class="empty">Click or type. Anything slow shows up here, with the component to blame.</div>`) +
       `<div class="foot"><span>react-inp-blame &middot; measuring cost ${costText(cost)} per interaction</span><button class="clear" type="button">Clear</button></div>`;
+    if (focused) panel.querySelector<HTMLElement>(`.row[data-id="${focused}"] .toggle`)?.focus({ preventScroll: true });
   }
 
   function row(g: Group): string {
@@ -143,15 +146,18 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const bar = phaseBar(r.explanation.phases, total);
     const later = laterRender(r);
     const n = g.reports.length;
+    const isExpanded = expanded.has(r.interactionId);
     const meta = n > 1 ? `<div class="meta">${n} key presses &middot; slowest ${Math.round(r.duration)} ms &middot; typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms</div>` : '';
     return (
       `<div class="row" data-id="${r.interactionId}">` +
+      `<div class="toggle" role="button" tabindex="0" aria-expanded="${isExpanded}">` +
       `<div class="r1"><i class="dot" style="background:${R.color}"></i><span class="t">${esc(title)}</span><span class="ms" style="color:${R.color}">${Math.round(r.duration)} ms</span></div>` +
       meta +
       `<div class="blame">${blameLine(r)}</div>` +
       (later ? `<div class="blame later">then <b>${esc(where(later))}</b> re-rendered after the paint &middot; ${esc(top(later))}${later.hasDurations ? ` &middot; ${Math.round(later.total)} ms` : ''}</div>` : '') +
       `<div class="bar">${bar}</div>` +
-      (expanded.has(r.interactionId) ? more(r) : '') +
+      `</div>` +
+      (isExpanded ? more(r) : '') +
       `</div>`
     );
   }
@@ -191,6 +197,12 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     );
   }
 
+  function toggleRow(r: HTMLElement) {
+    const id = Number(r.dataset.id);
+    if (expanded.has(id)) expanded.delete(id);
+    else expanded.add(id);
+    render();
+  }
   function schedule() {
     if (timer == null) timer = setTimeout(render, 0);
   }
@@ -215,11 +227,16 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     }
     if (el.closest('.more')) return;
     const r = el.closest<HTMLElement>('.row');
+    if (r) toggleRow(r);
+  });
+  // A row header opens and closes its row from the keyboard the way a button does.
+  panel.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const r = (e.target as HTMLElement).closest('.toggle')?.closest<HTMLElement>('.row');
     if (!r) return;
-    const id = Number(r.dataset.id);
-    if (expanded.has(id)) expanded.delete(id);
-    else expanded.add(id);
-    render();
+    // Space would also scroll the panel.
+    e.preventDefault();
+    toggleRow(r);
   });
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && !panel.hidden) setOpen(false);
@@ -325,7 +342,7 @@ function swatch(cls: string, p: Phase): string {
 }
 
 function where(c: CommitSummary): string {
-  return c.hotPath[c.hotPath.length - 1] ?? c.roots[0] ?? 'the tree';
+  return leafName(c) ?? 'the tree';
 }
 function top(c: CommitSummary): string {
   const t = c.components[0];
@@ -374,6 +391,11 @@ function titleFor(r: InteractionReport): string {
   if (isTypingEvent(r.type)) return label ? `Typing in ${label}` : 'Typing';
   if (isPointerEvent(r.type)) return label ? `Click on ${label}` : 'Click';
   return `${kindOf(r.type)} ${label}`.trim();
+}
+
+/** A title inside a sentence: the kind it starts with lowercased, the label as the page wrote it. */
+function inSentence(title: string): string {
+  return title.charAt(0).toLowerCase() + title.slice(1);
 }
 
 function tag(rating: keyof typeof RATING): string {

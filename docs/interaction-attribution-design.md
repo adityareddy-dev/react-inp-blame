@@ -1,9 +1,12 @@
 # Interaction attribution for React: design notes
 
-Status, 2026-09-17: 0.1.0 is on npm, published from the `v0.1.0` tag with provenance. On
-7917366 the Playwright suites were green against React 19.3 in development and production builds,
-18.3.1 and 17.0.2 (legacy root), and Next.js 16.3.5 under `next dev` and its Turbopack and webpack
-production builds. Since the prototype of 2026-09-12, the changes are these:
+Status, 2026-09-22: 0.2.0 is the latest on npm, published on 2026-09-21 through trusted publishing,
+and main has unreleased changes, listed under [Unreleased] in `CHANGELOG.md`.
+
+Status at 0.1.0, 2026-09-17: published from the `v0.1.0` tag with provenance. On 7917366 the
+Playwright suites were green against React 19.3 in development and production builds, 18.3.1 and
+17.0.2 (legacy root), and Next.js 16.3.5 under `next dev` and its Turbopack and webpack production
+builds. Since the prototype of 2026-09-12, the changes are these:
 
 - 612601c: a commit joins an interaction on `Event.timeStamp` through a ring of
   the last 8 inputs, with wall-clock overlap kept only as a flagged fallback; the headline is the
@@ -109,15 +112,16 @@ Since 2026-09-14 `apps/demo/e2e/cross-browser.spec.ts` also runs in Firefox 148 
 nothing installed. Both time React's components with a clock too coarse for the demo's (see
 "Coarse clocks" below), so their development reports carry counts and inferred blame.
 
-**One smoke run outside the demo.** On 2026-09-20 the packed tarball was installed into a production
+**Smoke runs outside the demo.** On 2026-09-20 the packed tarball was installed into a production
 build of a real Next.js App Router documentation site and driven through seven interactions. That run
 is cited below wherever it changed something, and only ever for *what the library said*: three runs
 of each build, unthrottled and at 4x CPU, on a machine somebody else was using, is not a measurement
 of that app, of an interaction, or of this library's cost, and no number taken from it appears here
 as one. Every verdict it produced came back identical across every run it recorded, which is what
-makes the sentences worth arguing with. Nothing
-outside the demo has been profiled, reproduced on a second machine, or hand-checked against a flame
-chart, and the evidence corpus that would do that is still not written.
+makes the sentences worth arguing with. Excalidraw, two TanStack Table examples and twenty have been
+run by hand as well, from the same date, and are cited on the same terms; Next.js's own bench apps have
+not been run. Nothing outside the demo has been profiled, reproduced on a second machine, or
+hand-checked against a flame chart, and the evidence corpus that would do that is still not written.
 
 ## What it costs
 
@@ -1065,7 +1069,10 @@ What needs help:
   the source string, so it runs under Turbopack (`turbopack.rules`, the Next 16 default,
   where a `webpack()` hook never runs) and under webpack (`module.rules`), and
   `react-inp-blame/vite` runs the same function as a transform. Proven on Next 16.3.5 in
-  production, 2026-09-14. Cost is about 30 bytes per component; the alternatives are worse:
+  production, 2026-09-14. Cost, for the guarded stamps written since 2026-09-19 (below), is
+  about 120 bytes minified and 16 gzipped per function component and about 35 and 6 per `memo`
+  or `forwardRef` one, against about 20 and 5 for a bare assignment (rolldown 1.2.8, twenty
+  components with four-letter names). The alternatives are worse:
   `next build --no-mangling` keeps every name (+9.6% gzip on react-dom alone), and an SWC
   plugin has to be rebuilt against each Next release's swc_core.
 
@@ -1156,7 +1163,7 @@ What needs help:
   Measured over the Excalidraw app and two TanStack Table examples, 301 files with JSX that a parser
   accepts: the names stamped went from 57 to 256, all 316 components the corpus can identify now carry
   one, counting the 60 those apps name themselves with a `displayName` of their own, and re-parsing
-  every transformed file broke 0 of 301. The guards changed none of that: the same 314 files give the
+  every transformed file broke 0 of 301. The guards changed none of that: the same 301 files give the
   same names, none added and none dropped. What
   it still misses there is 6 capitalised classes, and capitalised bindings built by a call it does not
   know: 89 `createIcon(…)`, 14 `createToolButton(…)`, 10 `React.createContext(…)`, 7 `Object.assign(…)`,
@@ -1164,12 +1171,12 @@ What needs help:
   `filter` and `join`. Most of those are not components, which is why that list is not a to-do: telling
   the ones that are from the ones that are not needs a scope analysis rather than a wider pattern.
 
-  What is still open, and is stated in both READMEs. A naming HOC that sets a `displayName` keeps it,
-  since the stamp does not replace a name that is there, but one that names a component some other way,
-  on a prototype or through a wrapper it returns, can still be overwritten. A file that begins with a
-  hashbang, and a file whose last line is a `sourceMappingURL` comment rather than code, are stamped
-  correctly by this transform but have not been put through webpack or Turbopack to see what those make
-  of the result.
+  What is still open, and is stated in the root README's Known limits. A naming HOC that sets a
+  `displayName` keeps it, since the stamp does not replace a name that is there, but one that names a
+  component some other way, on a prototype or through a wrapper it returns, can still be overwritten. A
+  file that begins with a hashbang, and a file whose last line is a `sourceMappingURL` comment rather
+  than code, are stamped correctly by this transform but have not been put through webpack or Turbopack
+  to see what those make of the result.
 
   Handler names are a different problem: LoAF's `sourceFunctionName`
   plus `sourceURL` and character position can be resolved through source maps offline, which
@@ -1184,7 +1191,8 @@ What needs help:
   cost is visible in the data rather than assumed.
 
 The production mode is the one that has to reproduce a hand-made INP win on a large app; that
-test has not been run yet against anything but the demo.
+test has not been run yet against anything but the demo, and the real applications run by hand were
+smoke runs, not that test.
 
 ## The web-vitals entry
 

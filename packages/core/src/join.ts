@@ -1,14 +1,14 @@
-import { heaviest } from './commits.js';
+import { heaviest, leafName } from './commits.js';
 import { elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
-import { joinWindow } from './hook.js';
+import { DEFAULT_INPUT_WINDOW, joinWindow } from './hook.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InputRecord, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
 
 /** How long after the paint a commit can still be counted as that interaction's later render, ms. */
-export const FOLLOW_UP_WINDOW = 1500;
+const FOLLOW_UP_WINDOW = 1500;
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
 // they agree to the timer's resolution; 1 ms covers the coarsening.
 const STAMP_TOLERANCE = 1;
@@ -410,7 +410,7 @@ export function buildReport(
     commits: Object.freeze(inWindow),
     followUps: Object.freeze(followUps),
     unjoinedCommits: unjoinedCommits(inputs, stamps, entries),
-    frames: frames && Object.freeze(frames.filter((f) => f.start < end && f.start + f.duration > start)),
+    frames: frames && Object.freeze(framesInWindow(frames, start, end)),
     laterFrames: frames && framesForLater(followUps, frames),
     revision: 0,
     overheadMs: walked(inWindow) + walked(followUps),
@@ -497,8 +497,8 @@ function framesForLater(later: readonly CommitSummary[], frames: readonly FrameS
   return Object.freeze(frames.filter((f) => later.some((c) => f.start <= c.at && f.start + f.duration >= c.at - Math.max(c.total, FRAME_MS))));
 }
 
-function framesInWindow(r: ReportData, frames: readonly FrameSummary[]): readonly FrameSummary[] {
-  return frames.filter((f) => f.start < r.end && f.start + f.duration > r.start);
+function framesInWindow(frames: readonly FrameSummary[], start: number, end: number): readonly FrameSummary[] {
+  return frames.filter((f) => f.start < end && f.start + f.duration > start);
 }
 
 /** `held` and the frames of `found` it does not hold yet, in time order; null when it holds every one. */
@@ -514,7 +514,7 @@ function withNewFrames(held: readonly FrameSummary[] | null, found: readonly Fra
  * store of recent frames lets them go; null when there is nothing new to add.
  */
 export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): ReportData | null {
-  const inWindow = withNewFrames(r.frames, framesInWindow(r, frames));
+  const inWindow = withNewFrames(r.frames, framesInWindow(frames, r.start, r.end));
   const later = withNewFrames(r.laterFrames, framesForLater(r.followUps, frames));
   if (!inWindow && !later) return null;
   return { ...r, frames: inWindow ?? r.frames, laterFrames: later ?? r.laterFrames, revision: r.revision + 1 };
@@ -654,8 +654,12 @@ function nextNode(node: Node, root: Node): Node | null {
   return null;
 }
 
-const ms = (n: number): string => `${Math.round(n)} ms`;
+export const ms = (n: number): string => `${Math.round(n)} ms`;
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+/** What the browser says ran a script: its invoker, else its function's name; null when it gives neither. */
+const scriptName = (s: ScriptSummary): string | null => s.invoker || s.name || null;
+/** "a script (handleClick, app.js)": a script by what ran it and the file it came from. */
+const aScript = (s: ScriptSummary): string => `a script (${scriptName(s) ?? 'unknown'}${s.source ? `, ${s.source}` : ''})`;
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A URL the way a link on `page` shows it: its path, query and fragment when it stays on that page's origin. */
@@ -674,7 +678,7 @@ function handlerPhrase(name: string, kind: string): string {
 }
 
 function leafOf(c: CommitSummary): string {
-  return c.hotPath[c.hotPath.length - 1] || c.roots[0] || 'the app';
+  return leafName(c) ?? 'the app';
 }
 
 /** "LineItem ×800", or the component count when no single component dominates. */
@@ -783,7 +787,7 @@ const PROFILING_BUILD = 'A profiling build of React would give exact numbers.';
 const say = (confidence: Blame['confidence'], measured: string, likely: string): string => (confidence === 'measured' ? measured : likely);
 
 /** The report in plain words. Frozen, like the report it explains. */
-export function explain(r: InteractionReport): Explanation {
+function explain(r: InteractionReport): Explanation {
   const rating = rateInp(r.duration);
   const kind = kindOf(r.type);
   const headline = `${ms(r.duration)} ${kind}`;
@@ -818,8 +822,8 @@ export function explain(r: InteractionReport): Explanation {
   // running when the input came (the task the input waited behind), or that ran after the handlers, is
   // named by what the browser says ran it.
   const ranAsHandler = (s: ScriptSummary) => s.start >= processingStart - STAMP_TOLERANCE && s.start <= processingEnd;
-  const scriptPhrase = (s: ScriptSummary) => (handler && ranAsHandler(s) ? handler : `a script (${s.invoker || s.name || 'unknown'}${s.source ? `, ${s.source}` : ''})`);
-  const scriptBlameName = (s: ScriptSummary) => (handlerName && ranAsHandler(s) ? handlerName : s.invoker || s.name || null);
+  const scriptPhrase = (s: ScriptSummary) => (handler && ranAsHandler(s) ? handler : aScript(s));
+  const scriptBlameName = (s: ScriptSummary) => (handlerName && ranAsHandler(s) ? handlerName : scriptName(s));
 
   // A script counts for its part inside each window, and so does its forced layout.
   const frames = r.frames ?? [];
@@ -943,7 +947,7 @@ export function explain(r: InteractionReport): Explanation {
     // measurement alone: whether any of the total had to be apportioned across the edge of the window.
     const confidence = forcedLayoutMeasured(whileHandling) ? 'measured' : 'inferred';
     const charged = mostForcedLayout(whileHandling);
-    const invoker = charged ? charged.script.invoker || charged.script.name || null : null;
+    const invoker = charged ? scriptName(charged.script) : null;
     // The name beside that number is not the browser's: it comes from a commit, and a commit that
     // only overlapped the interaction in time, or was walked short of the end, or sits beside commits
     // that could not be tied to this interaction at all, cannot say the layout happened in the
@@ -983,7 +987,7 @@ export function explain(r: InteractionReport): Explanation {
     // sentence says it whatever the blame is named after, because the cause is read on its own; and
     // it prints the script's own share whenever the script does not hold nearly all of the total,
     // since the total is several scripts' and the name beside it would claim all of it for one.
-    const chargedTo = invoker ? ` ${holdsMostOfIt ? 'It' : `${ms(charged!.forcedLayout)} of it`} was charged to ${invoker}.` : '';
+    const chargedTo = charged && invoker ? ` ${holdsMostOfIt ? 'It' : `${ms(charged.forcedLayout)} of it`} was charged to ${invoker}.` : '';
     // The clause about React is hedged on the same evidence the name is: a commit this interaction
     // cannot claim, and, where the clause prints a duration, a duration that is not a measurement.
     // A production build's component counts are measured by the walk, so they are not hedged here.
@@ -1011,7 +1015,7 @@ export function explain(r: InteractionReport): Explanation {
     // listener it ran and from which file, so the sentence passes that on as what the browser
     // recorded. It is not said to be the 190 ms: the script's time can hold React's render too.
     const listener = handlerName ? null : longestPart(whileHandling);
-    const listenerName = listener ? listener.script.invoker || listener.script.name || null : null;
+    const listenerName = listener ? scriptName(listener.script) : null;
     if (listener && listenerName) cause += ` The longest script the browser recorded in that time was ${listenerName}${listener.script.source ? ` (${listener.script.source})` : ''}, ${ms(listener.ms)}.`;
     // It names the blame only where it covers most of the time being blamed.
     const blamedListener = listener && listener.ms >= WAITED_BEHIND_MIN_SHARE * outside ? listenerName : null;
@@ -1042,14 +1046,14 @@ export function explain(r: InteractionReport): Explanation {
     if (behind) {
       const s = behind.script;
       const already = s.start < r.start - STAMP_TOLERANCE;
-      const what = `a script (${s.invoker || s.name || 'unknown'}${s.source ? `, ${s.source}` : ''})`;
+      const what = aScript(s);
       cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: ${what} ${already ? `was already running when the ${kind} came and` : 'ran first and'} held the main thread for ${Math.round(behind.ms) >= Math.round(r.inputDelay) ? 'all' : ms(behind.ms)} of that wait.`;
     } else {
       cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
     }
     // The milliseconds are the wait, so the script only gets its name on them when it filled most of
     // it. A 30 ms timer inside a 400 ms wait is in the sentence, with its own figure, and is not the blame.
-    const named = behind && behind.ms >= WAITED_BEHIND_MIN_SHARE * r.inputDelay ? behind.script.invoker || behind.script.name || null : null;
+    const named = behind && behind.ms >= WAITED_BEHIND_MIN_SHARE * r.inputDelay ? scriptName(behind.script) : null;
     blame = { kind: 'waiting', name: named, detail: null, ms: r.inputDelay, confidence: 'measured' };
   } else if (screenOutranks) {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot
@@ -1090,7 +1094,7 @@ export function explain(r: InteractionReport): Explanation {
 
   if (unjoined) {
     notes.push(
-      `React committed ${plural(r.unjoinedCommits, 'time')} while this ${kind} was being handled that could not be tied to it, so what it rendered is left out of this report. That happens when the commit landed more than ${ms(joinWindow() ?? FOLLOW_UP_WINDOW)} after the last commit inside the ${kind}'s own dispatch, with no way to tell it from an unrelated update.`,
+      `React committed ${plural(r.unjoinedCommits, 'time')} while this ${kind} was being handled that could not be tied to it, so what it rendered is left out of this report. That happens when the commit landed more than ${ms(joinWindow() ?? DEFAULT_INPUT_WINDOW)} after the last commit inside the ${kind}'s own dispatch, or after the ${kind} itself where React committed nothing inside it, with no way to tell it from an unrelated update.`,
     );
   }
   if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
@@ -1156,6 +1160,6 @@ export function explain(r: InteractionReport): Explanation {
   });
 }
 
-export function toVerdict(x: Explanation): string {
+function toVerdict(x: Explanation): string {
   return `${x.headline}${x.where ? ` on ${x.where}` : ''}. ${x.cause}${x.notes.length ? ' ' + x.notes.join(' ') : ''}`;
 }

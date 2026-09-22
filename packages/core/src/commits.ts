@@ -10,3 +10,8 @@ export function heaviest(list: readonly CommitSummary[]): CommitSummary {
 function score(c: CommitSummary): number {
   return c.hasDurations ? c.total : c.rendered;
 }
+
+/** The component a commit is named after: the end of its hot path, else its outermost root; null when it rendered none. */
+export function leafName(c: CommitSummary): string | null {
+  return c.hotPath[c.hotPath.length - 1] || c.roots[0] || null;
+}
