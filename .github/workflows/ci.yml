@@ -190,6 +190,10 @@ jobs:
       - name: Production build
         if: ${{ !cancelled() }}
         run: npm run test:prod -w apps/next-demo
+      # 15.x builds with webpack by default; this is where its Turbopack rule keeps the names.
+      - name: Turbopack production build
+        if: ${{ !cancelled() && startsWith(matrix.next, '15.') }}
+        run: INP_BUNDLER=turbopack npm run test:prod -w apps/next-demo
       - name: webpack production build
         if: ${{ !cancelled() && startsWith(matrix.next, '16.') }}
         run: npm run test:prod:webpack -w apps/next-demo

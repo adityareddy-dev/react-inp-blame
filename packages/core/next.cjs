@@ -115,7 +115,8 @@ function clientFileSource(dir) {
 }
 
 // Next.js reads its config more than once, and in the worker processes it starts as well, which inherit
-// the environment: marked there, a warning is printed once per `next dev` or `next build`.
+// the environment as it was when the config file was imported. A warning marked then prints once per
+// `next dev` or `next build`; one from inside a function config, marked later, can print once per process.
 function warnOnce(key, message) {
   const mark = `REACT_INP_BLAME_WARNED_${key}`;
   if (process.env[mark]) return;

@@ -7,7 +7,7 @@ export interface WithInpBlameOptions {
    * Which runs of Next get anything from this wrapper: 'development' (`next dev`), 'production'
    * (`next build` and `next start`), true for both, false for neither. Default 'development', so a
    * production build carries nothing from it, except on Next.js 15.3 to 16.2, where the line in
-   * instrumentation-client brings the client module into every build and it does nothing there. Next
+   * instrumentation-client brings the client module into every build, unused where it is left out. Next
    * sets NODE_ENV before it reads the config, which is how the two are told apart.
    */
   enabled?: 'development' | 'production' | boolean;

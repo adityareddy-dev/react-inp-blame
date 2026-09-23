@@ -51,7 +51,7 @@ explanation column has the right-hand side. From the demo's sign-in page, in dev
 production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
 defaults to `'development'`, so a production build carries nothing from either plugin until you say
 `enabled: true` or `enabled: 'production'`. The one exception is the line on Next.js 15.3 to 16.2:
-its module is in every build, and in the ones `enabled` leaves out it does nothing.
+its code is in every build, and in the ones `enabled` leaves out it ships unused and installs nothing.
 
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
@@ -93,8 +93,9 @@ Next.js added `instrumentationClientInject` in 16.3. From 15.3 to 16.2 the line 
 `instrumentation-client.ts` (beside `next.config` or in `src/`) does the install, with the options
 given to the wrapper, and the wrapper prints it in the runs `enabled` covers (`next dev` by default)
 until the file has it. Next.js imports that file before hydration, which is early enough. In a build
-`enabled` leaves out, or with `runtime: false`, the module the line loads does nothing. Kept after an
-upgrade to 16.3, the line goes on doing the install and no second copy is injected. If the file
+`enabled` leaves out, or with `runtime: false`, the module the line loads installs nothing, though
+its code still ships there. After an upgrade to 16.3, delete the line: kept, it goes on doing the
+install and no second copy is injected, but production builds keep carrying its code. If the file
 already exports an `onRouterTransitionStart`, as Sentry's setup has it do, call this one from yours:
 
     import { onRouterTransitionStart as inpBlame } from 'react-inp-blame/next-client';
@@ -105,8 +106,9 @@ already exports an `onRouterTransitionStart`, as Sentry's setup has it do, call 
     };
 
 TypeScript finds the types of the subpaths only through the package's `exports`, so
-`moduleResolution` has to be `bundler` or `node16`; a project still on `node` fails the type check
-on these imports. Below 15.3 there is no `instrumentation-client`: the wrapper warns and hands the
+`moduleResolution` has to be `bundler`, the one `create-next-app` sets. Under `node` these imports
+fail the type check, and under `node16` they do too unless the app's `package.json` has
+`"type": "module"`. Below 15.3 there is no `instrumentation-client`: the wrapper warns and hands the
 config back as it was.
 
 On the App Router the client module also hears each navigation, meaning each route change the
