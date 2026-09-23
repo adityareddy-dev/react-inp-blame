@@ -1,7 +1,7 @@
 // Installs the package the way its users get it, as the tarball `npm pack` makes, into throwaway apps
-// under the temp directory, and checks it there. Every other check in this repo resolves
-// react-inp-blame through the workspace link, which cannot see a file left out of `files`, an exports
-// target that does not exist, or a peer range npm refuses to install.
+// under the temp directory, and checks it there. Every other check in this repo but vite-app.mjs
+// resolves react-inp-blame through the workspace link, which cannot see a file left out of `files`, an
+// exports target that does not exist, or a peer range npm refuses to install.
 //
 //   node scripts/pack-smoke.mjs                     # pack packages/core, then every gating fixture
 //   node scripts/pack-smoke.mjs bare vite-oldest    # these fixtures only

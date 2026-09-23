@@ -273,7 +273,11 @@ development and production builds (Fast Refresh in development only, its runtime
 production bundle): React's commits reach the library in every order, `stats().mode` is
 `'chained'` when the tool came first and `'shim'` when it came after, and each tool's own record
 of mounted roots follows the app as it mounts and unmounts, except React DevTools loaded after the
-library, which installed nothing and never hears from React.
+library, which installed nothing and never hears from React. On @vitejs/plugin-react's dev server the Fast
+Refresh preamble runs first. Vite 8.3 puts each tag at the top of `head` as it adds it, so the page runs
+them in the reverse of that order, and plugin-react adds its tag from a normal-order hook, after the
+library's `order: 'pre'` one. The refresh stub is the hook there and the library chains onto it.
+`fixtures/vite-react-ts` checks that path, and the production build's, from the packed package.
 
 **One installation per page.** A page can load the library twice: a package duplicated in
 `node_modules`, or the same module in two chunks. While its state lived in module variables, the
