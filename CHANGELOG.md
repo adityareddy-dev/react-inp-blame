@@ -37,7 +37,13 @@ it changes when a field is removed or changes meaning, which a minor release may
 - **Text nobody can see is not a label.** With `labels: 'text'` a key press with nothing focused lands
   on the body, and the body's first text in a Vite page is its `noscript` line, so the report read
   `key press on body "You need to enable JavaScript to run thi"`. The first run of text now skips
-  `noscript`, `script`, `style` and `template`. Found on twenty's record table.
+  `noscript`, `script`, `style` and `template`. Found on Twenty's record table (the twentyhq/twenty CRM).
+- **The overlay's rows open from the keyboard.** A row was a clickable `div` that could not take the
+  focus, so from the keyboard alone there was no way to open one into its explanation. Its header is
+  now a button in the Tab order (`role="button"`, with `aria-expanded`), and Enter or Space opens and
+  closes the row without losing the focus. Held down, the key toggles it once rather than on every
+  repeat. Escape pressed inside the panel closes it and moves the focus to the badge, where before the
+  focus was lost with the panel. Escape anywhere else on the page still just closes it.
 
 ## [0.2.0] - 2026-09-20
 

@@ -234,12 +234,18 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const r = (e.target as HTMLElement).closest('.toggle')?.closest<HTMLElement>('.row');
     if (!r) return;
-    // Space would also scroll the panel.
+    // Space would also scroll the panel, on a repeat as much as on the first press.
     e.preventDefault();
-    toggleRow(r);
+    // A held key repeats, and the row opens or closes once per press rather than once per repeat.
+    if (!e.repeat) toggleRow(r);
   });
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !panel.hidden) setOpen(false);
+    if (e.key !== 'Escape' || panel.hidden) return;
+    // Hiding the panel takes the focus from whatever inside it had it, so Escape pressed in there
+    // moves the focus to the badge, the button that opens the panel again.
+    const inside = panel.contains(root.activeElement);
+    setOpen(false);
+    if (inside) badge.focus();
   };
   document.addEventListener('keydown', onKey);
   const off = source.onInteraction(schedule);

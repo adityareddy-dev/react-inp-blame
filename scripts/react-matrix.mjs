@@ -1,11 +1,11 @@
 // Creates apps/demo-react192, demo-react191, demo-react18, demo-react182 and demo-react17: copies of
 // the demo pinned to older React versions, so the same Playwright suite runs against each. npm nests
-// the conflicting react/react-dom under the variant's own node_modules. 19.2 is there cause it is
+// the conflicting react/react-dom under the variant's own node_modules. 19.2 is there because it is
 // about half of react-dom's downloads, more than the 19.3 the demo itself runs.
 //
 //   node scripts/react-matrix.mjs        # (re)create the variants
 //   npm install                          # picks up the new workspaces
-//   npm run test -w apps/demo-react18    # or -w apps/demo-react17
+//   npm run test -w apps/demo-react192   # or demo-react191, demo-react18, demo-react182, demo-react17
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
