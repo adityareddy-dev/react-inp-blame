@@ -138,9 +138,10 @@ Two things the demo's suite leaves out of a normal run:
   and once a day, plus a job against `next@canary` that is allowed to fail and one that runs the
   Next.js suites on 16.2, 15.5 and 15.3. To repeat that one:
   `npm install next@15.5.26 -w apps/next-demo`, put the line `withInpBlame` prints in
-  `apps/next-demo/instrumentation-client.ts`, run `npm test -w apps/next-demo` (on 15.x also
-  `INP_BUNDLER=turbopack npm test -w apps/next-demo`), then delete that file and put the pin back with
-  `git checkout apps/next-demo/package.json package-lock.json` and `npm ci`.
+  `apps/next-demo/instrumentation-client.ts`, run `npm test` and `npm run test:prod` with
+  `-w apps/next-demo`, on 15.x each again with `INP_BUNDLER=turbopack`, then delete that file and put
+  the pin back with `git checkout apps/next-demo/package.json apps/next-demo/tsconfig.json
+  package-lock.json` and `npm ci`. Next.js 15 rewrites the demo's `tsconfig.json` when it starts.
 - A test for every change in behaviour. Tests assert on a report's data (`explanation.blame`, the
   phases, the commits), never on the wording of `verdict`, `cause` or `notes`: those are display text
   and may change in any version.

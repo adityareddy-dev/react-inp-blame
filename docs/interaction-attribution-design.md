@@ -1306,7 +1306,8 @@ the load-order, hydration and web-vitals suites pass that way on 16.2.12, 15.5.2
 both bundlers, on 15.5 under Turbopack without the `commits.ms` check (2026-09-22). That module
 installs the library with the wrapper's `runtime` options, which reach it through `env` because
 Next.js inlines those at build time. Where the wrapper put nothing in `env`, a build `enabled` leaves
-out, it does nothing, since the line in instrumentation-client brings it into every build. The wrapper
+out, it installs nothing, though the line in instrumentation-client still brings its code into that
+build. The wrapper
 also adds the displayName loader as a Turbopack rule and as a webpack `enforce: 'pre'` rule, merging
 with whatever rules the app already has (before 16.0 a glob takes one rule, so an app's own rule on
 the same files is left alone, with a warning). Both are added only under `next dev` unless `enabled`
