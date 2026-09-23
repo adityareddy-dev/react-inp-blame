@@ -1,0 +1,27 @@
+{
+  "name": "vite-react-ts-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "What `npm create vite@9.2.1 -- --template react-ts` makes, with the README's Vite config and one slow component. Run by scripts/vite-app.mjs from a temp copy.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-inp-blame": "^0.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}

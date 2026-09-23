@@ -8,7 +8,7 @@ on:
   # Called by publish.yml, so a release runs the whole suite before it publishes.
   workflow_call:
   # Daily as well, so the next@canary job goes red the day a Next.js or React canary breaks something,
-  # not at the next push.
+  # not at the next push. vite-app-fresh gets its daily run from this too.
   schedule:
     - cron: '23 5 * * *'
 
@@ -37,10 +37,11 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
 
-  # The one job that sees what users install. Every other job resolves react-inp-blame through the
-  # workspace link, so a file left out of `files`, an exports target that does not exist or a peer range
-  # npm refuses to install would publish with all of them green. publish.yml needs this whole workflow,
-  # so a release waits for this job as well.
+  # Sees what users install, as the two vite-app jobs below do, and is the one gating job that checks
+  # every file and subpath of it. The unit and e2e jobs resolve react-inp-blame through the workspace
+  # link, so a file left out of `files`, an exports target that does not exist or a peer range npm
+  # refuses to install would publish with both of them green. publish.yml needs this whole workflow, so a
+  # release waits for this job as well.
   tarball:
     name: Packed tarball on Node 20.19
     runs-on: ubuntu-latest
@@ -60,6 +61,55 @@ jobs:
         with:
           node-version: '20.19'
       - run: node scripts/pack-smoke.mjs --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
+
+  # A Vite app as `npm create vite -- --template react-ts` makes it, with the README's vite.config.ts,
+  # given the packed tarball the way npm installs it. On the dev server @vitejs/plugin-react's Fast
+  # Refresh preamble creates React's DevTools hook and the library chains onto it. A production build has
+  # no preamble, so there the install script runs first. A job of its own, beside e2e rather than in it,
+  # so a run takes no longer.
+  vite-app:
+    name: create-vite app from the packed tarball
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/vite-react-ts/package-lock.json
+      - run: npm ci
+      - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
+      - run: npx playwright install --with-deps chromium
+      - name: The app from its lockfile
+        run: node scripts/vite-app.mjs --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
+
+  # The same app with no lockfile, so npm takes the newest release inside each range in the fixture's
+  # package.json, a new minor or patch of anything the app uses. A new major only reaches it when the
+  # fixture is made again from a newer create-vite. The daily run of this workflow makes it the check on
+  # those releases. A job and not a step of vite-app, because GitHub shows a step that is allowed to fail
+  # as passed even when it fails.
+  vite-app-fresh:
+    name: create-vite app, dependencies resolved today
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Goes red on the first run after a release in those ranges breaks the app, without failing the run.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/vite-react-ts/package-lock.json
+      - run: npm ci
+      - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/vite-app.mjs --fresh --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
   e2e:
     name: Vite demo, React 17 to 19.2, Next.js

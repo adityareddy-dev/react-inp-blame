@@ -13,6 +13,8 @@ we can agree on the approach before you spend time on it.
 - `scripts/react-matrix.mjs`: generates the copies of the demo pinned to React 19.2, 19.1, 18.3, 18.2
   and 17.
 - `scripts/pack-smoke.mjs`: installs the packed tarball into throwaway apps and checks it there.
+- `fixtures/vite-react-ts`: the app `npm create vite` makes, with the README's Vite config and one slow
+  component. `scripts/vite-app.mjs` installs the packed tarball into a copy of it and runs its specs.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
 
 ## Setup
@@ -53,6 +55,7 @@ From the repository root:
     npm run test:prod -w apps/next-demo           # Next.js, Turbopack production build
     npm run test:prod:webpack -w apps/next-demo   # Next.js, webpack production build
     npm run test:pack                             # the packed tarball, installed into throwaway apps
+    npm run test:vite-app                         # a create-vite app with @vitejs/plugin-react, from the packed tarball
 
 The Vite demo runs every spec in Chromium, and `cross-browser.spec.ts` in Firefox and WebKit as well.
 It imports the library's source, so it needs no build. The Next.js app uses the package as built, so
@@ -71,20 +74,22 @@ the script again rather than editing them. The `npm install` links the new works
 change `package-lock.json`.
 
 Run the suites one at a time. Each starts its server on a fixed port (the demo on 5177 and 5178, the
-React matrix copies on two ports each from 5187 to 5196, Next.js on 5199, 5198 and 5197), and outside
-CI a server already listening on that port is reused. A server left over from another suite would be
-tested in place of the right one, so stop it before the next suite starts.
+create-vite fixture on 5179 and 5180, the React matrix copies on two ports each from 5187 to 5196,
+Next.js on 5199, 5198 and 5197), and outside CI a server already listening on that port is reused. A
+server left over from another suite would be tested in place of the right one, so stop it before the
+next suite starts. The create-vite fixture never reuses one, so a server still on 5179 or 5180 fails
+its run.
 
-`npm run test:pack` is the one check that sees the package as npm publishes it; the suites above reach
-it through the workspace link. It packs `packages/core` and installs the tarball, with one `npm install`
-each, into throwaway apps in the temp directory: one with no peers, one with Next.js 15, one with the
-Next.js that `apps/next-demo` pins and one with Vite 5. In each it checks that every file `package.json`
-points at is in the package, imports and requires every subpath, and loads the browser entries again
-under the `react-server` condition. The Next.js 15 app has to get the wrapper's version error rather
-than a failed install, and the Vite app a production build whose page installs the library. It needs
-the npm registry and no port. Name fixtures to run only those; `next-canary` runs only when named,
-because a canary is allowed to break. `--tarball` checks a tarball that already exists, which is how CI
-runs the script on Node 20.19, the oldest Node the package supports:
+`npm run test:pack` and `npm run test:vite-app` are the two checks that see the package as npm publishes
+it; the other suites above reach it through the workspace link. `test:pack` packs `packages/core` and
+installs the tarball, with one `npm install` each, into throwaway apps in the temp directory: one with no
+peers, one with Next.js 15, one with the Next.js that `apps/next-demo` pins and one with Vite 5. In each
+it checks that every file `package.json` points at is in the package, imports and requires every subpath,
+and loads the browser entries again under the `react-server` condition. The Next.js 15 app has to get the
+wrapper's version error rather than a failed install, and the Vite app a production build whose page
+installs the library. It needs the npm registry and no port. Name fixtures to run only those;
+`next-canary` runs only when named, because a canary is allowed to break. `--tarball` checks a tarball
+that already exists, which is how CI runs the script on Node 20.19, the oldest Node the package supports:
 
     npm run test:pack -- bare next-15
     node scripts/pack-smoke.mjs --tarball path/to/react-inp-blame-<version>.tgz
@@ -99,6 +104,25 @@ under the `node` package from npm:
 
 On Windows, run the second command with npm's default script shell rather than Git Bash: the POSIX
 launcher of that package points at a placeholder file there, and only its `.cmd` one finds `node.exe`.
+
+`npm run test:vite-app` starts where a user starts. `fixtures/vite-react-ts` is what
+`npm create vite@9.2.1 -- --template react-ts` makes, with one slow component added and the README's Vite
+config as its `vite.config.ts`. The script copies it into the temp directory, where nothing resolves
+through this repo. There it installs the locked dependencies, with the packed tarball in place of the
+registry's react-inp-blame, and builds the app. Its specs then check the blame on the dev server (a Fast
+Refresh edit included) and on `vite preview` of the build. `--fresh` drops the lockfile first, so every
+dependency comes as npm resolves it that day within the ranges in its `package.json`, which never takes a
+new major. CI runs it that way too, in a job of its own that goes red without failing the run. `--tarball`
+works as it does for `test:pack`, and anything after `--` goes to Playwright. Through npm that is a second
+`--`, after npm's own, as in the last line below. A failed run leaves the copy in place and prints its path.
+
+    npm run test:vite-app -- --fresh
+    node scripts/vite-app.mjs -- --project=dev
+    npm run test:vite-app -- -- --project=dev
+
+The fixture's `vite.config.ts` is the README's "Install with Vite" block, and the script fails until the
+two match, so a change to one is a change to both. Its `@playwright/test` pin follows `apps/demo`'s. After
+changing its `package.json`, refresh its lock with `npm install --package-lock-only` in that folder.
 
 Two things the demo's suite leaves out of a normal run:
 

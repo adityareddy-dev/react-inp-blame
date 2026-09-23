@@ -499,7 +499,10 @@ in development and production builds, its attribution and input-delay specs on R
 and on `next@canary`, whose App Router brings a React canary, on every push and once a day, in a job allowed to
 fail. It also installs the package as packed for npm into apps with no peers, with Next.js 15, with Next.js
 16.3.5 and with Vite 5, on Node 20.19, the oldest its `engines` allows, and imports and requires every subpath
-there; the canary job installs it beside `next@canary` as well. No job runs `react@canary` alone.
+there; the canary job installs it beside `next@canary` as well. No job runs `react@canary` alone. One more
+job puts the packed package into an app made the way `npm create vite` makes one, on Vite 8.3 with
+@vitejs/plugin-react 6.1 and the Vite setup above, and checks that a click there is blamed on the component
+that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build.
 
 ## Known limits
 
