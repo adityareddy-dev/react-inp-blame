@@ -18,7 +18,7 @@ it changes when a field is removed or changes meaning, which a minor release may
   `react-inp-blame/next-client` now installs nothing in a build the wrapper's `enabled` leaves out,
   though its code still ships there. Before
   16.0 the Turbopack rule keeps to the browser and out of `node_modules` through builtin conditions, the
-  form those versions take, and rules under `experimental.turbo` are carried over. On 16.3 and later a
+  form those versions take, and `experimental.turbo` rules and loaders carry over. On 16.3 and later a
   kept line does the install and nothing is injected a second time, but it is better deleted, so builds
   `enabled` leaves out stop carrying the code. The subpath types need `moduleResolution: "bundler"`.
   Below 15.3 the wrapper warns and returns the config as it was.

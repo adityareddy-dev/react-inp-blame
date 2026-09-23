@@ -224,8 +224,14 @@ function wrap(nextConfig, options, dirs) {
 
   const legacy = !atLeast(found, NEXT_RULE_CONDITION) && nextConfig.experimental && nextConfig.experimental.turbo;
   // Next.js 15 reads rules from `experimental.turbo` too, under the ones in `turbopack`, which replace
-  // them as a whole; the `turbopack` written here would drop them unless they are carried over.
-  const existing = { ...((legacy && legacy.rules) || {}), ...((nextConfig.turbopack && nextConfig.turbopack.rules) || {}) };
+  // them as a whole; the `turbopack` written here would drop them unless they are carried over. Older
+  // configs have `loaders` keyed by extension there instead, which Next.js 15 turns into rules the same
+  // way when there are no `rules`.
+  const legacyLoaders = legacy && !legacy.rules && legacy.loaders;
+  const legacyRules = legacyLoaders
+    ? Object.fromEntries(Object.entries(legacyLoaders).map(([extension, loaders]) => [`*${extension}`, loaders]))
+    : legacy && legacy.rules;
+  const existing = { ...(legacyRules || {}), ...((nextConfig.turbopack && nextConfig.turbopack.rules) || {}) };
   const prior = existing[GLOB];
   let rule = turbopackRule(found);
   if (prior != null && atLeast(found, NEXT_RULE_CONDITION)) rule = [...(Array.isArray(prior) ? prior : [prior]), rule];

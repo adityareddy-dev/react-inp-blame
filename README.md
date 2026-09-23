@@ -125,7 +125,7 @@ package's `exports`, so `moduleResolution` in `tsconfig.json` has to be `bundler
 sets. Under `node` these imports fail the type check, and under `node16` they do too unless the app's
 `package.json` has `"type": "module"`. Before 16.0 a Turbopack rule takes no `condition`, so
 on 15.x the loader's rule keeps to the browser build and out of `node_modules` through builtin conditions
-instead, the rules under `experimental.turbo` are carried over, and a rule of your own on `*.{tsx,jsx}` is
+instead, `experimental.turbo` rules and loaders carry over, and a rule of your own on `*.{tsx,jsx}` is
 left as it is, with a warning, since 15.x takes one rule there. Below 15.3 there is no `instrumentation-client`
 and nothing can load the library ahead of React: the wrapper warns and hands your config back as it was. CI runs
 the Next.js suites on 16.2.12, 15.5.26 and 15.3.9 with the line, under both bundlers.
