@@ -259,6 +259,15 @@ test("on Next.js 15 the project's rules under experimental.turbo are kept, and a
   assert.deepEqual(Object.keys(legacy.turbopack.rules[GLOB]), ['foreign', 'browser']);
   assert.equal(legacy.experimental.turbo.rules['*.svg'], svg);
 
+  // Older still, loaders keyed by extension, which Next.js 15 turns into rules when there are none.
+  const svgLoaders = ['svg-loader'];
+  const loaders = inProject(v155, () => wrapped('development', { experimental: { turbo: { loaders: { '.svg': svgLoaders } } } }));
+  assert.equal(loaders.turbopack.rules['*.svg'], svgLoaders);
+  const both = inProject(v155, () =>
+    wrapped('development', { experimental: { turbo: { rules: { '*.md': md }, loaders: { '.svg': svgLoaders } } } }),
+  );
+  assert.deepEqual(Object.keys(both.turbopack.rules), ['*.md', GLOB]);
+
   // A glob holds one rule before 16.0, and a list of them fails Next.js's config check.
   forgetWarnings();
   const own = { loaders: ['own-loader'] };
