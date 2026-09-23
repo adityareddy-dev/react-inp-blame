@@ -2,7 +2,8 @@
  * The client half of `withInpBlame` (`react-inp-blame/next`), which adds this module to Next.js's
  * `instrumentationClientInject`. Next.js imports it before `instrumentation-client` and before
  * hydration, so install() runs ahead of react-dom, with the options the wrapper was given; and the
- * App Router calls its `onRouterTransitionStart` as each navigation starts.
+ * App Router calls its `onRouterTransitionStart` as each navigation starts. Before Next.js 16.3 the
+ * app's own instrumentation-client re-exports it, and Next.js imports that file just as early.
  */
 import { install } from './index.js';
 import { announceNavigation } from './navigation.js';
@@ -20,9 +21,13 @@ interface WrapperSettings {
 // here rather than taken from Node's types, because in the browser nothing else of `process` is read.
 declare const process: { readonly env: { readonly REACT_INP_BLAME_NEXT?: string } };
 
-const settings: WrapperSettings = { install: {}, basePath: '', ...JSON.parse(process.env.REACT_INP_BLAME_NEXT || '{}') };
+// Undefined in a build the wrapper's `enabled` leaves out, or with `runtime: false`, and then this module
+// does nothing. The injected copy is not in those builds at all, but the line in instrumentation-client
+// is in every one, so this is what keeps it to the runs the wrapper covers.
+const wrapper = process.env.REACT_INP_BLAME_NEXT;
+const settings: WrapperSettings | null = wrapper ? { install: {}, basePath: '', ...JSON.parse(wrapper) } : null;
 
-install(settings.install);
+if (settings) install(settings.install);
 
 /** The third argument under `experimental.instrumentationClientRouterTransitionEvents`, reduced to what is read; Next.js passes null without the flag. */
 interface RouterTransitionStartEvent {
@@ -36,6 +41,7 @@ interface RouterTransitionStartEvent {
  * every report after it carries its URL.
  */
 export function onRouterTransitionStart(url: string, navigationType: StartedNavigation['type'], event?: RouterTransitionStartEvent | null): void {
+  if (!settings) return;
   announceNavigation({
     // A push or replace announces the path it was given, without the basePath; a traverse, the full URL.
     url: new URL(url.startsWith('/') ? settings.basePath + url : url, location.href).href,

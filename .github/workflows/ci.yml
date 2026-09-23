@@ -156,6 +156,44 @@ jobs:
       - name: Next.js, webpack production build
         run: npm run test:prod:webpack -w apps/next-demo
 
+  # Next.js before 16.3 has no instrumentationClientInject, so the app's own instrumentation-client
+  # re-exports react-inp-blame/next-client: the line withInpBlame prints until it is there. 16.2 and 15.5
+  # are the newest minors of each major below 16.3, and 15.3 is the oldest with an instrumentation-client.
+  # Pinned to the patches last checked, so that a release, which waits for this job, does not turn on
+  # what npm serves that day.
+  next-older:
+    name: Next.js ${{ matrix.next }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        next: ['16.2.12', '15.5.26', '15.3.9']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm install next@${{ matrix.next }} -w apps/next-demo
+      - run: npm ls next
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: The line withInpBlame prints, in instrumentation-client.ts
+        run: echo "export { onRouterTransitionStart } from 'react-inp-blame/next-client';" > apps/next-demo/instrumentation-client.ts
+      - name: next dev
+        run: npm test -w apps/next-demo
+      - name: next dev --turbopack
+        if: ${{ !cancelled() && startsWith(matrix.next, '15.') }}
+        run: INP_BUNDLER=turbopack npm test -w apps/next-demo
+      - name: Production build
+        if: ${{ !cancelled() }}
+        run: npm run test:prod -w apps/next-demo
+      - name: webpack production build
+        if: ${{ !cancelled() && startsWith(matrix.next, '16.') }}
+        run: npm run test:prod:webpack -w apps/next-demo
+
   next-canary:
     name: Next.js canary
     runs-on: ubuntu-latest

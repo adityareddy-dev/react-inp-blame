@@ -10,7 +10,7 @@ purpose. Click something and read what the badge blames.
 
     npm install react-inp-blame
 
-## Start with Next.js 16.3 or later
+## Start with Next.js 15.3 or later
 
 ```ts
 // next.config.ts
@@ -18,6 +18,14 @@ import { withInpBlame } from 'react-inp-blame/next';
 
 // Your config first, this library's options second. They are not Next.js config keys.
 export default withInpBlame({ /* your config */ }, { runtime: { overlay: true } });
+```
+
+On Next.js 15.3 to 16.2, add one line to `instrumentation-client.ts` as well. `withInpBlame` prints it
+until the file has it:
+
+```ts
+// instrumentation-client.ts
+export { onRouterTransitionStart } from 'react-inp-blame/next-client';
 ```
 
 ## Start with Vite
@@ -47,7 +55,8 @@ in development, this is `report.verdict`, which the row spreads over its header 
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
 production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
 defaults to `'development'`, so a production build carries nothing from either plugin until you say
-`enabled: true` or `enabled: 'production'`.
+`enabled: true` or `enabled: 'production'`. The one exception is the line on Next.js 15.3 to 16.2: its module
+is in every build, and in the ones `enabled` leaves out it does nothing.
 
 If you would rather read reports than look at a badge, drop `overlay` and subscribe:
 
@@ -72,7 +81,7 @@ internal tree React keeps of your rendered components; the library reads it thro
 exposes for developer tools. A **soft navigation** is a route change the framework makes in the page,
 with no new document.
 
-## Install with Next.js 16.3 or later
+## Install with Next.js 15.3 or later
 
 `withInpBlame(nextConfig, options)`: your Next.js config first, this library's options second. Passing the
 options as the first argument throws, because Next.js has no `enabled` or `runtime` config key and would
@@ -90,6 +99,34 @@ export default withInpBlame({ /* your config */ }, {
 `withInpBlame` appends `react-inp-blame/next-client` to `instrumentationClientInject`, which Next.js imports
 before `instrumentation-client` and before hydration, and adds a loader, under Turbopack and webpack, that
 stamps `displayName` on the components in your `.tsx` and `.jsx` files so their names survive minification.
+
+Next.js added `instrumentationClientInject` in 16.3. From 15.3 to 16.2 the wrapper adds the loader and your
+options, and the install is one line in your own `instrumentation-client.ts`, beside `next.config` or in
+`src/`: `export { onRouterTransitionStart } from 'react-inp-blame/next-client';`. Next.js imports that file
+before hydration, which is early enough, and the wrapper prints the line in the runs `enabled` covers
+(`next dev` by default) until the file has it. The module the line loads installs with the options given to
+the wrapper, and does nothing in a build `enabled` leaves out or with `runtime: false`. Kept after an upgrade
+to 16.3, the line goes on doing the install and the wrapper injects no second copy. If the file already exports
+an `onRouterTransitionStart`, as Sentry's setup has it do, call this library's from yours instead:
+
+```ts
+// instrumentation-client.ts
+import { onRouterTransitionStart as inpBlame } from 'react-inp-blame/next-client';
+
+export const onRouterTransitionStart: typeof inpBlame = (url, navigationType, event) => {
+  inpBlame(url, navigationType, event);
+  Sentry.captureRouterTransitionStart(url, navigationType);
+};
+```
+
+TypeScript finds the types of `react-inp-blame/next` and `react-inp-blame/next-client` only through the
+package's `exports`, so `moduleResolution` in `tsconfig.json` has to be `bundler` or `node16`; a project
+still on `node` fails the type check on these imports. Before 16.0 a Turbopack rule takes no `condition`, so
+on 15.x the loader's rule keeps to the browser build and out of `node_modules` through builtin conditions
+instead, the rules under `experimental.turbo` are carried over, and a rule of your own on `*.{tsx,jsx}` is
+left as it is, with a warning, since 15.x takes one rule there. Below 15.3 there is no `instrumentation-client`
+and nothing can load the library ahead of React: the wrapper warns and hands your config back as it was. CI runs
+the Next.js suites on 16.2.12, 15.5.26 and 15.3.9 with the line, under both bundlers.
 
 **`enabled` defaults to `'development'`: a production build gets neither the runtime nor the component
 names unless you pass `enabled: true` or `enabled: 'production'`.**
@@ -452,7 +489,8 @@ per scenario, one interaction each, `walkBudget: 100000`, taken
 On the same machine with other processes at 15 to 49% CPU, the same commit read 1.1 to 1.6 times these p50s.
 The walk runs inside React's commit and its time is taken back out of `processing`; outside an interaction a
 commit costs a renderer lookup and one subtraction, and at the default `walkBudget` of 5000 neither scenario is
-cut short. With `enabled` at its default, neither plugin adds anything to a production build; where it loads:
+cut short. With `enabled` at its default, neither plugin adds anything to a production build (on Next.js 15.3 to
+16.2, the line's module, which does nothing there); where it loads:
 
 | Bundle (rolldown 1.2.8, minified ESM) | Minified | Gzip |
 | --- | --- | --- |
@@ -496,10 +534,11 @@ its own React does not switch off the app's own. Reports carry on without compon
 Supported: react-dom 17, 18 and 19; only react-dom commits are walked. CI runs the demo's suites on React 19.3
 in development and production builds, its attribution and input-delay specs on React 19.2.8, 19.1.9, 18.3.1,
 18.2.0 and 17.0.2 (legacy root), and the Next.js check on 16.3.5 under `next dev` and both production bundlers,
-and on `next@canary`, whose App Router brings a React canary, on every push and once a day, in a job allowed to
-fail. It also installs the package as packed for npm into apps with no peers, with Next.js 15, with Next.js
-16.3.5 and with Vite 5, on Node 20.19, the oldest its `engines` allows, and imports and requires every subpath
-there; the canary job installs it beside `next@canary` as well. No job runs `react@canary` alone. One more
+on 16.2.12, 15.5.26 and 15.3.9 through the `instrumentation-client` line, and on `next@canary`, whose App Router
+brings a React canary, on every push and once a day, in a job allowed to fail. It also installs the package as
+packed for npm into apps with no peers, with Next.js 15, with Next.js 16.3.5 and with Vite 5, on Node 20.19, the
+oldest its `engines` allows, and imports and requires every subpath there; the canary job installs it beside
+`next@canary` as well. No job runs `react@canary` alone. One more
 job puts the packed package into an app made the way `npm create vite` makes one, on Vite 8.3 with
 @vitejs/plugin-react 6.1 and the Vite setup above, and checks that a click there is blamed on the component
 that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build.
@@ -510,6 +549,11 @@ that rendered slowly, on the dev server with a Fast Refresh edit included and in
   TanStack Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves
   and builds, and theirs never go through it, so the library most likely never installs there, and nothing
   says so. Not tried yet. React Native is out of scope: only react-dom commits are walked.
+- **Under `next dev` from Next.js 15.4.11 and 15.5, the dev overlay renders with a production React of its own,
+  and its commits can join a click's report.** React did not time them, so the report then says a profiling
+  build would give exact numbers, and `commits.ms` in the web-vitals attribution is `null`. The blame is not
+  affected. On 16.3 it takes hot-reload traffic re-rendering the overlay; on 15.5 under Turbopack it happened on
+  every click the web-vitals test made, so that test does not check `commits.ms` there.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.

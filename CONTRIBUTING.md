@@ -85,10 +85,11 @@ it; the other suites above reach it through the workspace link. `test:pack` pack
 installs the tarball, with one `npm install` each, into throwaway apps in the temp directory: one with no
 peers, one with Next.js 15, one with the Next.js that `apps/next-demo` pins and one with Vite 5. In each
 it checks that every file `package.json` points at is in the package, imports and requires every subpath,
-and loads the browser entries again under the `react-server` condition. The Next.js 15 app has to get the
-wrapper's version error rather than a failed install, and the Vite app a production build whose page
-installs the library. It needs the npm registry and no port. Name fixtures to run only those;
-`next-canary` runs only when named, because a canary is allowed to break. `--tarball` checks a tarball
+and loads the browser entries again under the `react-server` condition. In the Next.js 15 app the wrapper
+has to leave out `instrumentationClientInject` and print the `instrumentation-client` line, and the Vite
+app has to give a production build whose page installs the library. It needs the npm registry and no
+port. Name fixtures to run only those; `next-canary` runs only when named, because a canary is allowed
+to break. `--tarball` checks a tarball
 that already exists, which is how CI runs the script on Node 20.19, the oldest Node the package supports:
 
     npm run test:pack -- bare next-15
@@ -134,7 +135,12 @@ Two things the demo's suite leaves out of a normal run:
 - `npm run build`, `npm run typecheck`, `npm run test:unit` and the Playwright suites the change can
   affect pass locally, and `npm run test:pack` when the change touches what is published:
   `packages/core/package.json` or a file it lists. CI runs all of them on every push and pull request
-  and once a day, plus a job against `next@canary` that is allowed to fail.
+  and once a day, plus a job against `next@canary` that is allowed to fail and one that runs the
+  Next.js suites on 16.2, 15.5 and 15.3. To repeat that one:
+  `npm install next@15.5.26 -w apps/next-demo`, put the line `withInpBlame` prints in
+  `apps/next-demo/instrumentation-client.ts`, run `npm test -w apps/next-demo` (on 15.x also
+  `INP_BUNDLER=turbopack npm test -w apps/next-demo`), then delete that file and put the pin back with
+  `git checkout apps/next-demo/package.json package-lock.json` and `npm ci`.
 - A test for every change in behaviour. Tests assert on a report's data (`explanation.blame`, the
   phases, the commits), never on the wording of `verdict`, `cause` or `notes`: those are display text
   and may change in any version.
