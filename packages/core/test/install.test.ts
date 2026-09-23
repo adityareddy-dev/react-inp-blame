@@ -5,7 +5,6 @@ import path from 'node:path';
 import { beforeEach, test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, mountOverlay, onInteraction } from '../src/index.ts';
-import { onRouterTransitionStart } from '../src/next-client.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 
 const HOOK = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
@@ -478,7 +477,25 @@ test('sampleRate rolls once per page, and a page that loses gets nothing install
   });
 });
 
+/**
+ * next-client as Next.js bundles it: `process.env.REACT_INP_BLAME_NEXT` holds what withInpBlame put in
+ * `env`, or nothing in a build the wrapper left out. Each tag imports a copy of its own.
+ */
+async function nextClient(tag: string, settings?: object): Promise<typeof import('../src/next-client.ts')> {
+  const saved = process.env.REACT_INP_BLAME_NEXT;
+  if (settings) process.env.REACT_INP_BLAME_NEXT = JSON.stringify(settings);
+  else delete process.env.REACT_INP_BLAME_NEXT;
+  try {
+    return await import(`../src/next-client.ts?${tag}`);
+  } finally {
+    if (saved === undefined) delete process.env.REACT_INP_BLAME_NEXT;
+    else process.env.REACT_INP_BLAME_NEXT = saved;
+  }
+}
+
 test('a click that starts an App Router navigation is named with it, and the reports after it carry the new URL', async () => {
+  // Imported outside the stand-in browser, so its own install() finds no window and does nothing.
+  const { onRouterTransitionStart } = await nextClient('wrapped', { install: {}, basePath: '' });
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false });
     // Next.js calls the injected module's hook from inside the click handler that starts the navigation.
@@ -494,6 +511,21 @@ test('a click that starts an App Router navigation is named with it, and the rep
     assert.equal(api.last()?.navigationURL, 'https://shop.example/cart');
     page.paint([click(21, back + 100, 64)]);
     assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'soft-navigation', startedNavigation: null });
+    api.dispose();
+  });
+});
+
+test('next-client installs nothing and names no navigation in a build withInpBlame left out, where the line in instrumentation-client still brings it', async () => {
+  await inBrowser(async (page) => {
+    const { onRouterTransitionStart } = await nextClient('left-out');
+    assert.equal(Observer.live.size, 0);
+    // The same module in a build the wrapper covers installs as it is imported.
+    await nextClient('covered', { install: { devtoolsTrack: false }, basePath: '' });
+    assert.ok(Observer.live.size > 0);
+    const api = install({ devtoolsTrack: false });
+    const clickedAt = page.duringClick(() => onRouterTransitionStart('/cart', 'push', null));
+    page.paint([click(7, clickedAt, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: null });
     api.dispose();
   });
 });

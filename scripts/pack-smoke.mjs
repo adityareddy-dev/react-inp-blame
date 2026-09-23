@@ -82,10 +82,13 @@ console.log(JSON.stringify(found));
 // Calls the wrapper the way the README's next.config does, and prints what came of it.
 const NEXT_CONFIG = `import { withInpBlame } from '${PACKAGE}/next';
 
+// What the wrapper prints goes into the answer, so the check can read it beside the config.
+const warnings = [];
+console.warn = (message) => warnings.push(String(message));
 try {
-  console.log(JSON.stringify({ config: withInpBlame({}) }));
+  console.log(JSON.stringify({ config: withInpBlame({}), warnings }));
 } catch (error) {
-  console.log(JSON.stringify({ refusal: error.message }));
+  console.log(JSON.stringify({ refusal: error.message, warnings }));
 }
 `;
 
@@ -239,13 +242,20 @@ function wrapNextConfig(app) {
   return JSON.parse(node(app, ['next-config.mjs'], { ...process.env, NODE_ENV: 'development' }));
 }
 
-/** The design is "installs anywhere, explains itself at run time". The install was the first half, and this is the second. */
-function refusesThisNext(app) {
-  const { refusal } = wrapNextConfig(app);
+/**
+ * The design is "installs anywhere, explains itself at run time". The install was the first half, and
+ * this is the second: below instrumentationClientInject the wrapper still goes to work, and prints the
+ * line that installs the library from the app's instrumentation-client.
+ */
+function explainsThisNext(app) {
+  const { config, refusal, warnings } = wrapNextConfig(app);
   const { version } = installed(app, 'next');
-  // The floor's number is the unit tests' to pin. What has to hold here is that the refusal names the Next.js it found.
-  const named = refusal?.includes('needs Next.js') && refusal.includes(version);
-  assert.ok(named, `withInpBlame({}) beside next ${version} did not throw the version floor's error: ${refusal}`);
+  assert.ok(refusal === undefined, `withInpBlame({}) beside next ${version} threw: ${refusal}`);
+  assert.ok(!config.instrumentationClientInject, `withInpBlame({}) beside next ${version} wrote instrumentationClientInject, which that Next.js does not have: ${JSON.stringify(config)}`);
+  // The version numbers are the unit tests' to pin. What has to hold here is that the warning names
+  // the Next.js it found and the line to add.
+  const told = warnings.some((warning) => warning.includes(version) && warning.includes(`${PACKAGE}/next-client`));
+  assert.ok(told, `withInpBlame({}) beside next ${version} did not print the line for instrumentation-client: ${JSON.stringify(warnings)}`);
 }
 
 /** At the floor or past it, a canary included, the wrapper goes to work instead of throwing. */
@@ -322,8 +332,8 @@ const nextDemo = readJson(path.join(root, 'apps/next-demo/package.json'));
 const FIXTURES = {
   // All four peers are optional, so with none of them the package still has to install and load.
   bare: { install: [], beside: [], check: arrivesAlone },
-  // Older than the wrapper's floor. The peer range that used to say so made npm refuse the install.
-  'next-15': { install: ['next@15'], beside: NEXT_APP, check: refusesThisNext },
+  // Older than instrumentationClientInject. The peer range the wrapper once had made npm refuse the install.
+  'next-15': { install: ['next@15'], beside: NEXT_APP, check: explainsThisNext },
   'next-current': { install: [`next@${nextDemo.dependencies.next}`], beside: NEXT_APP, check: wrapsNextConfig },
   // No document names an oldest Vite, so this is 5, the floor the peer range had before it became `*`.
   'vite-oldest': { install: ['vite@5'], beside: ['vite'], check: buildsWithVite },

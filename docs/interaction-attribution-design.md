@@ -1296,16 +1296,22 @@ track, and `react.*` OpenTelemetry attributes.
 page that includes the library gets a React attribution track next to Chrome's own Interactions
 track, with no extension to install.
 
-**Next.js.** Tested on Next 16.3.5 (`apps/next-demo`). Setup is one line: `withInpBlame()` around
-the config in `next.config.ts` (`react-inp-blame/next`). It appends `react-inp-blame/next-client` to
-`instrumentationClientInject`, the list of client modules Next.js 16.3 imports before
-`instrumentation-client` and before hydration, which Next.js documents for config wrappers of this
-kind. That module installs the library with the wrapper's `runtime` options, which reach it through
-`env` because Next.js inlines those at build time. The wrapper also adds the displayName loader as a
-Turbopack rule and as a webpack `enforce: 'pre'` rule, merging with whatever rules the app already
-has. Both are added only under `next dev` unless `enabled` is `'production'` or `true`, which
-`apps/next-demo` sets because its test checks names in production builds; `runtime: false` keeps the
-loader alone. That is the shape Sentry uses (`withSentryConfig`), so it is what Next users expect.
+**Next.js.** Tested on Next 16.3.5 (`apps/next-demo`). Setup is one line on 16.3 and two before it:
+`withInpBlame()` around the config in `next.config.ts` (`react-inp-blame/next`). It appends
+`react-inp-blame/next-client` to `instrumentationClientInject`, the list of client modules Next.js 16.3
+imports before `instrumentation-client` and before hydration, which Next.js documents for config
+wrappers of this kind. Next.js 15.3 to 16.2 have no such list, so there the app's own
+`instrumentation-client.ts` re-exports that module, a line the wrapper prints until the file has it;
+the load-order, hydration and web-vitals suites pass that way on 16.2.12, 15.5.26 and 15.3.9 under
+both bundlers, on 15.5 under Turbopack without the `commits.ms` check (2026-09-22). That module
+installs the library with the wrapper's `runtime` options, which reach it through `env` because
+Next.js inlines those at build time. Where the wrapper put nothing in `env`, a build `enabled` leaves
+out, it does nothing, since the line in instrumentation-client brings it into every build. The wrapper
+also adds the displayName loader as a Turbopack rule and as a webpack `enforce: 'pre'` rule, merging
+with whatever rules the app already has (before 16.0 a glob takes one rule, so an app's own rule on
+the same files is left alone, with a warning). Both are added only under `next dev` unless `enabled`
+is `'production'` or `true`, which `apps/next-demo` sets because its test checks names in production
+builds; `runtime: false` keeps the loader alone. That is the shape Sentry uses (`withSentryConfig`), so it is what Next users expect.
 In a production build the injected module runs before `react-dom` evaluates: the library's own hook
 is the one React registers with, and the first keystroke is attributed. In dev, React Fast Refresh's
 runtime has already installed a hook stub by then, so the library chains onto it, and attribution

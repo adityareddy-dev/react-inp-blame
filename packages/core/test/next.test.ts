@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-const { withInpBlame } = createRequire(import.meta.url)('../next.cjs');
+const require = createRequire(import.meta.url);
+const { withInpBlame } = require('../next.cjs');
 
 const GLOB = '*.{tsx,jsx}';
 const CLIENT_MODULE = 'react-inp-blame/next-client';
@@ -193,20 +194,200 @@ test('an async function config is awaited', async () => {
   assert.equal(config.basePath, '/docs');
 });
 
-test('a Next.js older than instrumentationClientInject is refused by name, and a canary of a later one is not', (t) => {
-  const old = projectWithNext('15.5.25');
+const CLIENT_LINE = `export { onRouterTransitionStart } from '${CLIENT_MODULE}';`;
+
+/** Drops the marks that keep each warning to one print per `next dev`, so a test sees its own. */
+function forgetWarnings(): void {
+  for (const key of Object.keys(process.env)) if (key.startsWith('REACT_INP_BLAME_WARNED_')) delete process.env[key];
+}
+
+/** A project on `version` whose instrumentation-client, at `file` under it, holds `source`. */
+function projectWithClientFile(version: string, file: string, source: string): string {
+  const dir = projectWithNext(version);
+  fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+  fs.writeFileSync(path.join(dir, file), source);
+  return dir;
+}
+
+test('below instrumentationClientInject the loader and the options still go in, and the line for instrumentation-client is printed once', (t) => {
+  const v162 = projectWithNext('16.2.12');
+  const v155 = projectWithNext('15.5.26');
+  t.after(() => {
+    for (const dir of [v162, v155]) fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const warn = t.mock.method(console, 'warn', () => {});
+  forgetWarnings();
+
+  const config = inProject(v162, () => wrapped('development', {}, { runtime: { overlay: true } }));
+  assert.deepEqual(added(config), { runtime: false, turbopack: true, webpack: true });
+  assert.deepEqual(config.turbopack.rules[GLOB].condition, { all: ['browser', { not: 'foreign' }] });
+  // The line re-exports next-client, which reads these as it does when Next.js injects it.
+  assert.deepEqual(clientSettings(config), { install: { overlay: true }, basePath: '' });
+  assert.equal(warn.mock.callCount(), 1);
+  const message = String(warn.mock.calls[0].arguments[0]);
+  assert.ok(message.includes('16.2.12') && message.includes(CLIENT_LINE), message);
+  // Next.js reads the config more than once in a run, and the warning is worth one print.
+  inProject(v162, () => wrapped('development', {}));
+  assert.equal(warn.mock.callCount(), 1);
+
+  // Before 16.0 a Turbopack rule has no `condition`: the same limits are builtin conditions as keys,
+  // the first that matches deciding, so foreign code is turned away before the browser build is let in.
+  forgetWarnings();
+  const older = inProject(v155, () => wrapped('development', {}));
+  assert.deepEqual(added(older), { runtime: false, turbopack: true, webpack: true });
+  const rule = older.turbopack.rules[GLOB];
+  assert.deepEqual(Object.keys(rule), ['foreign', 'browser']);
+  assert.equal(rule.foreign, false);
+  assert.deepEqual(Object.keys(rule.browser), ['loaders']);
+  assert.match(rule.browser.loaders[0], /display-names-loader\.cjs$/);
+  assert.ok(String(warn.mock.calls[1].arguments[0]).includes('15.5.26'));
+  forgetWarnings();
+});
+
+test("on Next.js 15 the project's rules under experimental.turbo are kept, and a rule of its own on the loader's glob is left alone with a warning", (t) => {
+  const v155 = projectWithNext('15.5.26');
+  t.after(() => fs.rmSync(v155, { recursive: true, force: true }));
+  const warn = t.mock.method(console, 'warn', () => {});
+  forgetWarnings();
+  const svg = { loaders: ['svg-loader'], as: '*.js' };
+  const md = ['md-loader'];
+
+  // Next.js 15 reads these under the rules in `turbopack`, which replace them as a whole.
+  const legacy = inProject(v155, () => wrapped('development', { experimental: { turbo: { rules: { '*.svg': svg } } }, turbopack: { rules: { '*.md': md } } }));
+  assert.equal(legacy.turbopack.rules['*.svg'], svg);
+  assert.equal(legacy.turbopack.rules['*.md'], md);
+  assert.deepEqual(Object.keys(legacy.turbopack.rules[GLOB]), ['foreign', 'browser']);
+  assert.equal(legacy.experimental.turbo.rules['*.svg'], svg);
+
+  // A glob holds one rule before 16.0, and a list of them fails Next.js's config check.
+  forgetWarnings();
+  const own = { loaders: ['own-loader'] };
+  const config = inProject(v155, () => wrapped('development', { turbopack: { rules: { [GLOB]: own } } }));
+  assert.equal(config.turbopack.rules[GLOB], own);
+  assert.deepEqual(added(config), { runtime: false, turbopack: true, webpack: true });
+  const told = warn.mock.calls.map((call) => String(call.arguments[0])).filter((message) => message.includes(GLOB));
+  assert.equal(told.length, 1);
+  assert.ok(told[0].includes('15.5.26') && told[0].includes('webpack'), told[0]);
+  forgetWarnings();
+});
+
+test('the line in instrumentation-client quiets the warning, and from 16.3 on it stands in for the injected module', (t) => {
+  const withLine = projectWithClientFile('16.2.12', 'instrumentation-client.ts', `${CLIENT_LINE}\n`);
+  const inSrc = projectWithClientFile('15.3.9', 'src/instrumentation-client.js', `import './analytics';\n${CLIENT_LINE}\n`);
+  const upgraded = projectWithClientFile('16.3.6', 'instrumentation-client.ts', `${CLIENT_LINE}\n`);
+  const other = projectWithClientFile('16.3.6', 'instrumentation-client.ts', "import './analytics';\n");
+  // Sentry's setup has the file export an onRouterTransitionStart of its own, which then calls next-client's.
+  const named = projectWithClientFile(
+    '16.2.12',
+    'instrumentation-client.ts',
+    `import * as Sentry from '@sentry/nextjs'\nimport {\n  onRouterTransitionStart as inpBlame,\n} from '${CLIENT_MODULE}'\nexport const onRouterTransitionStart = (url, type) => { inpBlame(url, type); Sentry.captureRouterTransitionStart(url, type) }\n`,
+  );
+  t.after(() => {
+    for (const dir of [withLine, inSrc, upgraded, other, named]) fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const warn = t.mock.method(console, 'warn', () => {});
+  forgetWarnings();
+
+  assert.deepEqual(added(inProject(withLine, () => wrapped('development', {}))), { runtime: false, turbopack: true, webpack: true });
+  assert.deepEqual(added(inProject(inSrc, () => wrapped('development', {}))), { runtime: false, turbopack: true, webpack: true });
+  assert.deepEqual(added(inProject(named, () => wrapped('development', {}))), { runtime: false, turbopack: true, webpack: true });
+  assert.equal(warn.mock.callCount(), 0);
+
+  // Kept after an upgrade, the line already installs the library, and injecting a second copy would
+  // announce every navigation twice.
+  const kept = inProject(upgraded, () => wrapped('development', {}, { runtime: { overlay: 'query' } }));
+  assert.deepEqual(added(kept), { runtime: false, turbopack: true, webpack: true });
+  assert.deepEqual(clientSettings(kept), { install: { overlay: 'query' }, basePath: '' });
+  assert.deepEqual(added(inProject(other, () => wrapped('development', {}))), EVERYTHING);
+  assert.equal(warn.mock.callCount(), 0);
+});
+
+test('a commented-out line, a bare import of next-client and a file Next.js does not use are not the line', (t) => {
+  const commented = projectWithClientFile('16.2.12', 'instrumentation-client.ts', `import './analytics'\n// ${CLIENT_LINE}\n/*\n${CLIENT_LINE}\n*/\n`);
+  const bare = projectWithClientFile('16.3.6', 'instrumentation-client.ts', `import '${CLIENT_MODULE}';\n`);
+  // Next.js takes src/instrumentation-client first, so a root one beside it is never loaded.
+  const shadowed = projectWithClientFile('16.3.6', 'instrumentation-client.ts', `${CLIENT_LINE}\n`);
+  fs.mkdirSync(path.join(shadowed, 'src'));
+  fs.writeFileSync(path.join(shadowed, 'src', 'instrumentation-client.ts'), "import './analytics';\n");
+  t.after(() => {
+    for (const dir of [commented, bare, shadowed]) fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const warn = t.mock.method(console, 'warn', () => {});
+  forgetWarnings();
+
+  inProject(commented, () => wrapped('development', {}));
+  assert.equal(warn.mock.callCount(), 1);
+  // A bare import installs the library but exports no onRouterTransitionStart, so the injected module
+  // is still what hears navigations.
+  assert.deepEqual(added(inProject(bare, () => wrapped('development', {}))), EVERYTHING);
+  assert.deepEqual(added(inProject(shadowed, () => wrapped('development', {}))), EVERYTHING);
+  forgetWarnings();
+});
+
+test('the line is printed while Next.js imports a config written as a function, before it calls it', async (t) => {
+  const v162 = projectWithNext('16.2.12');
+  t.after(() => fs.rmSync(v162, { recursive: true, force: true }));
+  const warn = t.mock.method(console, 'warn', () => {});
+  forgetWarnings();
+  const saved = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'development';
+  try {
+    const wrapper = inProject(v162, () => withInpBlame(() => ({ basePath: '/shop' })));
+    assert.equal(warn.mock.callCount(), 1);
+    const config = await inProject(v162, () => wrapper('phase-development-server', { defaultConfig: {} }));
+    assert.equal(clientSettings(config).basePath, '/shop');
+    assert.equal(warn.mock.callCount(), 1);
+  } finally {
+    if (saved === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = saved;
+    forgetWarnings();
+  }
+});
+
+test('run from a monorepo root, the project is found through the next.config that called the wrapper', (t) => {
+  const app = projectWithClientFile('15.5.26', 'instrumentation-client.ts', `${CLIENT_LINE}\n`);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'inp-root-'));
+  t.after(() => {
+    for (const dir of [app, root]) fs.rmSync(dir, { recursive: true, force: true });
+  });
+  fs.writeFileSync(path.join(app, 'next.config.cjs'), `module.exports = require(${JSON.stringify(require.resolve('../next.cjs'))}).withInpBlame({});\n`);
+  const warn = t.mock.method(console, 'warn', () => {});
+  forgetWarnings();
+  const saved = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'development';
+  try {
+    // `next dev apps/web` from the root: the working directory has neither Next.js nor the file.
+    const config = inProject(root, () => require(path.join(app, 'next.config.cjs')));
+    // Next.js 15.5, read from the app: the 15.x rule, nothing injected, and no warning, since the app's file has the line.
+    assert.deepEqual(Object.keys(config.turbopack.rules[GLOB]), ['foreign', 'browser']);
+    assert.deepEqual(added(config), { runtime: false, turbopack: true, webpack: true });
+    assert.equal(warn.mock.callCount(), 0);
+  } finally {
+    if (saved === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = saved;
+    forgetWarnings();
+  }
+});
+
+test('a Next.js older than instrumentation-client gets its config back as it was, with a warning that names it', (t) => {
+  const old = projectWithNext('15.2.9');
   const canary = projectWithNext('16.4.0-canary.31');
   t.after(() => {
     for (const dir of [old, canary]) fs.rmSync(dir, { recursive: true, force: true });
   });
+  const warn = t.mock.method(console, 'warn', () => {});
+  forgetWarnings();
 
-  assert.throws(
-    () => inProject(old, () => wrapped('development', {})),
-    (error: unknown) => error instanceof Error && /needs Next\.js 16\.3 or later/.test(error.message) && error.message.includes('15.5.25'),
-  );
-  // A prerelease of a later version passes the floor. The peer range this replaced refused it at install time.
+  const project = { reactStrictMode: true };
+  assert.equal(inProject(old, () => wrapped('development', project)), project);
+  assert.equal(warn.mock.callCount(), 1);
+  const message = String(warn.mock.calls[0].arguments[0]);
+  assert.ok(message.includes('15.2.9') && message.includes('15.3'), message);
+  // A prerelease of a later version passes every floor. A peer range would have refused it at install time.
   assert.deepEqual(added(inProject(canary, () => wrapped('development', {}))), EVERYTHING);
-  // enabled: false adds nothing to the config, so there is nothing to refuse.
-  const untouched = { reactStrictMode: true };
-  assert.equal(inProject(old, () => wrapped('development', untouched, { enabled: false })), untouched);
+  // enabled: false adds nothing to the config, so there is nothing to warn about.
+  forgetWarnings();
+  assert.equal(inProject(old, () => wrapped('development', project, { enabled: false })), project);
+  assert.equal(warn.mock.callCount(), 1);
+  forgetWarnings();
 });

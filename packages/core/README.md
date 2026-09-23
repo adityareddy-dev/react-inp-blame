@@ -10,13 +10,19 @@ on purpose. Click something and read what the badge blames.
 
     npm install react-inp-blame
 
-## Start with Next.js 16.3 or later
+## Start with Next.js 15.3 or later
 
     // next.config.ts
     import { withInpBlame } from 'react-inp-blame/next';
 
     // Your config first, this library's options second. They are not Next.js config keys.
     export default withInpBlame({ /* your config */ }, { runtime: { overlay: true } });
+
+On Next.js 15.3 to 16.2, add one line to `instrumentation-client.ts` as well. `withInpBlame` prints it
+until the file has it:
+
+    // instrumentation-client.ts
+    export { onRouterTransitionStart } from 'react-inp-blame/next-client';
 
 ## Start with Vite
 
@@ -44,7 +50,8 @@ explanation column has the right-hand side. From the demo's sign-in page, in dev
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
 production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
 defaults to `'development'`, so a production build carries nothing from either plugin until you say
-`enabled: true` or `enabled: 'production'`.
+`enabled: true` or `enabled: 'production'`. The one exception is the line on Next.js 15.3 to 16.2:
+its module is in every build, and in the ones `enabled` leaves out it does nothing.
 
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
@@ -62,9 +69,10 @@ nothing, and `stats()` says why.
     import { withInpBlame } from 'react-inp-blame/next';
     export default withInpBlame({ /* your config */ }, { enabled: true, runtime: { overlay: 'query' } });
 
-That is the whole setup, on Next.js 16.3 or later. The Next.js config is the first argument and this
-library's options are the second; passing the options first throws, because Next.js has no `enabled`
-or `runtime` config key and would drop them without installing anything.
+That is the whole setup on Next.js 16.3 or later; from 15.3 to 16.2 it takes the line above as well.
+The Next.js config is the first argument and this library's options are the second; passing the
+options first throws, because Next.js has no `enabled` or `runtime` config key and would drop them
+without installing anything.
 `withInpBlame` adds `react-inp-blame/next-client`
 to `instrumentationClientInject`, so Next.js installs the library before hydration, which the
 library needs, and a loader, under Turbopack and webpack, that stamps `displayName` on components
@@ -77,8 +85,29 @@ terser and SWC keep whatever the bundler handed them. Leave `enabled` at `'devel
 for neither; a run it leaves out gets the config back untouched. `runtime` defaults to `true`, which
 is `install()` with its default options; it also takes those options, such as `{ overlay: 'query' }`.
 They reach the browser inlined through `env`, so they are plain data. `runtime: false` leaves the
-client module out, for an app that installs from its own `instrumentation-client.ts`; the navigation
-join below goes with it, since the client module is what hears navigations.
+client module out, for an app that calls `install()` itself in its own `instrumentation-client.ts`,
+without the `next-client` line; the navigation join below goes with it, since the client module is
+what hears navigations.
+
+Next.js added `instrumentationClientInject` in 16.3. From 15.3 to 16.2 the line in
+`instrumentation-client.ts` (beside `next.config` or in `src/`) does the install, with the options
+given to the wrapper, and the wrapper prints it in the runs `enabled` covers (`next dev` by default)
+until the file has it. Next.js imports that file before hydration, which is early enough. In a build
+`enabled` leaves out, or with `runtime: false`, the module the line loads does nothing. Kept after an
+upgrade to 16.3, the line goes on doing the install and no second copy is injected. If the file
+already exports an `onRouterTransitionStart`, as Sentry's setup has it do, call this one from yours:
+
+    import { onRouterTransitionStart as inpBlame } from 'react-inp-blame/next-client';
+
+    export const onRouterTransitionStart: typeof inpBlame = (url, navigationType, event) => {
+      inpBlame(url, navigationType, event);
+      Sentry.captureRouterTransitionStart(url, navigationType);
+    };
+
+TypeScript finds the types of the subpaths only through the package's `exports`, so
+`moduleResolution` has to be `bundler` or `node16`; a project still on `node` fails the type check
+on these imports. Below 15.3 there is no `instrumentation-client`: the wrapper warns and hands the
+config back as it was.
 
 On the App Router the client module also hears each navigation, meaning each route change the
 framework makes in the page with no new document: every report carries

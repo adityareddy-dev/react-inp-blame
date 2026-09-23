@@ -5,9 +5,10 @@ const prod = process.env.INP_MODE === 'prod';
 const run = prod ? 'prod' : 'dev';
 
 // withInpBlame adds react-inp-blame/next-client to instrumentationClientInject, and Next.js imports that
-// module before hydration. Whether that is early enough is shown by what follows: react-dom registered
-// with the library's hook, and the page's first keystroke is reported with React's commits. next.config.ts
-// asks for the debug global, which is how these tests read the library.
+// module before hydration; below 16.3, CI's next-older job has instrumentation-client.ts re-export it.
+// Whether that is early enough is shown by what follows: react-dom registered with the library's hook,
+// and the page's first keystroke is reported with React's commits. next.config.ts asks for the debug
+// global, which is how these tests read the library.
 
 /**
  * Waits until app/last-interaction.tsx has subscribed to reports, which its effect does once hydration

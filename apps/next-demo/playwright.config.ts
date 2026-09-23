@@ -2,8 +2,11 @@ import { defineConfig } from '@playwright/test';
 
 const prod = process.env.INP_MODE === 'prod';
 const webpack = process.env.INP_BUNDLER === 'webpack';
+// Next.js 15 bundles with webpack unless asked for Turbopack, and 16 the other way round, so each has a
+// flag for the bundler it does not default to.
+const turbopack = process.env.INP_BUNDLER === 'turbopack';
 const port = prod ? (webpack ? 5197 : 5198) : 5199;
-const flag = webpack ? ' --webpack' : '';
+const flag = webpack ? ' --webpack' : turbopack ? ' --turbopack' : '';
 
 export default defineConfig({
   testDir: './e2e',

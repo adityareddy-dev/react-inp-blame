@@ -8,6 +8,19 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Changed
 
+- **`withInpBlame` works on Next.js 15.3 to 16.2 instead of throwing.** Those versions have no
+  `instrumentationClientInject`, so the wrapper adds the loader and the options and prints one line for
+  the app's own `instrumentation-client.ts`, `export { onRouterTransitionStart } from
+  'react-inp-blame/next-client';`, until the file has it. Next.js imports that file before hydration,
+  which is early enough: the load-order, hydration and `useReportWebVitals` suites pass on 16.2.12,
+  15.5.26 and 15.3.9 with it, under both bundlers, and CI runs them (on 15.5 under Turbopack without the
+  web-vitals `commits.ms` check, for the reason in Known limits). That line is in every build, so
+  `react-inp-blame/next-client` now does nothing in a build the wrapper's `enabled` leaves out. Before
+  16.0 the Turbopack rule keeps to the browser and out of `node_modules` through builtin conditions, the
+  form those versions take, and rules under `experimental.turbo` are carried over. On 16.3 and later a
+  kept line does the install and nothing is injected a second time. Below 15.3 the wrapper warns and
+  returns the config as it was.
+
 - **A wait names what the input waited behind.** A `waiting` verdict used to end "the main thread was
   busy with something else", even where the long animation frame that was open when the input came
   listed the script that kept it. The sentence now names that script, says whether it was already
