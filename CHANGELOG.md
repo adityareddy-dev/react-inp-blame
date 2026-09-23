@@ -17,6 +17,12 @@ it changes when a field is removed or changes meaning, which a minor release may
   still the element the browser reported.
 
 
+- **The overlay's rows open from the keyboard.** A row was a clickable `div` that could not take the
+  focus, so from the keyboard alone there was no way to open one into its explanation. Its header is
+  now a button in the Tab order (`role="button"`, with `aria-expanded`), and Enter or Space opens and
+  closes the row without losing the focus. Held down, the key toggles it once rather than on every
+  repeat. Escape pressed inside the panel closes it and moves the focus to the badge, where before the
+  focus was lost with the panel. Escape anywhere else on the page still just closes it.
 
 ## [0.2.0] - 2026-09-20
 

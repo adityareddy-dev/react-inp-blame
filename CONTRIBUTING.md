@@ -10,7 +10,8 @@ we can agree on the approach before you spend time on it.
   Playwright specs in `apps/demo/e2e`.
 - `apps/next-demo`: the Next.js checks in `e2e/` (load order, hydration, `useReportWebVitals`), run
   under `next dev` and two production builds.
-- `scripts/react-matrix.mjs`: generates the copies of the demo pinned to React 19.2, 19.1, 18.3, 18.2 and 17.
+- `scripts/react-matrix.mjs`: generates the copies of the demo pinned to React 19.2, 19.1, 18.3, 18.2
+  and 17.
 - `scripts/pack-smoke.mjs`: installs the packed tarball into throwaway apps and checks it there.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
 

@@ -1,6 +1,6 @@
 # Interaction attribution for React: design notes
 
-Status, 2026-09-22: 0.2.0 is the latest on npm, published on 2026-09-21 through trusted publishing,
+Status, 2026-09-22: 0.2.0 is the latest on npm, published on 2026-09-20 through trusted publishing,
 and main has unreleased changes, listed under [Unreleased] in `CHANGELOG.md`.
 
 Status at 0.1.0, 2026-09-17: published from the `v0.1.0` tag with provenance. On 7917366 the
@@ -1192,11 +1192,11 @@ One thing it found belongs to web-vitals, not here. In every current web-vitals,
 6.2.1 on Next.js canary and 6.2.2, a page hidden while web-vitals still has an idle callback pending
 reports no INP, or the smaller value from before. `onINP`'s own hide handler reports first, before that
 callback has set the value, and the callback then reports without forcing it, which does nothing. It
-happens every time with the stubbed hide web-vitals' own tests use, a real hide was not produced here.
+happens every time with the stubbed hide web-vitals' own tests use; a real hide was not produced here.
 Their tests always wait for idle before hiding, so they never reach it. The spec waits for an idle
 callback before it hides the page, which runs after the one web-vitals posted. An earlier version of
 this paragraph put a loss seen when hiding one frame after a click down to the same thing. That was a
-different case, the entry arrived after the hide.
+different case: the entry arrived after the hide.
 
 ## Distribution: where this can live
 
@@ -1338,10 +1338,16 @@ build as well as on the dev server.
   and behind a Chrome 133 user agent. Opening `apps/demo/traces/context-storm-dev.json` in the panel
   beside React's own tracks is still to do.
 
+- **Frameworks that render their own HTML have no setup yet**: React Router 7 and Remix in framework
+  mode, TanStack Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite
+  itself serves and builds, and theirs never go through it, so the library most likely never installs
+  there, and nothing says so. None of them has been tried, and neither has the READMEs' setup for a
+  build with no HTML page. React Native is out of scope: only react-dom commits are walked.
 
 ## Next steps
 
 What is left is the list above: look at the Performance panel tracks by eye, and run the library
-against Next.js's own bench apps. The `react-inp-blame/web-vitals` entry landed on 2026-09-19 and has
-its own section, which now includes a run under Next.js's `useReportWebVitals`. The hydration verdict
-landed on 2026-09-19 and has its own section above.
+against Next.js's own bench apps. The frameworks that render their own HTML need a setup as well. The
+`react-inp-blame/web-vitals` entry landed on 2026-09-19 and has its own section, which now includes a
+run under Next.js's `useReportWebVitals`. The hydration verdict landed on 2026-09-19 and has its own
+section above.

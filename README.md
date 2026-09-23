@@ -131,6 +131,13 @@ it beside your React plugin, not instead of it.
 `enabled` defaults to `'development'` here too (the dev server; `'production'` is `vite build`, `true` both,
 `false` adds no plugins), `runtime` is as for Next.js, and `pages(path)` picks the pages that get the script.
 
+**A `manualChunks` vendor rule.** A rule sending all of `node_modules` to one vendor chunk puts this library
+in that chunk with react-dom, and the install script's import of the chunk can then evaluate react-dom before
+`install()` runs. Nothing the plugin can reach decides that order, so keep react-inp-blame out of the rule, or
+give it a chunk of its own, whatever your Vite version. A rule sending only react and react-dom to `vendor` is
+fine. Seen failing on Vite 5.4.21, 6.4.3 and 7.3.6, built with React 17 and a default import of react-dom. On
+8.3.0 the same build came out right, but that was the bundler's doing.
+
 **No HTML page in the build** (Laravel, Rails, Django, or any backend that writes the page from
 `manifest.json`). The plugin has no page to put its script in, so it installs nothing, on the dev server or
 in a build, and says nothing about it. Keep it for names with `inpBlame({ runtime: false })`, and give the
@@ -140,11 +147,13 @@ install an entry of its own that each page loads first: a file such as `inp-blam
 page, as `@vite(['resources/js/inp-blame.ts', 'resources/js/app.tsx'])` does. Module scripts run in document
 order, which is what the plugin's own script relies on. `enabled` then decides only where names are stamped:
 that entry installs in every run that loads it. A first import inside the app's own entry is not enough once
-a second entry shares react-dom with it.
+a second entry shares react-dom with it. Keep react-inp-blame out of a `node_modules` vendor rule there too,
+because that entry imports the vendor chunk as the plugin's script would. None of this has been tried on a
+real backend yet.
 
 **webpack or Rspack.** Make `import 'react-inp-blame/auto'` the first import of your entry module. That holds
 even with a `splitChunks` vendor chunk, because these bundlers run a module when it is first required, not
-when its chunk loads. For names, add this rule to `module.rules`:
+when its chunk loads (not tried with either). For names, add this rule to `module.rules`:
 `{ test: /\.[jt]sx$/, exclude: /node_modules/, enforce: 'pre', use: ['react-inp-blame/display-names-loader'] }`.
 `enforce: 'pre'` is what matters, as it is in the Next.js wrapper. The loader reads your source as text, so
 after babel-loader or ts-loader it drops their source map, and where they compile down to ES5 (Babel 7's
@@ -154,10 +163,11 @@ names none of those components.
 With another bundler, make that import the first import of your entry module; for names, the loader's
 `stamp(code)` export does the same work. A first import is not a guarantee there in a production build,
 though: a bundler may put react-dom in a chunk that evaluates before your entry's body does, and React looks
-for the hook only while it evaluates. Two builds where that happens are a `manualChunks` rule sending
-`node_modules` to a vendor chunk, and a second HTML page sharing a chunk with the first. On Vite and Next.js
-use the plugin and the wrapper, which put the install in a file the page loads before its own; anywhere else,
-check `stats().mode` and `debug.hook().renderers` in a built page once.
+for the hook only while it evaluates. Two builds where that happens are a second HTML page sharing a chunk
+with the first, and a `manualChunks` rule sending `node_modules` to a vendor chunk. On Vite and Next.js use
+the plugin and the wrapper, which put the install in a file the page loads before its own. That settles the
+shared chunk, though not the vendor rule, as above. Anywhere else, check `stats().mode` and
+`debug.hook().renderers` in a built page once.
 
 ## With web-vitals
 
@@ -219,14 +229,15 @@ after `install()` returns, only when shown. `mountOverlay(options)` shows it aft
 root is an open one on `#react-inp-blame`, but a test that wants the reports should read them through
 [`debugGlobal`](#installoptions) rather than from the panel's DOM, which may change between versions.
 
-**Content Security Policy.** The badge and panel need `style-src 'unsafe-inline'`. They style their shadow
-root with a `<style>` element that carries no nonce, and set `style` attributes (dot colours, bar widths)
-through `innerHTML` with values that change with every report, so a `style-src` of nonces and hashes blocks
-them: the badge is then an unstyled button at the foot of the page, and the console reports the violation.
-The runtime still installs and measures, so on such a page read reports with `onInteraction` or the
-Performance panel track. On Vite, `html.cspNonce` puts the nonce on the plugin's script in development and in
-a build, and the badge's chunk loads through that script's import, so a nonce-based `script-src` needs
-nothing more.
+**Content Security Policy.** The badge and panel need `'unsafe-inline'` in `style-src`, with no nonce or
+hash beside it: a browser ignores `'unsafe-inline'` in a directive that also lists a nonce or a hash. They
+style their shadow root with a `<style>` element that carries no nonce, and set `style` attributes (dot
+colours, bar widths) through `innerHTML` with values that change with every report, so a `style-src` of
+nonces and hashes blocks them: the badge is then an unstyled button at the foot of the page, and the
+console reports the violation. The runtime still installs and measures, so on such a page read reports with
+`onInteraction` or the Performance panel track. On Vite, `html.cspNonce` puts the nonce on the plugin's
+script in development and in a build, and the badge's chunk loads through that script's import, so a
+nonce-based `script-src` needs nothing more.
 
 ## API
 
@@ -493,9 +504,9 @@ there; the canary job installs it beside `next@canary` as well. No job runs `rea
 ## Known limits
 
 - **Frameworks that render their own HTML have no setup yet**: React Router 7 and Remix in framework mode,
-  TanStack Start, Astro. The Vite plugin puts its install script in the page through `index.html`, and they do
-  not serve one, so the library most likely never installs there, and nothing says so. Not tried yet. React
-  Native is out of scope, only react-dom commits are walked.
+  TanStack Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves
+  and builds, and theirs never go through it, so the library most likely never installs there, and nothing
+  says so. Not tried yet. React Native is out of scope: only react-dom commits are walked.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.
@@ -529,13 +540,13 @@ there; the canary job installs it beside `next@canary` as well. No job runs `rea
   `'layout'` blame's `name` and `detail` say where it happened instead: the joined commit's subtree and
   what it was mostly made of. That name is dropped for the browser's own invoker where no commit joined,
   or where the one that did only overlapped the interaction in time, was walked short of the end, or sat
-  beside commits that could not be tied to the interaction — and the invoker itself only while one script
+  beside commits that could not be tied to the interaction. The invoker itself is named only while one script
   holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
   it, `name` is `null` and the cause names the largest with the share it holds. The milliseconds are the
   browser's either way, so `confidence` is about them alone and is never lowered to cover a doubtful name.
 - **`where` names the nearest owner with a readable name, not always the innermost one.** A component whose
   real name is one or two characters (`Td`, `Li`), or lowercase in any part of it (`header`, `motion.div`,
-  `UI.list`), is passed over for the next one out — but only if there is one, so a chain holding nothing
+  `UI.list`), is passed over for the next one out, but only if there is one, so a chain holding nothing
   better prints the name as it stands. A short capitalised name cannot be told from minifier output, so
   `Abc` is taken at face value either way. The full chain is on `target.owners`.
 - The names loader stamps any capitalised top-level binding whose value is a function, written at the start of

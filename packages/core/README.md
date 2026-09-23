@@ -98,21 +98,47 @@ join.
 
 `inpBlame` takes one argument, its own options, and returns an array of plugins. Those for the runtime
 add a module script ahead of the page's own that calls `install()`, so React registers with the
-library's hook whatever the entry module imports first; in a build the call gets a chunk of its own,
-which a separate script tag loads. The last one stamps `displayName` on the app's components, and is
-all that `runtime: false` leaves. They go beside the React plugin, not instead of it. `enabled` and
-`runtime` work as they do for
-Next.js, with `'development'` meaning the dev server and `'production'` meaning `vite build`, and
-`pages` picks the HTML pages that get the script.
+library's hook whatever the entry module imports first; in most builds the call gets a chunk of its
+own, which a separate script tag loads. The last one stamps `displayName` on the app's components,
+and is all that `runtime: false` leaves. They go beside the React plugin, not instead of it.
+`enabled` and `runtime` work as they do for Next.js, with `'development'` meaning the dev server and
+`'production'` meaning `vite build`, and `pages` picks the HTML pages that get the script.
 
-Anywhere else, make `import 'react-inp-blame/auto'` the first import of the entry module: it
-installs with the default options before react-dom loads. In a production build that is the right
-shape but not a guarantee, because a bundler may put react-dom in a chunk that evaluates before the
-entry's body does, and React looks for the hook only while it evaluates. Two builds where that
-happens are a `manualChunks` rule sending `node_modules` to a vendor chunk, and a second HTML page
-sharing a chunk with the first. The Vite plugin and the Next.js wrapper put the install in a file the
-page loads before its own; with another bundler, check `stats().mode` and `debug.hook().renderers` in
-a built page once.
+The plugin cannot fix a `manualChunks` rule sending all of `node_modules` to one vendor chunk. The
+rule puts this library in that chunk with react-dom, and the install script's import of the chunk
+can then evaluate react-dom before `install()` runs; nothing the plugin can reach decides that
+order. Keep react-inp-blame out of the rule, or give it a chunk of its own, whatever the Vite
+version. A rule sending only react and react-dom to `vendor` is fine. Seen failing on Vite 5.4.21,
+6.4.3 and 7.3.6, built with React 17 and a default import of react-dom. On 8.3.0 the same build
+came out right, but that was the bundler's doing.
+
+A build with no HTML page, as under Laravel, Rails, Django or any backend that writes the page from
+`manifest.json`, gives the plugin nowhere to put its script, so it installs nothing, on the dev
+server or in a build, and says nothing about it. Keep the plugin for names with
+`inpBlame({ runtime: false })`, and give the install an entry of its own that each page loads first:
+a file such as `inp-blame.ts` holding `import 'react-inp-blame/auto'` or the app's own `install()`
+call. List it first in the build's inputs (`build.rollupOptions.input`, or the backend plugin's,
+such as `laravel({ input: [...] })`) and first in the page, as
+`@vite(['resources/js/inp-blame.ts', 'resources/js/app.tsx'])` does. Module scripts run in document
+order, which is what the plugin's own script relies on. `enabled` then decides only where names are
+stamped: that entry installs in every run that loads it. A first import inside the app's own entry is
+not enough once a second entry shares react-dom with it. Keep react-inp-blame out of a `node_modules`
+vendor rule there too, because that entry imports the vendor chunk as the plugin's script would.
+None of this has been tried on a real backend yet. React Router 7 and Remix in framework mode,
+TanStack Start and Astro render their own HTML too, and have no setup yet: the plugin most likely
+installs nothing there either, and nothing says so. Not tried yet.
+
+Without the Vite plugin or the Next.js wrapper, make `import 'react-inp-blame/auto'` the first
+import of the entry module: it installs with the default options before react-dom loads. Under
+webpack or Rspack that holds even with a `splitChunks` vendor chunk, because they run a module when
+it is first required, not when its chunk loads (not tried with either). With another bundler it is
+the right shape in a production build but not a guarantee, because a bundler may put react-dom in a
+chunk that evaluates before the entry's body does, and React looks for the hook only while it
+evaluates. Two builds where that happens are a second HTML page sharing a chunk with the first, and a
+`manualChunks` rule sending `node_modules` to a vendor chunk. The Vite plugin and the Next.js wrapper
+put the install in a file the page loads before its own. That settles the shared chunk, though not
+the vendor rule, as above. With any other bundler, check `stats().mode` and `debug.hook().renderers`
+in a built page once.
 
 For component names in a production build, `react-inp-blame/display-names-loader` is a webpack-style
 loader with a `stamp(code)` export. It is written for the source before Babel or TypeScript compiles

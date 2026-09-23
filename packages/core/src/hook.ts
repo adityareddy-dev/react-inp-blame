@@ -220,11 +220,12 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
  * `timeStamp` is exactly its Event Timing entry's `startTime`. Recorded in the ring if the capture
  * listener has not seen it yet. Null outside an input's dispatch.
  *
- * A derived event counts as its input's dispatch. Typing is the case that matters: React's onChange
- * for a text field runs during the native `input` event, not during the keydown, so `window.event`
- * there is an `input` and the keystroke's own render would otherwise look like an unrelated commit.
- * The browser dispatches each of these inside the input that caused it, so the newest ring entry is
- * that input; `isTrusted` keeps a `change` or `submit` fired by script out.
+ * When `window.event` is one of DERIVED_TYPES, such as an `input` or a `change`, this returns the
+ * newest input in the ring instead, because the browser fires a derived event as part of the input
+ * that caused it. Typing is the case that matters: React's onChange for a text field runs during the
+ * native `input` event, not during the keydown, and the keystroke's own render would otherwise look
+ * like an unrelated commit. An event a script makes and sends with dispatchEvent() is not trusted,
+ * so a `change` or `submit` dispatched that way gets null, the same as no event at all.
  */
 export function dispatchedInput(): InputRecord | null {
   const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
