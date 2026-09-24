@@ -173,6 +173,31 @@ it changes when a field is removed or changes meaning, which a minor release may
   this one installs nothing and says so in the console, and `npm ls react-inp-blame` lists the two
   versions. Found reading the code.
 
+### Removed
+
+- **`fiberFromNode`, `ownerChain` and `handlerName` are no longer exported, nor is the `Fiber` type.**
+  The READMEs listed them without saying what they take or return, and `fiberFromNode` handed out
+  React's own fiber, typed as whichever fields this library happened to read, so a change to what it
+  reads would have changed a public type. `fiberFromNode` and `Fiber` have no stand-in: the library no
+  longer hands out React's fiber. For the element an interaction landed on, the report already carries
+  the other two: `target.owners` is what `ownerChain` returned, nearest first, and `target.handler`
+  is what `handlerName` returned. Both are read when the report is built, or at dispatch where the
+  element had left the page by then. For any other element `handlerName` has no stand-in.
+  `generateTarget(node)` from `react-inp-blame/web-vitals` names the components around it with no
+  `install()` needed, but as one string, the way web-vitals prints a target: outermost first, the
+  four nearest at most, then the element in brackets (`"ProfilePage > PhotoTile (button.tile)"`), or
+  `undefined`. `ownerChain` gave an array of up to eight, nearest first, so code that took
+  `ownerChain(el)[0]` wants the last name before the brackets. The no-op stand-ins for all three
+  under the `react-server` condition went too.
+- **The types `InputStamp`, `InputRecord` and `InputWork` are no longer exported.** They describe the
+  ring of recent inputs the library keeps for itself, and no report, option or function names them. A
+  commit carries the input it was stamped with as `inputTs`, `gestureTs` and `inputType`.
+- **`react-inp-blame/display-names-loader` exports the loader and `stamp(code)`, and nothing else.**
+  `componentNames(code)` was in its type declarations but in no README, and `componentEntries(code)`
+  was in neither. The names the loader gives a file are the ones `stamp` assigns in what it appends
+  after it, each `Foo.displayName = "Foo"` inside a guard, so
+  `stamp(code).slice(code.length).matchAll(/\.displayName = ("[^"]*")/g)` reads them back.
+
 ## [0.2.0] - 2026-09-20
 
 ### Added

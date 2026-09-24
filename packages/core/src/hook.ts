@@ -1,6 +1,6 @@
 import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
 import { shared } from './session.js';
-import type { CommitSummary, HookInfo, HydrationBoundary, InputRecord, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
+import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
 import { warnOnce } from './warn.js';
 
@@ -66,6 +66,68 @@ interface DispatchedInput {
   readonly target: EventTarget | null;
   readonly pointerId?: number;
   readonly code?: string;
+}
+
+/** An input stamped on a commit: the event being dispatched when it ran, else the newest one seen. */
+export interface InputStamp {
+  /** `Event.timeStamp`, the same clock as Event Timing's `startTime`. */
+  readonly ts: number;
+  readonly type: string;
+  /** `timeStamp` of the pointerdown or keydown that began the press this input is part of; equals `ts` for those. */
+  readonly gestureTs: number;
+}
+
+/** One input the library saw at dispatch. The last 8 are kept in a ring. */
+export interface InputRecord extends InputStamp {
+  /** `pointerId` for pointer events, `code` for key events: how a pointerup or keyup finds its press. */
+  readonly press: string | number | undefined;
+  readonly target: Node | null;
+  /**
+   * The components enclosing the target at dispatch, nearest first. Read before React's handlers run:
+   * once React commits the deletion of an element, React 18 and 19 clear its fiber's links and props, so
+   * a clicked row that deleted itself is still named after what it was.
+   */
+  readonly owners: readonly string[];
+  /** The React handler prop for this input's type on the target chain at dispatch, read then for the same reason. */
+  readonly handler: string | null;
+  /**
+   * Server-rendered HTML enclosing the target that React had not hydrated when the input was
+   * dispatched; null when React had hydrated it, and on a page with no React root above the target.
+   */
+  readonly dehydrated: HydrationBoundary | null;
+  /** What React did about this input. The hook keeps it current as commits arrive; the record itself does not change. */
+  readonly work: InputWork;
+}
+
+/** The React work one input caused, as the DevTools hook saw it. */
+export interface InputWork {
+  /**
+   * Where the window for joining later commits is measured from: the input's `ts` until React commits
+   * inside its dispatch, then the end of the last such commit. A commit that arrives after the dispatch
+   * is joined to the input while it lands within `inputWindow` of this, so a slow interaction's
+   * follow-up render is still its own rather than cut off a fixed time after the input.
+   *
+   * It is the end of the last commit inside the dispatch, not the end of the dispatch. A handler that
+   * runs for two seconds and commits nothing leaves this on the input itself, and a render it starts
+   * afterwards can fall outside the window and be dropped. Dropped is not lost: the time is kept in
+   * `unjoined` and the report says React rendered something it could not tie to the interaction.
+   */
+  endedAt: number;
+  /**
+   * `endedAt` as the input's own task left it. A commit inside a derived event from a later task, a
+   * `change` or an `input`, moves `endedAt` and not this, and such an event counts as the input's
+   * dispatch only within `inputWindow` of this, so a stream of them (dictation, an input method,
+   * autofill) cannot hold the window open by carrying it forward one event at a time.
+   */
+  ownEndedAt: number;
+  /**
+   * When commits React made while this was the newest input landed, for the ones not joined to it
+   * because they came past that window, newest last and capped. A report counts only those that ran
+   * inside one of its interaction's processing spans; on a page with a clock in it, most are the clock.
+   * A report with any says so and is never `measured`: React did render, and this library cannot say
+   * what the render belonged to.
+   */
+  unjoined: number[];
 }
 
 export interface HookOptions {

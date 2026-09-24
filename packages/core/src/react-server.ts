@@ -22,18 +22,6 @@ export function onInteraction(): () => void {
   return () => {};
 }
 
-export function fiberFromNode(): null {
-  return null;
-}
-
-export function ownerChain(): string[] {
-  return [];
-}
-
-export function handlerName(): null {
-  return null;
-}
-
 export function onRouterTransitionStart(): void {}
 
 export function generateTarget(): undefined {

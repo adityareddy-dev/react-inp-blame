@@ -6,13 +6,15 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const { componentNames, stamp } = createRequire(import.meta.url)('../display-names-loader.cjs') as {
-  componentNames(code: string): string[];
+const { stamp } = createRequire(import.meta.url)('../display-names-loader.cjs') as {
   stamp(code: string): string;
 };
 
-/** Each case is a whole module, because what the loader will and will not name depends on the lines around it. */
-const names = (code: string) => componentNames(code);
+/**
+ * The components the loader names in a module, read off the lines `stamp` adds after it, in their order.
+ * Each case is a whole module, because what the loader will and will not name depends on the lines around it.
+ */
+const names = (code: string): string[] => Array.from(stamp(code).slice(code.length).matchAll(/\.displayName = ("[^"]*")/g), (m) => JSON.parse(m[1] ?? ''));
 
 test('a function declaration is named, in each of the forms a module can write one', () => {
   for (const code of ['function Cart() {}', 'export function Cart() {}', 'export default function Cart() {}', 'function Cart<T>(props: T) {}']) {
@@ -251,5 +253,5 @@ test('the scan is linear: a file of one long identifier and a file of thousands 
   let many = '';
   for (let i = 0; i < 5000; i++) many += `export const Icon${i} = (props: P) => <svg {...props}><path d="M0 0h24v24H0z" /></svg>;\n`;
   budget('5,000 components in one file', many, 2000);
-  assert.equal(componentNames(many).length, 5000);
+  assert.equal(names(many).length, 5000);
 });
