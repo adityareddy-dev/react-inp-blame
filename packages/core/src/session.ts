@@ -15,7 +15,7 @@ const KEY = Symbol.for('react-inp-blame');
  * How the state is laid out. It changes whenever a slot's contents do, so a copy of another version
  * never reads state it would misunderstand.
  */
-const LAYOUT = 1;
+const LAYOUT = 2;
 
 interface Session {
   readonly layout: number;
