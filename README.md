@@ -294,8 +294,8 @@ template's, and needs Vite 8.
 On React 18, put `import "./inp-blame";` first in `app/root.tsx` instead of the entry. React 18's
 `react-dom` connects to the hook as it loads, so the entry is too late as soon as a route, or a library a
 route uses, imports react-dom. The library then blames nothing, and in a browser without React DevTools it
-warns after 3 s that it was installed too late. With DevTools open it can look fine, since react-dom
-connects to the extension's hook and the library finds it there. React Router imports the root route's
+warns after 3 s that it was installed too late. With the React DevTools extension installed it can look
+fine, since react-dom connects to the extension's hook and the library finds it there. React Router imports the root route's
 module before any other route's and before the entry, so the root's first import runs before any of them.
 CI runs that on React Router 7.18 with React 18.3 and a route that calls `flushSync` from react-dom, on the
 dev server and a production build. The same app with the install in the entry had nothing blamed on either.
