@@ -526,11 +526,6 @@ function componentEntries(code) {
   return entries;
 }
 
-/** Every name `componentEntries` found, which is what the tests and the corpus checks read. */
-function componentNames(code) {
-  return componentEntries(code).map((e) => e.name);
-}
-
 /**
  * Whether a statement can begin at `i`. A `function Foo(…)` at column 0 is usually a declaration, but
  * it can also be a named function expression that happens to be written there, inside `memo(` or an
@@ -662,5 +657,3 @@ function loader(source) {
 
 module.exports = loader;
 module.exports.stamp = stamp;
-module.exports.componentNames = componentNames;
-module.exports.componentEntries = componentEntries;

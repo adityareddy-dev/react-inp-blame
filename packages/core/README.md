@@ -322,9 +322,6 @@ and so can `blame.name`, which for a script can be its URL, or the page's for an
   unsupported, what the library has cost), `dispose()`, and `debug.commits()` and `debug.hook()`,
   which are for debugging and may change in any version.
 - `mountOverlay(options?)` shows the on-page badge and panel; their code loads when shown.
-- `fiberFromNode`, `ownerChain` and `handlerName` are the lookups reports are built from. They read
-  React's fiber tree, the internal tree React keeps of the rendered components, through the hook
-  React exposes for developer tools.
 
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when
 that function has no name worth printing. An inline `onClick={() => ...}` therefore reads as

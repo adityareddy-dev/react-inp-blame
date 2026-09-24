@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { InputRecord } from '../src/hook.ts';
 import { attachLaterRender, buildReport, isLaterRender, refreshReport, sealReport, type LabelSource } from '../src/join.ts';
 import type { PageNavigation } from '../src/navigation.ts';
-import type { CommitSummary, FrameSummary, InputRecord, InteractionReport, ScriptSummary } from '../src/types.ts';
+import type { CommitSummary, FrameSummary, InteractionReport, ScriptSummary } from '../src/types.ts';
 
 // Hand-built PerformanceEventTiming-like entries. Durations are multiples of 8 the way the
 // browser rounds them, except where the case under test says otherwise.

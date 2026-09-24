@@ -410,8 +410,8 @@ The API has `reports()` (the last 50 published, oldest first, at their latest re
 `clear()` (drops reports and commits, and starts the INP estimate over), `dispose()` and `stats()`: `mode`
 (`'shim'`, `'chained'`, `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `walks`, and the
 library's own time in `walkTotalMs`, `reportTotalMs` and `installMs`. `debug.commits()` and `debug.hook()` are
-for debugging and may change in any version. Also exported: `mountOverlay`, `fiberFromNode`, `ownerChain` and
-`handlerName`. Under the `react-server` condition every export does nothing, here and on
+for debugging and may change in any version. Also exported: [`mountOverlay`](#the-badge-and-panel). Under
+the `react-server` condition every export does nothing, here and on
 [`react-inp-blame/web-vitals`](#with-web-vitals): `generateTarget` returns `undefined` and
 `attributeINP` returns `{ react: null }`.
 

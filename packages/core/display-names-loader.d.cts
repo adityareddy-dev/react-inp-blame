@@ -3,7 +3,5 @@ declare function loader(this: { resourcePath?: string } | void, source: string |
 declare namespace loader {
   /** Returns the source with a displayName assignment per component, or the source untouched. */
   function stamp(code: string): string;
-  /** Component names the loader would stamp in this source. */
-  function componentNames(code: string): string[];
 }
 export = loader;
