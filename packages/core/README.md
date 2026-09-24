@@ -168,9 +168,12 @@ order, which is what the plugin's own script relies on. `enabled` then decides o
 stamped: that entry installs in every run that loads it. A first import inside the app's own entry is
 not enough once a second entry shares react-dom with it. Keep react-inp-blame out of a `node_modules`
 vendor rule there too, because that entry imports the vendor chunk as the plugin's script would.
-None of this has been tried on a real backend yet. React Router 7 and Remix in framework mode,
-TanStack Start and Astro render their own HTML too, and have no setup yet: the plugin most likely
-installs nothing there either, and nothing says so. Not tried yet.
+None of this has been tried on a real backend yet. React Router in framework mode renders its own
+HTML too. There the install is an `install()` call in a module of the app's own that
+`app/entry.client.tsx` imports first, with the plugin kept for names: the
+[repository README](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router) has
+the three files, and CI runs them on React Router 8.4. Remix, TanStack Start and Astro have no setup
+yet: the plugin most likely installs nothing there either, and nothing says so. Not tried yet.
 
 Without the Vite plugin or the Next.js wrapper, make `import 'react-inp-blame/auto'` the first
 import of the entry module: it installs with the default options before react-dom loads. Under
