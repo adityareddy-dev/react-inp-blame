@@ -18,8 +18,19 @@ it changes when a field is removed or changes meaning, which a minor release may
   clock, read from the root fiber. From there to `at` is React's own time for the commit, committing
   it included. `null` in a production build, which keeps no start, and where React did not time the
   tree. A commit object your own code builds, in a test fixture or a fake, needs the field.
+- `CommitSummary.effectsStartedAt` and `effectsEndedAt`: when every tool on the DevTools hook had been
+  handed the commit, and when React had run its passive effects, the `useEffect`s, as React 18 and 19
+  report it to the hook, production builds included. Both `null` until the effects have run, for a
+  commit whose tree has none, for a root made with `ReactDOM.render`, and on React 17, which does not
+  report them. A commit object your own code builds needs these fields too.
 
 ### Changed
+
+- **A render blame's `ms` is the commit's time in all, not its render alone.** It is the render,
+  committing it and its `useEffect` callbacks together, which is what the type has always said it is:
+  how much of the interaction the blame accounts for. A 3 ms render whose layout effects ran for 272 ms
+  was `ms: 3`, and the overlay showed 3 ms beside it; it is now 275. A production build's render blame
+  stays `null`.
 
 - **`withInpBlame` works on Next.js 15.3 to 16.2 instead of throwing.** Those versions have no
   `instrumentationClientInject`, so the wrapper adds the loader and the options and prints one line for
@@ -78,6 +89,27 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Fixed
 
+- **A heavy `useEffect` is React's time, not the handler's.** React 18 and 19 run a click's or a key's
+  passive effects in the same task as its commit, before the paint, and the working time they took went
+  to the handler: a click whose `useEffect` drew a chart for 300 ms came back as its `onClick` running
+  for 311 ms, beside a 5 ms render. React tells the DevTools hook when a commit's passive effects have
+  run, so the time from the end of the hook call to there is now React's, and the sentence says how
+  long the `useEffect` callbacks ran. It counts only where both ends fall inside the interaction's
+  handlers, so effects React ran in a later task, as it does for most other updates, are judged as
+  before. A render React makes once the effects are done and before it says so, from `flushSync` in an
+  effect or a `setState` in a layout effect, keeps its own time, and a production build, which cannot
+  take such a render out, says the figure holds it. A production build keeps no render start, but its
+  effects are timed all the same: there the render is named as a reading and the effects are measured.
+  React 17 does not say when effects ran, and React 18 runs a `ReactDOM.render` root's effects whenever
+  it next renders, so on those a heavy `useEffect` still reads as the handler. The handler is also now
+  the blame only where it outran all of React's time, committing and effects included, rather than its
+  render durations alone: a 100 ms handler beside a 5 ms render and 200 ms of effects is React's, with
+  the handler's 100 ms said after it. Where the handler does outrun React, the sentence says the
+  committing and effects that would show beside it. A production build cannot split the rest of the
+  working time between the handler and the render, so there the effects take the blame only where they
+  are at least half of it, or where no handler has a name: a 150 ms handler beside 60 ms of effects
+  stays the handler's, and its figure comes out as about 150 of the 210 ms, with the 60 ms said.
+
 - **Layout effects are React's time, not the handler's, where no Long Animation Frames say otherwise.**
   In Safari and Firefox the working time outside React's render durations went to the handler, and a
   render duration stops where committing starts. So in a development build a click whose 400 layout
@@ -88,8 +120,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   across them is judged by its render duration, as before. Where committing took 25 ms and a quarter of
   the working time, what a handler needs to be blamed, the render keeps the blame however small the
   render itself was, names the commit React spent longest on, and says how long committing took. A
-  production build keeps no start and is judged as before. A heavy `useEffect` still reads as the
-  handler. Found by the iPhone tap test in CI, on Linux WebKit.
+  production build keeps no start and is judged as before. Found by the iPhone tap test in CI, on Linux
+  WebKit.
 
 - **Next.js's dev overlay stays out of the reports.** Under `next dev` from Next.js 15.4.11 and 15.5 the
   overlay renders with a production React of its own, and its commits joined the click they landed in.

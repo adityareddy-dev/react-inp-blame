@@ -781,9 +781,51 @@ the working time), since the time taken off the handler has to land somewhere. T
 is the one React spent longest on with committing counted, and its sentence says what that commit's
 committing took. A production build keeps no start, so nothing changes there.
 
-Still left with the handler: `useEffect`s. React 18 and 19 run a click's passive effects in the same
-task, right after the commit hook, so a heavy one still reads as `onClick` in every browser. React
-calls `onPostCommitFiberRoot` once they are done, which could extend the span. Not done yet.
+`useEffect`s were left with the handler until 2026-09-24. React 18 and 19 run a click's or a key's
+passive effects in the same task, right after the commit hook, so a heavy one read as `onClick` in
+every browser: a chart drawn for 300 ms in an effect came back as the handler running 311 ms beside a
+5 ms render. React calls `onPostCommitFiberRoot` once a commit's passive effects have run, production
+builds included, and the hook now stamps that on the commit (`CommitSummary.effectsEndedAt`), with
+the moment the hook call for the commit returned (`effectsStartedAt`). The walk and React DevTools'
+own reading of the commit run inside that call, and neither is the effects' time. From one to the
+other is React's time as well, under the same rule as the render span: it counts only where both ends
+fall inside one event's handlers, so the effects of a transition, which React runs in a later task,
+count for nothing, since another task can have run in between. The effects add to the commit's
+committing time for the 25 ms test, and the sentence says each of the two that would show alone, or
+both where only their sum does, or the totals across the commits where only those earned the blame.
+A production build has no render start, but the effects are measured all the same, so there the
+render is named as a reading and the effects carry the figure. What is left of that build's working
+time is the handler and the render together, unsplit, so the effects take the blame there only where
+they are at least half of it, or where there is no handler's name to give the rest; below that the
+handler keeps it, with the effects taken off its time and said. A development build's handler keeps
+the blame, too, where React's time would not earn one: a 28 ms handler beside a 4 ms render and 24 ms
+of effects. Committing and effects only choose the commit a render blame names where they are worth
+a mention, and a sentence that names one commit gives what the others spent where that is worth
+saying, so none of it goes unsaid under the wrong name. The handler, for its part, now has to outrun all of React's time to be the blame, committing and
+effects included, not only the render durations it was held against before spans existed. A render
+blame's milliseconds are the commit's in all, render, committing and effects, since that is what it
+accounts for.
+
+React commits some updates once a commit's effects are done and before it says they ran: one an
+effect made with `flushSync`, and one a layout effect made, the measure-then-`setState` a tooltip
+does (in 18.3.1 `flushSyncCallbacks` and in 19.3 `flushSyncWorkAcrossRoots` run just before the
+call). Such a commit lands inside the effects' span. Where it has a span of its own it is taken out,
+like its walk; in a production build it has none, and the sentence says the figure holds one more
+render. In a React 19 development build the figure also holds the time React takes logging the
+components it rendered to the Performance panel, which it does in the same phase.
+
+React makes no post-commit call for a commit whose tree has no passive work, so the hook cannot
+simply take the latest commit. It keeps a place for every commit of a root, walked or not, with
+whether its fibers carry the flags that make React run the passive phase: Passive and ChildDeletion,
+and from React 19 Visibility, the same bits in both. A call goes to the newest place with those flags,
+and the places above it are dropped. That is right because React flushes a commit's pending effects
+before it renders the next one, so only the updates above can come between a commit and its call,
+and those came later: the ones with effects have had their own call first, and the ones without get
+none. A React 19 development build also calls for every commit it timed, effects or not; that call
+then goes to the commit the update was made in, whose effects had ended by then, so its end comes out
+a little late, by a render that is taken out as its span. A root made with `ReactDOM.render` in React
+18 runs a click's effects whenever React next renders, possibly later in the same handler, so its
+commits get no effects' time. React 17 makes no call at all, so nothing changes there.
 
 **Follow-ups.** Commits that land after the paint but within `inputWindow` (1.5 s by default) of it,
 stamped with the same input, with no newer input in between. Effects, transitions and data-driven
