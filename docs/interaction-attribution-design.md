@@ -1019,8 +1019,9 @@ unit-tested one by one; `install()` only wires it to the observers, the DevTools
 panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's own
 "Scheduler ⚛" and "Components ⚛".
 
-- The report is a contract from 0.1.0. It carries `schemaVersion: 1`, which changes when a field
-  is removed or changes meaning, and it is frozen down to its commits, frames and explanation.
+- The report is a contract from 0.1.0. It carries `schemaVersion` (1 until 0.3.0, 2 since), which
+  changes when a field is removed or changes meaning, and it is frozen down to its commits, frames and
+  explanation.
   Each commit a report holds is a frozen copy stamped with how it joined that report
   (`joinedBy`), so a commit in two reports no longer carries whichever join came last.
   `onInteraction` is the one way to hear reports, and each report reaches it in a task after the one

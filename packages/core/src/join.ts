@@ -390,7 +390,7 @@ export function buildReport(
   const navigation = navigationAt(navigations, first);
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     interactionId: longest.interactionId,
     type: (sorted[0] ?? longest).name,
     start,
