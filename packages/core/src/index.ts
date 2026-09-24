@@ -150,6 +150,7 @@ function installNow(opts: InstallOptions): Api {
   const navigations: PageNavigation[] = [documentNavigation()];
   const lifecycle = createLifecycle({
     threshold: settings.threshold,
+    inputWindow: settings.inputWindow,
     commits: recordedCommits,
     inputs: recentInputs,
     navigations: () => navigations,

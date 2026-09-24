@@ -7,8 +7,9 @@ import { warnOnce } from './warn.js';
 const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 const MAX_COMMITS = 300;
 /**
- * `inputWindow` by default, ms. It is measured from the end of the input's own work; `FOLLOW_UP_WINDOW`
- * in join.ts is the same length but measured from the paint, and changing one does not change the other.
+ * `inputWindow` by default, ms. The hook measures it from the end of the input's own work; a report
+ * takes later renders within the same length of its paint, or of that end where it came after the
+ * paint (`followUpFrom` in join.ts).
  */
 export const DEFAULT_INPUT_WINDOW = 1500;
 
@@ -110,6 +111,8 @@ interface HookState {
   registries: WeakMap<DevtoolsHook, Map<number, Renderer>>;
   /** The last 8 inputs seen, oldest first. */
   inputs: InputRecord[];
+  /** The newest input while the task that dispatched it is still running; null once a task queued behind it has run. */
+  inTask: InputRecord | null;
   /** Every root that committed while installed, held weakly so that an unmounted root is not kept alive by this list. */
   roots: WeakRef<FiberRoot>[];
   /** What the page's report listeners caused on each root in `roots`. */
@@ -132,6 +135,7 @@ const state = shared<HookState>('hook', () => ({
   walkTotalMs: 0,
   registries: new WeakMap(),
   inputs: [],
+  inTask: null,
   roots: [],
   listenerWork: new WeakMap(),
   hearing: false,
@@ -174,7 +178,7 @@ function record(e: DispatchedInput): InputRecord {
     target,
     owners: Object.freeze(ownersOf(fiber)),
     handler: handlerOf(fiber, e.type, isKey ? e.code : null),
-    work: { endedAt: e.timeStamp, unjoined: [] },
+    work: { endedAt: e.timeStamp, ownEndedAt: e.timeStamp, unjoined: [] },
     // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting
     // inside a page React has otherwise hydrated, and then the target's nearest fiber is the hydrated
     // ancestor above the boundary. React reads the same markers on every event it dispatches.
@@ -182,6 +186,12 @@ function record(e: DispatchedInput): InputRecord {
   };
   state.inputs.push(rec);
   if (state.inputs.length > RING_SIZE) state.inputs.shift();
+  // A task queued now runs only after the one dispatching this input has finished, with whatever
+  // derived events the browser fires from it.
+  state.inTask = rec;
+  setTimeout(() => {
+    if (state.inTask === rec) state.inTask = null;
+  }, 0);
   return rec;
 }
 
@@ -228,11 +238,24 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
  * native `input` event, not during the keydown, and the keystroke's own render would otherwise look
  * like an unrelated commit. An event a script makes and sends with dispatchEvent() is not trusted,
  * so a `change` or `submit` dispatched that way gets null, the same as no event at all.
+ *
+ * Only while the derived event is part of that input: fired in the task that dispatched it, or within
+ * `inputWindow` of the end of the work that task did (`ownEndedAt`). That is measured from the derived
+ * event's own `timeStamp`, since a slow render inside an `input` event ends seconds after it. A
+ * `change` the browser fires once a file is chosen in the system dialog, an option is picked from a
+ * native select's popup or a password manager fills a field can come long after the click on it, and
+ * gets null: its commit is then held to the window like any other, and cannot make a late render the
+ * click's own. A derived event from a later task does not move `ownEndedAt`, so text that arrives
+ * with no key pressed, from dictation or an input method, stops counting once it passes the window.
  */
 export function dispatchedInput(): InputRecord | null {
   const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
   if (!ev || !ev.isTrusted) return null;
-  if (DERIVED_TYPES.indexOf(ev.type) >= 0) return newestInput();
+  if (DERIVED_TYPES.indexOf(ev.type) >= 0) {
+    const last = newestInput();
+    if (!last) return null;
+    return last === state.inTask || ev.timeStamp - last.work.ownEndedAt <= (state.options?.inputWindow ?? DEFAULT_INPUT_WINDOW) ? last : null;
+  }
   if (INPUT_TYPES.indexOf(ev.type) < 0) return null;
   const last = newestInput();
   return last && last.ts === ev.timeStamp ? last : record(ev);
@@ -246,6 +269,12 @@ export function dispatchedInput(): InputRecord | null {
  */
 export function joinWindow(): number | null {
   return state.options?.inputWindow ?? null;
+}
+
+/** Whether `window.event` is one of DERIVED_TYPES, which `dispatchedInput` hands to the newest input. */
+function inDerivedEvent(): boolean {
+  const ev = typeof window !== 'undefined' ? window.event : undefined;
+  return ev !== undefined && DERIVED_TYPES.indexOf(ev.type) >= 0;
 }
 
 /** The newest input in the ring. */
@@ -353,6 +382,7 @@ export function uninstallHook(): void {
   state.unsupported = null;
   state.commits = [];
   state.inputs = [];
+  state.inTask = null;
   state.walks = 0;
   state.walkTotalMs = 0;
   state.roots = [];
@@ -471,7 +501,12 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   state.walks++;
   // Only the dispatch extends the window. Were a joined follow-up to extend it too, one commit every
   // second would keep an interaction's window open for as long as the page lived.
-  if (dispatched) input.work.endedAt = performance.now();
+  if (dispatched) {
+    input.work.endedAt = performance.now();
+    // A derived event from a later task is held to the window from the input's own work, which it does
+    // not move, or each one would open the window again for the next.
+    if (dispatched === state.inTask || !inDerivedEvent()) input.work.ownEndedAt = input.work.endedAt;
+  }
   if (summary.hydrated && !dispatched) return;
   if (state.commits.length >= MAX_COMMITS) state.commits.shift();
   state.commits.push(summary);

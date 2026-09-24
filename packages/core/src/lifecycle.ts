@@ -24,6 +24,8 @@ export const MAX_ENTRY_SETS = 100;
 export interface LifecycleOptions {
   /** Interactions at or above this duration (ms) are published at once; shorter ones when a later render joins them. */
   threshold: number;
+  /** How long after the paint a render can still join an interaction as its later render, ms (`InstallOptions.inputWindow`). */
+  inputWindow: number;
   /** React commits walked so far, oldest first. */
   commits(): readonly CommitSummary[];
   /** The ring of recent inputs, oldest first. */
@@ -70,7 +72,7 @@ interface Held {
 }
 
 export function createLifecycle(options: LifecycleOptions): Lifecycle {
-  const { threshold, frames, now, publish } = options;
+  const { threshold, inputWindow, frames, now, publish } = options;
   const published: Held[] = [];
   // Interactions under the threshold, kept only in case a later render attaches to them.
   const quiet: Held[] = [];
@@ -138,7 +140,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     if (existing) {
       // A late entry of the same interaction: the click after a held pointerdown, the keyup.
       const wasQuiet = quiet.includes(existing);
-      revise(existing, refreshReport(existing.data, entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations()), started);
+      revise(existing, refreshReport(existing.data, entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow), started);
       if (wasQuiet) {
         if (!worthPublishing(existing.data)) return;
         quiet.splice(quiet.indexOf(existing), 1);
@@ -152,7 +154,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       spend(started);
       return;
     }
-    const held = revise(null, buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations()), started);
+    const held = revise(null, buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow), started);
     if (!worthPublishing(held.data)) return holdBack(held);
     keep(held);
     publish(held.report);
@@ -178,7 +180,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       // belongs to that input if nothing newer happened. Attach it and publish the next revision.
       const last = published[published.length - 1];
       const inputs = options.inputs();
-      if (last && isLaterRender(last.data, c, inputs)) {
+      if (last && isLaterRender(last.data, c, inputs, inputWindow)) {
         const next = attachLaterRender(last.data, c, frames);
         if (next) publish(revise(last, next, started).report);
         else spend(started);
@@ -188,7 +190,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       // reporting even though INP alone would not flag it.
       for (let i = quiet.length - 1; i >= 0; i--) {
         const held = quiet[i];
-        if (!held || !isLaterRender(held.data, c, inputs)) continue;
+        if (!held || !isLaterRender(held.data, c, inputs, inputWindow)) continue;
         const next = attachLaterRender(held.data, c, frames);
         if (!next) break;
         quiet.splice(i, 1);

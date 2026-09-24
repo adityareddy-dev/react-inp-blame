@@ -306,7 +306,7 @@ their first value, with a warning, until `dispose()`.
 | `hook` | `'auto'` | `'chain'` wraps an existing `__REACT_DEVTOOLS_GLOBAL_HOOK__` and never creates one; `'shim'` creates one unless one exists; `'auto'` chains or creates |
 | `sampleRate` | `1` | Share of page loads that install anything |
 | `walkBudget` | `5000` | Component fibers visited per commit |
-| `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside a dispatch are always walked |
+| `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside an input's own dispatch are always walked. It also bounds `followUps`, whose window runs from the paint as a rule |
 | `devtoolsTrack` | `true` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track |
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
 
@@ -332,7 +332,7 @@ interface InteractionReport {
                owner: string | null; ms: number | null } | null;            // landed on before React hydrated it
   navigationURL: string; navigationType: NavigationType; // web-vitals' names and values
   startedNavigation: { url: string; type: 'push' | 'replace' | 'traverse' } | null;
-  commits: CommitSummary[]; followUps: CommitSummary[];   // before the paint; after it, within 1.5 s
+  commits: CommitSummary[]; followUps: CommitSummary[];   // before the paint; after it, within inputWindow
   unjoinedCommits: number;                               // commits in its handlers that could not be tied to it
   frames: FrameSummary[] | null; laterFrames: FrameSummary[] | null; // null without Long Animation Frames
   overheadMs: number;                                    // this library's own time on the interaction
@@ -630,8 +630,8 @@ that rendered slowly, on the dev server with a Fast Refresh edit included and in
   library cannot see. A handler that works for two seconds and commits nothing leaves the window running from
   the input, so a transition it starts afterwards can fall outside it. That render is then dropped and counted
   rather than reported: the interaction says React rendered something it could not tie to it.
-- Waiting on the server is not a phase: the render showing the result joins as a later render within 1.5 s of
-  the paint, or not at all.
+- Waiting on the server is not a phase: the render showing the result joins as a later render within
+  `inputWindow` of the paint (1.5 s unless you set it), or not at all.
 
 ## Labels and personal data
 
