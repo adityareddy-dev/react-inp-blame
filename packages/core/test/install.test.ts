@@ -1238,7 +1238,7 @@ test('Space makes its click on the key coming up, and a click with no key or poi
     input('keyup', 1580, { code: 'Space' });
     input('click', 1581, { pointerId: -1 }, 40);
     await nextTask();
-    // A screen reader activating a button sends the page a click and nothing before it.
+    // A click with no key or pointer behind it.
     input('click', 1900, { pointerId: -1 }, 40);
     await nextTask();
     assert.deepEqual(
@@ -1253,7 +1253,7 @@ test('Space makes its click on the key coming up, and a click with no key or poi
   });
 });
 
-test("a click takes the press of the input whose task made it, whatever its pointerId says", async (t) => {
+test("a click takes the press of the input whose task made it, whatever its pointerId says, unless it is a tap's", async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {
     const existing = existingHook();
@@ -1267,8 +1267,8 @@ test("a click takes the press of the input whose task made it, whatever its poin
       existing.onCommitFiberRoot(id, root, 1, false);
     });
 
-    // A mouse click on a label, which forwards a click of its own to its checkbox in the same task.
-    // Chrome gives the forwarded click pointerId -1; it is still the mouse press.
+    // A mouse click on a label, which forwards a click of its own to its checkbox in the same task. Where
+    // the forwarded click has pointerId -1, as Chrome gave it before 148, it is still the mouse press.
     input('pointerdown', 1000, { pointerId: 1 });
     await nextTask();
     input('pointerup', 1060, { pointerId: 1 });
@@ -1279,11 +1279,21 @@ test("a click takes the press of the input whose task made it, whatever its poin
     input('keydown', 2000, { code: 'Enter' });
     input('click', 2001, { pointerId: 1 }, 40);
     await nextTask();
+    // A tap whose click comes in a task of its own after the touchend, with a key pressed in between whose
+    // task marker has not been cleared yet. The click is still the tap's.
+    input('pointerdown', 3000, { pointerId: 2 });
+    await nextTask();
+    input('pointerup', 3080, { pointerId: 2 });
+    await nextTask();
+    input('keydown', 3082, { code: 'ShiftLeft' });
+    input('click', 3083, { pointerId: 2 }, 40);
+    await nextTask();
     assert.deepEqual(
       api.debug.commits().map((c) => ({ input: c.inputTs, gesture: c.gestureTs })),
       [
         { input: 1062, gesture: 1000 },
         { input: 2001, gesture: 2000 },
+        { input: 3083, gesture: 3000 },
       ],
     );
     api.dispose();
