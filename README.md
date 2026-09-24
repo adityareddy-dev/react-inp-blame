@@ -68,6 +68,20 @@ import { onInteraction } from 'react-inp-blame';
 onInteraction((report) => console.log(report.verdict, report.explanation.blame));
 ```
 
+## When the blame is wrong
+
+If a report names the wrong component or handler, or a slow interaction gets no report at all, please open
+an issue with the [wrong or missing blame form](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=wrong-or-missing-blame.yml).
+The report itself is what makes it diagnosable. Add `debugGlobal: true` to `runtime` (or to `install()`) and
+run `JSON.stringify(__REACT_INP_BLAME__.last(), null, 2)` in the console right after the slow interaction, or
+print `JSON.stringify(report)` from `onInteraction`; with no report, paste `stats()` instead. What the badge
+shows is a good start, but the JSON has everything its sentence was built from.
+
+The form also asks for the versions of react-inp-blame, react and react-dom, and Next.js or Vite, the bundler,
+whether it was a development or a production build, and the browser. Each changes what a report can say: a
+production build of React records no render times, and only Chromium has Long Animation Frames. A report
+carries the page's URL and the label of the element you clicked, so read it through before you paste it.
+
 ---
 
 # Reference
@@ -217,7 +231,9 @@ shared chunk, though not the vendor rule, as above. Anywhere else, check `stats(
 
 `react-inp-blame/web-vitals` gives the [web-vitals](https://github.com/GoogleChrome/web-vitals) package
 React component names, in one option. It imports nothing from web-vitals, and `generateTarget` works with
-no `install()` at all: it only reads the fiber React leaves on the node.
+no `install()` at all: it only reads the fiber React leaves on the node. `generateTarget` needs
+web-vitals 5.1 or later: 5.0 types the option as always returning a string, and puts an `undefined` in
+`interactionTarget` rather than falling back to its own selector.
 
 ```ts
 import { onINP } from 'web-vitals/attribution';
@@ -259,6 +275,80 @@ the page's INP, at what percentile, over the back/forward cache and soft navigat
 
 Component names in production need the `displayName` transform (the Next.js wrapper, the Vite plugin or
 the loader, all above). Without it the minifier has renamed them and the path reads `a > b (button.tile)`.
+
+### Sending it to Sentry
+
+Sentry records INP on its own, as a span, but that span carries no interaction id, so nothing ties this
+library's report to it. A metric does the job instead, from web-vitals, with the blame in attributes Sentry
+can search on. web-vitals reports INP the first time the page is hidden, and again, higher, each later time
+it is hidden after a slower interaction. A distribution can't take a value back, so the recipe sends the
+first report for each `metric.id`: one per page view, with a restore from the back/forward cache counting as
+a new one, and a slower interaction after the user comes back to the tab left out. Metrics need Sentry 10.25
+or later, where they are on by default, and `@sentry/react` and `@sentry/nextjs` export the same `metrics`.
+
+```ts
+import * as Sentry from '@sentry/browser'; // or @sentry/react, @sentry/nextjs
+import { onINP } from 'web-vitals/attribution';
+import { attributeINP, generateTarget } from 'react-inp-blame/web-vitals';
+
+const sent = new Set<string>();
+onINP((metric) => {
+  if (sent.has(metric.id)) return; // the same page view, reported again as it was hidden again
+  sent.add(metric.id);
+  const { interactionTarget, react } = attributeINP(metric);
+  Sentry.metrics.distribution('inp', metric.value, {
+    unit: 'millisecond',
+    attributes: {
+      rating: metric.rating,
+      target: interactionTarget,                    // 'ProfilePage > PhotoTile (button.tile)'
+      'blame.kind': react?.blame.kind,              // 'render', 'handler', 'layout', 'waiting', ...
+      'blame.name': react?.blame.name ?? undefined, // Sentry sends a null as the string "null"
+      'blame.confidence': react?.blame.confidence,  // 'measured' or 'inferred'
+    },
+  });
+}, { generateTarget });
+```
+
+### Sending it to Google Analytics 4
+
+This is web-vitals' own [example for Google Analytics](https://github.com/GoogleChrome/web-vitals#send-attribution-data),
+`debug_target` and all, with the blame in two more parameters. `navigationURL` came in web-vitals 6, so on
+5.x leave out `page_location`:
+
+```ts
+import { onINP } from 'web-vitals/attribution';
+import { attributeINP, generateTarget } from 'react-inp-blame/web-vitals';
+
+onINP((metric) => {
+  const { interactionTarget, react } = attributeINP(metric);
+  // gtag() is the global the Google tag defines, typed by @types/gtag.js
+  gtag('event', metric.name, {
+    value: metric.delta, // delta, so the values can be summed
+    metric_id: metric.id,
+    metric_value: metric.value,
+    metric_delta: metric.delta,
+    page_location: metric.navigationURL,
+    debug_target: interactionTarget, // 'ProfilePage > PhotoTile (button.tile)'
+    debug_blame_kind: react?.blame.kind,
+    debug_blame_name: react?.blame.name ?? undefined,
+  });
+}, { generateTarget });
+```
+
+GA4 reports show a parameter only once it is registered as an event-scoped custom dimension, and GA4 takes at
+most 100 characters of a parameter's value, where `generateTarget` allows 120, so a long path can lose its end.
+
+On Next.js, the body of either `onINP` callback goes in the `useReportWebVitals` one above, for
+`metric.name === 'INP'`, with the Sentry one's `sent` at the top of that module. That metric comes from the
+build without attribution, so `interactionTarget` is undefined there, and so is `navigationURL`.
+
+Neither recipe sends a label or a sentence. `attributeINP` holds component, handler and script names, and
+`generateTarget` an element's tag, id and test id or classes, but a report's `target.label`, `verdict` and
+other sentences can hold text the page shows: under `labels: 'text'`, and by default in a development build
+(see [Labels and personal data](#labels-and-personal-data)). If you forward those as well, install with
+`labels: 'attributes'`, so a label comes only from what your code wrote on the element. `navigationURL`,
+sent above as `page_location`, keeps its query string. So can `blame.name`: when a script takes the blame it
+can be the script's URL, or the page's for an inline script, as the browser reports it.
 
 ## The badge and panel
 
@@ -652,6 +742,7 @@ text can be a person's name or email, and reports are made to be forwarded to er
 text is opt-in there: with `install({ labels: 'text' })` an element with no `aria-label` that is not a form
 field is named by its first run of text. Development builds use text by default. Whatever `labels` says,
 `target.selector` has the tag, the `id` if there is one, and `data-test` or `data-testid` or else two classes,
-and `navigationURL` and `startedNavigation.url` are full URLs, query string included.
+and `navigationURL` and `startedNavigation.url` are full URLs, query string included. So is a script the
+browser names by its URL, or by the page's for an inline script, in a blame's `name` and the sentences.
 
 [Design notes](docs/interaction-attribution-design.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · MIT license

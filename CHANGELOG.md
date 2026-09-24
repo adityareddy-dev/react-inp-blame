@@ -6,6 +6,15 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **The READMEs show how to send the blame to Sentry and to Google Analytics 4.** Both start from
+  web-vitals' `onINP` and `attributeINP`: Sentry gets one metric per page view with the blame in its
+  attributes, since its own INP span carries no interaction id to join on, and GA4 gets web-vitals' own
+  `debug_target` example with two more parameters. Neither sends a label or a sentence. The READMEs also ask
+  for wrong or missing blames through the issue form and say what to include, and the form's versions field
+  now asks for Next.js or Vite as well.
+
 ### Changed
 
 - **`withInpBlame` works on Next.js 15.3 to 16.2 instead of throwing.** Those versions have no
