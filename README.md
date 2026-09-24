@@ -281,12 +281,17 @@ export default defineConfig({
 
 The call needs a module of its own because the entry's body comes too late: by the time it runs, every
 static import has run, react-dom's included. First among the entry's imports is early enough. React Router
-loads each route's module before the entry, but those import `react-router`, which never loads react-dom;
-`react-router/dom` does, and only the entry imports it. The plugin with `runtime: false` is there for the
-names, so they survive the production minifier. CI builds this from `npx create-react-router@8.4.0` (React
-Router 8.4, Vite 8.3, React 19.3) and checks that a click is blamed on the component that rendered slowly,
-under `react-router dev` and on a production build served by `react-router-serve`. React Router 7 was not
-run. Its `react-router` imports no react-dom either (7.18.4), so the same three files should hold there.
+loads each route's module before the entry, and a route may well import react-dom, as a dialog's portal
+does. On React 19 that does no harm: `react-dom` itself never connects to React's DevTools hook, only
+`react-dom/client` does, and only the entry imports that. React Router 8 needs React 19.2.7 or later. The
+plugin with `runtime: false` is there for the names, so they survive the production minifier. CI builds
+this from `npx create-react-router@8.4.0` (React Router 8.4, Vite 8.3, React 19.3) and checks that a click
+is blamed on the component that rendered slowly, under `react-router dev` and on a production build served
+by `react-router-serve`. React Router 7 was not run. On React 19 the first two files should hold there as
+they are, and in `vite.config.ts` only the `inpBlame` line is the library's; `resolve.tsconfigPaths` is the
+template's, and needs Vite 8. On React 18 the setup does not hold. Its `react-dom` connects to the hook as it
+loads, so a route that imports it gets there before the install, and the library blames nothing and warns
+after 3 s that it was installed too late.
 
 ## Install with TanStack Start
 
@@ -766,8 +771,8 @@ oldest its `engines` allows, and imports and requires every subpath there; the c
 job puts the packed package into an app made the way `npm create vite` makes one, on Vite 8.3 with
 @vitejs/plugin-react 6.1 and the Vite setup above, and checks that a click there is blamed on the component
 that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. Two
-more do the same with the apps `npx create-react-router` and TanStack Start's CLI make, each with its setup
-above.
+more check the same click, with no Fast Refresh edit, in the apps `npx create-react-router` and TanStack
+Start's CLI make, each with its setup above.
 
 ## Known limits
 
