@@ -596,6 +596,11 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 | Of that, the part that has to run before react-dom, not a separate entry yet: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
 | `react-inp-blame/web-vitals` on its own, measured 2026-09-19 by a different script that read `/auto` at 38.2 / 14.1 | 2.7 KB | 1.3 KB |
 
+On four open-source apps, built with and without it, 15 paired runs each unthrottled and at 4x CPU:
+[docs/benchmarks](docs/benchmarks/README.md). INP did not move on any of them. On a Next.js site
+with thousands of components, page load took about 75 ms longer unthrottled, most likely from the
+name stamps.
+
 ## What it reads from React
 
 These are React internals with no promise of stability, so the library checks them and fails closed: a
