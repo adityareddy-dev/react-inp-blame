@@ -56,6 +56,13 @@ its code is in every build, and in the ones `enabled` leaves out it ships unused
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
 
+A report that names the wrong component or handler, or a slow interaction with no report at all, is
+worth an issue: the [wrong or missing blame form](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=wrong-or-missing-blame.yml)
+says what to include. The report as JSON matters most: add `debugGlobal: true` to `runtime` (or to
+`install()`) and run `JSON.stringify(__REACT_INP_BLAME__.last(), null, 2)` in the console right after
+the slow interaction. It carries the page's URL and the label of the element you clicked, so read it
+through before you paste it.
+
 # Reference
 
 No dependencies. React 17 to 19 (react-dom). Browsers with Event Timing's `interactionId`
@@ -188,7 +195,9 @@ it, so under webpack or Rspack give it `enforce: 'pre'`, as `withInpBlame` does:
 
 `react-inp-blame/web-vitals` gives the web-vitals package React component names, in one option. It
 imports nothing from web-vitals, and `generateTarget` needs no `install()`: it only reads the fiber
-React leaves on the node.
+React leaves on the node. `generateTarget` needs web-vitals 5.1 or later: 5.0 types the option as
+always returning a string, and puts an `undefined` in `interactionTarget` rather than falling back to
+its own selector.
 
     import { onINP } from 'web-vitals/attribution';
     import { generateTarget } from 'react-inp-blame/web-vitals';
@@ -225,6 +234,64 @@ which interaction is INP, the percentile, the back/forward cache and soft naviga
 
 In production the component names need the `displayName` transform above; without it the minifier
 has renamed them and the path reads `a > b (button.tile)`.
+
+The blame can go to Sentry as a metric, with its fields as attributes. Sentry's own INP span carries
+no interaction id, so nothing ties this library's report to it. web-vitals reports INP again, higher,
+each time the page is hidden after a slower interaction, and a distribution can't take a value back,
+so this sends the first report for each `metric.id`, one per page view. Metrics need Sentry 10.25 or
+later, and `@sentry/react` and `@sentry/nextjs` export the same `metrics`:
+
+    import * as Sentry from '@sentry/browser'; // or @sentry/react, @sentry/nextjs
+    import { onINP } from 'web-vitals/attribution';
+    import { attributeINP, generateTarget } from 'react-inp-blame/web-vitals';
+
+    const sent = new Set<string>();
+    onINP((metric) => {
+      if (sent.has(metric.id)) return; // the same page view, reported again as it was hidden again
+      sent.add(metric.id);
+      const { interactionTarget, react } = attributeINP(metric);
+      Sentry.metrics.distribution('inp', metric.value, {
+        unit: 'millisecond',
+        attributes: {
+          rating: metric.rating,
+          target: interactionTarget,                    // 'ProfilePage > PhotoTile (button.tile)'
+          'blame.kind': react?.blame.kind,              // 'render', 'handler', 'layout', 'waiting', ...
+          'blame.name': react?.blame.name ?? undefined, // Sentry sends a null as the string "null"
+          'blame.confidence': react?.blame.confidence,  // 'measured' or 'inferred'
+        },
+      });
+    }, { generateTarget });
+
+For Google Analytics 4 it is web-vitals' own example, `debug_target` and all, with the blame in two
+more parameters. GA4 reports show a parameter once it is registered as an event-scoped custom
+dimension, and take at most 100 characters of its value, where `generateTarget` allows 120.
+`navigationURL` came in web-vitals 6, so on 5.x leave out `page_location`:
+
+    import { onINP } from 'web-vitals/attribution';
+    import { attributeINP, generateTarget } from 'react-inp-blame/web-vitals';
+
+    onINP((metric) => {
+      const { interactionTarget, react } = attributeINP(metric);
+      // gtag() is the global the Google tag defines, typed by @types/gtag.js
+      gtag('event', metric.name, {
+        value: metric.delta, // delta, so the values can be summed
+        metric_id: metric.id,
+        metric_value: metric.value,
+        metric_delta: metric.delta,
+        page_location: metric.navigationURL,
+        debug_target: interactionTarget, // 'ProfilePage > PhotoTile (button.tile)'
+        debug_blame_kind: react?.blame.kind,
+        debug_blame_name: react?.blame.name ?? undefined,
+      });
+    }, { generateTarget });
+
+On Next.js the body of either `onINP` callback goes in the `useReportWebVitals` one above, for
+`metric.name === 'INP'`, with the Sentry one's `sent` at the top of that module, and
+`interactionTarget` and `navigationURL` are undefined there.
+Neither recipe sends a label or a sentence: a report's `target.label`, `verdict` and other sentences
+can hold text the page shows, under `labels: 'text'` and by default in a development build, so forward
+those only from an app installed with `labels: 'attributes'`. `page_location` keeps its query string,
+and so can `blame.name`, which for a script can be its URL, or the page's for an inline script.
 
 ## API
 
