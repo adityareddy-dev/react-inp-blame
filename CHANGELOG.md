@@ -389,7 +389,8 @@ First release.
 - An INP estimate for the navigation the page is on, `inp()`, written from the same entries web-vitals
   reads and checked against web-vitals 6.2.2 over more than 50 interactions in a browser.
 - An on-page badge and panel, `overlay`, drawn as plain DOM in a shadow root and loaded only when
-  shown, and a track per report in Chrome's Performance panel.
+  shown, and in Chrome's Performance panel an "Interaction blame" track with an entry per interaction,
+  beside a "React renders" track where React draws no render track of its own.
 - `withInpBlame` for Next.js 16.3 and later: the runtime on `instrumentationClientInject`, so it
   installs before hydration, and a `displayName` loader under Turbopack and webpack. `inpBlame` for
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
