@@ -168,6 +168,18 @@ function maps(entry, condition) {
 }
 
 /**
+ * Every file `typesVersions` maps a subpath to, for any TypeScript version. A target with a `*` in it
+ * names no one file, so it is left to the `types` fixture's type check.
+ */
+function typesVersionsTargets(manifest) {
+  return Object.entries(manifest.typesVersions ?? {})
+    .flatMap(([range, paths]) =>
+      Object.entries(paths).flatMap(([subpath, files]) => files.map((file) => ({ file, where: `typesVersions["${range}"]["${subpath}"]` }))),
+    )
+    .filter(({ file }) => !file.includes('*'));
+}
+
+/**
  * Looks at the files rather than trusting the loads that follow, because of the `types` targets:
  * nothing ever executes a declaration file.
  */
@@ -175,6 +187,7 @@ function assertFilesExist(dir, manifest) {
   const promised = [
     ...['main', 'types'].map((field) => ({ file: manifest[field], where: field })),
     ...Object.entries(manifest.exports).flatMap(([subpath, entry]) => targets(entry, `exports["${subpath}"]`)),
+    ...typesVersionsTargets(manifest),
   ].filter(({ file }) => typeof file === 'string');
   const missing = promised.filter(({ file }) => !fs.existsSync(path.join(dir, file)));
   assert.ok(missing.length === 0, missing.map(({ file, where }) => `${where} points at ${file}, which is not in the package`).join('\n'));
@@ -321,6 +334,58 @@ function buildsWithVite(app) {
   }
 }
 
+// moduleResolution settings the READMEs say work, each with the `module` that goes with it. node10,
+// which older setups have as `node`, reads no `exports` and finds a subpath's types only through
+// `typesVersions`; the others read `exports` and ignore `typesVersions` for any subpath it has. module
+// node16, and nodenext before TypeScript 5.8, also need `"type": "module"` from the app, which this
+// app's package.json has.
+const RESOLUTIONS = {
+  node10: { module: 'commonjs', moduleResolution: 'node10' },
+  node16: { module: 'node16', moduleResolution: 'node16' },
+  nodenext: { module: 'nodenext', moduleResolution: 'nodenext' },
+  bundler: { module: 'esnext', moduleResolution: 'bundler' },
+};
+
+/**
+ * A module that imports every subpath and uses each name EXPECTED gives it as a function, so a subpath
+ * TypeScript cannot find fails, and so does one it finds in the wrong file. A subpath with no names in
+ * EXPECTED, which is /auto, has to come out with none, or a map that led it to another entry's
+ * declarations would pass. A JSON subpath is left out: TypeScript reads one only under
+ * resolveJsonModule, and it has no declarations to find.
+ */
+function typedConsumer(manifest) {
+  const typed = Object.keys(manifest.exports).filter((subpath) => !subpath.endsWith('.json'));
+  const imports = typed.map((subpath, index) => `import * as entry${index} from '${specifierOf(subpath)}';`);
+  const uses = typed.flatMap((subpath, index) =>
+    Object.entries(EXPECTED[subpath].names)
+      .filter(([, type]) => type === 'function')
+      .map(([name]) => `  entry${index}.${name},\n`),
+  );
+  const empty = typed.flatMap((subpath, index) =>
+    Object.keys(EXPECTED[subpath].names).length === 0 ? [`export const empty${index}: Empty<typeof entry${index}> = true;\n`] : [],
+  );
+  const types = 'type Callable = (...args: never[]) => unknown;\ntype Empty<T> = [keyof T] extends [never] ? true : false;';
+  return `${imports.join('\n')}\n\n${types}\n\nexport const documented: Callable[] = [\n${uses.join('')}];\n${empty.join('')}`;
+}
+
+/**
+ * `tsc` over that module under each of RESOLUTIONS, against the declarations npm installed. Those
+ * import from next and vite and name Node's Buffer, none of which this app has, so skipLibCheck is on,
+ * as create-next-app and create-vite set it: the check is that each subpath resolves to its own types.
+ * It also hides errors inside the package's own declarations, such as the one next.d.cts gives under
+ * module node16 for taking InstallOptions from an ES module, which the READMEs answer with skipLibCheck.
+ */
+function typeChecks(app) {
+  fs.writeFileSync(path.join(app, 'consumer.ts'), typedConsumer(installed(app, PACKAGE)));
+  const tsc = path.join('node_modules/typescript', installed(app, 'typescript').bin.tsc);
+  for (const [name, options] of Object.entries(RESOLUTIONS)) {
+    const compilerOptions = { ...options, target: 'es2022', strict: true, skipLibCheck: true, noEmit: true };
+    fs.writeFileSync(path.join(app, `tsconfig.${name}.json`), `${JSON.stringify({ compilerOptions, files: ['consumer.ts'] }, null, 2)}\n`);
+    // tsc prints its errors on stdout, which run() puts in the failure.
+    node(app, [tsc, '-p', `tsconfig.${name}.json`]);
+  }
+}
+
 // Next.js is named alone because npm installs the peers a package asks for: each app gets the react and
 // react-dom its Next.js wants, a canary's included, with no version guessed here.
 const NEXT_APP = ['next', 'react', 'react-dom'];
@@ -337,6 +402,9 @@ const FIXTURES = {
   'next-current': { install: [`next@${nextDemo.dependencies.next}`], beside: NEXT_APP, check: wrapsNextConfig },
   // No document names an oldest Vite, so this is 5, the floor the peer range had before it became `*`.
   'vite-oldest': { install: ['vite@5'], beside: ['vite'], check: buildsWithVite },
+  // The types, as an app's tsconfig finds them. TypeScript 5, the last with node10 as it was: 6.0 fails
+  // a config that sets it unless ignoreDeprecations says "6.0", and 7.0 removed it.
+  types: { install: ['typescript@5'], beside: ['typescript'], check: typeChecks },
   // A canary is allowed to break, so this one runs only when named. CI names it in the job that may fail.
   'next-canary': { install: ['next@canary'], beside: NEXT_APP, check: wrapsNextConfig, gating: false },
 };
