@@ -33,8 +33,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   script never ran there and the library never installed. The README's new section puts `install()` in a
   module of the app's own that `app/entry.client.tsx` imports first, which runs before react-dom does, and
   keeps the plugin for component names. CI runs it in an app from `npx create-react-router@8.4.0`, installed
-  from the packed tarball, under `react-router dev` and on a production build. React Router 7 has the same
-  entry file and was not tried.
+  from the packed tarball, under `react-router dev` and on a production build. React Router 7 was not run;
+  its `react-router` imports no react-dom either, so the same setup should hold.
 - `CommitSummary.startedAt`: when React began the render a commit came from, on `performance.now()`'s
   clock, read from the root fiber. From there to `at` is React's own time for the commit, committing
   it included. `null` in a production build, which keeps no start, and where React did not time the
