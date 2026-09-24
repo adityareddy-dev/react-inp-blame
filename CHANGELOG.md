@@ -13,8 +13,7 @@ it changes when a field is removed or changes meaning, which a minor release may
   the app's own `instrumentation-client.ts`, `export { onRouterTransitionStart } from
   'react-inp-blame/next-client';`, until the file has it. Next.js imports that file before hydration,
   which is early enough: the load-order, hydration and `useReportWebVitals` suites pass on 16.2.12,
-  15.5.26 and 15.3.9 with it, under both bundlers, and CI runs them (on 15.5 under Turbopack without the
-  web-vitals `commits.ms` check, for the reason in Known limits). That line is in every build, so
+  15.5.26 and 15.3.9 with it, under both bundlers, and CI runs them. That line is in every build, so
   `react-inp-blame/next-client` now installs nothing in a build the wrapper's `enabled` leaves out,
   though its code still ships there. Before
   16.0 the Turbopack rule keeps to the browser and out of `node_modules` through builtin conditions, the
@@ -59,6 +58,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   closes the row without losing the focus. Held down, the key toggles it once rather than on every
   repeat. Escape pressed inside the panel closes it and moves the focus to the badge, where before the
   focus was lost with the panel. Escape anywhere else on the page still just closes it.
+
+### Fixed
+
+- **Next.js's dev overlay stays out of the reports.** Under `next dev` from Next.js 15.4.11 and 15.5 the
+  overlay renders with a production React of its own, and its commits joined the click they landed in.
+  The report then named the overlay's minified components (`lk > P > eW` on 16.3.5), and as React never
+  timed those commits, `commits.ms` in the web-vitals attribution was `null` and the explanation asked
+  for a profiling build. The root the overlay creates on its `<nextjs-portal>` element is now left out,
+  whatever React it runs, and the app's own roots are read as before, a production react-dom's too.
+  Found by the web-vitals test on 15.5 under `next dev --turbopack`, where the overlay committed inside
+  every click. On 16.3.5 it took opening the dev tools menu first.
 
 ## [0.2.0] - 2026-09-20
 

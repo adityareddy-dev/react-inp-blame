@@ -1303,7 +1303,8 @@ imports before `instrumentation-client` and before hydration, which Next.js docu
 wrappers of this kind. Next.js 15.3 to 16.2 have no such list, so there the app's own
 `instrumentation-client.ts` re-exports that module, a line the wrapper prints until the file has it;
 the load-order, hydration and web-vitals suites pass that way on 16.2.12, 15.5.26 and 15.3.9 under
-both bundlers, on 15.5 under Turbopack without the `commits.ms` check (2026-09-22). That module
+both bundlers (2026-09-22), on 15.5 under Turbopack without the `commits.ms` check until the dev
+overlay's commits were left out (2026-09-23, below). That module
 installs the library with the wrapper's `runtime` options, which reach it through `env` because
 Next.js inlines those at build time. Where the wrapper put nothing in `env`, a build `enabled` leaves
 out, it installs nothing, though the line in instrumentation-client still brings its code into that
@@ -1316,7 +1317,19 @@ builds; `runtime: false` keeps the loader alone. That is the shape Sentry uses (
 In a production build the injected module runs before `react-dom` evaluates: the library's own hook
 is the one React registers with, and the first keystroke is attributed. In dev, React Fast Refresh's
 runtime has already installed a hook stub by then, so the library chains onto it, and attribution
-works there too, with durations. No beforeInteractive shim is needed. Until 2026-09-15 the runtime
+works there too, with durations. No beforeInteractive shim is needed. The dev overlay is not the app,
+though it runs React on the same page: it creates a root of its own on a `<nextjs-portal>` element, and
+from 15.4.11 and 15.5 renders it with a production react-dom bundled at
+`next/dist/compiled/next-devtools`, the same version the app gets (checked on 15.5.26 and 16.3.5). Its
+commits carry minified names and no durations, and on 15.5 under Turbopack one landed inside every
+click, so the report named the overlay's components and `commits.ms` came out null. The hook now drops
+any commit on a root whose container is that element (`nextDevToolsRoot`, 2026-09-23). The container
+is the signal because nothing about the renderer is: an app can run a production react-dom of its own,
+and several roots. Summing only the commits that have durations was the other option, and it would have
+kept the overlay's components in the report. Dropping them keeps the overlay's react-dom away from the
+shape check too, so while it has committed nothing but that root it does not count as a react-dom the
+page can still be read through, and a React that moved a field still leaves the page `'unsupported'`
+as it did before. Until 2026-09-15 the runtime
 half was a hand-written `import 'react-inp-blame/auto'` in `instrumentation-client.ts`; the spec
 now checks the injected module under `next dev`, Turbopack production and `next build --webpack`
 production. The loader was proven 2026-09-14 in the same three runs; before it the verdict read

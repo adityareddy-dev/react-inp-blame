@@ -1,4 +1,4 @@
-import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, ownersOf, profileModeBit, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
+import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, profileModeBit, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, HydrationBoundary, InputRecord, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
@@ -51,6 +51,8 @@ interface Renderer {
   problem: Problem | null;
   /** Its first commit has been checked. */
   checked: boolean;
+  /** Every root it has committed so far is Next.js's dev overlay's, and those are never read (see `nextDevToolsRoot`). */
+  devToolsOnly: boolean;
 }
 
 /** The fields of a pointer or key event the ring reads. */
@@ -281,7 +283,8 @@ function unreadableReactDom(): UnsupportedReason | null {
   if (!state.attached) return null;
   let first: Problem | null = null;
   for (const renderer of registryOf(state.attached).values()) {
-    if (!renderer.isReactDom) continue;
+    // The dev overlay's own react-dom is never read, so it is not one the page can still be read through.
+    if (!renderer.isReactDom || renderer.devToolsOnly) continue;
     if (!renderer.problem) return null;
     first ??= renderer.problem;
   }
@@ -389,6 +392,7 @@ function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer 
     profileMode: supported ? profileModeBit(version.major) : 0,
     problem: null,
     checked: false,
+    devToolsOnly: false,
   };
   if (!supported) renderer.problem = problem('react-version', `react-dom ${info.version ?? 'without a version'} is outside React ${OLDEST_REACT_MAJOR} to ${NEWEST_REACT_MAJOR}`);
   registryOf(hook).set(id, renderer);
@@ -416,6 +420,11 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   // A renderer that registered before install() is unknown here, and its commits are not read.
   const renderer = registryOf(hook).get(id);
   if (!renderer || !renderer.isReactDom || renderer.problem) return;
+  // Next.js's dev overlay is not the app, so nothing it commits is walked or tied to an input (see `nextDevToolsRoot`).
+  if (nextDevToolsRoot(root)) {
+    if (!renderer.checked) renderer.devToolsOnly = true;
+    return;
+  }
   if (!renderer.checked) checkFirstCommit(renderer, root);
   if (renderer.problem || causedByListeners(root)) return;
   const now = performance.now();
@@ -471,6 +480,7 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
 
 function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
   renderer.checked = true;
+  renderer.devToolsOnly = false;
   const shape = rootShapeProblem(root);
   if (shape) {
     const build = renderer.experimental ? ' (an experimental build, read as React 19)' : '';

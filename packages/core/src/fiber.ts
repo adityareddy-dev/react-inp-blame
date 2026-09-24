@@ -102,6 +102,21 @@ export interface FiberRoot {
    * commit clears the lanes it finished before React calls the hook. The same field in React 17 to 19.
    */
   pendingLanes: number;
+  /** The node the root was created on: the element given to `createRoot`, or the document `hydrateRoot(document)` hydrates. */
+  containerInfo?: unknown;
+}
+
+/**
+ * Whether this root belongs to Next.js's dev tools rather than to the app. Under `next dev` the dev
+ * overlay creates a root of its own on a `<nextjs-portal>` element, and from Next.js 15.4.11 and 15.5 it
+ * renders there with a production react-dom that Next.js bundles into the overlay, so its commits carry
+ * minified names and no durations, and some land inside the app's clicks. Nothing else in Next.js makes
+ * that element, and an app has no reason to put a root on it. The renderer says nothing: an app can run
+ * a production react-dom too, and under `next dev` the two report the same version.
+ */
+export function nextDevToolsRoot(root: FiberRoot): boolean {
+  const container = root?.containerInfo as { localName?: unknown } | null | undefined;
+  return container?.localName === 'nextjs-portal';
 }
 
 /**
