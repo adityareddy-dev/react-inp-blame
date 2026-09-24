@@ -285,8 +285,8 @@ loads each route's module before the entry, but those import `react-router`, whi
 `react-router/dom` does, and only the entry imports it. The plugin with `runtime: false` is there for the
 names, so they survive the production minifier. CI builds this from `npx create-react-router@8.4.0` (React
 Router 8.4, Vite 8.3, React 19.3) and checks that a click is blamed on the component that rendered slowly,
-under `react-router dev` and on a production build served by `react-router-serve`. React Router 7 has the
-same entry file and was not tried.
+under `react-router dev` and on a production build served by `react-router-serve`. React Router 7 was not
+run. Its `react-router` imports no react-dom either (7.18.4), so the same three files should hold there.
 
 ## With web-vitals
 

@@ -1562,11 +1562,11 @@ build as well as on the dev server.
   Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
   builds, and theirs never go through it, so the library most likely never installs there, and nothing
   says so. None of them has been tried, and neither has the READMEs' setup for a build with no HTML page.
-  React Router's setup landed on 2026-09-23: `install()` in a module of the app's own that
+  React Router got a setup on 2026-09-23: `install()` in a module of the app's own that
   `app/entry.client.tsx` imports first. That is early enough there because React Router's `<Scripts>`
   imports the route modules statically and then the client entry with `import()`, and the route modules
   reach only `react-router`, whose main entry imports no react-dom; `react-router/dom` does, and only the
-  client entry imports it (read in react-router 8.4.0's `dist/production`). CI runs it in the job
+  client entry imports it (read in react-router 8.4.0's `dist/production`, and the same holds for 7.18.4). CI runs it in the job
   `react-router-app`, on the dev server and a production build. React Native is out of scope: only
   react-dom commits are walked.
 
