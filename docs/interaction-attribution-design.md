@@ -1558,11 +1558,17 @@ build as well as on the dev server.
 - **Real applications have been run by hand, not in CI**: Excalidraw, two TanStack Table examples, the
   shadcn/ui documentation site and Twenty, from 2026-09-20. What they turned up is in the sections
   above and in the changelog. Nothing has run on Next.js's own bench apps.
-- **Frameworks that render their own HTML have no setup yet**: React Router 7 and Remix in framework
-  mode, TanStack Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite
-  itself serves and builds, and theirs never go through it, so the library most likely never installs
-  there, and nothing says so. None of them has been tried, and neither has the READMEs' setup for a
-  build with no HTML page. React Native is out of scope: only react-dom commits are walked.
+- **Frameworks that render their own HTML have no setup yet**, apart from React Router: Remix, TanStack
+  Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
+  builds, and theirs never go through it, so the library most likely never installs there, and nothing
+  says so. None of them has been tried, and neither has the READMEs' setup for a build with no HTML page.
+  React Router's setup landed on 2026-09-23: `install()` in a module of the app's own that
+  `app/entry.client.tsx` imports first. That is early enough there because React Router's `<Scripts>`
+  imports the route modules statically and then the client entry with `import()`, and the route modules
+  reach only `react-router`, whose main entry imports no react-dom; `react-router/dom` does, and only the
+  client entry imports it (read in react-router 8.4.0's `dist/production`). CI runs it in the job
+  `react-router-app`, on the dev server and a production build. React Native is out of scope: only
+  react-dom commits are walked.
 
 ## Next steps
 

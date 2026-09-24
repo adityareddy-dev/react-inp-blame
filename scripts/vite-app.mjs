@@ -1,13 +1,15 @@
-// Runs fixtures/vite-react-ts, the app `npm create vite -- --template react-ts` makes with the README's
-// vite.config.ts pasted in, the way a user has it. The script copies it out of the repo into the temp
-// directory and installs its dependencies there from its own lockfile, with react-inp-blame from the
-// tarball `npm pack` makes. It then builds the app and runs its Playwright specs on the dev server (a Fast
-// Refresh edit included) and on `vite preview` of the build.
+// Runs an app from fixtures/ the way a user has it: fixtures/vite-react-ts, the app `npm create vite --
+// --template react-ts` makes with the README's vite.config.ts pasted in, or with `--fixture react-router`
+// fixtures/react-router, the one `npx create-react-router` makes with the README's React Router setup. The
+// script copies it out of the repo into the temp directory and installs its dependencies there from its
+// own lockfile, with react-inp-blame from the tarball `npm pack` makes. It then builds the app and runs its
+// Playwright specs on the dev server (for the Vite app, a Fast Refresh edit included) and on the build.
 //
-//   node scripts/vite-app.mjs                      # pack packages/core, then install and test
-//   node scripts/vite-app.mjs --tarball <path>     # a tarball that already exists
-//   node scripts/vite-app.mjs --fresh              # no lockfile: every dependency as npm resolves it today
-//   node scripts/vite-app.mjs -- --project=dev     # anything after -- goes to Playwright
+//   node scripts/vite-app.mjs                          # pack packages/core, then install and test
+//   node scripts/vite-app.mjs --tarball <path>         # a tarball that already exists
+//   node scripts/vite-app.mjs --fresh                  # no lockfile: every dependency as npm resolves it today
+//   node scripts/vite-app.mjs --fixture react-router   # the React Router app instead
+//   node scripts/vite-app.mjs -- --project=dev         # anything after -- goes to Playwright
 //
 // The copy is what makes it the user's install. Inside the repo the app could resolve react-inp-blame
 // through the workspace link or the monorepo's node_modules, and would never see the package as npm
@@ -23,12 +25,30 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const fixture = path.join(root, 'fixtures/vite-react-ts');
 const PACKAGE = 'react-inp-blame';
-// Printed after the install, so a failure says which releases it happened with.
-const REPORTED = ['vite', '@vitejs/plugin-react', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE];
+/**
+ * What differs between the apps. `readme` is the heading whose code blocks the fixture's `files` must
+ * match, each block found by its first line, a comment that starts with the file's path. `reported` is
+ * printed after the install, so a failure says which releases it happened with. `typecheck` checks what
+ * the build leaves out: the specs and playwright.config.ts, which Playwright runs without checking.
+ */
+const FIXTURES = {
+  'vite-react-ts': {
+    readme: '## Install with Vite',
+    files: ['vite.config.ts'],
+    reported: ['vite', '@vitejs/plugin-react', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
+  },
+  'react-router': {
+    readme: '## Install with React Router',
+    files: ['vite.config.ts', 'app/inp-blame.ts', 'app/entry.client.tsx'],
+    reported: ['react-router', '@react-router/dev', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    // The template's own check, route types first. Its tsconfig takes in every file, the specs included.
+    typecheck: (app) => npm('run typecheck', app),
+  },
+};
 // Left behind by a run in the fixture folder itself, and not part of the app.
-const NOT_COPIED = new Set(['node_modules', 'dist', 'test-results', 'playwright-report']);
+const NOT_COPIED = new Set(['node_modules', 'dist', 'build', '.react-router', 'test-results', 'playwright-report']);
 
 const quoted = (text) => `"${text}"`;
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -55,30 +75,38 @@ function run(what, command, args, options) {
  */
 const npm = (command, cwd) => run(`npm ${command}`, `npm ${command}`, [], { cwd, shell: true });
 
-/** The first ```ts block under the README's "Install with Vite" heading. */
-function readmeViteConfig() {
+/** The ```ts or ```tsx block under the README's `heading` whose first line is a comment naming `file`. */
+function readmeBlock(heading, file) {
   const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
-  const section = readme.indexOf('\n## Install with Vite\n');
-  assert.ok(section !== -1, 'README.md has no "## Install with Vite" heading, which scripts/vite-app.mjs reads the fixture\'s config from');
-  const start = readme.indexOf('```ts\n', section);
-  const end = readme.indexOf('\n```', start + 1);
-  assert.ok(start !== -1 && end !== -1, 'README.md has no ```ts block under "## Install with Vite"');
-  return readme.slice(start + '```ts\n'.length, end);
+  const section = readme.indexOf(`\n${heading}\n`);
+  assert.ok(section !== -1, `README.md has no "${heading}" heading, which scripts/vite-app.mjs reads the fixture's ${file} from`);
+  const next = readme.indexOf('\n## ', section + 1);
+  const blocks = readme.slice(section, next === -1 ? undefined : next).matchAll(/\n```tsx?\n([\s\S]*?)\n```/g);
+  const block = [...blocks].find(([, code]) => {
+    const first = code.split('\n', 1)[0];
+    return first === `// ${file}` || first.startsWith(`// ${file},`);
+  });
+  assert.ok(block, `README.md has no \`\`\`ts block under "${heading}" that starts with the comment // ${file}`);
+  return block[1];
 }
 
 /** What has to hold before anything is installed, so a drift is named for the file that has to change. */
-function guards() {
+function guards(name) {
+  const { readme, files } = FIXTURES[name];
+  const fixture = path.join(root, 'fixtures', name);
   const own = readJson(path.join(fixture, 'package.json')).devDependencies['@playwright/test'];
   const demo = readJson(path.join(root, 'apps/demo/package.json')).devDependencies['@playwright/test'];
   assert.ok(
     own === demo,
-    `fixtures/vite-react-ts/package.json pins @playwright/test ${own} and apps/demo ${demo}. Change the fixture's to ${demo} and refresh its lock with \`npm install --package-lock-only\` in that folder, so both use the browsers CI installs.`,
+    `fixtures/${name}/package.json pins @playwright/test ${own} and apps/demo ${demo}. Change the fixture's to ${demo} and refresh its lock with \`npm install --package-lock-only\` in that folder, so both use the browsers CI installs.`,
   );
-  const config = fs.readFileSync(path.join(fixture, 'vite.config.ts'), 'utf8');
-  assert.ok(
-    normalized(config) === normalized(readmeViteConfig()),
-    'fixtures/vite-react-ts/vite.config.ts is not the vite.config.ts block under "## Install with Vite" in README.md. Copy the README block into the fixture, so the fixture tests what users paste.',
-  );
+  for (const file of files) {
+    const code = fs.readFileSync(path.join(fixture, file), 'utf8');
+    assert.ok(
+      normalized(code) === normalized(readmeBlock(readme, file)),
+      `fixtures/${name}/${file} is not the ${file} block under "${readme}" in README.md. Copy the README block into the fixture, so the fixture tests what users paste.`,
+    );
+  }
 }
 
 /** Packs packages/core into a directory of its own and returns the tarball. `prepack` builds it first. */
@@ -112,14 +140,20 @@ function main() {
   const split = argv.indexOf('--');
   const own = split === -1 ? argv : argv.slice(0, split);
   const playwright = split === -1 ? [] : argv.slice(split + 1);
-  const { values } = parseArgs({ args: own, options: { tarball: { type: 'string' }, fresh: { type: 'boolean', default: false } } });
+  const { values } = parseArgs({
+    args: own,
+    options: { tarball: { type: 'string' }, fresh: { type: 'boolean', default: false }, fixture: { type: 'string', default: 'vite-react-ts' } },
+  });
+  const name = values.fixture;
+  assert.ok(Object.hasOwn(FIXTURES, name), `--fixture is ${Object.keys(FIXTURES).join(' or ')}, not ${name}`);
+  const fixture = path.join(root, 'fixtures', name);
 
-  guards();
+  guards(name);
   const tarball = values.tarball === undefined ? pack() : path.resolve(values.tarball);
   assert.ok(fs.existsSync(tarball), `${tarball} does not exist`);
 
-  const app = fs.mkdtempSync(path.join(os.tmpdir(), 'vite-app-'));
-  console.log(`${path.basename(tarball)} into ${app}${values.fresh ? ', dependencies resolved today' : ''}, on Node ${process.version}`);
+  const app = fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
+  console.log(`${path.basename(tarball)} into ${app}, the app in fixtures/${name}${values.fresh ? ', dependencies resolved today' : ''}, on Node ${process.version}`);
   try {
     fs.cpSync(fixture, app, { recursive: true, filter: (source) => !NOT_COPIED.has(path.basename(source)) });
     if (values.fresh) {
@@ -132,14 +166,12 @@ function main() {
       npm(`install --no-save --no-audit --no-fund ${quoted(tarball)}`, app);
     }
     assertTarballInstalled(app);
-    const versions = REPORTED.map((name) => `${name} ${readJson(path.join(app, 'node_modules', name, 'package.json')).version}`);
+    const versions = FIXTURES[name].reported.map((name) => `${name} ${readJson(path.join(app, 'node_modules', name, 'package.json')).version}`);
     console.log(`\nInstalled: ${versions.join(', ')}`);
 
     // A step of its own, so a type error in the README's config reads as one.
     npm('run build', app);
-    // The specs and playwright.config.ts, which the build's `tsc -b` leaves out and Playwright runs
-    // without checking.
-    run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app });
+    FIXTURES[name].typecheck(app);
     const cli = path.join(app, 'node_modules/@playwright/test', readJson(path.join(app, 'node_modules/@playwright/test/package.json')).bin.playwright);
     run(['playwright test', ...playwright].join(' '), process.execPath, [cli, 'test', ...playwright], {
       cwd: app,
