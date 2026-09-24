@@ -6,6 +6,19 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Fixed
+
+- **A click made from the keyboard belongs to its key, not to the mouse click before it.** A pointerup
+  or a click is tied to the press it releases by its `pointerId`, and the click that Enter or Space makes
+  has none to go by: its `pointerId` is -1. It took the newest pointerdown of the last 5 s instead. So
+  after a mouse click on a button, Enter on the same button within `inputWindow` of that click's paint
+  had its render joined to the mouse click's report as a later render, whenever the report held the
+  mouse click's pointerdown entry, which it does once that entry reaches 16 ms, or at any length when
+  that click was the page's first input. The click is now part of
+  the key whose task made it, Enter's keydown or a Space's keyup, unless it is a tap's click whose touch
+  has not clicked yet, which happens when a key lands between the touchend and the click. A click with
+  neither a key nor a pointer behind it is a gesture of its own. Found reading the code.
+
 ## [0.3.0] - 2026-09-24
 
 ### Added
@@ -155,17 +168,6 @@ it changes when a field is removed or changes meaning, which a minor release may
   it, and text that arrives with no key pressed, from dictation or an input method, stops joining the
   click rather than joining it for as long as it runs. Found reading the code, where a comment in the
   hook said changing one length did not change the other.
-
-- **A click made from the keyboard belongs to its key, not to the mouse click before it.** A pointerup
-  or a click is tied to the press it releases by its `pointerId`, and the click that Enter or Space makes
-  has none to go by: its `pointerId` is -1. It took the newest pointerdown of the last 5 s instead. So
-  after a mouse click on a button, Enter on the same button within `inputWindow` of that click's paint
-  had its render joined to the mouse click's report as a later render, whenever the report held the
-  mouse click's pointerdown entry, which it does once that entry reaches 16 ms, or at any length when
-  that click was the page's first input. The click is now part of
-  the key whose task made it, Enter's keydown or a Space's keyup, unless it is a tap's click whose touch
-  has not clicked yet, which happens when a key lands between the touchend and the click. A click with
-  neither a key nor a pointer behind it is a gesture of its own. Found reading the code.
 
 - **The subpaths have types under `moduleResolution: "node"`.** That setting, `node10` since
   TypeScript 5.0 and still what older setups have, ignores `exports`, so every import but the package
