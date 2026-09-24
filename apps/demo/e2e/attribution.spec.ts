@@ -1,22 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import type { CommitSummary, HookInfo, InteractionReport, Stats } from 'react-inp-blame';
-import { clearReports, lastReport, settle, testAttribute, waitForFrames } from './page';
+import { clearReports, interact, settle, testAttribute, waitForFrames } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
 // A render blamed from React's durations is measured; production builds have only counts to go on.
 const renderConfidence = prod ? 'inferred' : 'measured';
-
-/** Opens a scenario, makes one interaction in it, and returns the report. The verdict is attached to the test rather than printed. */
-async function interact(page: Page, scenario: string, act: () => Promise<void>): Promise<InteractionReport> {
-  await page.goto(`/#${scenario}`);
-  await page.waitForSelector('[data-test=trigger]');
-  await settle(page);
-  await clearReports(page);
-  await act();
-  const r = await lastReport(page);
-  await test.info().attach(`${scenario}: verdict`, { body: `${r.verdict}\n\nmeasuring it cost ${r.overheadMs.toFixed(2)} ms`, contentType: 'text/plain' });
-  return r;
-}
 
 test('hook is installed before React registers', async ({ page }) => {
   await page.goto('/#fine');

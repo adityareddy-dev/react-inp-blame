@@ -57,9 +57,17 @@ From the repository root:
     npm run test:pack                             # the packed tarball, installed into throwaway apps
     npm run test:vite-app                         # a create-vite app with @vitejs/plugin-react, from the packed tarball
 
-The Vite demo runs every spec in Chromium, and `cross-browser.spec.ts` in Firefox and WebKit as well.
+The Vite demo runs its specs in Chromium, and `cross-browser.spec.ts` in Firefox and WebKit as well.
 It imports the library's source, so it needs no build. The Next.js app uses the package as built, so
 run `npm run build` before its suites.
+
+The one spec desktop Chromium leaves out is `phone.spec.ts`, which taps where the others click, on two
+emulated phones with touch screens: a Pixel 7 in Chromium with the CPU slowed four times, and an
+iPhone 15 in WebKit. `npm test` and `npm run test:prod` include it. To run only the phones, from
+`apps/demo`:
+
+    npx playwright test --project=android-dev --project=iphone-dev
+    INP_MODE=prod npx playwright test --project=android-prod --project=iphone-prod
 
 The React matrix runs the demo's attribution and input-delay specs against React 19.2.8, 19.1.9, 18.3.1,
 18.2.0 and 17.0.2 (legacy root), on the dev server and a production build:

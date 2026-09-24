@@ -112,6 +112,22 @@ Since 2026-09-14 `apps/demo/e2e/cross-browser.spec.ts` also runs in Firefox 148 
 nothing installed. Both time React's components with a clock too coarse for the demo's (see
 "Coarse clocks" below), so their development reports carry counts and inferred blame.
 
+Since 2026-09-23 `apps/demo/e2e/phone.spec.ts` taps the lab's scenarios on two emulated phones, each
+with a touch screen and a phone's viewport: a Pixel 7 in Chromium with the CPU slowed 4x through the
+DevTools protocol, and an iPhone 15 in WebKit 26.4 (Playwright's builds and device settings, checked on
+Windows, not on a phone). A tap is one interaction, its pointerdown, pointerup and click under one id,
+named after the click and labelled by the button tapped. Chromium's blames are the desktop click's;
+WebKit names the same components and leaves out the forced layout and the handler's script, which it
+has no Long Animation Frames to see. In Chromium a finger held 250 ms before it lifts goes into
+`holdMs`, not the headline; WebKit gives Playwright no way to hold a touch. On WebKit a tap whose own
+paint comes quickly, with the heavy render after it, can be reported as its pointerdown alone: the
+page's first input is reported however quick it was, and the render joins it as a later render. The
+tap's own commit may not. That report ends at the pointerdown's paint, rounded to 8 ms, and the
+click's re-render of CascadingEffect lands within a millisecond of that end, before it in most runs and
+after it in a few (2 of 30 on the dev server on 2026-09-23, with other runs loading the machine). After
+it, one component is too small to be a later render, so it is left out and the report says "React
+didn't render anything" about a tap that did.
+
 **Smoke runs outside the demo.** On 2026-09-20 the packed tarball was installed into a production
 build of a real Next.js App Router documentation site and driven through seven interactions. That run
 is cited below wherever it changed something, and only ever for *what the library said*: three runs
