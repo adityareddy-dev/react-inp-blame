@@ -105,8 +105,9 @@ test("a later render joins within the page's inputWindow of the paint, however l
 });
 
 test('a quiet mouse click is not published for the render of a click Enter made on the same button later', () => {
-  // The click Enter makes has no pointerdown of its own, so it takes the mouse click's as its press and
-  // its render carries that stamp, 2.6 s after the mouse click painted.
+  // A ring where the click Enter made carries the mouse click's pointerdown as its press, and its render
+  // that stamp, 2.6 s after the mouse click painted. The hook recorded it that way until it tied a
+  // keyboard click to its key, and a release whose press it can only guess at still takes the newest one.
   const input = (ts: number, type: string, gestureTs: number, press: string | number) => ({ ts, type, gestureTs, press, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
   const ring = [input(7000, 'pointerdown', 7000, 1), input(7080, 'pointerup', 7000, 1), input(7081, 'click', 7000, 1), input(9600, 'keydown', 9600, 'Enter'), input(9601, 'click', 7000, -1)];
   const { life, published, render } = lifecycle({ inputs: () => ring });
