@@ -433,9 +433,10 @@ test("a later render of a click whose pointerdown painted first is measured from
 });
 
 test('a click made from the keyboard is not a later render of the mouse click before it', () => {
-  // A mouse click, then Enter on the button it left focused, 2.8 s after its paint. The click that Enter
-  // makes has no pointerdown of its own (its pointerId is -1), so it takes the mouse click's pointerdown
-  // as its press, and its render carries that stamp. The keydown between them says something else was
+  // A mouse click, then Enter on the button it left focused, 2.8 s after its paint, in a ring where the
+  // click Enter made carries the mouse click's pointerdown as its press. The hook recorded it that way
+  // until it tied a keyboard click to its key (install.test.ts has that), and a release whose press it
+  // can only guess at still takes the newest one. The keydown between them says something else was
   // pressed, so the window still runs from the mouse click's paint and the render is past it.
   const mouse = [entry('pointerdown', 0, 24, 2, 4), entry('click', 81, 120, 83, 180)];
   const ring = [
