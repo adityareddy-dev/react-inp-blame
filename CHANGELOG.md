@@ -115,6 +115,15 @@ it changes when a field is removed or changes meaning, which a minor release may
   now say so. The packed-tarball check now type-checks every subpath under `node10`, `node16`,
   `nodenext` and `bundler`, so a subpath added without an entry in the map fails it.
 
+- **A copy of this version keeps to itself beside an older one on the same page.** Every copy of the
+  library on a page keeps its state under one global key, so that two copies install once between
+  them, and a copy only uses what it finds there when the layout number beside it matches its own.
+  That number stayed at 1 from 0.1.0 through 0.2.0 though what is kept there changed, and it changes
+  again here: a renderer records whether it only draws Next.js's dev overlay, and an input where the
+  work of its own task ended. It is 2 from this release, so where an older copy got to the page first,
+  this one installs nothing and says so in the console, and `npm ls react-inp-blame` lists the two
+  versions. Found reading the code.
+
 ## [0.2.0] - 2026-09-20
 
 ### Added
