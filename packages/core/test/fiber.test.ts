@@ -46,6 +46,7 @@ test('the shape check names the first field that is not what the walk reads', ()
     ['React 16 called the flags effectTag', committed({ ...without('flags'), effectTag: 0 }), 'root.current.flags is not a number'],
     ['a tree link that went missing', committed(without('alternate')), 'root.current.alternate is neither a fiber nor null'],
     ['durations stored some other way', committed({ ...hostRoot(), actualDuration: '1.5' }), 'root.current.actualDuration is neither a number nor absent'],
+    ['a render start stored some other way', committed({ ...hostRoot(), actualStartTime: '40' }), 'root.current.actualStartTime is neither a number nor absent'],
   ];
   for (const [why, root, problem] of cases) assert.equal(rootShapeProblem(root), problem, why);
 });
@@ -483,6 +484,17 @@ function timed(component: () => void, ms: number, ...children: Record<string, un
   return f;
 }
 const profiledRoot = (child: Record<string, unknown>) => Object.assign(root(child), { mode: 0b10, actualDuration: child.actualDuration });
+
+test("a commit's render start is the root fiber's actualStartTime, and only when it can be one", () => {
+  function Panel() {}
+  const at = (start: unknown) => walkCommit(Object.assign(profiledRoot(timed(Panel, 3)), start === undefined ? {} : { actualStartTime: start }) as any, 5000, 100, click, development).startedAt;
+  assert.equal(at(40), 40);
+  // A production build has no such field, and a tree outside ProfileMode leaves it at -1.
+  assert.equal(at(undefined), null);
+  assert.equal(at(-1), null);
+  // Later than the commit's end is not the start of the render that commit came from.
+  assert.equal(at(100.5), null);
+});
 
 test('a clock in whole milliseconds that timed quick components keeps the commit total and drops the per-component times', () => {
   // Firefox and Safari step performance.now() by 1 ms without cross-origin isolation: a component that

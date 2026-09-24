@@ -126,6 +126,13 @@ export interface CommitSummary {
   /** Total render time of the commit in ms when durations exist, else 0. */
   readonly total: number;
   /**
+   * performance.now() when React began the render this commit came from, read from the root fiber.
+   * From here to `at` is React's own time for the commit, committing it included: the DOM changes,
+   * ref callbacks and layout effects that `total` leaves out. Null in a production build, which keeps
+   * no start, and where React did not time the tree.
+   */
+  readonly startedAt: number | null;
+  /**
    * How long this library took to walk the commit, ms. The walk runs inside React's commit, so
    * for a commit during an interaction's handlers it is part of the processing time the browser
    * measured; the report takes it back out (`InteractionReport.walkMs`).
