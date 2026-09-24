@@ -70,6 +70,22 @@ it changes when a field is removed or changes meaning, which a minor release may
   Found by the web-vitals test on 15.5 under `next dev --turbopack`, where the overlay committed inside
   every click. On 16.3.5 it took opening the dev tools menu first.
 
+- **An `inputWindow` over 1500 ms reaches the report.** The option set how long after an input's own
+  work the hook walked a commit, but a report took later renders only within a fixed 1.5 s of its
+  paint, so a page that set it to 3000 paid to walk a render 2 s after the paint and never saw it in
+  `followUps`. A report now takes later renders within `inputWindow` of its paint, or of the end of a
+  later input's own work in the same interaction where that came after the paint, which is where the
+  hook measured from. The default length is unchanged, and a shorter window drops nothing the hook
+  walked for the interaction. What changes at any length is where the window starts for a later input:
+  where the pointerdown was the slowest part of a click, a render of the click counted from the
+  pointerdown's paint, so a pointer held down past the window lost the render its release made, even
+  one inside the click's own dispatch. A `change`, `input` or `submit` counts as part of the input
+  before it only when the browser fires it in that input's task or within `inputWindow` of the work
+  that task did, so a file chosen in the system dialog 20 s after its click is not a later render of
+  it, and text that arrives with no key pressed, from dictation or an input method, stops joining the
+  click rather than joining it for as long as it runs. Found reading the code, where a comment in the
+  hook said changing one length did not change the other.
+
 ## [0.2.0] - 2026-09-20
 
 ### Added

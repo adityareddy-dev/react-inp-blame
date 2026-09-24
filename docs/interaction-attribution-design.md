@@ -476,10 +476,13 @@ rounded to 8 ms, `processingEnd` is not, so a commit inside the handlers is neve
 a follow-up.
 
 **The window, and what it is measured from.** A commit React makes inside an input's dispatch is that
-input's, however long the dispatch has been running. A commit outside any dispatch joins the newest
-input the ring holds while it lands within `inputWindow` (1.5 s by default) of the input's own
-timestamp, until React commits inside its dispatch, and then of the end of the last such commit.
-Until 2026-09-19 both were measured from the input's timestamp, so a click that
+input's, however long the dispatch has been running. A `change`, `input` or `submit` the browser fires
+from an input counts as its dispatch while it comes in the input's own task or within `inputWindow` of
+the end of the input's work, by its own `timeStamp`: a file chosen in the system dialog 20 s after its
+click is neither, and its render is held to the window like any other. A commit outside any dispatch
+joins the newest input the ring holds while it lands within `inputWindow` (1.5 s by default) of the
+input's own timestamp, until React commits inside its dispatch, and then of the end of the last such
+commit. Until 2026-09-19 both were measured from the input's timestamp, so a click that
 spent 2.5 s inside React had its one commit thrown out by the same check that throws out an unrelated
 background update, and the report read "React didn't render anything" with confidence `measured`. That
 was wrong, and stated as a fact.
@@ -740,21 +743,37 @@ The demo's layout-thrash scenario is the case: 400 layout effects writing a styl
 about 190 ms of layout against a 48 ms render, named `LayoutThrash` with `PriceTicker ×400` beside
 it, exactly as the render blame it replaced was.
 
-**Follow-ups.** Commits that land after the paint but within 1.5 s of it, stamped with the same
-input, with no newer input in between. Effects, transitions and data-driven re-renders show
-up here. The window runs from the paint, not from the input, so an interaction that took three seconds
-still gets the render its effects schedule a moment after it. "No newer input in between" is checked
-against the ring, not against the stamp alone: a commit made outside any dispatch carries whatever
-input the ring last held, and that can be an interaction two steps back. Sorting a table in the
-TanStack Table example and then changing its page size a second later made exactly that report, where
-the sort click was told it had re-rendered 417 components a second after its paint, when the page-size
-change had done it. So when an input that is not one of this interaction's own arrived after all of
-them and before the commit, the commit is attached to nothing: the library cannot tell whose it is, and
-a wrong attachment reads as a finding. The ring is the whole of that evidence, which bounds the check:
-an update with no user input behind it at all, a timer firing, a message from a socket, or a test
-script setting a select's value and dispatching `change` itself, is invisible to it and is still read
-as this interaction's follow-up render. The harness's `page-size-50` step is the third of those, which
-is why the `tt-fuzzy` sort click still collects that render.
+**Follow-ups.** Commits that land after the paint but within `inputWindow` (1.5 s by default) of it,
+stamped with the same input, with no newer input in between. Effects, transitions and data-driven
+re-renders show up here. The window runs from the paint, not from the input, so an interaction that took
+three seconds still gets the render its effects schedule a moment after it. Where the commit's own input
+is a later one of the same interaction whose work ended after that paint, the click that releases a
+pointer held down past it or a click whose pointerdown was the slow part and painted first, the window
+runs from the end of that input's work (`work.endedAt` in the ring), which is where the hook measured
+it from. So the hold is not counted against the render the release made, and a window set shorter than
+1.5 s does not drop a render the hook walked for that input. It runs from there only while the ring
+shows nothing else pressed between the interaction's first input and that one. A click made from the
+keyboard has no pointerdown of its own and takes the newest one in the ring as its press, so the
+render of Enter pressed on a button a few seconds after a mouse click carries the mouse click's stamp;
+the keydown in between is what keeps it off the mouse click. Inside the window from the mouse click's
+paint it still joins: the hook pairs a click that has no pointer with any pointerdown of the last 5 s,
+and that pairing is a limit of its own, older than this window. Until 2026-09-23 this window was a fixed
+1.5 s whatever `inputWindow` said, and always ran from the paint. A page that set `inputWindow` to 3 s
+paid for the walk of a render 2 s after the paint and never saw it in a report, and a press held for
+2 s lost the render its own click made inside its dispatch.
+
+"No newer input in between" is checked against the ring, not against the stamp alone: a commit made
+outside any dispatch carries whatever input the ring last held, and that can be an interaction two
+steps back. Sorting a table in the TanStack Table example and then changing its page size a second
+later made exactly that report, where the sort click was told it had re-rendered 417 components a
+second after its paint, when the page-size change had done it. So when an input that is not one of
+this interaction's own arrived after all of them and before the commit, the commit is attached to
+nothing: the library cannot tell whose it is, and a wrong attachment reads as a finding. The ring is
+the whole of that evidence, which bounds the check: an update with no user input behind it at all, a
+timer firing, a message from a socket, or a test script setting a select's value and dispatching
+`change` itself, is invisible to it and is still read as this interaction's follow-up render. The
+harness's `page-size-50` step is the third of those, which is why the `tt-fuzzy` sort click still
+collects that render.
 
 A run on the shadcn/ui documentation site on 2026-09-20 produced a fourth: resizing the viewport. A
 theme toggle was credited with a second render of 441 components inside `SidebarContent` 982 ms after
@@ -763,8 +782,8 @@ the window to 390 px for the step after it. The next click came 446 ms later sti
 had arrived and the check above never had anything to fire on. It is the same limit, not a new one:
 the ring holds inputs, a resize is not one, and the commit's own stamp says the theme toggle because
 the theme toggle is the last input the ring held. Nothing here can tell that apart from the render an
-effect of the theme toggle might genuinely have scheduled a second later, and the window is 1.5 s
-because the renders worth reporting land inside it.
+effect of the theme toggle might genuinely have scheduled a second later, and the default window is
+1.5 s because the renders worth reporting land inside it. A longer `inputWindow` reads more of these.
 
 **Saying it in plain words.** Every report carries an `explanation`: a headline ("264 ms
 click"), a rating on the INP thresholds in web-vitals' words (good to 200 ms, needs improvement to
@@ -862,7 +881,7 @@ round down in 20 runs.
 
 **Late arrivals.** A profile that renders 500 ms after the click, once the server answers,
 lands long after the report was first emitted. Such renders attach to the existing report
-(same input stamp, no newer input since, within 1.5 s), and listeners receive the next
+(same input stamp, no newer input since, within `inputWindow`), and listeners receive the next
 revision: a new frozen report with `revision` bumped and its own explanation, the earlier one
 left as it was (before 0.1.0 the same object was changed and handed over again). Long animation
 frames that

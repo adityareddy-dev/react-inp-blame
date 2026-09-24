@@ -377,6 +377,77 @@ test('a follow-up window is measured from the paint, so a slow interaction still
   assert.deepEqual(buildReport(slow, [commit(4100, 0, { total: 40 })], [], [input(0, 'click')]).followUps, []);
 });
 
+test("the follow-up window is the page's inputWindow, above 1.5 s as well as below it", () => {
+  const clicked = [entry('click', 0, 120, 3, 100)];
+  const ring = [input(0, 'click')];
+  const r = buildReport(clicked, [], [], ring);
+  // Data that came back 2 s after the paint: past the default window, inside one of 3 s. The hook walks
+  // it under a 3 s window, and the report has to take it too, or the walk bought nothing.
+  const late = commit(2120, 0, { total: 40 });
+  assert.deepEqual(buildReport(clicked, [late], [], ring).followUps, []);
+  assert.deepEqual(buildReport(clicked, [late], [], ring, 'attributes', [], 3000).followUps, [joinedAs(late, 'exact')]);
+  assert.equal(isLaterRender(r, late, ring), false);
+  assert.equal(isLaterRender(r, late, ring, 3000), true);
+  // 600 ms after the paint: inside the default window, past one of 500 ms.
+  const soon = commit(720, 0, { total: 40 });
+  assert.deepEqual(buildReport(clicked, [soon], [], ring).followUps, [joinedAs(soon, 'exact')]);
+  assert.deepEqual(buildReport(clicked, [soon], [], ring, 'attributes', [], 500).followUps, []);
+  assert.equal(isLaterRender(r, soon, ring, 500), false);
+});
+
+test("a press held past the window keeps the render its release made, and a later render is measured from the end of the release's work", () => {
+  // Only the pointerdown was slow enough to be observed. The pointer is held for 2 s and the click that
+  // releases it renders inside its own dispatch, 1970 ms after the pointerdown painted. Measured from
+  // that paint it was past the window and joined nothing, though the hook had walked it as the click's.
+  const pressed = [entry('pointerdown', 0, 40, 2, 30)];
+  const gesture = [input(0, 'pointerdown'), input(2000, 'pointerup', { gestureTs: 0 }), input(2001, 'click', { gestureTs: 0, work: { endedAt: 2012, unjoined: [] } })];
+  const release = commit(2010, 2001, { gestureTs: 0, total: 40 });
+  assert.deepEqual(buildReport(pressed, [release], [], gesture).followUps, [joinedAs(release, 'exact')]);
+  // It is the release's own work, so a window shorter than the hold keeps it too.
+  assert.deepEqual(buildReport(pressed, [release], [], gesture, 'attributes', [], 500).followUps, [joinedAs(release, 'exact')]);
+  // The same when the release was observed too and the pointerdown is still the slowest entry.
+  const observed = [...pressed, entry('pointerup', 2000, 16, 2001, 2002), entry('click', 2001, 16, 2002, 2012)];
+  assert.deepEqual(buildReport(observed, [release], [], gesture).followUps, [joinedAs(release, 'exact')]);
+  // A render 800 ms after the release is inside the default window and past one of 500 ms.
+  const after = commit(2801, 2001, { gestureTs: 0, total: 40 });
+  assert.deepEqual(buildReport(pressed, [after], [], gesture).followUps, [joinedAs(after, 'exact')]);
+  assert.deepEqual(buildReport(pressed, [after], [], gesture, 'attributes', [], 500).followUps, []);
+});
+
+test("a later render of a click whose pointerdown painted first is measured from the end of the click's own work", () => {
+  // The pointerdown was the slow part and painted at 152. The click after it renders inside its own
+  // dispatch until 300, and an effect of it lands at 750. Under a 500 ms window the hook walked that
+  // effect, 450 ms after the click's work, and a window run from the pointerdown's paint dropped it.
+  const entries = [entry('pointerdown', 0, 152, 2, 148), entry('pointerup', 199, 16, 200, 201), entry('click', 200, 120, 201, 300)];
+  const ring = [input(0, 'pointerdown'), input(199, 'pointerup', { gestureTs: 0 }), input(200, 'click', { gestureTs: 0, work: { endedAt: 300, unjoined: [] } })];
+  const inDispatch = commit(290, 200, { gestureTs: 0, total: 40 });
+  const effect = commit(750, 200, { gestureTs: 0, total: 40 });
+  const report = (commits: CommitSummary[]) => buildReport(entries, commits, [], ring, 'attributes', [], 500).followUps.map((c) => c.at);
+  assert.deepEqual(report([inDispatch, effect]), [290, 750]);
+  // One the hook would have dropped too, 501 ms after the click's work, stays out.
+  assert.deepEqual(report([inDispatch, commit(801, 200, { gestureTs: 0, total: 40 })]), [290]);
+});
+
+test('a click made from the keyboard is not a later render of the mouse click before it', () => {
+  // A mouse click, then Enter on the button it left focused, 2.8 s after its paint. The click that Enter
+  // makes has no pointerdown of its own (its pointerId is -1), so it takes the mouse click's pointerdown
+  // as its press, and its render carries that stamp. The keydown between them says something else was
+  // pressed, so the window still runs from the mouse click's paint and the render is past it.
+  const mouse = [entry('pointerdown', 0, 24, 2, 4), entry('click', 81, 120, 83, 180)];
+  const ring = [
+    input(0, 'pointerdown', { press: 1 }),
+    input(80, 'pointerup', { gestureTs: 0, press: 1 }),
+    input(81, 'click', { gestureTs: 0, press: 1 }),
+    input(3000, 'keydown', { press: 'Enter' }),
+    input(3001, 'click', { gestureTs: 0, press: -1, work: { endedAt: 3012, unjoined: [] } }),
+  ];
+  const r = buildReport(mouse, [], [], ring);
+  const enter = commit(3010, 3001, { gestureTs: 0, total: 40 });
+  assert.equal(isLaterRender(r, enter, ring), false);
+  assert.deepEqual(buildReport(mouse, [enter], [], ring).followUps, []);
+  assert.deepEqual(buildReport(mouse, [enter], [], ring, 'attributes', [], 500).followUps, []);
+});
+
 test("the rating follows INP's thresholds", () => {
   assert.equal(report([entry('click', 0, 200, 1, 2)], [], []).explanation.rating, 'good');
   assert.equal(report([entry('click', 0, 208, 1, 2)], [], []).explanation.rating, 'needs-improvement');

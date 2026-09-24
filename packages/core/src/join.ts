@@ -7,8 +7,6 @@ import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InputRecord, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
 
-/** How long after the paint a commit can still be counted as that interaction's later render, ms. */
-const FOLLOW_UP_WINDOW = 1500;
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
 // they agree to the timer's resolution; 1 ms covers the coarsening.
 const STAMP_TOLERANCE = 1;
@@ -308,7 +306,8 @@ export function interactionTarget(entries: readonly InteractionTiming[], inputs:
  * longest single entry, which is the number web-vitals reports as INP for the interaction;
  * `inputs` is the ring of recent inputs, used to tell whose commit is whose and to recover
  * the target when the entry's is gone; `navigations` are the page's, oldest first, to say which
- * one the interaction happened in and which one it started.
+ * one the interaction happened in and which one it started; `inputWindow` is the page's
+ * `InstallOptions.inputWindow`, which bounds its later renders (see `isFollowUp`).
  */
 export function buildReport(
   entries: readonly InteractionTiming[],
@@ -317,6 +316,7 @@ export function buildReport(
   inputs: readonly InputRecord[] = [],
   labels: LabelSource = 'attributes',
   navigations: readonly PageNavigation[] = [],
+  inputWindow = DEFAULT_INPUT_WINDOW,
 ): ReportData {
   const longest = entries.reduce((a, e) => (e.duration > a.duration ? e : a));
   const group = paintGroupOf(entries, longest);
@@ -376,7 +376,7 @@ export function buildReport(
       // part of what INP measured for it; `holdMs` covers that time.
       if (c.at < start - STAMP_TOLERANCE) continue;
       if (c.at <= paintBound) inWindow.push(joined(c, 'exact'));
-      else if (isFollowUp(c, end, inputs, stamps)) followUps.push(joined(c, 'exact'));
+      else if (isFollowUp(c, end, inputs, stamps, inputWindow)) followUps.push(joined(c, 'exact'));
     } else if (c.at >= processingStart - STAMP_TOLERANCE && c.at <= paintBound && !claimedElsewhere(c, inputs, stamps)) {
       // No stamp matched, but it ran between this interaction's handlers and its paint.
       inWindow.push(joined(c, 'overlap'));
@@ -486,10 +486,11 @@ export function refreshReport(
   inputs: readonly InputRecord[] = [],
   labels: LabelSource = 'attributes',
   navigations: readonly PageNavigation[] = [],
+  inputWindow = DEFAULT_INPUT_WINDOW,
 ): ReportData {
   // Time already spent building the report stays counted; the walks are recounted for the commits it now holds.
   const building = r.overheadMs - walked(r.commits) - walked(r.followUps);
-  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations);
+  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations, inputWindow);
   return { ...fresh, revision: r.revision + 1, overheadMs: fresh.overheadMs + building };
 }
 
@@ -521,19 +522,45 @@ export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): R
 }
 
 /**
- * A commit that landed after the paint and is worth a sentence, close enough to the paint to be this
- * interaction's own doing, with no newer interaction under way to have caused it instead. The window
- * runs from the paint, not from the input: an interaction that took three seconds still gets the
- * render its effects schedule a moment after it.
+ * A commit that landed after the paint and is worth a sentence, close enough to be this interaction's
+ * own doing, with no newer interaction under way to have caused it instead. Close enough is within
+ * `inputWindow` of `followUpFrom`, the length the hook walks a commit by, so a page that sets it longer
+ * gets the renders it pays to walk and one that sets it shorter keeps the ones it walked.
  */
-function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: number[]): boolean {
-  return c.at - end <= FOLLOW_UP_WINDOW && worthMentioning(c) && !newerInputBefore(inputs, stamps, c.at);
+function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: number[], inputWindow: number): boolean {
+  return c.at - followUpFrom(c, end, inputs, stamps) <= inputWindow && worthMentioning(c) && !newerInputBefore(inputs, stamps, c.at);
 }
 
-/** Does this commit belong to the report's input, landing after its paint? */
-export function isLaterRender(r: ReportData, c: CommitSummary, inputs: readonly InputRecord[] = []): boolean {
+/**
+ * Where a later render's window runs from. The paint, as a rule, not the input: an interaction that took
+ * three seconds still gets the render its effects schedule a moment after it. The hook measures from the
+ * end of the work of the input the commit is stamped with (`work.endedAt`, which the ring keeps), and for
+ * the input the paint closed that is before the paint. Another input of the same interaction can end its
+ * work after it: the click that releases a pointer held down past the paint, or a click whose pointerdown
+ * was the slow part and painted first. Then the window runs from the end of that input's work, as the
+ * hook's did, and a render inside the click's own dispatch is the click's however long the press was held.
+ *
+ * Only while the ring shows nothing else pressed from the interaction's first input to that one. A click
+ * made from the keyboard has no pointerdown of its own and takes the newest one in the ring as its press,
+ * so its render carries an earlier mouse click's stamp, and measured from itself it would join that mouse
+ * click seconds later. The Enter or Space that made it sits in between. When the ring has let the input
+ * go, there is nothing to check it against, and the window runs from the paint.
+ */
+function followUpFrom(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: number[]): number {
+  // By type as well: a pointerup and its click are often under a millisecond apart.
+  const own = inputs.find((i) => i.type === c.inputType && near(i.ts, c.inputTs));
+  if (!own || !ownInput(own, stamps)) return end;
+  const first = Math.min(...stamps);
+  // No tolerance on the bounds: the inputs at them are the interaction's own, and the keydown that
+  // makes a click can be under a millisecond before it.
+  const pressedBetween = inputs.some((i) => i.ts >= first && i.ts <= own.ts && !ownInput(i, stamps));
+  return pressedBetween ? end : Math.max(end, own.work.endedAt);
+}
+
+/** Does this commit belong to the report's input, landing after its paint and inside its later-render window (`followUpFrom`)? */
+export function isLaterRender(r: ReportData, c: CommitSummary, inputs: readonly InputRecord[] = [], inputWindow = DEFAULT_INPUT_WINDOW): boolean {
   const stamps = r.entries.map((e) => e.startTime);
-  return c.at > r.end && stampMatches(c, stamps) && isFollowUp(c, r.end, inputs, stamps);
+  return c.at > r.end && stampMatches(c, stamps) && isFollowUp(c, r.end, inputs, stamps, inputWindow);
 }
 
 /** The next revision of a report, with a later render attached; null when it holds that render already. */
