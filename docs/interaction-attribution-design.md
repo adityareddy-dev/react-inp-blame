@@ -759,6 +759,32 @@ The demo's layout-thrash scenario is the case: 400 layout effects writing a styl
 about 190 ms of layout against a 48 ms render, named `LayoutThrash` with `PriceTicker ×400` beside
 it, exactly as the render blame it replaced was.
 
+Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
+handler. A render duration stops where committing starts, so 400 layout effects reading geometry are
+nowhere in it, and the working time outside the render was all the handler's: on Linux WebKit in CI
+the same scenario came back as `onClick` running for 465 ms beside a 404 ms render. A development or
+profiling build keeps when React began each render, as the root fiber's `actualStartTime`, on the same
+clock as `performance.now()`, and the commit hook runs after the layout effects. So from that start
+to the commit's end is React's own time, committing included (`CommitSummary.startedAt` to `at`).
+A span only counts when it began and ended inside one event's handlers. React does not yield in
+there, so a render that began before them or committed after them stopped on the way, and what ran
+meanwhile, the handler most often, was not React's; that commit falls back to its render duration.
+Where spans overlap (a layout effect flushing another root with `flushSync`) they count once. The
+handler now takes what lies outside both React's time and the forced layout the browser measured.
+The two are not added together: a layout effect's forced layout sits inside the commit, and counting
+it twice would leave the handler less than it ran, so the larger one is taken. Neither is exact:
+geometry read in a render body is in the render and the layout both, as the layout branch says, and
+forced layout in the handler's own code, beside a commit busy with other work, stays in the handler's
+figure rather than the layout's. The render keeps the blame, however small the render itself was,
+once committing took as long as the handler would have needed to be blamed (25 ms and a quarter of
+the working time), since the time taken off the handler has to land somewhere. The commit it names
+is the one React spent longest on with committing counted, and its sentence says what that commit's
+committing took. A production build keeps no start, so nothing changes there.
+
+Still left with the handler: `useEffect`s. React 18 and 19 run a click's passive effects in the same
+task, right after the commit hook, so a heavy one still reads as `onClick` in every browser. React
+calls `onPostCommitFiberRoot` once they are done, which could extend the span. Not done yet.
+
 **Follow-ups.** Commits that land after the paint but within `inputWindow` (1.5 s by default) of it,
 stamped with the same input, with no newer input in between. Effects, transitions and data-driven
 re-renders show up here. The window runs from the paint, not from the input, so an interaction that took
@@ -833,9 +859,11 @@ site, paging a calendar forward one month (5 ms of working time, 82 of the scree
 shape, one offered as a guess and the other as a measurement. They now read the same.
 
 **How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
-it in `join.ts`: the handler is blamed from 25 ms of working time outside React's render, and only
-when that is a quarter of the working time (committing the demo's 1441-row list takes a fifth of
-it outside React's durations); a render from 5 ms with durations, or from 10 components by counts
+it in `join.ts`: the handler is blamed from 25 ms of working time outside React's own time (the
+larger of two figures: each render's start to its commit's end, where the build keeps the start, and
+the render durations plus the forced layout), and only when that is a quarter of the working time
+(in a production build committing the demo's 1441-row list takes a fifth of it outside React's
+durations); a render from 5 ms with durations, or from 10 components by counts
 and 50 beside a named handler; forced layout from 50 ms, or 25 ms without render durations, and half the
 window it was counted across, and never over a longer wait before the handlers,
 with one script having to hold nine tenths of a window's forced layout before its name is used for

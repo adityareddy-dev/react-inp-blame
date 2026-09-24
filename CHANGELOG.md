@@ -14,6 +14,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   `debug_target` example with two more parameters. Neither sends a label or a sentence. The READMEs also ask
   for wrong or missing blames through the issue form and say what to include, and the form's versions field
   now asks for Next.js or Vite as well.
+- `CommitSummary.startedAt`: when React began the render a commit came from, on `performance.now()`'s
+  clock, read from the root fiber. From there to `at` is React's own time for the commit, committing
+  it included. `null` in a production build, which keeps no start, and where React did not time the
+  tree. A commit object your own code builds, in a test fixture or a fake, needs the field.
 
 ### Changed
 
@@ -73,6 +77,19 @@ it changes when a field is removed or changes meaning, which a minor release may
   afterwards, so the next Tab stays in the overlay. Clear keeps it after emptying the list.
 
 ### Fixed
+
+- **Layout effects are React's time, not the handler's, where no Long Animation Frames say otherwise.**
+  In Safari and Firefox the working time outside React's render durations went to the handler, and a
+  render duration stops where committing starts. So in a development build a click whose 400 layout
+  effects each read a size came back as its `onClick` running for 465 ms, beside a 404 ms render.
+  A development or profiling build keeps when React began each render, so React's time now runs from
+  there to the end of the commit, and the handler is blamed only from working time outside that. Only
+  a render that began and committed inside the handlers counts that way: one that waited or yielded
+  across them is judged by its render duration, as before. Where committing took 25 ms and a quarter of
+  the working time, what a handler needs to be blamed, the render keeps the blame however small the
+  render itself was, names the commit React spent longest on, and says how long committing took. A
+  production build keeps no start and is judged as before. A heavy `useEffect` still reads as the
+  handler. Found by the iPhone tap test in CI, on Linux WebKit.
 
 - **Next.js's dev overlay stays out of the reports.** Under `next dev` from Next.js 15.4.11 and 15.5 the
   overlay renders with a production React of its own, and its commits joined the click they landed in.

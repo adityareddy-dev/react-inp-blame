@@ -92,6 +92,11 @@ export interface Fiber {
   deletions?: Fiber[] | null;
   /** ms React spent rendering this fiber's subtree in the commit; absent in production builds. */
   actualDuration?: number;
+  /**
+   * When React began this fiber's work in the render just committed, on performance.now()'s clock; -1
+   * where it did not time the fiber (a tree outside ProfileMode), absent in production builds.
+   */
+  actualStartTime?: number;
 }
 
 /** What React hands the DevTools hook with each commit: the root of the tree it committed. */
@@ -147,6 +152,7 @@ export function rootShapeProblem(root: unknown): string | null {
     if (f[key] !== null && typeof f[key] !== 'object') return `root.current.${key} is neither a fiber nor null`;
   }
   if (f.actualDuration !== undefined && typeof f.actualDuration !== 'number') return 'root.current.actualDuration is neither a number nor absent';
+  if (f.actualStartTime !== undefined && typeof f.actualStartTime !== 'number') return 'root.current.actualStartTime is neither a number nor absent';
   return null;
 }
 
@@ -812,9 +818,21 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     hasDurations,
     coarseClock,
     total: hasDurations ? renderTime : 0,
+    startedAt: renderStartOf(rootFiber, at),
     priority: context.priority,
     didError: context.didError,
   };
+}
+
+/**
+ * When React began the render this commit came from: the root fiber's `actualStartTime`, which React
+ * sets from the same clock as performance.now() when it starts the root's work. Only a development or
+ * profiling build keeps it, and only for a tree in ProfileMode. Anything that cannot be the start of
+ * this commit's render, unset or later than the commit's end, is null rather than a guess.
+ */
+function renderStartOf(rootFiber: Fiber, at: number): number | null {
+  const t = rootFiber.actualStartTime;
+  return typeof t === 'number' && t >= 0 && t <= at ? t : null;
 }
 
 function dedupe(xs: string[]): string[] {
