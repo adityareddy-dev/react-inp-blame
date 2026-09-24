@@ -287,11 +287,18 @@ does. On React 19 that does no harm: `react-dom` itself never connects to React'
 plugin with `runtime: false` is there for the names, so they survive the production minifier. CI builds
 this from `npx create-react-router@8.4.0` (React Router 8.4, Vite 8.3, React 19.3) and checks that a click
 is blamed on the component that rendered slowly, under `react-router dev` and on a production build served
-by `react-router-serve`. React Router 7 was not run. On React 19 the first two files should hold there as
-they are, and in `vite.config.ts` only the `inpBlame` line is the library's; `resolve.tsconfigPaths` is the
-template's, and needs Vite 8. On React 18 the setup does not hold. Its `react-dom` connects to the hook as it
-loads, so a route that imports it gets there before the install, and the library blames nothing and warns
-after 3 s that it was installed too late.
+by `react-router-serve`. On React Router 7 with React 19 the first two files should hold as they are (not
+run), and in `vite.config.ts` only the `inpBlame` line is the library's; `resolve.tsconfigPaths` is the
+template's, and needs Vite 8.
+
+On React 18, put `import "./inp-blame";` first in `app/root.tsx` instead of the entry. React 18's
+`react-dom` connects to the hook as it loads, so the entry is too late as soon as a route, or a library a
+route uses, imports react-dom. The library then blames nothing, and in a browser without React DevTools it
+warns after 3 s that it was installed too late. With DevTools open it can look fine, since react-dom
+connects to the extension's hook and the library finds it there. React Router imports the root route's
+module before any other route's and before the entry, so the root's first import runs before any of them.
+CI runs that on React Router 7.18 with React 18.3 and a route that calls `flushSync` from react-dom, on the
+dev server and a production build. The same app with the install in the entry had nothing blamed on either.
 
 ## Install with TanStack Start
 
@@ -772,7 +779,7 @@ job puts the packed package into an app made the way `npm create vite` makes one
 @vitejs/plugin-react 6.1 and the Vite setup above, and checks that a click there is blamed on the component
 that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. Two
 more check the same click, with no Fast Refresh edit, in the apps `npx create-react-router` and TanStack
-Start's CLI make, each with its setup above.
+Start's CLI make, each with its setup above, and a fourth in React Router 7's app moved to React 18.
 
 ## Known limits
 

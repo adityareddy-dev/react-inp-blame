@@ -125,6 +125,8 @@ jobs:
         include:
           - fixture: react-router
             name: create-react-router
+          - fixture: react-router-7
+            name: React Router 7 on React 18
           - fixture: tanstack-start
             name: TanStack Start
     steps:
