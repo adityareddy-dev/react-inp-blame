@@ -419,7 +419,7 @@ the `react-server` condition every export does nothing, here and on
 
 ```ts
 interface InteractionReport {
-  schemaVersion: 1; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
+  schemaVersion: 2; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
   start: number; end: number; duration: number; holdMs: number;             // ms, performance.now() clock
   inputDelay: number; processing: number; walkMs: number; presentation: number; // add up to duration
   target: TargetInfo | null; entries: EventEntrySummary[]; // target: selector, label, component, owners, handler

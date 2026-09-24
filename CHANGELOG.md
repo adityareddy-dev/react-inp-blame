@@ -26,6 +26,12 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Changed
 
+- **`schemaVersion` is 2, on the report and on the `react` field `attributeINP` adds.** Three fields
+  keep their names and change what they hold, below: `blame.name` can be a script's invoker where it
+  used to be `null`, `target.label` names the control around where the click landed rather than the
+  element itself, and a render blame's `ms` includes committing and effects. Code that reads any of
+  them should check the version; code that only passes the report along needs no change.
+
 - **A render blame's `ms` is the commit's time in all, not its render alone.** It is the render,
   committing it and its `useEffect` callbacks together, which is what the type has always said it is:
   how much of the interaction the blame accounts for. A 3 ms render whose layout effects ran for 272 ms

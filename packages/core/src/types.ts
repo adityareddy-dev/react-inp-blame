@@ -415,7 +415,7 @@ export interface EventEntrySummary {
  */
 export interface InteractionReport {
   /** The version of this shape. It changes when a field is removed or changes meaning; a field added beside the others leaves it as it is. */
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly interactionId: number;
   /** The event the headline is named after: the best-known one in the headline entry's paint group. */
   readonly type: string;
