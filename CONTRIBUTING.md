@@ -83,11 +83,13 @@ its run.
 `npm run test:pack` and `npm run test:vite-app` are the two checks that see the package as npm publishes
 it; the other suites above reach it through the workspace link. `test:pack` packs `packages/core` and
 installs the tarball, with one `npm install` each, into throwaway apps in the temp directory: one with no
-peers, one with Next.js 15, one with the Next.js that `apps/next-demo` pins and one with Vite 5. In each
-it checks that every file `package.json` points at is in the package, imports and requires every subpath,
-and loads the browser entries again under the `react-server` condition. In the Next.js 15 app the wrapper
-has to leave out `instrumentationClientInject` and print the `instrumentation-client` line, and the Vite
-app has to give a production build whose page installs the library. It needs the npm registry and no
+peers, one with Next.js 15, one with the Next.js that `apps/next-demo` pins, one with Vite 5 and one with
+TypeScript 5. In each it checks that every file `package.json` points at is in the package, imports and
+requires every subpath, and loads the browser entries again under the `react-server` condition. In the
+Next.js 15 app the wrapper has to leave out `instrumentationClientInject` and print the
+`instrumentation-client` line, the Vite app has to give a production build whose page installs the
+library, and in the TypeScript app a module importing every subpath has to type-check under
+`moduleResolution` `node10`, `node16`, `nodenext` and `bundler`. It needs the npm registry and no
 port. Name fixtures to run only those; `next-canary` runs only when named, because a canary is allowed
 to break. `--tarball` checks a tarball
 that already exists, which is how CI runs the script on Node 20.19, the oldest Node the package supports:

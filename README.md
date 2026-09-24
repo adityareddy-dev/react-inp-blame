@@ -120,10 +120,15 @@ export const onRouterTransitionStart: typeof inpBlame = (url, navigationType, ev
 };
 ```
 
-TypeScript finds the types of `react-inp-blame/next` and `react-inp-blame/next-client` only through the
-package's `exports`, so `moduleResolution` in `tsconfig.json` has to be `bundler`, the one `create-next-app`
-sets. Under `node` these imports fail the type check, and under `node16` they do too unless the app's
-`package.json` has `"type": "module"`. Before 16.0 a Turbopack rule takes no `condition`, so
+TypeScript finds the types of `react-inp-blame/next` and `react-inp-blame/next-client` under
+`moduleResolution` `bundler` (the one `create-next-app` sets), `node16` and `nodenext`, which read the
+package's `exports`, and under `node` (`node10`), which ignores `exports` and reads its `typesVersions`
+instead. Whether they then pass depends on `module`. `module` `node16` and `node18`, and `nodenext` before
+TypeScript 5.8, stand for a Node that cannot `require()` an ES module, so in an app whose `package.json` has
+no `"type": "module"` the `next-client` import gives TS1479. `nodenext` from 5.8 and `node20` from 5.9 pass.
+The same settings, in any app, find an error inside the `/next` types, which take `InstallOptions` from the
+package's ES-module types, so there `/next` also needs `skipLibCheck: true`, as `create-next-app` sets it.
+Before 16.0 a Turbopack rule takes no `condition`, so
 on 15.x the loader's rule keeps to the browser build and out of `node_modules` through builtin conditions
 instead, `experimental.turbo` rules and loaders carry over, and a rule of your own on `*.{tsx,jsx}` is
 left as it is, with a warning, since 15.x takes one rule there. Below 15.3 there is no `instrumentation-client`

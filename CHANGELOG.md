@@ -19,8 +19,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   16.0 the Turbopack rule keeps to the browser and out of `node_modules` through builtin conditions, the
   form those versions take, and `experimental.turbo` rules and loaders carry over. On 16.3 and later a
   kept line does the install and nothing is injected a second time, but it is better deleted, so builds
-  `enabled` leaves out stop carrying the code. The subpath types need `moduleResolution: "bundler"`.
-  Below 15.3 the wrapper warns and returns the config as it was.
+  `enabled` leaves out stop carrying the code. Below 15.3 the wrapper warns and returns the config as it
+  was.
 
 - **A wait names what the input waited behind.** A `waiting` verdict used to end "the main thread was
   busy with something else", even where the long animation frame that was open when the input came
@@ -89,6 +89,22 @@ it changes when a field is removed or changes meaning, which a minor release may
   it, and text that arrives with no key pressed, from dictation or an input method, stops joining the
   click rather than joining it for as long as it runs. Found reading the code, where a comment in the
   hook said changing one length did not change the other.
+
+- **The subpaths have types under `moduleResolution: "node"`.** That setting, `node10` since
+  TypeScript 5.0 and still what older setups have, ignores `exports`, so every import but the package
+  root failed the type check with "Cannot find module 'react-inp-blame/next' or its corresponding type
+  declarations", and the READMEs said to switch to `bundler`. A `typesVersions` map now points each
+  subpath at the declarations its `exports` entry names. `bundler`, `node16` and `nodenext` read
+  `exports` and ignore the map: with it pointed at a file that does not exist they still pass. Checked
+  on TypeScript 4.7.4, 5.0.4, 5.8.3 and 5.9.3; 6.0 wants `ignoreDeprecations: "6.0"` for `node10`, and
+  7.0 no longer has it. What still fails depends on `module`, not the resolution. In an app with no
+  `"type": "module"`, `module` `node16` or `node18`, or `nodenext` before TypeScript 5.8, stands for a
+  Node that cannot `require()` an ES module, so an import that takes a name from any subpath but `/next`
+  and `/display-names-loader` gives TS1479, or TS1541 for an `import type` from 5.7; `nodenext` from 5.8
+  and `node20` from 5.9 pass. Under those same settings the `/next` types have always needed
+  `skipLibCheck`, in any app, since they take `InstallOptions` from the ES-module types, and the READMEs
+  now say so. The packed-tarball check now type-checks every subpath under `node10`, `node16`,
+  `nodenext` and `bundler`, so a subpath added without an entry in the map fails it.
 
 ## [0.2.0] - 2026-09-20
 

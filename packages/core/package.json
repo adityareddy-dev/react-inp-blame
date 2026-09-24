@@ -58,6 +58,16 @@
     },
     "./package.json": "./package.json"
   },
+  "typesVersions": {
+    "*": {
+      "auto": ["./dist/auto.d.ts"],
+      "next": ["./next.d.cts"],
+      "next-client": ["./dist/next-client.d.ts"],
+      "web-vitals": ["./dist/web-vitals.d.ts"],
+      "vite": ["./vite.d.mts"],
+      "display-names-loader": ["./display-names-loader.d.cts"]
+    }
+  },
   "sideEffects": ["./dist/auto.js", "./dist/next-client.js", "./src/auto.ts", "./src/next-client.ts"],
   "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "vite.mjs", "vite.d.mts", "README.md", "LICENSE"],
   "engines": {
