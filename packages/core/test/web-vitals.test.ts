@@ -157,6 +157,7 @@ function commit(opts: Partial<CommitSummary> = {}): CommitSummary {
     hasDurations: true,
     coarseClock: false,
     total: 180,
+    startedAt: null,
     walkMs: 0,
     priority: 1,
     didError: false,

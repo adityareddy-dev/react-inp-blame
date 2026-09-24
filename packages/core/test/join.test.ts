@@ -27,6 +27,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
     hasDurations: true,
     coarseClock: false,
     total: 30,
+    startedAt: null,
     walkMs: 0,
     priority: 1,
     didError: false,
@@ -1154,4 +1155,118 @@ test('a press before hydration and a click after it is not a click on HTML React
   assert.equal(report(entries, [], [], [waiting, handled]).hydration, null);
   // Both still waiting is the case the sentence is for.
   assert.equal(report(entries, [], [], [waiting, input(20, 'click', { dehydrated: { scope: 'root', owner: null } })]).hydration?.kind, 'not-hydrated');
+});
+
+test("committing is React's time, not the handler's, where the build keeps the render's start", () => {
+  // Safari on a slow machine, the layout thrash scenario: onClick sets one state, React renders 401
+  // components in 404 ms, then 400 layout effects each read geometry after a write, for 466 ms more.
+  // No long animation frames, so the forced layout has no figure of its own. Counting only the render
+  // as React's left the 466 ms to the handler, which ran for a millisecond.
+  const thrash = commit(871, 0, {
+    startedAt: 3,
+    total: 404,
+    rendered: 401,
+    coarseClock: true,
+    roots: ['LayoutThrash'],
+    hotPath: ['LayoutThrash'],
+    components: [
+      { name: 'PriceTicker', count: 400, self: null, total: null },
+      { name: 'LayoutThrash', count: 1, self: null, total: null },
+    ],
+  });
+  const tap = [input(0, 'click', { owners: ['LayoutThrash'], handler: 'onClick' })];
+  const r = report([entry('click', 0, 872, 2, 871)], [thrash], null, tap);
+  assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'LayoutThrash', detail: 'PriceTicker ×400', ms: 404, confidence: 'inferred' });
+  assert.match(r.explanation.cause, /Committing it took about 464 ms more: the DOM changes, ref callbacks and layout effects\./);
+  assert.doesNotMatch(r.explanation.cause, /onClick/);
+  // A production build keeps no start, so the same commit reads as it did before: the time beyond the render is the handler's.
+  const noStart = report([entry('click', 0, 872, 2, 871)], [{ ...thrash, startedAt: null }], null, tap);
+  assert.equal(noStart.explanation.blame.kind, 'handler');
+});
+
+test('a render that waited or yielded across the handlers is not counted as React time', () => {
+  // React does not yield inside one event's handlers, so a render that began before them, or committed
+  // after them, stopped somewhere on the way, and whatever ran meanwhile was not React's. Clipped to the
+  // handlers, a transition that began at 900 and committed at 1290 would have taken all 277 ms of them.
+  const tap = [input(1000, 'click', { handler: 'onClick' })];
+  const click = [entry('click', 1000, 300, 1003, 1280)];
+  const after = report(click, [commit(1290, 1000, { startedAt: 900, total: 60 })], null, tap);
+  assert.equal(after.explanation.blame.kind, 'handler');
+  assert.equal(after.explanation.blame.ms, 217);
+  assert.doesNotMatch(after.explanation.cause, /Committing/);
+  const before = report(click, [commit(1100, 1000, { startedAt: 800, total: 20 })], null, tap);
+  assert.equal(before.explanation.blame.kind, 'handler');
+  assert.equal(before.explanation.blame.ms, 257);
+});
+
+test("two roots' React time is counted once where their spans overlap", () => {
+  // A layout effect of one root flushes another with flushSync, so the second renders and commits inside
+  // the first's commit, which ends at 1200. Added up the two would be 247 ms of the 277, leaving the
+  // handler 30, under a quarter of the working time.
+  const outer = commit(1200, 1000, { startedAt: 1003, total: 20 });
+  const inner = commit(1100, 1000, { startedAt: 1050, total: 10 });
+  const r = report([entry('click', 1000, 300, 1003, 1280)], [outer, inner], null, [input(1000, 'click', { handler: 'onClick' })]);
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.equal(r.explanation.blame.ms, 80);
+});
+
+test('a small render with a heavy commit is still React, not nothing', () => {
+  // A 3 ms render whose layout effects set up a chart for 272 ms. Taken off the handler, the time has to
+  // land on React's render, or the report says React's render was small and nothing else is known.
+  const chart = commit(1280, 1000, { startedAt: 1005, total: 3, rendered: 2, roots: ['Chart'], hotPath: ['Chart'], components: [{ name: 'Chart', count: 2, self: null, total: null }] });
+  const r = report([entry('click', 1000, 300, 1003, 1280)], [chart], null, [input(1000, 'click', { owners: ['Chart'], handler: 'onClick' })]);
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.ms, 3);
+  assert.match(r.explanation.cause, /Committing it took about 272 ms more/);
+});
+
+test('with long animation frames, React time and forced layout are not added together', () => {
+  // onClick runs 150 ms of its own code, then React renders for 40 ms and commits, and the layout effects
+  // force 150 ms of layout inside that commit. The forced layout is inside React's span, so adding the
+  // two would leave the handler nothing; the larger of them is React's, and the handler keeps its 150.
+  const commitAfter = commit(1353, 1000, { startedAt: 1153, total: 40 });
+  const frames = [frame(990, 380, [script('BUTTON.onclick', 1003, 350, 150)])];
+  const r = report([entry('click', 1000, 380, 1003, 1353)], [commitAfter], frames, [input(1000, 'click', { handler: 'onClick' })]);
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.equal(r.explanation.blame.ms, 150);
+});
+
+test('a few milliseconds of committing do not make a small render outrank a wait', () => {
+  // A click that waited 300 ms behind another task, then rendered for 2 ms and committed for 4. Every
+  // development build commits for a few milliseconds; that is no reason to blame a 2 ms render.
+  const small = commit(1306, 1000, { startedAt: 1300, total: 2, rendered: 2, roots: ['Badge'], hotPath: ['Badge'] });
+  const r = report([entry('click', 1000, 330, 1300, 1308)], [small], null, [input(1000, 'click', { owners: ['Badge'], handler: 'onClick' })]);
+  assert.equal(r.explanation.blame.kind, 'waiting');
+});
+
+test('the render blame names the commit whose committing took the time', () => {
+  // List renders for 30 ms and commits in 2; a layout effect of it sets state, and Tooltip renders in
+  // 1 ms and then runs 200 ms of layout effects. The 200 ms is Tooltip's, so the blame is too.
+  const list = commit(1035, 1000, { startedAt: 1003, total: 30, rendered: 31, roots: ['List'], hotPath: ['List'] });
+  const tooltip = commit(1237, 1000, { startedAt: 1036, total: 1, rendered: 1, roots: ['Tooltip'], hotPath: ['Tooltip'] });
+  const r = report([entry('click', 1000, 300, 1003, 1240)], [list, tooltip], null, [input(1000, 'click', { handler: 'onClick' })]);
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.name, 'Tooltip');
+  assert.equal(r.explanation.blame.ms, 1);
+  assert.match(r.explanation.cause, /Committing it took about 200 ms more/);
+});
+
+test('a root flushed inside another in the same millisecond keeps its committing', () => {
+  // On a 1 ms clock a wrapper whose layout effect mounts a widget root with flushSync can share both
+  // edges with it. The widget committed first and its layout effects took the 300 ms; taking each span
+  // as inside the other would leave both with nothing.
+  const widget = commit(1304, 1000, { startedAt: 1004, total: 1, rendered: 1, roots: ['Widget'], hotPath: ['Widget'] });
+  const wrapper = commit(1304, 1000, { startedAt: 1004, total: 2, rendered: 1, roots: ['Wrapper'], hotPath: ['Wrapper'] });
+  const r = report([entry('click', 1000, 310, 1003, 1306)], [widget, wrapper], null, [input(1000, 'click', { handler: 'onClick' })]);
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.name, 'Widget');
+  assert.match(r.explanation.cause, /Committing it took about 299 ms more/);
+});
+
+test("the note under a screen update gives the committing that made React's time worth a mention", () => {
+  // 40 ms of working time, 1 ms of it rendering Badge and 35 committing it, then 207 ms of screen update.
+  const badge = commit(1040, 1000, { startedAt: 1004, total: 1, rendered: 1, roots: ['Badge'], hotPath: ['Badge'] });
+  const r = report([entry('click', 1000, 250, 1003, 1043)], [badge], null, [input(1000, 'click', { owners: ['Badge'], handler: 'onClick' })]);
+  assert.equal(r.explanation.blame.kind, 'painting');
+  assert.ok(r.explanation.notes.some((n) => /and 35 ms committing it in the 40 ms of working time before that\./.test(n)), r.explanation.notes.join(' | '));
 });

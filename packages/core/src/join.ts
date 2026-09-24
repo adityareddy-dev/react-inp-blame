@@ -871,16 +871,81 @@ function explain(r: InteractionReport): Explanation {
    * printed against this, or it reads as "110 ms of the 100 ms of working time".
    */
   const handledWindow = r.processing + r.walkMs;
-  // Working time that was neither React's render phase nor forced layout: the handler itself,
-  // React committing what it rendered, or other scripts in the same task. Subtracting React's render
-  // is what makes it the handler's, so a build that records no durations has no such figure: there
-  // this would be the whole working time wearing the handler's name. The walk is taken out too, by
-  // starting from `processing` rather than the window above: it is this library's time, not the app's.
-  const outside = Math.max(0, r.processing - renderTotal - forcedWhileHandling);
+  /**
+   * React's own time while the input was handled, where the build keeps when each render began: from
+   * that start to the end of its commit, so committing is in it, the DOM changes, ref callbacks and
+   * layout effects that a render duration leaves out. Only a development or profiling build keeps the
+   * start, so a production build has no such span. A span only counts when it began and ended inside
+   * one event's handlers. React does not yield in there, so a render that began before them, or
+   * committed after, waited or yielded on the way, and what ran meanwhile (the handler, most often) was
+   * not React's. Its render duration stands for it, as in a production build. Spans that overlap
+   * count once: a root flushed from inside another root's layout effect commits within that span.
+   */
+  const spans = r.commits
+    .flatMap((x, order) => {
+      const began = x.startedAt;
+      const inOneHandler = began !== null && r.entries.some((e) => began >= e.processingStart - STAMP_TOLERANCE && x.at <= e.processingEnd + STAMP_TOLERANCE);
+      if (!inOneHandler) return [];
+      const from = Math.max(began, processingStart);
+      const to = Math.min(x.at, processingEnd);
+      return to > from ? [{ commit: x, order, from, to }] : [];
+    })
+    .sort((a, b) => a.from - b.from);
+  let spanned = 0;
+  let spannedTo = processingStart;
+  for (const span of spans) {
+    const from = Math.max(span.from, spannedTo);
+    if (span.to > from) {
+      spanned += span.to - from;
+      spannedTo = span.to;
+    }
+  }
+  const spannedRender = spans.reduce((a, x) => a + x.commit.total, 0);
+  /**
+   * What committing took beyond the render, for each commit with a span: the span less its own render,
+   * and less the span of any root it flushed inside it, which is that root's time and counted there.
+   */
+  const committingOf = new Map<CommitSummary, number>();
+  // On a 1 ms clock a root flushed inside another can share both its edges; it committed first, so the
+  // earlier of two identical spans is the one inside.
+  const within = (inner: (typeof spans)[number], outer: (typeof spans)[number]) =>
+    inner !== outer && inner.from >= outer.from && inner.to <= outer.to && (inner.from > outer.from || inner.to < outer.to || inner.order < outer.order);
+  for (const span of spans) {
+    const flushed = spans.filter((o) => within(o, span) && !spans.some((m) => within(o, m) && within(m, span)));
+    committingOf.set(span.commit, Math.max(0, span.to - span.from - span.commit.total - flushed.reduce((a, o) => a + o.to - o.from, 0)));
+  }
+  const committing = [...committingOf.values()].reduce((a, x) => a + x, 0);
+  // Committing that would have been enough to blame the handler, had it been the handler's.
+  const committingShows = (t: number) => t >= HANDLER_MIN_MS && t >= HANDLER_MIN_SHARE * r.processing;
+  const committingMatters = committingShows(committing);
+  // React's time in all: the spans, and the render durations of the commits that have none.
+  const reactWhileHandling = spanned + renderTotal - spannedRender;
+  // Working time that was neither React's nor forced layout: the handler itself, or other scripts in
+  // the same task. Subtracting React's render is what makes it the handler's, so a build that records
+  // no durations has no such figure: there this would be the whole working time wearing the handler's
+  // name. Subtracting React's commit too keeps a commit phase heavy with layout effects off the handler,
+  // which is all that stood between the two in a browser that does not time forced layout. Where it
+  // does, forced layout inside React's commit is in both figures, so the larger of the two is taken
+  // rather than their sum. The walk is taken out too, by starting from `processing` rather than the
+  // window above: it is this library's time, not the app's.
+  const outside = Math.max(0, r.processing - Math.max(reactWhileHandling, renderTotal + forcedWhileHandling));
   const outsideMatters = hasDurations && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
-  // click that re-rendered 10 components and took 260 ms was slow in its handler.
-  const renderMatters = !!c && (hasDurations ? renderTotal >= RENDER_MIN_MS : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS));
+  // click that re-rendered 10 components and took 260 ms was slow in its handler. With them, a commit
+  // that took as long as a handler would need to be blamed earns it too: a 3 ms render whose layout
+  // effects ran for 300 ms is React's work, and taking that time off the handler has to leave it
+  // somewhere. A few milliseconds of committing, which any development build spends, earn nothing.
+  const renderMatters = !!c && (hasDurations ? renderTotal >= RENDER_MIN_MS || committingMatters : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS));
+  // The commit a render blame names is the one React spent longest on, committing included, so a 1 ms
+  // render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where no commit
+  // has a span this is the heaviest render, as everywhere else.
+  const own = (x: CommitSummary) => x.total + (committingOf.get(x) ?? 0);
+  const rc = c && hasDurations ? r.commits.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
+  const rcCommitting = rc ? (committingOf.get(rc) ?? 0) : 0;
+  // What committing that commit took, where it is worth saying: a render duration stops where
+  // committing starts, so layout effects that read geometry 400 times are nowhere in it, and in a
+  // browser that does not time forced layout this is the only figure for them.
+  const committed = committingShows(rcCommitting) ? ` and ${ms(rcCommitting)} committing it` : '';
   /**
    * Does the screen update outrank everything the working time holds? Nothing that happened in
    * there can account for more of the interaction than the working time it ran in, so that is what
@@ -930,7 +995,7 @@ function explain(r: InteractionReport): Explanation {
    * rung closed, and there the note is dropped: known, and it wants its own phrasing, not this one.
    */
   const closedByTheScreen: string | null =
-    !screenOutranks || !c
+    !screenOutranks || !c || !rc
       ? null
       : outsideMatters && outside > renderTotal
         ? say(
@@ -940,9 +1005,9 @@ function explain(r: InteractionReport): Explanation {
           )
         : renderMatters
           ? say(
-              measuredFrom(c),
-              `React still spent ${ms(c.total)} ${renderPhrase(c)} in the ${ms(r.processing)} of working time before that.`,
-              `React ${HEDGE} still ${hasDurations ? `spent about ${ms(c.total)} ` : ''}${renderPhrase(c)} in the ${ms(r.processing)} of working time before that.`,
+              measuredFrom(rc),
+              `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed} in the ${ms(r.processing)} of working time before that.`,
+              `React ${HEDGE} still ${hasDurations ? `spent about ${ms(rc.total)} ` : ''}${renderPhrase(rc)}${committed} in the ${ms(r.processing)} of working time before that.`,
             )
           : null;
 
@@ -1049,18 +1114,19 @@ function explain(r: InteractionReport): Explanation {
     // The component is the target's, which is where a React handler lives. A listener on the document
     // lives nowhere in the tree, so a name that came from the browser goes without one.
     blame = { kind: 'handler', name: handlerName ?? blamedListener, detail: blamedListener && !handlerName ? null : component, ms: outside, confidence };
-  } else if (c && renderMatters && !screenOutranks) {
-    const confidence = measuredFrom(c);
+  } else if (c && rc && renderMatters && !screenOutranks) {
+    const confidence = measuredFrom(rc);
     // Without durations the blame rests on the component count alone, which is why it is a reading:
     // 600 cheap components can outrank the one expensive component that actually took the time.
     const likely = hasDurations
       ? // The measured render is the claim; the working time is context. Saying React spent all of it
         // rendering and then that other code ran for a third of it was two claims that cannot both hold.
-        `React ${HEDGE} spent about ${ms(c.total)} of the ${ms(r.processing)} of working time ${renderPhrase(c)}.`
-      : `React was ${HEDGE} ${renderPhrase(c)}. This React build records no render durations, so that is read from the component counts, not measured.`;
-    cause = say(confidence, `React spent ${ms(c.total)} ${renderPhrase(c)}.`, `${likely}${profiling}`);
+        `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}.`
+      : `React was ${HEDGE} ${renderPhrase(rc)}. This React build records no render durations, so that is read from the component counts, not measured.`;
+    cause = say(confidence, `React spent ${ms(rc.total)} ${renderPhrase(rc)}.`, `${likely}${profiling}`);
+    if (committed) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
     if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
-    blame = { kind: 'render', name: leafOf(c), detail: mostlyOf(c), ms: hasDurations ? c.total : null, confidence };
+    blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? rc.total : null, confidence };
   } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
     const howLittle = c.rendered === 0 ? 'React rendered nothing' : `React re-rendered only ${plural(c.rendered, 'component')}`;
     cause = `${cap(handler)} ${HEDGE} took the ${ms(r.processing)}: ${howLittle}.${profiling}`;
