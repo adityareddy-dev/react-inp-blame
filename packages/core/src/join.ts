@@ -683,6 +683,33 @@ function nextNode(node: Node, root: Node): Node | null {
 
 export const ms = (n: number): string => `${Math.round(n)} ms`;
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+interface Interval {
+  readonly from: number;
+  readonly to: number;
+}
+
+/** `intervals` as sorted pieces that do not overlap, so that each moment counts once. */
+function merged(intervals: readonly Interval[]): Interval[] {
+  const out: { from: number; to: number }[] = [];
+  for (const i of intervals.filter((x) => x.to > x.from).sort((a, b) => a.from - b.from)) {
+    const last = out[out.length - 1];
+    if (last && i.from <= last.to) last.to = Math.max(last.to, i.to);
+    else out.push({ from: i.from, to: i.to });
+  }
+  return out;
+}
+
+/** The time `intervals` cover, each moment once, less what `less` covers of it. */
+function coverage(intervals: readonly Interval[], less: readonly Interval[] = []): number {
+  const taken = merged(less);
+  let total = 0;
+  for (const x of merged(intervals)) {
+    total += x.to - x.from;
+    for (const y of taken) total -= Math.max(0, Math.min(x.to, y.to) - Math.max(x.from, y.from));
+  }
+  return total;
+}
 /** What the browser says ran a script: its invoker, else its function's name; null when it gives neither. */
 const scriptName = (s: ScriptSummary): string | null => s.invoker || s.name || null;
 /** "a script (handleClick, app.js)": a script by what ran it and the file it came from. */
@@ -881,25 +908,36 @@ function explain(r: InteractionReport): Explanation {
    * not React's. Its render duration stands for it, as in a production build. Spans that overlap
    * count once: a root flushed from inside another root's layout effect commits within that span.
    */
+  const inOneHandler = (from: number, to: number) => r.entries.some((e) => from >= e.processingStart - STAMP_TOLERANCE && to <= e.processingEnd + STAMP_TOLERANCE);
   const spans = r.commits
     .flatMap((x, order) => {
       const began = x.startedAt;
-      const inOneHandler = began !== null && r.entries.some((e) => began >= e.processingStart - STAMP_TOLERANCE && x.at <= e.processingEnd + STAMP_TOLERANCE);
-      if (!inOneHandler) return [];
+      if (began === null || !inOneHandler(began, x.at)) return [];
       const from = Math.max(began, processingStart);
       const to = Math.min(x.at, processingEnd);
       return to > from ? [{ commit: x, order, from, to }] : [];
     })
     .sort((a, b) => a.from - b.from);
-  let spanned = 0;
-  let spannedTo = processingStart;
-  for (const span of spans) {
-    const from = Math.max(span.from, spannedTo);
-    if (span.to > from) {
-      spanned += span.to - from;
-      spannedTo = span.to;
-    }
-  }
+  /**
+   * The passive effects', the `useEffect`s', in every build: React 18 and 19 say when a commit's have
+   * run, and run a click's or a key press's right after its commit, in the same task. From the end of
+   * the hook call for the commit (this library's walk and React DevTools' own reading are not theirs)
+   * to then is theirs, under the same rule as a span: the commit and the end of its effects inside one
+   * event's handlers. Effects React ran in a later task have no figure here, since whatever ran between
+   * the two tasks was not theirs.
+   */
+  const effectSpans = r.commits.flatMap((x, order) => {
+    const began = x.effectsStartedAt;
+    const ended = x.effectsEndedAt;
+    if (began === null || ended === null || !inOneHandler(x.at, ended)) return [];
+    const from = Math.max(began, processingStart);
+    const to = Math.min(ended, processingEnd);
+    return to > from ? [{ commit: x, order, from, to }] : [];
+  });
+  // This library's walk of each commit, which `processing` already leaves out. One inside another
+  // commit's span, a root committed inside it, is not React's time either.
+  const walks = r.commits.map((x) => ({ from: x.at, to: x.at + x.walkMs }));
+  const spanned = coverage([...spans, ...effectSpans], walks);
   const spannedRender = spans.reduce((a, x) => a + x.commit.total, 0);
   /**
    * What committing took beyond the render, for each commit with a span: the span less its own render,
@@ -911,15 +949,51 @@ function explain(r: InteractionReport): Explanation {
   const within = (inner: (typeof spans)[number], outer: (typeof spans)[number]) =>
     inner !== outer && inner.from >= outer.from && inner.to <= outer.to && (inner.from > outer.from || inner.to < outer.to || inner.order < outer.order);
   for (const span of spans) {
-    const flushed = spans.filter((o) => within(o, span) && !spans.some((m) => within(o, m) && within(m, span)));
-    committingOf.set(span.commit, Math.max(0, span.to - span.from - span.commit.total - flushed.reduce((a, o) => a + o.to - o.from, 0)));
+    // The walks of the roots flushed inside it are in their gaps, after each one's own span, and are
+    // this library's time.
+    const flushed = spans.filter((o) => within(o, span));
+    committingOf.set(span.commit, Math.max(0, coverage([span], [...flushed, ...walks]) - span.commit.total));
   }
   const committing = [...committingOf.values()].reduce((a, x) => a + x, 0);
-  // Committing that would have been enough to blame the handler, had it been the handler's.
+  /**
+   * What each commit's effects took: the span less the React time of anything committed inside it,
+   * which is counted as that commit's, and less the walks. React commits an update an effect made with
+   * `flushSync`, or one a layout effect made, once the effects are done and before it says so, so such
+   * a commit lands inside. Where it has no span of its own (a production build keeps no render start),
+   * its render cannot be taken out, and the figure says it holds one.
+   */
+  const effectsOf = new Map<CommitSummary, number>();
+  const rendersInside = new Map<CommitSummary, number>();
+  for (const span of effectSpans) {
+    const within = (o: Interval) => o.from >= span.from && o.to <= span.to;
+    const inside = [...spans, ...effectSpans].filter((o) => o.commit !== span.commit && within(o));
+    effectsOf.set(span.commit, Math.max(0, coverage([span], [...inside, ...walks])));
+    const unspanned = r.commits.filter((x) => x !== span.commit && x.at > span.from && x.at < span.to && !spans.some((o) => o.commit === x));
+    if (unspanned.length) rendersInside.set(span.commit, unspanned.length);
+  }
+  const effects = [...effectsOf.values()].reduce((a, x) => a + x, 0);
+  /** Where a commit's effects figure holds renders it could not take out: ", one more render included". */
+  const includedN = (n: number) => (n === 0 ? '' : `, ${n === 1 ? 'one more render' : `${n} more renders`} included`);
+  const included = (x: CommitSummary) => includedN(rendersInside.get(x) ?? 0);
+  // Committing and effects that would have been enough to blame the handler, had they been the handler's.
   const committingShows = (t: number) => t >= HANDLER_MIN_MS && t >= HANDLER_MIN_SHARE * r.processing;
-  const committingMatters = committingShows(committing);
+  const committingMatters = committingShows(committing + effects);
+  // A production build has no render durations, so what is left of the working time once the effects
+  // are out is the handler and the render together, unsplit. There the effects earn React the blame
+  // only where they are at least that remainder: a 150 ms handler beside 60 ms of effects is still the
+  // handler's, though the 60 ms are worth saying.
+  // Without a handler's name there is no sentence to say them in, and the rest is no one's to take,
+  // unless the browser names a script that ran beside React rather than around it (none of the
+  // effects inside it), a listener on the document, and for longer.
+  const besideReact = longestPart(whileHandling.filter((p) => !effectSpans.some((e) => p.script.start < e.to && p.script.start + p.script.duration > e.from)));
+  const effectsEarn =
+    committingMatters && (hasDurations || committing + effects >= r.processing / 2 || (!handler && !(besideReact && besideReact.ms > committing + effects)));
   // React's time in all: the spans, and the render durations of the commits that have none.
   const reactWhileHandling = spanned + renderTotal - spannedRender;
+  // What the handler has to outrun to be the blame: all of React's time, committing and effects
+  // included, not only its render durations, or a 100 ms handler beside a 5 ms render and 200 ms of
+  // effects was blamed and the effects went unsaid.
+  const reactTime = Math.max(renderTotal, reactWhileHandling);
   // Working time that was neither React's nor forced layout: the handler itself, or other scripts in
   // the same task. Subtracting React's render is what makes it the handler's, so a build that records
   // no durations has no such figure: there this would be the whole working time wearing the handler's
@@ -935,17 +1009,64 @@ function explain(r: InteractionReport): Explanation {
   // that took as long as a handler would need to be blamed earns it too: a 3 ms render whose layout
   // effects ran for 300 ms is React's work, and taking that time off the handler has to leave it
   // somewhere. A few milliseconds of committing, which any development build spends, earn nothing.
-  const renderMatters = !!c && (hasDurations ? renderTotal >= RENDER_MIN_MS || committingMatters : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS));
-  // The commit a render blame names is the one React spent longest on, committing included, so a 1 ms
-  // render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where no commit
-  // has a span this is the heaviest render, as everywhere else.
-  const own = (x: CommitSummary) => x.total + (committingOf.get(x) ?? 0);
-  const rc = c && hasDurations ? r.commits.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
+  // Effects are timed in every build, so a production build's render earns it by them too.
+  const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS)));
+  // The commit a render blame names is the one React spent longest on, committing and effects included,
+  // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
+  // no commit has a span this is the heaviest render, as everywhere else. Committing and effects only
+  // choose it where they are worth a mention at all, or a 1 ms render beside 30 ms of effects nobody
+  // hears about is named over a 30 ms render. Without durations a commit is only named over the one
+  // with the most components when its effects are what earned the blame.
+  const own = (x: CommitSummary) => x.total + (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
+  const rc = c && (hasDurations ? committingMatters : effectsEarn) ? r.commits.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
   const rcCommitting = rc ? (committingOf.get(rc) ?? 0) : 0;
-  // What committing that commit took, where it is worth saying: a render duration stops where
-  // committing starts, so layout effects that read geometry 400 times are nowhere in it, and in a
-  // browser that does not time forced layout this is the only figure for them.
-  const committed = committingShows(rcCommitting) ? ` and ${ms(rcCommitting)} committing it` : '';
+  const rcEffects = rc ? (effectsOf.get(rc) ?? 0) : 0;
+  // Of a committing figure and an effects figure, which to say: each that would be worth saying alone,
+  // or both where neither is and only the two together are.
+  const worthSaying = (committed: number, ran: number): [boolean, boolean] => {
+    const alone = [committingShows(committed), committingShows(ran)];
+    const together = !alone[0] && !alone[1] && committingShows(committed + ran);
+    return [alone[0] || (together && committed >= 1), alone[1] || (together && ran >= 1)];
+  };
+  // What committing that commit and running its effects took, where it is worth saying: a render
+  // duration stops where committing starts, so layout effects that read geometry 400 times are nowhere in
+  // it, and in a browser that does not time forced layout this is the only figure for them.
+  const [sayCommitting, sayEffects] = worthSaying(rcCommitting, rcEffects);
+  // The commits that hold the figures a sentence says, other than `except`, and where they were from
+  // the point of view of the commit the sentence names.
+  const holding = ([sayC, sayE]: [boolean, boolean], except: CommitSummary | null = null) =>
+    r.commits.filter((x) => x !== except && ((sayC && (committingOf.get(x) ?? 0) >= 1) || (sayE && (effectsOf.get(x) ?? 0) >= 1)));
+  const whereOf = (named: CommitSummary | null, said: [boolean, boolean]) => {
+    const held = holding(said);
+    return held.length > 1 ? ` across ${plural(held.length, 'commit')}` : held.length === 1 && held[0] !== named ? ' in another commit' : '';
+  };
+  const heldAll = includedN([...rendersInside.values()].reduce((a, x) => a + x, 0));
+  const figures = (committed: number, ran: number, [sayC, sayE]: [boolean, boolean], its = '') =>
+    [sayC ? `${ms(committed)} committing${its ? ' it' : ''}` : null, sayE ? `${ms(ran)} running ${its}useEffect callbacks` : null].filter((x): x is string => x !== null);
+  // Committing and effects can earn the blame across several commits with no one commit's worth
+  // saying. Then the totals are what earned it, and the sentence gives those.
+  const sayTotals = committingMatters && !sayCommitting && !sayEffects;
+  const totalsSaid = worthSaying(committing, effects);
+  const totals = sayTotals ? figures(committing, effects, totalsSaid) : [];
+  const acrossCommits = totals.length ? `${totals.join(' and ')}${whereOf(rc, totalsSaid)}` : null;
+  // And where the named commit's are said, what the others spent beside them, where that is worth saying.
+  const othersSaid = worthSaying(committing - rcCommitting, effects - rcEffects);
+  const others = sayTotals || !rc ? [] : figures(committing - rcCommitting, effects - rcEffects, othersSaid);
+  const othersBusy = holding(othersSaid, rc).length;
+  const alsoOthers = others.length ? ` React also spent ${others.join(' and ')} in ${othersBusy === 1 ? 'another commit' : `${othersBusy} other commits`}.` : '';
+  const extras = figures(rcCommitting, rcEffects, [sayCommitting, sayEffects], 'its ');
+  if (sayEffects && rc) extras[extras.length - 1] += included(rc);
+  // A figure that ends in the renders it holds takes a comma before the sentence goes on.
+  const committedEnd = sayEffects && rc && included(rc) ? ',' : '';
+  const committed = extras.length === 2 ? `, ${extras[0]} and ${extras[1]}` : extras.length === 1 ? ` and ${extras[0]}` : acrossCommits ? ` and ${acrossCommits}` : '';
+  // In a production build the effects are the only figure, and the totals are said, since there is no
+  // render figure to set one commit's beside.
+  const effectsFigure = committingMatters ? effects : 0;
+  const effectsWhere = `${whereOf(rc, [false, true])}${heldAll}`;
+  const profilingRender = profiling ? ' A profiling build of React would time the render too.' : '';
+  // The handler is the blame where it outruns all of React's time, or where React's time, whatever it
+  // is, would not be the blame anyway: a 28 ms handler beside a 4 ms render and 24 ms of effects.
+  const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
   /**
    * Does the screen update outrank everything the working time holds? Nothing that happened in
    * there can account for more of the interaction than the working time it ran in, so that is what
@@ -997,7 +1118,7 @@ function explain(r: InteractionReport): Explanation {
   const closedByTheScreen: string | null =
     !screenOutranks || !c || !rc
       ? null
-      : outsideMatters && outside > renderTotal
+      : handlerWins
         ? say(
             measuredFrom(...r.commits),
             `${cap(outsideName)} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time before that.`,
@@ -1006,8 +1127,12 @@ function explain(r: InteractionReport): Explanation {
         : renderMatters
           ? say(
               measuredFrom(rc),
-              `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed} in the ${ms(r.processing)} of working time before that.`,
-              `React ${HEDGE} still ${hasDurations ? `spent about ${ms(rc.total)} ` : ''}${renderPhrase(rc)}${committed} in the ${ms(r.processing)} of working time before that.`,
+              `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time before that.`,
+              hasDurations
+                ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time before that.`
+                : effectsFigure >= 1
+                  ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldAll ? ',' : ''} in the ${ms(r.processing)} of working time before that.`
+                  : `React was ${HEDGE} still ${renderPhrase(rc)} in the ${ms(r.processing)} of working time before that.`,
             )
           : null;
 
@@ -1098,10 +1223,14 @@ function explain(r: InteractionReport): Explanation {
       ms: forcedWhileHandling,
       confidence,
     };
-  } else if (c && outsideMatters && outside > renderTotal && !screenOutranks) {
+  } else if (c && handlerWins && !screenOutranks) {
     const confidence = measuredFrom(...r.commits);
     const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
-    cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${profiling}`);
+    // Committing and effects React spent beside it, where they would be worth saying. They are the
+    // totals, since the render named here need not be the commit that spent them.
+    const spent = figures(committing, effects, totalsSaid);
+    const also = spent.length ? ` React also spent ${spent.join(' and ')}${whereOf(c, totalsSaid)}.` : '';
+    cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
     // A listener React did not attach (a shortcut bound on the document, a library's own listener) has
     // no React name, and "code outside React" sends nobody anywhere. The browser still says which
     // listener it ran and from which file, so the sentence passes that on as what the browser
@@ -1123,13 +1252,25 @@ function explain(r: InteractionReport): Explanation {
         // rendering and then that other code ran for a third of it was two claims that cannot both hold.
         `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}.`
       : `React was ${HEDGE} ${renderPhrase(rc)}. This React build records no render durations, so that is read from the component counts, not measured.`;
-    cause = say(confidence, `React spent ${ms(rc.total)} ${renderPhrase(rc)}.`, `${likely}${profiling}`);
-    if (committed) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
+    // A production build times the effects but not the render, so there the effects lead.
+    cause =
+      !hasDurations && effectsFigure >= 1
+        ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}`
+        : say(confidence, `React spent ${ms(rc.total)} ${renderPhrase(rc)}.`, `${likely}${profiling}`);
+    if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
+    if (sayEffects && hasDurations) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
+    if (acrossCommits && hasDurations) cause += ` React also spent ${acrossCommits}.`;
+    if (hasDurations) cause += alsoOthers;
     if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
-    blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? rc.total : null, confidence };
+    // The milliseconds are the commit's in all, its render, committing and effects, which is what it
+    // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
+    blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
   } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
     const howLittle = c.rendered === 0 ? 'React rendered nothing' : `React re-rendered only ${plural(c.rendered, 'component')}`;
-    cause = `${cap(handler)} ${HEDGE} took the ${ms(r.processing)}: ${howLittle}.${profiling}`;
+    // The effects are measured in every build, so they come off what the handler is said to have taken.
+    const took = effects >= 1 ? `about ${ms(r.processing - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
+    const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';
+    cause = `${cap(handler)} ${HEDGE} took ${took}: ${howLittle}${ranEffects}.${profiling}`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
     // What the input waited behind is usually on record: the long animation frame that was open when

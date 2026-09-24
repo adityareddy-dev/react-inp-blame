@@ -28,6 +28,8 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
     coarseClock: false,
     total: 30,
     startedAt: null,
+    effectsStartedAt: null,
+    effectsEndedAt: null,
     walkMs: 0,
     priority: 1,
     didError: false,
@@ -994,6 +996,7 @@ test('every sentence a blame can produce reads as inferred when the blame is inf
     ['render measured', report(slow, [commit(50, 0, { total: 90 })], [], ring)],
     ['render truncated', report(slow, [commit(50, 0, { total: 90, truncated: true })], [], ring)],
     ['render counted', report(slow, [commit(50, 0, { hasDurations: false, total: 0, rendered: 800 })], [], ring)],
+    ['render from its effects, counted', report(slow, [commit(50, 0, { hasDurations: false, total: 0, rendered: 2, effectsStartedAt: 51, effectsEndedAt: 95 })], [], ring)],
     ['layout measured', report([entry('click', 0, 128, 2, 118)], [], [frame(0, 128, [script('DIV#root.onclick', 2, 116, 108)])], ring)],
     ['layout apportioned', report([entry('click', 0, 128, 2, 118)], [], [frame(0, 200, [script('DIV#root.onclick', 2, 180, 170)])], ring)],
     ['waiting', report([entry('click', 0, 400, 380, 385)], [], [], ring)],
@@ -1176,7 +1179,7 @@ test("committing is React's time, not the handler's, where the build keeps the r
   });
   const tap = [input(0, 'click', { owners: ['LayoutThrash'], handler: 'onClick' })];
   const r = report([entry('click', 0, 872, 2, 871)], [thrash], null, tap);
-  assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'LayoutThrash', detail: 'PriceTicker ×400', ms: 404, confidence: 'inferred' });
+  assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'LayoutThrash', detail: 'PriceTicker ×400', ms: 868, confidence: 'inferred' });
   assert.match(r.explanation.cause, /Committing it took about 464 ms more: the DOM changes, ref callbacks and layout effects\./);
   assert.doesNotMatch(r.explanation.cause, /onClick/);
   // A production build keeps no start, so the same commit reads as it did before: the time beyond the render is the handler's.
@@ -1202,12 +1205,13 @@ test('a render that waited or yielded across the handlers is not counted as Reac
 test("two roots' React time is counted once where their spans overlap", () => {
   // A layout effect of one root flushes another with flushSync, so the second renders and commits inside
   // the first's commit, which ends at 1200. Added up the two would be 247 ms of the 277, leaving the
-  // handler 30, under a quarter of the working time.
+  // handler 30, under a quarter of the working time. Counted once they are 197, and the handler's 80
+  // is still worth saying, beside React's time rather than instead of it.
   const outer = commit(1200, 1000, { startedAt: 1003, total: 20 });
   const inner = commit(1100, 1000, { startedAt: 1050, total: 10 });
   const r = report([entry('click', 1000, 300, 1003, 1280)], [outer, inner], null, [input(1000, 'click', { handler: 'onClick' })]);
-  assert.equal(r.explanation.blame.kind, 'handler');
-  assert.equal(r.explanation.blame.ms, 80);
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.match(r.explanation.cause, /On top of that, .* ran for about 80 ms./);
 });
 
 test('a small render with a heavy commit is still React, not nothing', () => {
@@ -1216,7 +1220,8 @@ test('a small render with a heavy commit is still React, not nothing', () => {
   const chart = commit(1280, 1000, { startedAt: 1005, total: 3, rendered: 2, roots: ['Chart'], hotPath: ['Chart'], components: [{ name: 'Chart', count: 2, self: null, total: null }] });
   const r = report([entry('click', 1000, 300, 1003, 1280)], [chart], null, [input(1000, 'click', { owners: ['Chart'], handler: 'onClick' })]);
   assert.equal(r.explanation.blame.kind, 'render');
-  assert.equal(r.explanation.blame.ms, 3);
+  // The render and its committing: what the commit accounts for, not the 3 ms render alone.
+  assert.equal(r.explanation.blame.ms, 275);
   assert.match(r.explanation.cause, /Committing it took about 272 ms more/);
 });
 
@@ -1224,11 +1229,12 @@ test('with long animation frames, React time and forced layout are not added tog
   // onClick runs 150 ms of its own code, then React renders for 40 ms and commits, and the layout effects
   // force 150 ms of layout inside that commit. The forced layout is inside React's span, so adding the
   // two would leave the handler nothing; the larger of them is React's, and the handler keeps its 150.
+  // React's 200 ms outrun it, so React has the blame and the handler's 150 are said beside it.
   const commitAfter = commit(1353, 1000, { startedAt: 1153, total: 40 });
   const frames = [frame(990, 380, [script('BUTTON.onclick', 1003, 350, 150)])];
   const r = report([entry('click', 1000, 380, 1003, 1353)], [commitAfter], frames, [input(1000, 'click', { handler: 'onClick' })]);
-  assert.equal(r.explanation.blame.kind, 'handler');
-  assert.equal(r.explanation.blame.ms, 150);
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.match(r.explanation.cause, /On top of that, .* ran for about 150 ms./);
 });
 
 test('a few milliseconds of committing do not make a small render outrank a wait', () => {
@@ -1247,7 +1253,7 @@ test('the render blame names the commit whose committing took the time', () => {
   const r = report([entry('click', 1000, 300, 1003, 1240)], [list, tooltip], null, [input(1000, 'click', { handler: 'onClick' })]);
   assert.equal(r.explanation.blame.kind, 'render');
   assert.equal(r.explanation.blame.name, 'Tooltip');
-  assert.equal(r.explanation.blame.ms, 1);
+  assert.equal(r.explanation.blame.ms, 201);
   assert.match(r.explanation.cause, /Committing it took about 200 ms more/);
 });
 
@@ -1269,4 +1275,236 @@ test("the note under a screen update gives the committing that made React's time
   const r = report([entry('click', 1000, 250, 1003, 1043)], [badge], null, [input(1000, 'click', { owners: ['Badge'], handler: 'onClick' })]);
   assert.equal(r.explanation.blame.kind, 'painting');
   assert.ok(r.explanation.notes.some((n) => /and 35 ms committing it in the 40 ms of working time before that\./.test(n)), r.explanation.notes.join(' | '));
+});
+
+/** A button labelled Draw, the target of the clicks below. */
+const draw = (extra: Partial<InputRecord> = {}) => [input(1000, 'click', { target: element('button', [text('Draw')]) as unknown as Node, handler: 'onClick', ...extra })];
+
+test("a click's useEffect callbacks are React's time, not the handler's, where React ran them in the same task", () => {
+  // onClick sets one state, Chart renders in 5 ms, and its useEffect draws for 300 ms. React 18 and 19
+  // run a click's passive effects right after its commit and then say so, so the 300 ms has a figure.
+  const chart = commit(1010, 1000, { startedAt: 1004, total: 5, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], components: [{ name: 'Chart', count: 1, self: 5, total: 5 }], effectsStartedAt: 1010, effectsEndedAt: 1310 });
+  const tap = draw({ owners: ['Chart'] });
+  const click = [entry('click', 1000, 330, 1003, 1320)];
+  const r = report(click, [chart], null, tap);
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.name, 'Chart');
+  // The commit's milliseconds are its render, committing and effects together.
+  assert.equal(r.explanation.blame.ms, 306);
+  assert.match(r.explanation.cause, /React spent 5 ms re-rendering Chart\. The commit's useEffect callbacks then ran for about 300 ms more, before the screen could update\./);
+  assert.doesNotMatch(r.explanation.cause, /onClick|Committing/);
+  // Without the effects' times, as on React 17, the 300 ms is the handler's, as it was before.
+  const noEffects = report(click, [{ ...chart, effectsStartedAt: null, effectsEndedAt: null }], null, tap);
+  assert.equal(noEffects.explanation.blame.kind, 'handler');
+  assert.equal(noEffects.explanation.blame.ms, 311);
+});
+
+test('a production build times the effects too, so a heavy useEffect is not read as the handler there', () => {
+  // The same click on a production React: no render durations and no render start, but React still says
+  // when the effects ended, so the 300 ms is measured. Which component's effect it was is a reading.
+  const chart = commit(1010, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], components: [{ name: 'Chart', count: 1, self: null, total: null }], effectsStartedAt: 1010, effectsEndedAt: 1310 });
+  const tap = draw({ owners: ['Chart'] });
+  const click = [entry('click', 1000, 330, 1003, 1320)];
+  const r = report(click, [chart], null, tap);
+  assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'Chart', detail: null, ms: null, confidence: 'inferred' });
+  assert.equal(
+    r.explanation.cause,
+    'React was most likely re-rendering Chart, then ran useEffect callbacks for about 300 ms of the 317 ms of working time, before the screen could update. A profiling build of React would time the render too.',
+  );
+  // Before, the only reading was the handler's.
+  assert.equal(report(click, [{ ...chart, effectsStartedAt: null, effectsEndedAt: null }], null, tap).explanation.blame.kind, 'handler');
+});
+
+test('effects React ran in a later task are not counted', () => {
+  // A transition's effects run in a task of their own, after the handlers, so what lies between the
+  // commit and their end is anyone's. The handler keeps the time it had.
+  const chart = commit(1010, 1000, { startedAt: 1004, total: 5, effectsStartedAt: 1010, effectsEndedAt: 1400 });
+  const r = report([entry('click', 1000, 330, 1003, 1320)], [chart], null, draw());
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.equal(r.explanation.blame.ms, 311);
+  assert.doesNotMatch(r.explanation.cause, /useEffect/);
+});
+
+test("the effects' time starts where the hook call returned, after this library's walk and React DevTools' reading", () => {
+  const chart = commit(1010, 1000, { startedAt: 1004, total: 5, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], walkMs: 2, effectsStartedAt: 1030, effectsEndedAt: 1310 });
+  const r = report([entry('click', 1000, 330, 1003, 1320)], [chart], null, draw({ owners: ['Chart'] }));
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.match(r.explanation.cause, /The commit's useEffect callbacks then ran for about 280 ms more/);
+});
+
+test('light effects beside a heavy handler leave the handler its time', () => {
+  const list = commit(1260, 1000, { startedAt: 1253, total: 5, effectsStartedAt: 1260, effectsEndedAt: 1275 });
+  const r = report([entry('click', 1000, 300, 1003, 1280)], [list], null, draw());
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.equal(r.explanation.blame.ms, 255);
+  assert.doesNotMatch(r.explanation.cause, /useEffect/);
+});
+
+test('a handler has to outrun all of React to be the blame, effects included, and is said beside it when it does not', () => {
+  // onClick runs for 100 ms, Chart renders in 5 and its useEffect runs for 200. The handler outruns the
+  // render but not React, and the 200 ms were left unsaid when the handler took the blame.
+  const chart = commit(1110, 1000, { startedAt: 1104, total: 5, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1110, effectsEndedAt: 1310 });
+  const r = report([entry('click', 1000, 330, 1003, 1320)], [chart], null, draw({ owners: ['Chart'] }));
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.match(r.explanation.cause, /The commit's useEffect callbacks then ran for about 200 ms more, before the screen could update\. On top of that, the onClick handler ran for about 1\d\d ms\./);
+});
+
+test('a root an effect flushes with flushSync is its own time, not the effects of the commit that ran it', () => {
+  // Chart's useEffect runs for 300 ms, then commits a Tooltip root with flushSync, which React renders
+  // for 50 ms once the effects are done and before it says they ran.
+  const chart = commit(1010, 1000, { startedAt: 1004, total: 5, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1010, effectsEndedAt: 1360 });
+  const tooltip = commit(1360, 1000, { startedAt: 1310, total: 40, rendered: 1, roots: ['Tooltip'], hotPath: ['Tooltip'], walkMs: 1 });
+  const r = report([entry('click', 1000, 380, 1003, 1370)], [chart, tooltip], null, draw());
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.name, 'Chart');
+  assert.match(r.explanation.cause, /The commit's useEffect callbacks then ran for about 300 ms more, before the screen could update/);
+});
+
+test("in a production build, a render inside the effects' time is said to be in the figure", () => {
+  // As above on a production React, which keeps no render start: Tooltip's render cannot be taken out
+  // of the 350 ms, so the sentence says the figure holds it.
+  const chart = commit(1010, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1010, effectsEndedAt: 1360 });
+  const tooltip = commit(1359, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['Tooltip'], hotPath: ['Tooltip'], walkMs: 1 });
+  const r = report([entry('click', 1000, 380, 1003, 1370)], [chart, tooltip], null, draw());
+  assert.equal(r.explanation.blame.name, 'Chart');
+  // The Tooltip's walk is this library's time, not the effects'.
+  assert.match(r.explanation.cause, /then ran useEffect callbacks for about 349 ms of the \d+ ms of working time, one more render included, before the screen could update\./);
+});
+
+test('committing and effects too small to mention alone are both said where together they took the time', () => {
+  // 40 ms of working time: a 1 ms render, 15 ms committing it and 15 ms of effects. Neither alone is
+  // worth a handler blame; the two together are, and the sentence says both.
+  const badge = commit(1020, 1000, { startedAt: 1004, total: 1, rendered: 1, roots: ['Badge'], hotPath: ['Badge'], effectsStartedAt: 1020, effectsEndedAt: 1035 });
+  const r = report([entry('click', 1000, 60, 1003, 1043)], [badge], null, draw({ owners: ['Badge'] }));
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.match(r.explanation.cause, /Committing it took about 15 ms more: the DOM changes, ref callbacks and layout effects\. The commit's useEffect callbacks then ran for about 15 ms more/);
+});
+
+test("where only the effects of several commits together earned React the blame, the sentence gives the totals", () => {
+  // Two commits, each with 15 ms of effects, in 40 ms of working time: neither alone is worth saying.
+  const first = commit(1010, 1000, { startedAt: 1009, total: 1, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1010, effectsEndedAt: 1025 });
+  const second = commit(1027, 1000, { startedAt: 1026, total: 1, rendered: 1, roots: ['Legend'], hotPath: ['Legend'], effectsStartedAt: 1027, effectsEndedAt: 1042 });
+  const click = [entry('click', 1000, 60, 1003, 1043)];
+  const dev = report(click, [first, second], null, draw());
+  assert.equal(dev.explanation.blame.kind, 'render');
+  assert.match(dev.explanation.cause, /React spent 1 ms re-rendering \w+\. React also spent 30 ms running useEffect callbacks across 2 commits\./);
+  const strip = (x: CommitSummary): CommitSummary => ({ ...x, hasDurations: false, total: 0, startedAt: null, components: [] });
+  const production = report(click, [strip(first), strip(second)], null, draw());
+  assert.equal(production.explanation.blame.kind, 'render');
+  assert.match(production.explanation.cause, /then ran useEffect callbacks for about 30 ms of the 40 ms of working time across 2 commits, before the screen could update\./);
+});
+
+test("the note under a screen update gives the effects that made React's time worth a mention", () => {
+  // 40 ms of working time, 1 ms of it rendering Badge and 35 running its effects, then 207 ms of screen update.
+  const tap = draw({ owners: ['Badge'] });
+  const click = [entry('click', 1000, 250, 1003, 1043)];
+  const badge = commit(1005, 1000, { startedAt: 1004, total: 1, rendered: 1, roots: ['Badge'], hotPath: ['Badge'], effectsStartedAt: 1005, effectsEndedAt: 1040 });
+  const r = report(click, [badge], null, tap);
+  assert.equal(r.explanation.blame.kind, 'painting');
+  assert.ok(r.explanation.notes.some((n) => /React still spent 1 ms re-rendering Badge and 35 ms running its useEffect callbacks in the 40 ms of working time before that\./.test(n)), r.explanation.notes.join(' | '));
+  const production = report(click, [{ ...badge, hasDurations: false, total: 0, startedAt: null }], null, tap);
+  assert.ok(production.explanation.notes.some((n) => /React was most likely still re-rendering Badge, then spent 35 ms running useEffect callbacks in the 40 ms of working time before that\./.test(n)), production.explanation.notes.join(' | '));
+});
+
+test("the note under a screen update reads as a sentence for a production build's render", () => {
+  const rows = commit(1030, 1000, { hasDurations: false, total: 0, rendered: 400, roots: ['Table'], hotPath: ['Table'], components: [{ name: 'Row', count: 400, self: null, total: null }] });
+  const r = report([entry('click', 1000, 250, 1003, 1043)], [rows], null, draw({ owners: ['Table'] }));
+  assert.equal(r.explanation.blame.kind, 'painting');
+  assert.ok(r.explanation.notes.some((n) => /^React was most likely still re-rendering 400 components inside Table/.test(n)), r.explanation.notes.join(' | '));
+});
+
+test('in a production build, effects that are a minority of the working time leave the handler the blame and come off its time', () => {
+  // onClick runs for 150 ms and Chart's useEffect for 60. A production build cannot split the 150 ms
+  // between the handler and the render, so the 60 ms, though worth saying, do not outrank it.
+  const chart = commit(1155, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], components: [{ name: 'Chart', count: 1, self: null, total: null }], effectsStartedAt: 1155, effectsEndedAt: 1215 });
+  const r = report([entry('click', 1000, 230, 1005, 1215)], [chart], null, draw({ owners: ['Chart'] }));
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.equal(r.explanation.blame.ms, null);
+  assert.match(r.explanation.cause, /^The onClick handler most likely took about 150 ms of the 210 ms: React re-rendered only 1 component and ran useEffect callbacks for 60 ms./);
+  // Where the effects are most of it, they are React's, as above.
+  const most = { ...chart, at: 1055, effectsStartedAt: 1055, effectsEndedAt: 1210 };
+  assert.equal(report([entry('click', 1000, 230, 1005, 1215)], [most], null, draw({ owners: ['Chart'] })).explanation.blame.kind, 'render');
+});
+
+test("a handler that is the blame is said beside the effects React ran for it, where they would show", () => {
+  // onClick runs for about 150 ms, Chart renders in 5 and its useEffect runs for 60.
+  const chart = commit(1160, 1000, { startedAt: 1154, total: 5, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1160, effectsEndedAt: 1220 });
+  const r = report([entry('click', 1000, 260, 1003, 1223)], [chart], null, draw({ owners: ['Chart'] }));
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.match(r.explanation.cause, /^The onClick handler ran for about 154 ms; React spent 5 ms re-rendering Chart\. React also spent 60 ms running useEffect callbacks\.$/);
+});
+
+test("the handler's sentence gives React's committing and effects as totals, since the render it names need not have spent them", () => {
+  // List renders for 30 ms; Tooltip renders for 1 ms and commits for 200; onClick runs for about 266.
+  const list = commit(1035, 1000, { startedAt: 1005, total: 30, rendered: 31, roots: ['List'], hotPath: ['List'] });
+  const tooltip = commit(1237, 1000, { startedAt: 1036, total: 1, rendered: 1, roots: ['Tooltip'], hotPath: ['Tooltip'] });
+  const r = report([entry('click', 1000, 520, 1003, 1500)], [list, tooltip], null, draw());
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.match(r.explanation.cause, /React spent 31 ms re-rendering 31 components inside List, .*\)\. React also spent 200 ms committing in another commit\.$/);
+});
+
+test('effects too small to mention do not choose the commit a render blame names', () => {
+  // List renders for 30 ms; Chart renders for 1 ms and runs 30 ms of effects, under a quarter of the 121 ms.
+  const list = commit(1035, 1000, { startedAt: 1005, total: 30, rendered: 31, roots: ['List'], hotPath: ['List'] });
+  const chart = commit(1037, 1000, { startedAt: 1036, total: 1, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1037, effectsEndedAt: 1067 });
+  const r = report([entry('click', 1000, 150, 1003, 1124)], [list, chart], null, draw());
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.name, 'List');
+});
+
+test("in a production build, effects that together are most of the working time are said together", () => {
+  // Chart's effects run for 60 ms and Legend's for 45, in 200 ms of working time: neither is half alone.
+  const chart = commit(1020, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1020, effectsEndedAt: 1080 });
+  const legend = commit(1100, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['Legend'], hotPath: ['Legend'], effectsStartedAt: 1100, effectsEndedAt: 1145 });
+  const r = report([entry('click', 1000, 230, 1003, 1203)], [chart, legend], null, draw());
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.name, 'Chart');
+  assert.match(r.explanation.cause, /then ran useEffect callbacks for about 105 ms of the 200 ms of working time across 2 commits, before the screen could update\./);
+});
+
+test('in a production build with no handler to name, effects under half the working time are still React\'s', () => {
+  const chart = commit(1050, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1050, effectsEndedAt: 1150 });
+  const r = report([entry('click', 1000, 230, 1005, 1215)], [chart], null, draw({ handler: undefined, owners: ['Chart'] }));
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.match(r.explanation.cause, /then ran useEffect callbacks for about 100 ms of the 210 ms of working time, before the screen could update\./);
+});
+
+test('a handler worth blaming keeps the blame where React\'s time would not earn it, however close the two are', () => {
+  // onClick runs for 28 ms; React renders for 4 and runs 24 ms of effects, neither worth a blame.
+  const badge = commit(1035, 1000, { startedAt: 1031, total: 4, rendered: 1, roots: ['Badge'], hotPath: ['Badge'], effectsStartedAt: 1035, effectsEndedAt: 1059 });
+  const r = report([entry('click', 1000, 80, 1003, 1059)], [badge], null, draw());
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.equal(r.explanation.blame.ms, 28);
+});
+
+test("where the named commit's effects are said, another commit's committing worth saying is said beside them", () => {
+  // Panel renders for 1 ms and commits for 100; Chart renders for 1 ms and runs 120 ms of effects.
+  const panel = commit(1104, 1000, { startedAt: 1003, total: 1, rendered: 1, roots: ['Panel'], hotPath: ['Panel'] });
+  const chart = commit(1106, 1000, { startedAt: 1105, total: 1, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1106, effectsEndedAt: 1226 });
+  const r = report([entry('click', 1000, 280, 1003, 1250)], [panel, chart], null, draw());
+  assert.equal(r.explanation.blame.name, 'Chart');
+  assert.equal(r.explanation.blame.ms, 121);
+  assert.match(r.explanation.cause, /The commit's useEffect callbacks then ran for about 120 ms more, before the screen could update\. React also spent 100 ms committing in another commit\./);
+});
+
+test('in a production build with no handler to name, a listener beside React that ran longer than the effects keeps the blame', () => {
+  // React's listener runs Chart's 60 ms of effects; a listener on the document then runs for 143 ms.
+  const chart = commit(1010, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1010, effectsEndedAt: 1070 });
+  const click = [entry('click', 1000, 230, 1005, 1215)];
+  const tap = draw({ handler: undefined, owners: ['Chart'] });
+  const react = script('#root.onclick', 1005, 66);
+  const r = report(click, [chart], [frame(1000, 230, [react, script('#document.onclick', 1072, 143)])], tap);
+  assert.equal(r.explanation.blame.kind, 'script');
+  assert.equal(r.explanation.blame.name, '#document.onclick');
+  // With only React's own listener on record, the effects are React's as before.
+  assert.equal(report(click, [chart], [frame(1000, 230, [{ ...react, duration: 210 }])], tap).explanation.blame.kind, 'render');
+});
+
+test('a sentence says across how many commits only where more than one holds the figure it gives', () => {
+  // List renders for 10 ms and runs all 190 ms of the effects; Tip commits for 2 ms after it.
+  const list = commit(1015, 1000, { startedAt: 1005, total: 10, rendered: 11, roots: ['List'], hotPath: ['List'], effectsStartedAt: 1015, effectsEndedAt: 1205 });
+  const tip = commit(1209, 1000, { startedAt: 1206, total: 1, rendered: 1, roots: ['Tip'], hotPath: ['Tip'] });
+  const r = report([entry('click', 1000, 450, 1003, 1420)], [list, tip], null, draw());
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.match(r.explanation.cause, /React also spent 190 ms running useEffect callbacks\.$/);
 });

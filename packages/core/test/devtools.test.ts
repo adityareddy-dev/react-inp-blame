@@ -83,6 +83,8 @@ function commit(at: number, opts: Partial<CommitSummary> = {}): CommitSummary {
     coarseClock: false,
     total: 0,
     startedAt: null,
+    effectsStartedAt: null,
+    effectsEndedAt: null,
     walkMs: 1,
     priority: undefined,
     didError: false,
