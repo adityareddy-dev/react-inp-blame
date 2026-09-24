@@ -15,6 +15,9 @@ we can agree on the approach before you spend time on it.
 - `scripts/pack-smoke.mjs`: installs the packed tarball into throwaway apps and checks it there.
 - `fixtures/vite-react-ts`: the app `npm create vite` makes, with the README's Vite config and one slow
   component. `scripts/vite-app.mjs` installs the packed tarball into a copy of it and runs its specs.
+- `fixtures/react-router` and `fixtures/tanstack-start`: the apps `npx create-react-router@8.4.0` and
+  `npx @tanstack/cli@0.71.0 create --framework React --blank` make, each with its README setup and the
+  same slow component, run by the same script with `--fixture`.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
 
 ## Setup
@@ -82,11 +85,12 @@ the script again rather than editing them. The `npm install` links the new works
 change `package-lock.json`.
 
 Run the suites one at a time. Each starts its server on a fixed port (the demo on 5177 and 5178, the
-create-vite fixture on 5179 and 5180, the React matrix copies on two ports each from 5187 to 5196,
+create-vite fixture on 5179 and 5180, the React Router one on 5181 and 5182, the TanStack Start one on
+5183 and 5184, the React matrix copies on two ports each from 5187 to 5196,
 Next.js on 5199, 5198 and 5197), and outside CI a server already listening on that port is reused. A
 server left over from another suite would be tested in place of the right one, so stop it before the
-next suite starts. The create-vite fixture never reuses one, so a server still on 5179 or 5180 fails
-its run.
+next suite starts. The three fixtures never reuse one, so a server still on one of their ports fails
+their run.
 
 `npm run test:pack` and `npm run test:vite-app` are the two checks that see the package as npm publishes
 it; the other suites above reach it through the workspace link. `test:pack` packs `packages/core` and
@@ -135,6 +139,12 @@ works as it does for `test:pack`, and anything after `--` goes to Playwright. Th
 The fixture's `vite.config.ts` is the README's "Install with Vite" block, and the script fails until the
 two match, so a change to one is a change to both. Its `@playwright/test` pin follows `apps/demo`'s. After
 changing its `package.json`, refresh its lock with `npm install --package-lock-only` in that folder.
+
+`--fixture react-router` and `--fixture tanstack-start` run the same steps on the other two apps, with no
+Fast Refresh edit, and their setup files are held to the README's blocks the same way: `app/inp-blame.ts`
+and `app/entry.client.tsx` for React Router, `src/inp-blame.ts` and `src/client.tsx` for TanStack Start,
+and `vite.config.ts` for both. The React Router app drops the template's Google Fonts links, since a font
+request that fails would fail its specs.
 
 Two things the demo's suite leaves out of a normal run:
 
