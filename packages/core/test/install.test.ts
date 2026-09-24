@@ -792,7 +792,8 @@ test('a copy of an incompatible version installs nothing beside the one already 
   const key = Symbol.for('react-inp-blame');
   const holder = globalThis as Record<symbol, unknown>;
   const current = holder[key];
-  holder[key] = { layout: 0, slots: {} };
+  // What 0.1 and 0.2 left there.
+  holder[key] = { layout: 1, slots: {} };
   let other: Awaited<ReturnType<typeof copyOfLibrary>>;
   try {
     other = await copyOfLibrary(t);
