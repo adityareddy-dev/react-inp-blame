@@ -479,7 +479,7 @@ still set for the sync commit of a discrete event, including the microtask React
 flush it in. A commit with no event on the stack (a transition, an effect, data arriving)
 is stamped with the newest input seen. A release also carries the timestamp of the press it
 belongs to (pointerup and click by `pointerId`, keyup by key code, and a click made from the
-keyboard, whose `pointerId` is -1, by the key whose task it came in), so a render after a cheap
+keyboard, whose `pointerId` is -1 in Chrome, by the key whose task it came in), so a render after a cheap
 click still finds the pointerdown that was slow enough to be observed. A commit belongs to
 an interaction when one of those stamps matches an entry's `startTime` within 1 ms: the
 Event Timing spec says `startTime` is the event's `timeStamp`, the same clock React's own
@@ -840,8 +840,10 @@ it from. So the hold is not counted against the render the release made, and a w
 shows nothing else pressed between the interaction's first input and that one: a pointer held down
 through a key press, say, or a release whose press the hook could only guess at and took the newest one
 for. A click made from the keyboard is neither. It belongs to the key whose task made it, Enter's keydown
-or a Space's keyup, and a click with `pointerId` -1 and no input's task behind it, the one a screen
-reader sends, is a gesture of its own. The hook paired such a click with the newest pointerdown of the
+or a Space's keyup, and a click with `pointerId` -1 and no input's task behind it is a gesture of its
+own. A tap's click can land in a key's task too, since Chromium runs a key pressed between the touchend
+and the click before the timer that ends the key's task, so a click whose pointer went down and has had
+no click since stays with that pointer. The hook paired such a click with the newest pointerdown of the
 last 5 s until 2026-09-23, so Enter on a button inside the window from an earlier mouse click's paint
 had its render joined to that mouse click. Until 2026-09-23 this window was a fixed
 1.5 s whatever `inputWindow` said, and always ran from the paint. A page that set `inputWindow` to 3 s

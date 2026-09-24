@@ -163,8 +163,9 @@ it changes when a field is removed or changes meaning, which a minor release may
   had its render joined to the mouse click's report as a later render, whenever the report held the
   mouse click's pointerdown entry, which it does once that entry reaches 16 ms, or at any length when
   that click was the page's first input. The click is now part of
-  the key whose task made it, Enter's keydown or a Space's keyup, and a click with neither a key nor a
-  pointer behind it, the kind a screen reader sends, is a gesture of its own. Found reading the code.
+  the key whose task made it, Enter's keydown or a Space's keyup, unless its pointer is still down, as a
+  tap's is when a key lands between the touchend and its click. A click with neither a key nor a pointer
+  behind it is a gesture of its own. Found reading the code.
 
 - **The subpaths have types under `moduleResolution: "node"`.** That setting, `node10` since
   TypeScript 5.0 and still what older setups have, ignores `exports`, so every import but the package
