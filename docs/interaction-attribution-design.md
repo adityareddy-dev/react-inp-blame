@@ -1566,7 +1566,11 @@ build as well as on the dev server.
   the client entry imports first. That is early enough under React Router because its `<Scripts>` imports
   the route modules statically and then the client entry with `import()`, and the route modules reach only
   `react-router`, whose main entry imports no react-dom; `react-router/dom` does, and only the client entry
-  imports it (read in react-router 8.4.0's `dist/production`, and the same holds for 7.18.4). Under
+  imports it (read in react-router 8.4.0's `dist/production`, and the same holds for 7.18.4). A route can
+  still import `react-dom` itself, as a portal does, and that is harmless on React 19: its `react-dom`
+  calls nothing on the hook but `registerInternalModuleStart` and `registerInternalModuleStop`, and only
+  `react-dom/client` connects. React Router 8 needs React 19.2.7 or later. A React Router 7 app on React 18
+  loads a `react-dom` that connects as it evaluates, so a route that imports it beats the install. Under
   TanStack Start the build's client input is `src/client.tsx` itself, the dev server imports it right after
   the Fast Refresh preamble, and `@tanstack/react-router` imports react-dom only for server rendering (read
   in @tanstack/start-plugin-core 1.171.47 and @tanstack/react-router 1.170.39). CI runs both in the job
