@@ -29,6 +29,12 @@ it changes when a field is removed or changes meaning, which a minor release may
   `debug_target` example with two more parameters. Neither sends a label or a sentence. The READMEs also ask
   for wrong or missing blames through the issue form and say what to include, and the form's versions field
   now asks for Next.js or Vite as well.
+- **A setup for React Router in framework mode.** React Router writes its own HTML, so the Vite plugin's
+  script never ran there and the library never installed. The README's new section puts `install()` in a
+  module of the app's own that `app/entry.client.tsx` imports first, which runs before react-dom does, and
+  keeps the plugin for component names. CI runs it in an app from `npx create-react-router@8.4.0`, installed
+  from the packed tarball, under `react-router dev` and on a production build. React Router 7 has the same
+  entry file and was not tried.
 - `CommitSummary.startedAt`: when React began the render a commit came from, on `performance.now()`'s
   clock, read from the root fiber. From there to `at` is React's own time for the commit, committing
   it included. `null` in a production build, which keeps no start, and where React did not time the

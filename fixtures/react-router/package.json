@@ -1,0 +1,33 @@
+{
+  "name": "react-router-fixture",
+  "private": true,
+  "type": "module",
+  "description": "What `npx create-react-router@8.4.0` makes, with the README's React Router setup and one slow component. Run by scripts/vite-app.mjs --fixture react-router from a temp copy.",
+  "scripts": {
+    "build": "react-router build",
+    "dev": "react-router dev",
+    "start": "react-router-serve ./build/server/index.js",
+    "typecheck": "react-router typegen && tsc",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@react-router/node": "^8.4.0",
+    "@react-router/serve": "^8.4.0",
+    "isbot": "^5.1.36",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-inp-blame": "^0.2.0",
+    "react-router": "^8.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@react-router/dev": "^8.4.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^22",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.3"
+  }
+}

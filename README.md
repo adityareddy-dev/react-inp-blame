@@ -227,6 +227,67 @@ the plugin and the wrapper, which put the install in a file the page loads befor
 shared chunk, though not the vendor rule, as above. Anywhere else, check `stats().mode` and
 `debug.hook().renderers` in a built page once.
 
+## Install with React Router
+
+In framework mode React Router writes the page itself, so the Vite plugin's script never reaches it. The
+install goes in a module of your own that the client entry imports before anything else. If the app has no
+`app/entry.client.tsx` yet, `npx react-router reveal entry.client` writes React Router's default one.
+
+```ts
+// app/inp-blame.ts, imported first in app/entry.client.tsx so it runs before react-dom loads
+import { install } from "react-inp-blame";
+
+// Every build. For the dev server alone, wrap the call in `if (import.meta.env.DEV)`.
+install({ overlay: "query" }); // the badge only on request, such as ?inp-blame in the URL
+```
+
+```tsx
+// app/entry.client.tsx, React Router's own (`npx react-router reveal entry.client`) with one import added
+import "./inp-blame";
+import { startTransition, StrictMode } from "react";
+import { hydrateRoot } from "react-dom/client";
+import { HydratedRouter } from "react-router/dom";
+
+startTransition(() => {
+  hydrateRoot(
+    document,
+    <StrictMode>
+      <HydratedRouter />
+    </StrictMode>,
+  );
+});
+```
+
+```ts
+// vite.config.ts
+import { reactRouter } from "@react-router/dev/vite";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
+import { inpBlame } from "react-inp-blame/vite";
+
+export default defineConfig({
+  plugins: [
+    tailwindcss(),
+    reactRouter(),
+    // Component names that survive the minifier. The install is app/inp-blame.ts, since React Router
+    // writes its own HTML and the plugin's script has no page to go in.
+    inpBlame({ enabled: true, runtime: false }), // production builds too; the default is development only
+  ],
+  resolve: {
+    tsconfigPaths: true,
+  },
+});
+```
+
+The call needs a module of its own because the entry's body comes too late: by the time it runs, every
+static import has run, react-dom's included. First among the entry's imports is early enough. React Router
+loads each route's module before the entry, but those import `react-router`, which never loads react-dom;
+`react-router/dom` does, and only the entry imports it. The plugin with `runtime: false` is there for the
+names, so they survive the production minifier. CI builds this from `npx create-react-router@8.4.0` (React
+Router 8.4, Vite 8.3, React 19.3) and checks that a click is blamed on the component that rendered slowly,
+under `react-router dev` and on a production build served by `react-router-serve`. React Router 7 has the
+same entry file and was not tried.
+
 ## With web-vitals
 
 `react-inp-blame/web-vitals` gives the [web-vitals](https://github.com/GoogleChrome/web-vitals) package
@@ -644,14 +705,16 @@ oldest its `engines` allows, and imports and requires every subpath there; the c
 `next@canary` as well. No job runs `react@canary` alone. One more
 job puts the packed package into an app made the way `npm create vite` makes one, on Vite 8.3 with
 @vitejs/plugin-react 6.1 and the Vite setup above, and checks that a click there is blamed on the component
-that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build.
+that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. A
+second does the same with the app `npx create-react-router` makes and the React Router setup above.
 
 ## Known limits
 
-- **Frameworks that render their own HTML have no setup yet**: React Router 7 and Remix in framework mode,
-  TanStack Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves
-  and builds, and theirs never go through it, so the library most likely never installs there, and nothing
-  says so. Not tried yet. React Native is out of scope: only react-dom commits are walked.
+- **Frameworks that render their own HTML have no setup yet**, beyond React Router's above: Remix, TanStack
+  Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
+  builds, and theirs never go through it, so the library most likely never installs there, and nothing says
+  so. An import first in the client entry, as React Router's setup does, may be enough where nothing else
+  loads react-dom before it. Not tried yet. React Native is out of scope: only react-dom commits are walked.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.
