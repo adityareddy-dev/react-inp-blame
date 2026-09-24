@@ -478,7 +478,8 @@ commit is stamped with the input being dispatched when it ran: `window.event`, w
 still set for the sync commit of a discrete event, including the microtask React 18 and 19
 flush it in. A commit with no event on the stack (a transition, an effect, data arriving)
 is stamped with the newest input seen. A release also carries the timestamp of the press it
-belongs to (pointerup and click by `pointerId`, keyup by key code), so a render after a cheap
+belongs to (pointerup and click by `pointerId`, keyup by key code, and a click made from the
+keyboard, whose `pointerId` is -1, by the key whose task it came in), so a render after a cheap
 click still finds the pointerdown that was slow enough to be observed. A commit belongs to
 an interaction when one of those stamps matches an entry's `startTime` within 1 ms: the
 Event Timing spec says `startTime` is the event's `timeStamp`, the same clock React's own
@@ -836,12 +837,13 @@ pointer held down past it or a click whose pointerdown was the slow part and pai
 runs from the end of that input's work (`work.endedAt` in the ring), which is where the hook measured
 it from. So the hold is not counted against the render the release made, and a window set shorter than
 1.5 s does not drop a render the hook walked for that input. It runs from there only while the ring
-shows nothing else pressed between the interaction's first input and that one. A click made from the
-keyboard has no pointerdown of its own and takes the newest one in the ring as its press, so the
-render of Enter pressed on a button a few seconds after a mouse click carries the mouse click's stamp;
-the keydown in between is what keeps it off the mouse click. Inside the window from the mouse click's
-paint it still joins: the hook pairs a click that has no pointer with any pointerdown of the last 5 s,
-and that pairing is a limit of its own, older than this window. Until 2026-09-23 this window was a fixed
+shows nothing else pressed between the interaction's first input and that one: a pointer held down
+through a key press, say, or a release whose press the hook could only guess at and took the newest one
+for. A click made from the keyboard is neither. It belongs to the key whose task made it, Enter's keydown
+or a Space's keyup, and a click with `pointerId` -1 and no input's task behind it, the one a screen
+reader sends, is a gesture of its own. The hook paired such a click with the newest pointerdown of the
+last 5 s until 2026-09-23, so Enter on a button inside the window from an earlier mouse click's paint
+had its render joined to that mouse click. Until 2026-09-23 this window was a fixed
 1.5 s whatever `inputWindow` said, and always ran from the paint. A page that set `inputWindow` to 3 s
 paid for the walk of a render 2 s after the paint and never saw it in a report, and a press held for
 2 s lost the render its own click made inside its dispatch.

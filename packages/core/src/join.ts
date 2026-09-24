@@ -540,11 +540,11 @@ function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[
  * was the slow part and painted first. Then the window runs from the end of that input's work, as the
  * hook's did, and a render inside the click's own dispatch is the click's however long the press was held.
  *
- * Only while the ring shows nothing else pressed from the interaction's first input to that one. A click
- * made from the keyboard has no pointerdown of its own and takes the newest one in the ring as its press,
- * so its render carries an earlier mouse click's stamp, and measured from itself it would join that mouse
- * click seconds later. The Enter or Space that made it sits in between. When the ring has let the input
- * go, there is nothing to check it against, and the window runs from the paint.
+ * Only while the ring shows nothing else pressed from the interaction's first input to that one. Where
+ * something was, the release may not be this interaction's alone: a pointer held down through a key
+ * press, or a release whose press the hook could only guess at and took the newest one for (`gestureOf`).
+ * When the ring has let the input go, there is nothing to check it against, and the window runs from the
+ * paint.
  */
 function followUpFrom(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: number[]): number {
   // By type as well: a pointerup and its click are often under a millisecond apart.

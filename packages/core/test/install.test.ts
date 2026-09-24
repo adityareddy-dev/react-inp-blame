@@ -1162,6 +1162,134 @@ test('an inputWindow over 1.5 s reaches the report: a render the hook walks unde
   });
 });
 
+/** A trusted input handed to the window's capture listener at `timeStamp`, and, given `render`, a commit inside its dispatch 9 ms later. */
+function inputOn(page: Page, clock: { now: number }, commit: (ms: number) => void) {
+  return (type: string, timeStamp: number, fields: Record<string, unknown>, render?: number) => {
+    clock.now = timeStamp;
+    const event = { isTrusted: true, type, timeStamp, target: null, ...fields };
+    page.fire(type, event);
+    if (render === undefined) return;
+    page.window.event = event;
+    clock.now = timeStamp + 9;
+    commit(render);
+    delete page.window.event;
+  };
+}
+
+test('a click made from the keyboard is part of its key press, so its render never joins the mouse click before it', async (t) => {
+  // A mouse click on a button, then Enter on the button it left focused, 800 ms after the click's paint.
+  // The click Enter makes has no pointerdown (its pointerId is -1). It used to take the newest pointerdown
+  // within 5 s as its press, the mouse click's, so its render carried that stamp and joined the mouse
+  // click's report as a later render, well inside the window from its paint.
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    const input = inputOn(page, clock, (ms) => {
+      commitAgain(root, ms);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+
+    input('pointerdown', 1000, { pointerId: 1 });
+    input('pointerup', 1060, { pointerId: 1 });
+    input('click', 1061, { pointerId: 1 }, 40);
+    page.paint([pointer('pointerdown', 7, 1000, 24), click(7, 1061, 120)]);
+    await nextTask();
+
+    input('keydown', 2000, { code: 'Enter' });
+    input('click', 2001, { pointerId: -1 }, 40);
+    await nextTask();
+    assert.deepEqual(
+      api.reports().map((r) => ({ id: r.interactionId, revision: r.revision, laterRenders: r.followUps.map((c) => c.at) })),
+      [{ id: 7, revision: 0, laterRenders: [] }],
+    );
+    assert.equal(api.debug.commits().at(-1)?.gestureTs, 2000, "the keyboard click's render is not stamped with the Enter that made it");
+
+    page.paint([pointer('keydown', 8, 2000, 120), click(8, 2001, 119)]);
+    assert.deepEqual(api.last()?.commits.map((c) => c.at), [2010]);
+    api.dispose();
+  });
+});
+
+test('Space makes its click on the key coming up, and a click with no key or pointer behind it is a gesture of its own', async (t) => {
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    const input = inputOn(page, clock, (ms) => {
+      commitAgain(root, ms);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+
+    input('pointerdown', 1000, { pointerId: 1 });
+    input('pointerup', 1060, { pointerId: 1 });
+    input('click', 1061, { pointerId: 1 }, 40);
+    await nextTask();
+    input('keydown', 1500, { code: 'Space' });
+    await nextTask();
+    input('keyup', 1580, { code: 'Space' });
+    input('click', 1581, { pointerId: -1 }, 40);
+    await nextTask();
+    // A screen reader activating a button sends the page a click and nothing before it.
+    input('click', 1900, { pointerId: -1 }, 40);
+    await nextTask();
+    assert.deepEqual(
+      api.debug.commits().map((c) => ({ input: c.inputTs, gesture: c.gestureTs })),
+      [
+        { input: 1061, gesture: 1000 },
+        { input: 1581, gesture: 1500 },
+        { input: 1900, gesture: 1900 },
+      ],
+    );
+    api.dispose();
+  });
+});
+
+test("a click takes the press of the input whose task made it, whatever its pointerId says", async (t) => {
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    const input = inputOn(page, clock, (ms) => {
+      commitAgain(root, ms);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+
+    // A mouse click on a label, which forwards a click of its own to its checkbox in the same task.
+    // Chrome gives the forwarded click pointerId -1; it is still the mouse press.
+    input('pointerdown', 1000, { pointerId: 1 });
+    await nextTask();
+    input('pointerup', 1060, { pointerId: 1 });
+    input('click', 1061, { pointerId: 1 });
+    input('click', 1062, { pointerId: -1 }, 40);
+    await nextTask();
+    // Enter's click carrying the mouse's pointerId, which pairing by pointerId would give to the mouse press.
+    input('keydown', 2000, { code: 'Enter' });
+    input('click', 2001, { pointerId: 1 }, 40);
+    await nextTask();
+    assert.deepEqual(
+      api.debug.commits().map((c) => ({ input: c.inputTs, gesture: c.gestureTs })),
+      [
+        { input: 1062, gesture: 1000 },
+        { input: 2001, gesture: 2000 },
+      ],
+    );
+    api.dispose();
+  });
+});
+
 test('a report whose interaction had commits it could not be joined to says so, and no longer reads as measured', async (t) => {
   const clock = useClock(t);
   await inBrowser((page) => {
