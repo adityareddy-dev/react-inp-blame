@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dehydratedAround, handlerOf, hydratedSince, ownersOf, rootShapeProblem, walkCommit } from '../src/fiber.ts';
+import { dehydratedAround, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, rootShapeProblem, walkCommit, type FiberRoot } from '../src/fiber.ts';
 
 // The HostRoot fiber React 17, 18 and 19 hand the hook as `root.current`, in a development build.
 const hostRoot = (): Record<string, unknown> => ({ tag: 3, flags: 0, mode: 3, child: null, sibling: null, return: null, alternate: null, actualDuration: 1.5 });
@@ -48,6 +48,18 @@ test('the shape check names the first field that is not what the walk reads', ()
     ['durations stored some other way', committed({ ...hostRoot(), actualDuration: '1.5' }), 'root.current.actualDuration is neither a number nor absent'],
   ];
   for (const [why, root, problem] of cases) assert.equal(rootShapeProblem(root), problem, why);
+});
+
+test("a root on Next.js's nextjs-portal element is its dev tools', and a root anywhere else is the app's", () => {
+  const on = (containerInfo: unknown) => ({ ...committed(hostRoot()), containerInfo }) as unknown as FiberRoot;
+  assert.equal(nextDevToolsRoot(on({ nodeType: 1, nodeName: 'NEXTJS-PORTAL', localName: 'nextjs-portal' })), true);
+  // The App Router hydrates the document; an app's own createRoot is given an element of its own.
+  assert.equal(nextDevToolsRoot(on({ nodeType: 9, nodeName: '#document' })), false);
+  assert.equal(nextDevToolsRoot(on({ nodeType: 1, nodeName: 'DIV', localName: 'div' })), false);
+  // A root with no container, or none at all, is left to the shape check rather than taken for the overlay.
+  assert.equal(nextDevToolsRoot(on(null)), false);
+  assert.equal(nextDevToolsRoot(committed(hostRoot()) as unknown as FiberRoot), false);
+  assert.equal(nextDevToolsRoot(undefined as unknown as FiberRoot), false);
 });
 
 test('only component fibers count against the walk budget, not the DOM and text fibers under them', () => {

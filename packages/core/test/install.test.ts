@@ -6,6 +6,7 @@ import { beforeEach, test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, mountOverlay, onInteraction } from '../src/index.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
+import { attributeINP } from '../src/web-vitals.ts';
 
 const HOOK = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 
@@ -134,8 +135,8 @@ function mountedRoot(mode: number, ms: number | undefined): { current: Record<st
   return { current: renderedTree(mode, ms), pendingLanes: 0 };
 }
 
-/** The root committing again: a new tree, whose alternate is the tree it replaces. */
-function commitAgain(root: { current: Record<string, any> }, ms: number): void {
+/** The root committing again: a new tree, whose alternate is the tree it replaces. A production build passes no `ms`. */
+function commitAgain(root: { current: Record<string, any> }, ms: number | undefined): void {
   const next = renderedTree(root.current.mode, ms);
   next.alternate = root.current;
   root.current = next;
@@ -991,4 +992,87 @@ test('a commit from a clock elsewhere on the page is not counted against the int
     assert.equal(r.explanation.notes.some((note) => note.includes('could not be tied to it')), false);
     api.dispose();
   }, { entryTypes: ['event', 'first-input', 'long-animation-frame'] });
+});
+
+test("Next.js's dev overlay is left out of every report: a root on its nextjs-portal element, whatever React it runs", async (t) => {
+  // Under `next dev` the overlay renders with a production react-dom that Next.js bundles into it, at the
+  // same version as the app's. On 15.5 under Turbopack it committed inside every click, and the report
+  // named its minified components and lost the render time: React never timed the overlay's commit.
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40 });
+    const app = existing.inject(reactDom('19.3.0-canary-cbb046ab-20260731'));
+    const devTools = existing.inject(reactDom('19.3.0-canary-cbb046ab-20260731', 0));
+    const onDocument = { ...mountedRoot(0b11, 4), containerInfo: { nodeType: 9, nodeName: '#document' } };
+    const onPortal = { ...mountedRoot(0b01, undefined), containerInfo: { nodeType: 1, nodeName: 'NEXTJS-PORTAL', localName: 'nextjs-portal' } };
+    existing.onCommitFiberRoot(app, onDocument);
+    existing.onCommitFiberRoot(devTools, onPortal);
+
+    clock.now = 1000;
+    const clicked = page.duringClick(() => {
+      clock.now = 1005;
+      commitAgain(onPortal, undefined);
+      existing.onCommitFiberRoot(devTools, onPortal);
+      clock.now = 1400;
+      commitAgain(onDocument, 380);
+      existing.onCommitFiberRoot(app, onDocument, 1, false);
+    });
+    // After the paint, a message from the dev server re-renders the overlay inside the click's window.
+    clock.now = 1600;
+    commitAgain(onPortal, undefined);
+    existing.onCommitFiberRoot(devTools, onPortal);
+    assert.equal(api.debug.commits().length, 1, "the overlay's commits were walked");
+
+    page.paint([click(7, clicked, 420)]);
+    const r = api.last();
+    assert.ok(r);
+    assert.deepEqual(r.commits.map((c) => [c.hasDurations, c.total]), [[true, 380]]);
+    assert.equal(r.followUps.length, 0);
+    assert.equal(r.unjoinedCommits, 0);
+    assert.equal(r.explanation.blame.confidence, 'measured');
+    assert.equal(attributeINP({ entries: [{ interactionId: 7 }] }).react?.commits.ms, 380);
+
+    // A root of the app's own on a production react-dom is read as before, without durations.
+    const widget = existing.inject(reactDom('19.3.0', 0));
+    const island = { ...mountedRoot(0b01, undefined), containerInfo: { nodeType: 1, nodeName: 'DIV', localName: 'div' } };
+    existing.onCommitFiberRoot(widget, island);
+    clock.now = 3000;
+    page.duringClick(() => {
+      commitAgain(island, undefined);
+      existing.onCommitFiberRoot(widget, island);
+    });
+    assert.deepEqual(api.debug.commits().map((c) => c.hasDurations), [true, false]);
+    api.dispose();
+  });
+});
+
+test("the dev overlay's own react-dom does not keep a page supported whose app React cannot be read", async (t) => {
+  // The overlay's react-dom is never read, so it is not a react-dom the page could still be read through.
+  // Its React is the app's version, so a React that moved a field fails the app's shape check alone.
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const app = existing.inject(reactDom('19.3.0'));
+    const devTools = existing.inject(reactDom('19.3.0', 0));
+    const onPortal = { ...mountedRoot(0b01, undefined), containerInfo: { nodeType: 1, nodeName: 'NEXTJS-PORTAL', localName: 'nextjs-portal' } };
+    delete onPortal.current.flags;
+    existing.onCommitFiberRoot(devTools, onPortal);
+    assert.equal(api.stats().mode, 'chained', 'the app has not committed yet');
+
+    const onDocument = { ...mountedRoot(0b11, 4), containerInfo: { nodeType: 9, nodeName: '#document' } };
+    delete onDocument.current.flags;
+    page.duringClick(() => existing.onCommitFiberRoot(app, onDocument));
+    assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'fiber-shape' });
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /react-dom 19\.3\.0 is not the shape/);
+
+    // Were the overlay's react-dom to render a root of the app's, it would be read like any other.
+    existing.onCommitFiberRoot(devTools, { ...mountedRoot(0b01, undefined), containerInfo: { nodeType: 1, nodeName: 'DIV', localName: 'div' } });
+    assert.deepEqual({ mode: api.stats().mode, reason: api.stats().unsupportedReason }, { mode: 'chained', reason: null });
+    api.dispose();
+  });
 });

@@ -517,7 +517,8 @@ its own React does not switch off the app's own. Reports carry on without compon
 - On the root: `current`, and `pendingLanes`, the bits of the updates React has not committed yet. They say
   which commits the page's own report listeners caused while they ran, so a panel that shows reports is not
   read as part of one. An update a listener defers to a later task is an ordinary render and is read like
-  any other.
+  any other. Also `containerInfo`, the node the root was created on, for its `localName`: a root on a
+  `<nextjs-portal>` element is Next.js's dev overlay under `next dev`, and its commits are not read.
 - On fibers: `tag` (components are 0, 1, 11, 14 and 15; the root is 3, a Suspense boundary 13, an Activity
   boundary 31 on React 19, and 18 is the DehydratedFragment React deletes when it gives up hydrating a boundary),
   `flags` (the `PerformedWork` bit, 1; on the root `ForceClientRender`, 256, which says React threw its server
@@ -551,11 +552,6 @@ that rendered slowly, on the dev server with a Fast Refresh edit included and in
   TanStack Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves
   and builds, and theirs never go through it, so the library most likely never installs there, and nothing
   says so. Not tried yet. React Native is out of scope: only react-dom commits are walked.
-- **Under `next dev` from Next.js 15.4.11 and 15.5, the dev overlay renders with a production React of its own,
-  and its commits can join a click's report.** React did not time them, so the report then says a profiling
-  build would give exact numbers, and `commits.ms` in the web-vitals attribution is `null`. The blame is not
-  affected. On 16.3 it takes hot-reload traffic re-rendering the overlay; on 15.5 under Turbopack it happened on
-  every click the web-vitals test made, so that test does not check `commits.ms` there.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.

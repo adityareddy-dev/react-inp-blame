@@ -1,16 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import fs from 'node:fs';
-import path from 'node:path';
 import type { InteractionReport } from 'react-inp-blame';
 import type { ReactAttribution } from 'react-inp-blame/web-vitals';
 
 const prod = process.env.INP_MODE === 'prod';
 const run = prod ? 'prod' : 'dev';
-// Next.js's dev overlay renders with a production React of its own, which Next.js bundles here from
-// 15.4.11 and 15.5 on. On 15.5 under `next dev --turbopack` it committed inside every click the test
-// made; see the end of the test.
-const overlayReact =
-  process.env.INP_BUNDLER === 'turbopack' && fs.existsSync(path.join(path.dirname(require.resolve('next/package.json')), 'dist/compiled/next-devtools'));
 
 // app/vitals is the README's Next.js snippet: useReportWebVitals, with attributeINP adding the React side.
 // The web-vitals Next.js vendors reports INP only once the page is hidden, so the test hides it the way
@@ -85,6 +78,8 @@ test('the INP useReportWebVitals reports carries the report for that interaction
   // Names survive the production minifier through the displayName loader withInpBlame adds.
   expect(react!.hotPath).toEqual(['VitalsPage', 'Rows']);
   expect(react!.components[0].name).toBe('Row');
-  // React did not time the overlay's commit, so the sum has no duration to give.
-  if (!prod && !overlayReact) expect(react!.commits.ms).not.toBeNull();
+  // Next.js's dev overlay renders with a production React of its own, which times nothing. On 15.5 under
+  // `next dev --turbopack` it commits inside every click, and a sum holding that commit had no duration;
+  // the library now leaves the overlay's commits out.
+  if (!prod) expect(react!.commits.ms).not.toBeNull();
 });
