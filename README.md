@@ -288,6 +288,66 @@ Router 8.4, Vite 8.3, React 19.3) and checks that a click is blamed on the compo
 under `react-router dev` and on a production build served by `react-router-serve`. React Router 7 was not
 run. Its `react-router` imports no react-dom either (7.18.4), so the same three files should hold there.
 
+## Install with TanStack Start
+
+TanStack Start writes its own HTML too, and takes the same setup as React Router. Its client entry is
+`src/client.tsx` once the file exists, and TanStack Start's own default is the code below without the first
+import.
+
+```ts
+// src/inp-blame.ts, imported first in src/client.tsx so it runs before react-dom loads
+import { install } from 'react-inp-blame'
+
+// Every build. For the dev server alone, wrap the call in `if (import.meta.env.DEV)`.
+install({ overlay: 'query' }) // the badge only on request, such as ?inp-blame in the URL
+```
+
+```tsx
+// src/client.tsx, TanStack Start's default client entry with one import added
+import './inp-blame'
+import { StrictMode, startTransition } from 'react'
+import { hydrateRoot } from 'react-dom/client'
+import { StartClient } from '@tanstack/react-start/client'
+
+startTransition(() => {
+  hydrateRoot(
+    document,
+    <StrictMode>
+      <StartClient />
+    </StrictMode>,
+  )
+})
+```
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite'
+
+import { tanstackStart } from '@tanstack/react-start/plugin/vite'
+
+import viteReact from '@vitejs/plugin-react'
+import { inpBlame } from 'react-inp-blame/vite'
+
+const config = defineConfig({
+  resolve: { tsconfigPaths: true },
+  plugins: [
+    tanstackStart(),
+    viteReact(),
+    // Component names that survive the minifier. The install is src/inp-blame.ts, since TanStack Start
+    // writes its own HTML and the plugin's script has no page to go in.
+    inpBlame({ enabled: true, runtime: false }), // production builds too; the default is development only
+  ],
+})
+
+export default config
+```
+
+A build starts from that entry, and the dev server imports it right after the Fast Refresh preamble, so its
+first import runs before anything reaches react-dom: `@tanstack/react-router` loads react-dom only for
+server rendering. CI builds this from `npx @tanstack/cli@0.71.0 create --framework React --blank`
+(TanStack Start 1.168, Vite 8.3, React 19.3) and checks the same click under `vite dev` and on
+`vite preview` of the production build.
+
 ## With web-vitals
 
 `react-inp-blame/web-vitals` gives the [web-vitals](https://github.com/GoogleChrome/web-vitals) package
@@ -705,16 +765,17 @@ oldest its `engines` allows, and imports and requires every subpath there; the c
 `next@canary` as well. No job runs `react@canary` alone. One more
 job puts the packed package into an app made the way `npm create vite` makes one, on Vite 8.3 with
 @vitejs/plugin-react 6.1 and the Vite setup above, and checks that a click there is blamed on the component
-that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. A
-second does the same with the app `npx create-react-router` makes and the React Router setup above.
+that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. Two
+more do the same with the apps `npx create-react-router` and TanStack Start's CLI make, each with its setup
+above.
 
 ## Known limits
 
-- **Frameworks that render their own HTML have no setup yet**, beyond React Router's above: Remix, TanStack
-  Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
+- **Frameworks that render their own HTML have no setup yet**, beyond React Router's and TanStack Start's
+  above: Remix, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
   builds, and theirs never go through it, so the library most likely never installs there, and nothing says
-  so. An import first in the client entry, as React Router's setup does, may be enough where nothing else
-  loads react-dom before it. Not tried yet. React Native is out of scope: only react-dom commits are walked.
+  so. An import first in the client entry, as those two setups do, may be enough where nothing else loads
+  react-dom before it. Not tried yet. React Native is out of scope: only react-dom commits are walked.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.
