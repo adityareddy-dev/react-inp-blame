@@ -1,9 +1,10 @@
+import type { InputRecord } from './hook.js';
 import { createInpTracker, rateInp, type InpEstimate } from './inp.js';
 import { attachLaterRender, buildReport, interactionTarget, isLaterRender, refreshFrames, refreshReport, sealReport, type LabelSource, type ReportData } from './join.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import { inOverlay } from './overlay-host.js';
-import type { CommitSummary, FrameSummary, InputRecord, InteractionReport } from './types.js';
+import type { CommitSummary, FrameSummary, InteractionReport } from './types.js';
 
 /**
  * What happens to reports between the first Event Timing entry of an interaction and the last
