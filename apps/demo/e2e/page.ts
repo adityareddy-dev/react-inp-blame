@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { test, type Page } from '@playwright/test';
 import type { Api, InteractionReport } from 'react-inp-blame';
 
 declare global {
@@ -10,7 +10,10 @@ declare global {
 
 /** Waits until the page has nothing left to do, so that its start-up work is not part of the next interaction. */
 export async function settle(page: Page): Promise<void> {
-  await page.evaluate(() => new Promise<void>((resolve) => requestIdleCallback(() => resolve(), { timeout: 2000 })));
+  // WebKit has no requestIdleCallback, so there half a second stands in for it.
+  await page.evaluate(
+    () => new Promise<void>((resolve) => ('requestIdleCallback' in window ? requestIdleCallback(() => resolve(), { timeout: 2000 }) : setTimeout(resolve, 500))),
+  );
 }
 
 /** Drops every report and commit from before now, so a test sees only the interaction it makes. */
@@ -20,6 +23,18 @@ export async function clearReports(page: Page): Promise<void> {
 
 /** How a report's selector names an element the demo marks with `data-test`. */
 export const testAttribute = (value: string): string => `data-test="${value}"`;
+
+/** Opens a scenario, makes one interaction in it, and returns the report. The verdict is attached to the test rather than printed. */
+export async function interact(page: Page, scenario: string, act: () => Promise<void>): Promise<InteractionReport> {
+  await page.goto(`/#${scenario}`);
+  await page.waitForSelector('[data-test=trigger]');
+  await settle(page);
+  await clearReports(page);
+  await act();
+  const r = await lastReport(page);
+  await test.info().attach(`${scenario}: verdict`, { body: `${r.verdict}\n\nmeasuring it cost ${r.overheadMs.toFixed(2)} ms`, contentType: 'text/plain' });
+  return r;
+}
 
 /** Waits for the newest published report and returns it. */
 export async function lastReport(page: Page, timeout = 8_000): Promise<InteractionReport> {

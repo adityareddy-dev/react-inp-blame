@@ -125,6 +125,7 @@ jobs:
       - run: npm run build
       # `chromium` installs the full Chromium build beside the headless shell: e2e/inp.spec.ts runs in
       # Chromium's own headless mode (channel: 'chromium'). Firefox and WebKit run cross-browser.spec.ts.
+      # The next two steps also run phone.spec.ts, as a Pixel 7 in Chromium and an iPhone 15 in WebKit.
       - run: npx playwright install --with-deps chromium firefox webkit
       - name: Vite demo, development build
         run: npm test
