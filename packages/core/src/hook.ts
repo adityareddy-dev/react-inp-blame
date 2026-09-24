@@ -297,18 +297,18 @@ function creditHydration(input: InputRecord): HydrationBoundary | null {
 /**
  * The pointerdown or keydown this event releases, by pointerId or key code; the newest press as a fallback.
  *
- * A click made from the keyboard has no pointer to pair by, and Pointer Events gives it pointerId -1. It
- * comes in the task of the key that made it, Enter's keydown or a Space's keyup, and is part of that key's
- * press whatever its pointerId says. Paired by the fallback it took the newest pointerdown within
- * PRESS_WINDOW, an earlier mouse click's, and its render joined that click's report. Any other click
- * with pointerId -1 takes the press of the input whose task it came in, as the click a label forwards to
- * its control does, and with none behind it, as a screen reader sends it, is a gesture of its own.
+ * A click made from the keyboard has no pointer to pair by, and Chrome gives it pointerId -1. It comes in
+ * the task of the key that made it, Enter's keydown or a Space's keyup, and is part of that key's press
+ * whatever its pointerId says. Paired by the fallback it took the newest pointerdown within PRESS_WINDOW,
+ * an earlier mouse click's, and its render joined that click's report. The one click in a key's task that
+ * is not the key's is a tap's (`tapInFlight`). Any other click with pointerId -1 takes the press of the
+ * input whose task it came in, and with none behind it is a gesture of its own.
  */
 function gestureOf(e: DispatchedInput, isKey: boolean): number {
   if (e.type === 'pointerdown' || e.type === 'keydown') return e.timeStamp;
   const task = state.inTask;
   const fromKey = task !== null && (task.type === 'keydown' || task.type === 'keyup');
-  if (e.type === 'click' && (fromKey || e.pointerId === -1)) return task ? task.gestureTs : e.timeStamp;
+  if (e.type === 'click' && (fromKey || e.pointerId === -1) && !tapInFlight(e)) return task ? task.gestureTs : e.timeStamp;
   const want = isKey ? 'keydown' : 'pointerdown';
   const press = isKey ? e.code : e.pointerId;
   let fallback = -1;
@@ -319,6 +319,23 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
     if (fallback < 0) fallback = r.ts;
   }
   return fallback < 0 ? e.timeStamp : fallback;
+}
+
+/**
+ * Whether this click's pointer went down and has had no click since. A tap's click comes in a task of its
+ * own after the touchend, and a key pressed in between is still `state.inTask` when it runs, since Chromium
+ * runs input ahead of the timer that clears it. That click is the tap's, and pairs by its pointerId. A
+ * click from the keyboard carrying the mouse's pointerId finds that pointer's press already clicked.
+ */
+function tapInFlight(e: DispatchedInput): boolean {
+  if (e.pointerId === undefined || e.pointerId === -1) return false;
+  for (let i = state.inputs.length - 1; i >= 0; i--) {
+    const r = state.inputs[i];
+    if (!r || r.press !== e.pointerId || e.timeStamp - r.ts > PRESS_WINDOW) continue;
+    if (r.type === 'click') return false;
+    if (r.type === 'pointerdown') return true;
+  }
+  return false;
 }
 
 /**
