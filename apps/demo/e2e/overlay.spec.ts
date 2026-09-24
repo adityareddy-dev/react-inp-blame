@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { lastReport, settle, waitForFrames } from './page';
+import { lastReport, settle } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
 
@@ -61,18 +61,14 @@ test('overlay: rows work from the keyboard, and Escape hands the focus back to t
   await settle(page);
   await page.click('[data-test=trigger]');
   await lastReport(page);
-  // A long animation frame that arrives late revises the report, and a revision redraws the panel, so
-  // the frame is waited for before any key is pressed.
-  await waitForFrames(page);
-
+  // A long animation frame that arrives late revises the report and redraws the panel, anywhere between
+  // the key presses below. Every control keeps the focus across a redraw, as the next test checks.
   const badge = page.locator('#react-inp-blame .badge');
   const panel = page.locator('#react-inp-blame .panel');
   await badge.press('Enter');
   await expect(panel).toBeVisible();
   const row = panel.locator('.row').first();
   const header = row.locator('.toggle');
-  // A redraw gives the focus back to a row header only, so one landing between here and the Tab would
-  // send the Tab out of the overlay. Waiting for the frames above makes that unlikely, not impossible.
   await panel.locator('.x').focus();
   await expect(panel.locator('.x')).toBeFocused();
   await page.keyboard.press('Tab');
@@ -98,5 +94,62 @@ test('overlay: rows work from the keyboard, and Escape hands the focus back to t
 
   await page.keyboard.press('Escape');
   await expect(panel).toBeHidden();
+  await expect(badge).toBeFocused();
+});
+
+// A new report redraws the open panel, and so does Clear. The close button and Clear have the focus
+// afterwards the way a row header does, and closing the panel from its button hands the focus to the
+// badge, as Escape does.
+test('overlay: close and Clear keep the focus when the panel redraws', async ({ page }) => {
+  await page.goto('/#handler-hog');
+  await page.waitForSelector('[data-test=trigger]');
+  await settle(page);
+  // A mouse press moves the focus to what was pressed, here the trigger button. The page here cancels
+  // that, so a click on the trigger brings a report in while the focus stays in the panel.
+  await page.evaluate(() => document.addEventListener('mousedown', (e) => e.preventDefault()));
+  const trigger = page.locator('[data-test=trigger]');
+  await trigger.click();
+  await lastReport(page);
+
+  const badge = page.locator('#react-inp-blame .badge');
+  const panel = page.locator('#react-inp-blame .panel');
+  const rows = panel.locator('.row');
+  const close = panel.locator('.x');
+  const clear = panel.locator('.clear');
+  await badge.press('Enter');
+  await expect(panel).toBeVisible();
+  await expect(rows).toHaveCount(1);
+
+  // The badge comes after the panel, so Shift+Tab from it lands on Clear, the panel's last control.
+  await page.keyboard.press('Shift+Tab');
+  await expect(clear).toBeFocused();
+  await trigger.click();
+  await expect(rows).toHaveCount(2);
+  await expect(clear).toBeFocused();
+
+  // Clear empties the list and redraws the panel, and the button just pressed keeps the focus.
+  await page.keyboard.press('Enter');
+  await expect(rows).toHaveCount(0);
+  await expect(clear).toBeFocused();
+
+  // With no rows left, the close button is the control before Clear.
+  await page.keyboard.press('Shift+Tab');
+  await expect(close).toBeFocused();
+  await trigger.click();
+  await expect(rows).toHaveCount(1);
+  await expect(close).toBeFocused();
+
+  // Enter held on the close button. The first keydown closes the panel and moves the focus to the
+  // badge, so the three repeats land on the badge, and a badge that clicked on each of them would
+  // leave the panel open.
+  for (let i = 0; i < 4; i++) await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  await expect(panel).toBeHidden();
+  await expect(badge).toBeFocused();
+
+  // Held on the badge, Enter opens the panel once too.
+  for (let i = 0; i < 4; i++) await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  await expect(panel).toBeVisible();
   await expect(badge).toBeFocused();
 });

@@ -124,8 +124,8 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       badge.innerHTML = `<i class="dot" style="background:${R.color}"></i>INP <span class="ms">${Math.round(inp.value)} ms</span>`;
     }
     if (panel.hidden) return;
-    // The panel is rebuilt below, so the row header that has the focus is given it back afterwards.
-    const focused = root.activeElement?.closest<HTMLElement>('.row')?.dataset.id;
+    // The panel is rebuilt below, so the control that has the focus is given it back afterwards.
+    const focused = focusedControl();
     const groups = groupRows(all).slice(-max).reverse();
     const cost = all.length ? all.reduce((a, r) => a + r.overheadMs, 0) / all.length : 0;
     const head = inp
@@ -135,7 +135,22 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       `<div class="head">${head}<button class="x" type="button" aria-label="Close">&times;</button></div>` +
       (groups.length ? groups.map(row).join('') : `<div class="empty">Click or type. Anything slow shows up here, with the component to blame.</div>`) +
       `<div class="foot"><span>react-inp-blame &middot; measuring cost ${costText(cost)} per interaction</span><button class="clear" type="button">Clear</button></div>`;
-    if (focused) panel.querySelector<HTMLElement>(`.row[data-id="${focused}"] .toggle`)?.focus({ preventScroll: true });
+    if (focused) panel.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });
+  }
+
+  /**
+   * A selector for the control in the panel that has the focus: a row header, found by its row's id
+   * since new rows go on top, or the close button or Clear, of which there is one each. Clear is
+   * still there once it has emptied the list, so it keeps the focus it was pressed with.
+   */
+  function focusedControl(): string | null {
+    const el = root.activeElement;
+    if (!el || !panel.contains(el)) return null;
+    const id = el.closest<HTMLElement>('.row')?.dataset.id;
+    if (id) return `.row[data-id="${id}"] .toggle`;
+    if (el.closest('.x')) return '.x';
+    if (el.closest('.clear')) return '.clear';
+    return null;
   }
 
   function row(g: Group): string {
@@ -215,11 +230,24 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     }
     render();
   }
+  // Hiding the panel takes the focus from whatever inside it had it, so closing it from in there, with
+  // Escape or the close button, moves the focus to the badge, the button that opens the panel again.
+  function hide() {
+    const inside = panel.contains(root.activeElement);
+    setOpen(false);
+    if (inside) badge.focus();
+  }
 
   badge.addEventListener('click', () => setOpen(panel.hidden));
+  // A button clicks on every keydown of a held Enter, so the badge drops the repeats and opens or closes
+  // the panel once per press. They reach it after the close button too, which hands it the focus on the
+  // first keydown. Space clicks on keyup, once however long it is held.
+  badge.addEventListener('keydown', (e) => {
+    if (e.repeat && e.key === 'Enter') e.preventDefault();
+  });
   panel.addEventListener('click', (e) => {
     const el = e.target as HTMLElement;
-    if (el.closest('.x')) return setOpen(false);
+    if (el.closest('.x')) return hide();
     if (el.closest('.clear')) {
       source.clear();
       expanded.clear();
@@ -241,11 +269,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   });
   const onKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || panel.hidden) return;
-    // Hiding the panel takes the focus from whatever inside it had it, so Escape pressed in there
-    // moves the focus to the badge, the button that opens the panel again.
-    const inside = panel.contains(root.activeElement);
-    setOpen(false);
-    if (inside) badge.focus();
+    hide();
   };
   document.addEventListener('keydown', onKey);
   const off = source.onInteraction(schedule);

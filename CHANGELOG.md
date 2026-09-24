@@ -56,8 +56,12 @@ it changes when a field is removed or changes meaning, which a minor release may
   focus, so from the keyboard alone there was no way to open one into its explanation. Its header is
   now a button in the Tab order (`role="button"`, with `aria-expanded`), and Enter or Space opens and
   closes the row without losing the focus. Held down, the key toggles it once rather than on every
-  repeat. Escape pressed inside the panel closes it and moves the focus to the badge, where before the
-  focus was lost with the panel. Escape anywhere else on the page still just closes it.
+  repeat. The close button, or Escape pressed inside the panel, closes it and moves the focus to the
+  badge, where before the focus was lost with the panel. Escape anywhere else on the page still just
+  closes it. Enter held on the badge, or on the close button, opens or closes the panel once, where
+  the badge used to flip it on every repeat. The panel is drawn again whenever a report arrives or
+  changes, and whichever of a row header, the close button or Clear had the focus has it again
+  afterwards, so the next Tab stays in the overlay. Clear keeps it after emptying the list.
 
 ### Fixed
 
