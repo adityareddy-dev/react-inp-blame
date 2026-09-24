@@ -841,11 +841,11 @@ shows nothing else pressed between the interaction's first input and that one: a
 through a key press, say, or a release whose press the hook could only guess at and took the newest one
 for. A click made from the keyboard is neither. It belongs to the key whose task made it, Enter's keydown
 or a Space's keyup, and a click with `pointerId` -1 and no input's task behind it is a gesture of its
-own. A tap's click can land in a key's task too, since Chromium runs a key pressed between the touchend
-and the click before the timer that ends the key's task, so a click whose pointer went down and has had
-no click since stays with that pointer. The hook paired such a click with the newest pointerdown of the
-last 5 s until 2026-09-23, so Enter on a button inside the window from an earlier mouse click's paint
-had its render joined to that mouse click. Until 2026-09-23 this window was a fixed
+own. The hook paired a keyboard click with the newest pointerdown of the last 5 s until 2026-09-23, so
+Enter on a button inside the window from an earlier mouse click's paint had its render joined to that
+mouse click. A tap's click can land in a key's task too: Chromium can run it ahead of the timer a key
+pressed just before it left to end that task, since input outranks timers. So a touch or pen click whose
+pointer went down and has had no click since stays with that pointer. Until 2026-09-23 this window was a fixed
 1.5 s whatever `inputWindow` said, and always ran from the paint. A page that set `inputWindow` to 3 s
 paid for the walk of a render 2 s after the paint and never saw it in a report, and a press held for
 2 s lost the render its own click made inside its dispatch.
