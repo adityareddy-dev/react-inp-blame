@@ -29,11 +29,12 @@ it changes when a field is removed or changes meaning, which a minor release may
   `debug_target` example with two more parameters. Neither sends a label or a sentence. The READMEs also ask
   for wrong or missing blames through the issue form and say what to include, and the form's versions field
   now asks for Next.js or Vite as well.
-- **A setup for React Router in framework mode.** React Router writes its own HTML, so the Vite plugin's
-  script never ran there and the library never installed. The README's new section puts `install()` in a
-  module of the app's own that `app/entry.client.tsx` imports first, which runs before react-dom does, and
-  keeps the plugin for component names. CI runs it in an app from `npx create-react-router@8.4.0`, installed
-  from the packed tarball, under `react-router dev` and on a production build. React Router 7 was not run;
+- **A setup for React Router in framework mode and for TanStack Start.** Both write their own HTML, so the
+  Vite plugin's script never ran there and the library never installed. The README's new sections put
+  `install()` in a module of the app's own that the client entry (`app/entry.client.tsx`, `src/client.tsx`)
+  imports first, which runs before react-dom does, and keep the plugin for component names. CI runs each in
+  an app from the framework's own template, `npx create-react-router@8.4.0` and TanStack Start's blank one,
+  installed from the packed tarball, on the dev server and on a production build. React Router 7 was not run;
   its `react-router` imports no react-dom either, so the same setup should hold.
 - `CommitSummary.startedAt`: when React began the render a commit came from, on `performance.now()`'s
   clock, read from the root fiber. From there to `at` is React's own time for the commit, committing

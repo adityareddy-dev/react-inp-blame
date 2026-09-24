@@ -1,0 +1,33 @@
+{
+  "name": "tanstack-start-fixture",
+  "private": true,
+  "type": "module",
+  "description": "What `npx @tanstack/cli@0.71.0 create --framework React --blank` makes, with the README's TanStack Start setup and one slow component. Run by scripts/vite-app.mjs --fixture tanstack-start from a temp copy.",
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vite dev --port 3000",
+    "generate-routes": "tsr generate",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "latest",
+    "@tanstack/react-start": "latest",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-inp-blame": "^0.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@tanstack/router-cli": "^1.132.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.0"
+  }
+}

@@ -1475,17 +1475,20 @@ build as well as on the dev server.
   and behind a Chrome 133 user agent. Opening `apps/demo/traces/context-storm-dev.json` in the panel
   beside React's own tracks is still to do.
 
-- **Frameworks that render their own HTML have no setup yet**, apart from React Router: Remix, TanStack
-  Start, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
+- **Frameworks that render their own HTML have no setup yet**, apart from React Router and TanStack Start:
+  Remix, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
   builds, and theirs never go through it, so the library most likely never installs there, and nothing
   says so. None of them has been tried, and neither has the READMEs' setup for a build with no HTML page.
-  React Router got a setup on 2026-09-23: `install()` in a module of the app's own that
-  `app/entry.client.tsx` imports first. That is early enough there because React Router's `<Scripts>`
-  imports the route modules statically and then the client entry with `import()`, and the route modules
-  reach only `react-router`, whose main entry imports no react-dom; `react-router/dom` does, and only the
-  client entry imports it (read in react-router 8.4.0's `dist/production`, and the same holds for 7.18.4). CI runs it in the job
-  `react-router-app`, on the dev server and a production build. React Native is out of scope: only
-  react-dom commits are walked.
+  React Router and TanStack Start got a setup on 2026-09-23: `install()` in a module of the app's own that
+  the client entry imports first. That is early enough under React Router because its `<Scripts>` imports
+  the route modules statically and then the client entry with `import()`, and the route modules reach only
+  `react-router`, whose main entry imports no react-dom; `react-router/dom` does, and only the client entry
+  imports it (read in react-router 8.4.0's `dist/production`, and the same holds for 7.18.4). Under
+  TanStack Start the build's client input is `src/client.tsx` itself, the dev server imports it right after
+  the Fast Refresh preamble, and `@tanstack/react-router` imports react-dom only for server rendering (read
+  in @tanstack/start-plugin-core 1.171.47 and @tanstack/react-router 1.170.39). CI runs both in the job
+  `framework-app`, on the dev server and a production build. React Native is out of scope: only react-dom
+  commits are walked.
 
 ## Next steps
 
