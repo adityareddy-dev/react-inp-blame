@@ -6,6 +6,17 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **A setup for React Router in framework mode and for TanStack Start.** Both write their own HTML, so the
+  Vite plugin's script never ran there and the library never installed. The README's new sections put
+  `install()` in a module of the app's own that the client entry (`app/entry.client.tsx`, `src/client.tsx`)
+  imports first, which runs before react-dom does, and keep the plugin for component names. CI runs each in
+  an app from the framework's own template, `npx create-react-router@8.4.0` and TanStack Start's blank one,
+  installed from the packed tarball, on the dev server and on a production build. On React 18 the import
+  goes first in `app/root.tsx`: that `react-dom` connects to React's DevTools hook as it loads, and a route
+  can import it before the entry does. CI runs that in React Router 7.18's app moved to React 18.3.
+
 ### Fixed
 
 - **A click made from the keyboard belongs to its key, not to the mouse click before it.** A pointerup
@@ -29,14 +40,6 @@ it changes when a field is removed or changes meaning, which a minor release may
   `debug_target` example with two more parameters. Neither sends a label or a sentence. The READMEs also ask
   for wrong or missing blames through the issue form and say what to include, and the form's versions field
   now asks for Next.js or Vite as well.
-- **A setup for React Router in framework mode and for TanStack Start.** Both write their own HTML, so the
-  Vite plugin's script never ran there and the library never installed. The README's new sections put
-  `install()` in a module of the app's own that the client entry (`app/entry.client.tsx`, `src/client.tsx`)
-  imports first, which runs before react-dom does, and keep the plugin for component names. CI runs each in
-  an app from the framework's own template, `npx create-react-router@8.4.0` and TanStack Start's blank one,
-  installed from the packed tarball, on the dev server and on a production build. On React 18 the import
-  goes first in `app/root.tsx`: that `react-dom` connects to React's DevTools hook as it loads, and a route
-  can import it before the entry does. CI runs that in React Router 7.18's app moved to React 18.3.
 - `CommitSummary.startedAt`: when React began the render a commit came from, on `performance.now()`'s
   clock, read from the root fiber. From there to `at` is React's own time for the commit, committing
   it included. `null` in a production build, which keeps no start, and where React did not time the
