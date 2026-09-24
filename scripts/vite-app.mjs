@@ -46,6 +46,15 @@ const FIXTURES = {
     // The template's own check, route types first. Its tsconfig takes in every file, the specs included.
     typecheck: (app) => npm('run typecheck', app),
   },
+  // React Router 7 on React 18, where the main react-dom module connects to the DevTools hook as it loads
+  // and a route module can load it before the client entry does, so the install is first in app/root.tsx.
+  // The README gives that in a sentence rather than a block, so there is no file to hold to it.
+  'react-router-7': {
+    readme: '## Install with React Router',
+    files: [],
+    reported: ['react-router', '@react-router/dev', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => npm('run typecheck', app),
+  },
   'tanstack-start': {
     readme: '## Install with TanStack Start',
     files: ['vite.config.ts', 'src/inp-blame.ts', 'src/client.tsx'],

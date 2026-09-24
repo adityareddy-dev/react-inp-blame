@@ -1570,7 +1570,11 @@ build as well as on the dev server.
   still import `react-dom` itself, as a portal does, and that is harmless on React 19: its `react-dom`
   calls nothing on the hook but `registerInternalModuleStart` and `registerInternalModuleStop`, and only
   `react-dom/client` connects. React Router 8 needs React 19.2.7 or later. A React Router 7 app on React 18
-  loads a `react-dom` that connects as it evaluates, so a route that imports it beats the install. Under
+  loads a `react-dom` that connects as it evaluates, so a route that imports it beats an install in the
+  entry. There the install goes first in `app/root.tsx`, since React Router imports the root route's module
+  before any other and before the entry. CI runs that in React Router 7.18's app on React 18.3 with a route
+  that calls `flushSync`; with the install in the entry instead, the same app blamed nothing on the dev
+  server or the build (run 35953518744, 2026-09-23). Under
   TanStack Start the build's client input is `src/client.tsx` itself, the dev server imports it right after
   the Fast Refresh preamble, and `@tanstack/react-router` imports react-dom only for server rendering (read
   in @tanstack/start-plugin-core 1.171.47 and @tanstack/react-router 1.170.39). CI runs both in the job
