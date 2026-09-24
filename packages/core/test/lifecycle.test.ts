@@ -42,12 +42,13 @@ const slowFrame: FrameSummary = Object.freeze({
   scripts: Object.freeze([Object.freeze({ invoker: 'BUTTON.onclick', name: '', source: '', start: 7002, duration: 110, forcedLayout: 30 })]),
 });
 
-/** A lifecycle at the default 40 ms threshold on a stopped clock, with every report it publishes recorded in order. */
+/** A lifecycle at the default 40 ms threshold and 1500 ms input window on a stopped clock, with every report it publishes recorded in order. */
 function lifecycle(options: Partial<LifecycleOptions> = {}) {
   const commits: CommitSummary[] = [];
   const published: InteractionReport[] = [];
   const life = createLifecycle({
     threshold: 40,
+    inputWindow: 1500,
     commits: () => commits,
     inputs: () => [],
     navigations: () => [],
@@ -83,6 +84,32 @@ test('a quiet interaction is held back, and published once a render it caused la
   assert.equal(r?.duration, 24);
   assert.deepEqual(r?.followUps, [{ ...later, joinedBy: 'exact' }]);
   assert.deepEqual(life.reports(), [r]);
+});
+
+test("a later render joins within the page's inputWindow of the paint, however long the page made it", () => {
+  // The click painted at 7024 and its render landed 2 s after that.
+  const late = commit(9024, 7000);
+  const byDefault = lifecycle();
+  byDefault.life.onEntries([entry(7, 'click', 24)]);
+  byDefault.render(late);
+  assert.deepEqual(byDefault.published, []);
+
+  const longer = lifecycle({ inputWindow: 3000 });
+  longer.life.onEntries([entry(7, 'click', 24)]);
+  longer.render(late);
+  assert.equal(longer.published.length, 1);
+  assert.deepEqual(longer.published[0]?.followUps, [{ ...late, joinedBy: 'exact' }]);
+});
+
+test('a quiet mouse click is not published for the render of a click Enter made on the same button later', () => {
+  // The click Enter makes has no pointerdown of its own, so it takes the mouse click's as its press and
+  // its render carries that stamp, 2.6 s after the mouse click painted.
+  const input = (ts: number, type: string, gestureTs: number, press: string | number) => ({ ts, type, gestureTs, press, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const ring = [input(7000, 'pointerdown', 7000, 1), input(7080, 'pointerup', 7000, 1), input(7081, 'click', 7000, 1), input(9600, 'keydown', 9600, 'Enter'), input(9601, 'click', 7000, -1)];
+  const { life, published, render } = lifecycle({ inputs: () => ring });
+  life.onEntries([entry(7, 'pointerdown', 24)]);
+  render({ ...commit(9610, 9601), gestureTs: 7000 });
+  assert.deepEqual(published, []);
 });
 
 test('a late entry publishes the next revision as a new report, and the revision before stays as it was', () => {

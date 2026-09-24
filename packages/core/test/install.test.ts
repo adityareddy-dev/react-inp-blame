@@ -893,6 +893,31 @@ test('a commit outside any dispatch joins the newest input while it lands inside
   });
 });
 
+test('an inputWindow over 1.5 s reaches the report: a render the hook walks under it joins as a later render', async (t) => {
+  // The report used to take a later render only within a fixed 1.5 s of the paint, so a longer window
+  // paid for the walk and the render still never reached the report.
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 3000, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    clock.now = 1000;
+    page.duringClick(() => existing.onCommitFiberRoot(id, root));
+    page.paint([click(7, 1000, 120)]);
+    assert.equal(api.last()?.revision, 0);
+    // Data comes back and React renders it 2 s after the paint.
+    clock.now = 3120;
+    commitAgain(root, 40);
+    existing.onCommitFiberRoot(id, root);
+    assert.equal(api.debug.commits().length, 2);
+    assert.equal(api.last()?.revision, 1);
+    assert.deepEqual(api.last()?.followUps.map((c) => c.at), [3120]);
+    api.dispose();
+  });
+});
+
 test('a report whose interaction had commits it could not be joined to says so, and no longer reads as measured', async (t) => {
   const clock = useClock(t);
   await inBrowser((page) => {
@@ -955,6 +980,169 @@ test("a commit inside a derived event's dispatch is the input that caused it, wh
     existing.onCommitFiberRoot(id, root, 1, false);
     delete page.window.event;
     assert.equal(api.debug.commits().length, 1);
+    api.dispose();
+  });
+});
+
+test('a change the browser fires long after its click, a file chosen in the system dialog, is not the click\'s work, so a quick click stays unreported', async (t) => {
+  // The click opens the file dialog and paints in 24 ms. The browser fires a trusted `change` once a
+  // file is chosen, 20 s later, and React renders the preview. Read as the click's own dispatch, that
+  // render joined the click as a later render and published a report for a click nobody waited on.
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const heard: InteractionReport[] = [];
+    const stop = onInteraction((r) => heard.push(r));
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.duringClick(() => {
+      clock.now = 1003;
+      commitAgain(root, 1);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    page.paint([click(7, 1000, 24)]);
+    await nextTask();
+    clock.now = 21000;
+    page.window.event = { isTrusted: true, type: 'change', timeStamp: 21000, target: null };
+    commitAgain(root, 60);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    await nextTask();
+    assert.deepEqual(api.reports(), []);
+    assert.deepEqual(heard, []);
+    assert.equal(api.debug.commits().length, 1);
+    stop();
+    api.dispose();
+  });
+});
+
+test('a report keeps revision 0 when a change arrives long after its click, and the change does not reopen the window for what follows it', async (t) => {
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.duringClick(() => {
+      clock.now = 1100;
+      commitAgain(root, 90);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    page.paint([click(7, 1000, 120)]);
+    assert.equal(api.last()?.revision, 0);
+    await nextTask();
+    // A choice from a native select's popup, 20 s on, then an effect of the render it made.
+    clock.now = 21000;
+    page.window.event = { isTrusted: true, type: 'change', timeStamp: 21000, target: null };
+    commitAgain(root, 30);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    clock.now = 21200;
+    commitAgain(root, 30);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    assert.equal(api.debug.commits().length, 1);
+    assert.equal(api.last()?.revision, 0);
+    assert.deepEqual(api.last()?.followUps, []);
+    api.dispose();
+  });
+});
+
+test('a change 1 s after its click still joins it as a later render, measured from when the change was fired and not from when its render ended', async (t) => {
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.duringClick(() => {
+      clock.now = 1003;
+      commitAgain(root, 1);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    page.paint([click(7, 1000, 120)]);
+    await nextTask();
+    // An option picked from a native select a second after the click that opened it. Its render takes
+    // 600 ms, so it ends 1.6 s after the click's own work, and the change itself came well inside the window.
+    page.window.event = { isTrusted: true, type: 'change', timeStamp: 2000, target: null };
+    clock.now = 2600;
+    commitAgain(root, 600);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    assert.equal(api.last()?.revision, 1);
+    assert.deepEqual(api.last()?.followUps.map((c) => c.at), [2600]);
+    api.dispose();
+  });
+});
+
+test('text that arrives with no key pressed, one input event a second after a click, stops joining the click once it passes the window', async (t) => {
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.duringClick(() => {
+      clock.now = 1003;
+      commitAgain(root, 1);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    page.paint([click(7, 1000, 120)]);
+    await nextTask();
+    // Dictation into the field the click focused: a trusted input event a second, each rendering, and no
+    // keydown between them to start an interaction of their own. Were each to carry the window forward
+    // from its own render, the stream would join the click for as long as it ran.
+    for (const at of [2000, 3000, 4000, 5000]) {
+      page.window.event = { isTrusted: true, type: 'input', timeStamp: at, target: null };
+      clock.now = at + 10;
+      commitAgain(root, 10);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      delete page.window.event;
+    }
+    assert.deepEqual(api.last()?.followUps.map((c) => c.at), [2010, 3010]);
+    assert.deepEqual(api.debug.commits().map((c) => c.at), [1003, 2010, 3010]);
+    api.dispose();
+  });
+});
+
+test('a submit fired in its click\'s own task is the click\'s work however long the click\'s handler ran first', async (t) => {
+  // A submit button's click handler validates for 2 s and commits nothing, then the browser submits the
+  // form in the same task and React renders from onSubmit. The submit comes past the window measured
+  // from the click, but nothing else can have run in between.
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500 });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.window.event = { isTrusted: true, type: 'submit', timeStamp: 3000, target: null };
+    clock.now = 3050;
+    commitAgain(root, 50);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    assert.equal(api.debug.commits().length, 1);
+    assert.equal(api.debug.commits()[0]?.inputTs, 1000);
+    assert.equal(api.debug.commits()[0]?.inputType, 'click');
     api.dispose();
   });
 });

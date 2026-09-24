@@ -59,6 +59,13 @@ export interface InputWork {
    */
   endedAt: number;
   /**
+   * `endedAt` as the input's own task left it. A commit inside a derived event from a later task, a
+   * `change` or an `input`, moves `endedAt` and not this, and such an event counts as the input's
+   * dispatch only within `inputWindow` of this, so a stream of them (dictation, an input method,
+   * autofill) cannot hold the window open by carrying it forward one event at a time.
+   */
+  ownEndedAt: number;
+  /**
    * When commits React made while this was the newest input landed, for the ones not joined to it
    * because they came past that window, newest last and capped. A report counts only those that ran
    * inside one of its interaction's processing spans; on a page with a clock in it, most are the clock.
@@ -487,7 +494,11 @@ export interface InteractionReport {
   readonly startedNavigation: StartedNavigation | null;
   /** React commits between the input and the next paint: what INP measures. */
   readonly commits: readonly CommitSummary[];
-  /** Commits that landed after that paint but still belong to this input (effects, transitions, cascades). INP does not count them; the user still waits for them. */
+  /**
+   * Commits that landed after that paint but still belong to this input (effects, transitions, cascades), within
+   * `inputWindow` of the paint, or of the end of a later input's own work in the same interaction, such as the
+   * click that releases a press held past the paint. INP does not count them; the user still waits for them.
+   */
   readonly followUps: readonly CommitSummary[];
   /**
    * React commits that ran while this interaction's own handlers were running and could not be tied to
@@ -545,7 +556,10 @@ export interface InstallOptions {
   /**
    * How long after an input's own work ends a commit can still be that input's, in ms. Default 1500.
    * A commit React makes inside the input's dispatch is always its own, however long the dispatch runs,
-   * so this bounds only the commits that arrive after it: effects, transitions and data that came back.
+   * so this bounds only the commits that arrive after it: effects, transitions, data that came back, and
+   * a `change` or `input` the browser fires from a later task, such as a file chosen in the system dialog.
+   * A report takes the ones that land within this long of its paint as its `followUps`, or within this
+   * long of the end of a later input's own work in the same interaction where that came after the paint.
    */
   inputWindow?: number;
   /** Expose the API on window (true = window.__REACT_INP_BLAME__, or give a name). */
