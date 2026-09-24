@@ -26,19 +26,20 @@ const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 
 const functions = (...names) => Object.fromEntries(names.map((name) => [name, 'function']));
 
-// What loading each subpath has to give: the public names the READMEs document, by `typeof`. A subpath
-// the installed exports map has and this does not fails the run, so a new one cannot ship unchecked.
-// `whole` is for a module that is one value rather than a set of names. `import` hands that value over
-// as `default` and `require()` as what it returns, and the names are looked for on it.
+// What loading each subpath has to give: the public names the READMEs document, by `typeof`, and no
+// other. A subpath the installed exports map has and this does not fails the run, so a new one cannot
+// ship unchecked, and neither can a new name on an old one. `whole` is for a module that is one value
+// rather than a set of names. `import` hands that value over as `default` and `require()` as what it
+// returns, and the names are looked for on it.
 const EXPECTED = {
-  '.': { names: functions('install', 'mountOverlay', 'onInteraction', 'fiberFromNode', 'ownerChain', 'handlerName') },
+  '.': { names: functions('install', 'mountOverlay', 'onInteraction') },
   // Exports nothing: importing it installs, which in these apps means loading with no `window` and not throwing.
   './auto': { names: {} },
   './next': { names: functions('withInpBlame') },
   './next-client': { names: functions('onRouterTransitionStart') },
   './web-vitals': { names: functions('generateTarget', 'attributeINP') },
   './vite': { names: functions('inpBlame') },
-  './display-names-loader': { whole: 'function', names: functions('stamp', 'componentNames') },
+  './display-names-loader': { whole: 'function', names: functions('stamp') },
   './package.json': { whole: 'object', names: { name: 'string' } },
 };
 
@@ -46,17 +47,22 @@ const EXPECTED = {
 // the plan file it is handed and prints what it found in the shape of EXPECTED, so the assertions stay
 // in this file. A specifier that cannot be loaded is reported with its error rather than skipped: Node
 // 20.19 is the floor because it has require(esm) without a flag, so requiring the ESM entries is part
-// of the promise.
+// of the promise. `others` is every name on the value that the plan did not ask about, less its
+// `interop`: the ones Node adds when one module system loads the other.
+const OTHER_NAMES = `const othersOf = (value, names, interop) => Object.keys(Object(value)).filter((name) => !names.includes(name) && !interop.includes(name)).sort();
+`;
 const LOADERS = {
   'load.mjs': `import fs from 'node:fs';
 
+${OTHER_NAMES}
 const found = {};
-for (const { specifier, whole, names } of JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))) {
+for (const { specifier, whole, names, exact, interop } of JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))) {
   try {
     const namespace = await import(specifier, specifier.endsWith('.json') ? { with: { type: 'json' } } : undefined);
     const value = whole ? namespace.default : namespace;
     const types = Object.fromEntries(names.map((name) => [name, typeof value?.[name]]));
     found[specifier] = whole ? { whole: typeof value, names: types } : { names: types };
+    if (exact) found[specifier].others = othersOf(value, names, interop);
   } catch (error) {
     found[specifier] = { error: String(error) };
   }
@@ -65,12 +71,14 @@ console.log(JSON.stringify(found));
 `,
   'load.cjs': `const fs = require('node:fs');
 
+${OTHER_NAMES}
 const found = {};
-for (const { specifier, whole, names } of JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))) {
+for (const { specifier, whole, names, exact, interop } of JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))) {
   try {
     const value = require(specifier);
     const types = Object.fromEntries(names.map((name) => [name, typeof value?.[name]]));
     found[specifier] = whole ? { whole: typeof value, names: types } : { names: types };
+    if (exact) found[specifier].others = othersOf(value, names, interop);
   } catch (error) {
     found[specifier] = { error: String(error) };
   }
@@ -193,6 +201,15 @@ function assertFilesExist(dir, manifest) {
   assert.ok(missing.length === 0, missing.map(({ file, where }) => `${where} points at ${file}, which is not in the package`).join('\n'));
 }
 
+/** A manifest's other fields are not names anyone imports, so only a module is held to its list. */
+const exact = (subpath) => !subpath.endsWith('.json');
+
+// The entries written as CommonJS. Imported, Node hands them over with `default`, and on newer Nodes
+// `module.exports`, beside their own names. On an ES module entry `default` is an export like any
+// other and counts. What Node adds there is `__esModule`, when it requires one that has a default.
+const COMMON_JS = ['./next', './display-names-loader'];
+const interopOf = (subpath) => (COMMON_JS.includes(subpath) ? ['default', 'module.exports'] : ['__esModule']);
+
 /**
  * Loads the subpaths of `expected` with both loaders and holds what each found against it. The plan
  * stays in the app, so a failure can be run again there by hand.
@@ -202,6 +219,8 @@ function assertLoads(app, planFile, expected, flags = []) {
     specifier: specifierOf(subpath),
     whole: whole !== undefined,
     names: Object.keys(names),
+    exact: exact(subpath),
+    interop: interopOf(subpath),
   }));
   fs.writeFileSync(path.join(app, planFile), `${JSON.stringify(plan, null, 2)}\n`);
   for (const loader of Object.keys(LOADERS)) {
@@ -210,7 +229,7 @@ function assertLoads(app, planFile, expected, flags = []) {
     for (const [subpath, shape] of Object.entries(expected)) {
       const specifier = specifierOf(subpath);
       // Node prints how the two shapes differ under this message.
-      assert.deepEqual(found[specifier], shape, `node ${args.join(' ')}: ${specifier}`);
+      assert.deepEqual(found[specifier], exact(subpath) ? { ...shape, others: [] } : shape, `node ${args.join(' ')}: ${specifier}`);
     }
   }
 }
@@ -348,10 +367,13 @@ const RESOLUTIONS = {
 
 /**
  * A module that imports every subpath and uses each name EXPECTED gives it as a function, so a subpath
- * TypeScript cannot find fails, and so does one it finds in the wrong file. A subpath with no names in
- * EXPECTED, which is /auto, has to come out with none, or a map that led it to another entry's
- * declarations would pass. A JSON subpath is left out: TypeScript reads one only under
- * resolveJsonModule, and it has no declarations to find.
+ * TypeScript cannot find fails, and so does one it finds in the wrong file. Each subpath's declarations
+ * also have to give no value EXPECTED leaves out, the same list the loaders hold the modules to, so a
+ * declaration left behind in a hand-written .d.cts or .d.mts fails, where an import of it would fail at
+ * run time. A CommonJS entry may have `default` as well, which is how an ES module imports it. /auto,
+ * with no names, has to come out with none, or a map that led it to another entry's declarations would
+ * pass. A JSON subpath is left out: TypeScript reads one only under resolveJsonModule, and it has no
+ * declarations to find.
  */
 function typedConsumer(manifest) {
   const typed = Object.keys(manifest.exports).filter((subpath) => !subpath.endsWith('.json'));
@@ -361,11 +383,13 @@ function typedConsumer(manifest) {
       .filter(([, type]) => type === 'function')
       .map(([name]) => `  entry${index}.${name},\n`),
   );
-  const empty = typed.flatMap((subpath, index) =>
-    Object.keys(EXPECTED[subpath].names).length === 0 ? [`export const empty${index}: Empty<typeof entry${index}> = true;\n`] : [],
-  );
-  const types = 'type Callable = (...args: never[]) => unknown;\ntype Empty<T> = [keyof T] extends [never] ? true : false;';
-  return `${imports.join('\n')}\n\n${types}\n\nexport const documented: Callable[] = [\n${uses.join('')}];\n${empty.join('')}`;
+  const only = typed.map((subpath, index) => {
+    const allowed = [...Object.keys(EXPECTED[subpath].names), ...(COMMON_JS.includes(subpath) ? ['default'] : [])];
+    const names = allowed.length ? allowed.map((name) => `'${name}'`).join(' | ') : 'never';
+    return `export const only${index}: Only<typeof entry${index}, ${names}> = true;\n`;
+  });
+  const types = 'type Callable = (...args: never[]) => unknown;\ntype Only<T, Names> = [Exclude<keyof T, Names>] extends [never] ? true : false;';
+  return `${imports.join('\n')}\n\n${types}\n\nexport const documented: Callable[] = [\n${uses.join('')}];\n${only.join('')}`;
 }
 
 /**

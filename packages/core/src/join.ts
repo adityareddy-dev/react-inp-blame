@@ -1,11 +1,11 @@
 import { heaviest, leafName } from './commits.js';
 import { elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
-import { DEFAULT_INPUT_WINDOW, joinWindow } from './hook.js';
+import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
-import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InputRecord, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
+import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
 
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
 // they agree to the timer's resolution; 1 ms covers the coarsening.

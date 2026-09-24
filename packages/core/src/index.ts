@@ -14,8 +14,6 @@ import { warnOnce } from './warn.js';
 
 export type * from './types.js';
 export type { InpEstimate } from './inp.js';
-export type { Fiber } from './fiber.js';
-export { fiberFromNode, ownerChain, handlerName } from './fiber.js';
 export type { OverlayHandle } from './overlay.js';
 
 /** Where `debugGlobal: true` puts the API on window. */

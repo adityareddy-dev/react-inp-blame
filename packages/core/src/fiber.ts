@@ -1,4 +1,5 @@
-import type { CommitSummary, HydrationBoundary, InputStamp, RenderedComponent } from './types.js';
+import type { InputStamp } from './hook.js';
+import type { CommitSummary, HydrationBoundary, RenderedComponent } from './types.js';
 
 // React work tags, stable across 17, 18 and 19.
 const FunctionComponent = 0;
@@ -388,14 +389,9 @@ function nameOf(f: Fiber): string | null {
 const countsAsComponent = (f: Fiber) => f.tag !== MemoComponent && isComponent(f);
 
 /**
- * The components enclosing the node, nearest first. They follow the tree React rendered the node in,
+ * The components enclosing a fiber, nearest first. They follow the tree React rendered the fiber in,
  * which is not React's owner chain: a button that Page passes into Card as children is in Card.
  */
-export function ownerChain(node: Node | null, limit = 8): string[] {
-  return ownersOf(fiberFromNode(node), limit);
-}
-
-/** The components enclosing a fiber, nearest first, by the same tree. */
 export function ownersOf(fiber: Fiber | null, limit = 8): string[] {
   const out: string[] = [];
   for (let f = fiber; f && out.length < limit; f = f.return) {
@@ -588,14 +584,10 @@ function firstHandler(fiber: Fiber | null, props: readonly string[], stop: Fiber
   return null;
 }
 
-/** Name of the first React handler prop for this event type on the target chain. */
-export function handlerName(node: Node | null, eventType: string, key?: string | null): string | null {
-  return handlerOf(fiberFromNode(node), eventType, key);
-}
-
 /**
- * Same, starting from a fiber. `key` is the `code` or `key` of a key event where the caller has it;
- * without it a key press reaches no onSubmit, since there is no way to tell Enter from any other key.
+ * Name of the first React handler prop for this event type on the chain from a fiber up. `key` is the
+ * `code` or `key` of a key event where the caller has it; without it a key press reaches no onSubmit,
+ * since there is no way to tell Enter from any other key.
  */
 export function handlerOf(fiber: Fiber | null, eventType: string, key?: string | null): string | null {
   const props = propsFor(fiber, eventType, key);
