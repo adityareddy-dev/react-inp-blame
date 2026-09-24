@@ -1,4 +1,4 @@
-import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, profileModeBit, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
+import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, HydrationBoundary, InputRecord, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
@@ -46,6 +46,8 @@ interface Renderer {
   isReactDom: boolean;
   /** Its version is an experimental build's, read as the newest React (see `parseReactVersion`). */
   experimental: boolean;
+  /** Its React major, 0 outside the versions read. */
+  major: number;
   /** `profileModeBit` for its React major. */
   profileMode: number;
   /** Why its commits cannot be read (a React outside 17 to 19, a root of another shape, a walk that threw), or null. */
@@ -119,6 +121,21 @@ interface HookState {
   listenerWork: WeakMap<FiberRoot, ListenerWork>;
   /** The page's report listeners are running. */
   hearing: boolean;
+  /** Per root, the commits React has not yet said ran their passive effects, newest last (`onPostCommit`). */
+  awaitingEffects: WeakMap<FiberRoot, AwaitingEffects[]>;
+}
+
+/** A commit's place until React says its passive effects ran. */
+interface AwaitingEffects {
+  /** The commit as walked, or null for one that was not. */
+  summary: CommitSummary | null;
+  /** Its tree holds passive work, so React will say when that ran (`reportsPassiveEffects`). */
+  reported: boolean;
+  /**
+   * When the hook call for it returned, every tool chained on the hook included (React DevTools reads
+   * each commit too). The effects start after that, so nothing before it is theirs.
+   */
+  returnedAt: number;
 }
 
 /** One for the page, whichever copy of the library installed (see session.ts). */
@@ -139,6 +156,7 @@ const state = shared<HookState>('hook', () => ({
   roots: [],
   listenerWork: new WeakMap(),
   hearing: false,
+  awaitingEffects: new WeakMap(),
 }));
 
 // The events Event Timing gives an interactionId to, and so the only ones an interaction is ever
@@ -150,6 +168,8 @@ const RING_SIZE = 8;
 // Times of commits that could not be joined to one input, kept per input. A page that commits in a
 // loop would otherwise grow this without end; the oldest are the least likely to be worth reporting.
 const MAX_UNJOINED = 16;
+/** Commits per root waiting for React to say their passive effects ran. Only one committed inside another's effects waits behind a newer one. */
+const MAX_AWAITING_EFFECTS = 8;
 // A press can be held this long and its release still counts as the same gesture.
 const PRESS_WINDOW = 5000;
 
@@ -388,6 +408,7 @@ export function uninstallHook(): void {
   state.roots = [];
   state.listenerWork = new WeakMap();
   state.hearing = false;
+  state.awaitingEffects = new WeakMap();
 }
 
 function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
@@ -419,6 +440,7 @@ function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer 
     info,
     isReactDom: info.rendererPackageName === 'react-dom',
     experimental: version?.experimental ?? false,
+    major: supported ? version.major : 0,
     profileMode: supported ? profileModeBit(version.major) : 0,
     problem: null,
     checked: false,
@@ -456,7 +478,15 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
     return;
   }
   if (!renderer.checked) checkFirstCommit(renderer, root);
-  if (renderer.problem || causedByListeners(root)) return;
+  if (renderer.problem) return;
+  // Every commit holds a place until React says its passive effects ran, walked or not, so that the
+  // report is matched to the commit it belongs to (`onPostCommit`).
+  const place: AwaitingEffects = { summary: null, reported: reportsPassiveEffects(root, renderer.major), returnedAt: performance.now() };
+  const awaiting = awaitingEffectsOf(root);
+  awaiting.push(place);
+  if (awaiting.length > MAX_AWAITING_EFFECTS) awaiting.shift();
+  placed = place;
+  if (causedByListeners(root)) return;
   const now = performance.now();
   const dispatched = dispatchedInput();
   // A root's first commit mounts it, or hydrates its server-rendered HTML: the page starting up, not an
@@ -510,7 +540,37 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   if (summary.hydrated && !dispatched) return;
   if (state.commits.length >= MAX_COMMITS) state.commits.shift();
   state.commits.push(summary);
+  place.summary = summary;
   options.onSummary(summary);
+}
+
+function awaitingEffectsOf(root: FiberRoot): AwaitingEffects[] {
+  let awaiting = state.awaitingEffects.get(root);
+  if (!awaiting) state.awaitingEffects.set(root, (awaiting = []));
+  return awaiting;
+}
+
+/**
+ * Puts when `summary`'s passive effects ended on it. A report is built from `state.commits` once the
+ * interaction's Event Timing entry arrives, after the paint, so a commit whose effects React ran in the
+ * same task has the time by then. The summary already handed to `onSummary` is only read as a render
+ * after the paint, whose effects never count.
+ */
+function effectsRan(summary: CommitSummary, startedAt: number, endedAt: number): void {
+  const i = state.commits.lastIndexOf(summary);
+  if (i >= 0) state.commits[i] = Object.freeze({ ...summary, effectsStartedAt: startedAt, effectsEndedAt: endedAt });
+}
+
+/**
+ * The place the hook call now running pushed, until that call returns. Module state rather than page
+ * state: the call that pushes it and the wrapper that returns are both this copy's.
+ */
+let placed: AwaitingEffects | null = null;
+
+/** Every tool on the hook has had the commit; its effects can start from here. */
+function hookReturned(): void {
+  if (placed) placed.returnedAt = performance.now();
+  placed = null;
 }
 
 function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
@@ -582,9 +642,29 @@ function causedByListeners(root: FiberRoot): boolean {
   return theirs;
 }
 
-/** React 18 and 19, once a commit's passive effects have run. React 17 has no such call, so there an effect of the listeners' render is not recognised. */
-function onPostCommit(hook: DevtoolsHook, root: FiberRoot): void {
+/**
+ * React 18 and 19, once a commit's passive effects have run. React 17 has no such call, so there an
+ * effect of the listeners' render is not recognised, and no commit gets `effectsEndedAt`.
+ */
+function onPostCommit(hook: DevtoolsHook, id: number, root: FiberRoot): void {
   if (hook !== state.attached) return;
+  // The call is the newest waiting commit's that React reports for. React runs a commit's pending
+  // effects before it renders again, so no commit can come between one and its call, except those
+  // React commits inside that call's passive phase: an update an effect made with `flushSync`, or one
+  // a layout effect made, which React renders once the effects are done and before it says so. Those
+  // came later, so they sit above it, and their own calls come first. One with no passive work gets no
+  // call and is passed over, and one React calls for anyway (a React 19 development build calls for
+  // every commit it timed) passes its call down to the commit it was made inside: the effects of that
+  // one had ended by then, and the commit's own time is its span, taken out in `join.ts`.
+  const awaiting = state.awaitingEffects.get(root);
+  if (awaiting && !registryOf(hook).get(id)?.problem) {
+    const now = performance.now();
+    for (let place = awaiting.pop(); place; place = awaiting.pop()) {
+      if (!place.reported) continue;
+      if (place.summary) effectsRan(place.summary, place.returnedAt, now);
+      break;
+    }
+  }
   const work = state.listenerWork.get(root);
   if (!work?.effectsPending) return;
   work.effectsPending = false;
@@ -593,6 +673,7 @@ function onPostCommit(hook: DevtoolsHook, root: FiberRoot): void {
 
 /** React calls the hook inside its commit; nothing here may throw into it. */
 function guardedCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority?: number, didError?: boolean): void {
+  placed = null;
   try {
     onCommit(hook, id, root, priority, didError);
   } catch (error) {
@@ -602,7 +683,7 @@ function guardedCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority
 
 function guardedPostCommit(hook: DevtoolsHook, id: number, root: FiberRoot): void {
   try {
-    onPostCommit(hook, root);
+    onPostCommit(hook, id, root);
   } catch (error) {
     threw(hook, id, error);
   }
@@ -627,7 +708,11 @@ function chain(hook: DevtoolsHook): () => void {
   };
   const onCommitFiberRoot = function (this: unknown, ...args: Parameters<DevtoolsHook['onCommitFiberRoot']>): void {
     guardedCommit(hook, ...args);
-    if (typeof prevCommit === 'function') prevCommit.apply(this, args);
+    try {
+      if (typeof prevCommit === 'function') prevCommit.apply(this, args);
+    } finally {
+      hookReturned();
+    }
   };
   const onPostCommitFiberRoot = function (this: unknown, id: number, root: FiberRoot): void {
     guardedPostCommit(hook, id, root);
@@ -673,6 +758,7 @@ function createShim(): DevtoolsHook {
     },
     onCommitFiberRoot(id, root, priority, didError) {
       guardedCommit(hook, id, root, priority, didError);
+      hookReturned();
     },
     onPostCommitFiberRoot(id, root) {
       guardedPostCommit(hook, id, root);

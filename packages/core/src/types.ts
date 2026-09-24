@@ -133,6 +133,22 @@ export interface CommitSummary {
    */
   readonly startedAt: number | null;
   /**
+   * performance.now() when every tool on the DevTools hook had been handed this commit, React DevTools
+   * included, after which React can run its passive effects, the `useEffect`s. Set together with
+   * `effectsEndedAt`, and null where that is.
+   */
+  readonly effectsStartedAt: number | null;
+  /**
+   * performance.now() when React had run this commit's passive effects, as React 18 and 19 report it
+   * to the DevTools hook, production builds included. React runs them in the same task right after a
+   * click's or a key's commit, and later for most other updates, so the time from `effectsStartedAt`
+   * to here is theirs only where no other task can have run in between. It also holds any render React
+   * made once they were done and before it said so (an update from a layout effect or from `flushSync`
+   * in an effect), which is that render's own time. Null until they have run, for a commit whose tree
+   * has no passive effects, for a root made with `ReactDOM.render`, and on React 17.
+   */
+  readonly effectsEndedAt: number | null;
+  /**
    * How long this library took to walk the commit, ms. The walk runs inside React's commit, so
    * for a commit during an interaction's handlers it is part of the processing time the browser
    * measured; the report takes it back out (`InteractionReport.walkMs`).
