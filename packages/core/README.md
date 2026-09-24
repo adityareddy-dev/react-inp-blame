@@ -105,11 +105,17 @@ already exports an `onRouterTransitionStart`, as Sentry's setup has it do, call 
       Sentry.captureRouterTransitionStart(url, navigationType);
     };
 
-TypeScript finds the types of the subpaths only through the package's `exports`, so
-`moduleResolution` has to be `bundler`, the one `create-next-app` sets. Under `node` these imports
-fail the type check, and under `node16` they do too unless the app's `package.json` has
-`"type": "module"`. Below 15.3 there is no `instrumentation-client`: the wrapper warns and hands the
-config back as it was.
+TypeScript finds the types of the subpaths under `moduleResolution` `bundler` (the one
+`create-next-app` sets), `node16` and `nodenext`, which read the package's `exports`, and under
+`node` (`node10`), which ignores `exports` and reads its `typesVersions` instead. Whether they then
+pass depends on `module`. `module` `node16` and `node18`, and `nodenext` before TypeScript 5.8,
+stand for a Node that cannot `require()` an ES module, so in an app whose `package.json` has no
+`"type": "module"` an import that takes a name from the package gives TS1479 (TS1541 for an
+`import type`, from TypeScript 5.7), except from `/next` and `/display-names-loader`, whose types
+are CommonJS. `nodenext` from 5.8 and `node20` from 5.9 pass. The same settings, in any app, find
+an error inside the `/next` types, which take `InstallOptions` from the package's ES-module types,
+so there `/next` also needs `skipLibCheck: true`, as `create-next-app` sets it. Below 15.3 there is
+no `instrumentation-client`: the wrapper warns and hands the config back as it was.
 
 On the App Router the client module also hears each navigation, meaning each route change the
 framework makes in the page with no new document: every report carries
