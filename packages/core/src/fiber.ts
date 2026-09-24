@@ -97,10 +97,14 @@ export interface Fiber {
    * where it did not time the fiber (a tree outside ProfileMode), absent in production builds.
    */
   actualStartTime?: number;
+  /** The flags of every fiber below this one in the commit, or'ed together. React 18 and 19; React 17 has none. */
+  subtreeFlags?: number;
 }
 
 /** What React hands the DevTools hook with each commit: the root of the tree it committed. */
 export interface FiberRoot {
+  /** 0 for a root `ReactDOM.render` made (React 18's legacy mode, which React 19 removed), 1 for `createRoot` or `hydrateRoot`. */
+  tag?: number;
   current: Fiber;
   /**
    * The lanes (bits) of updates React has not committed on this root: every update sets its lane, and a
@@ -130,6 +134,28 @@ export function nextDevToolsRoot(root: FiberRoot): boolean {
  */
 export function profileModeBit(reactMajor: number): number {
   return reactMajor === 17 ? 0b1000 : 0b10;
+}
+
+// The flags that make React run a commit's passive phase, and so call `onPostCommitFiberRoot` after
+// it: effects to run (Passive), effects to clean up (ChildDeletion) and, from React 19, a hidden or
+// revealed Activity or Suspense tree (Visibility). The same bits in React 18 and 19.
+const PassiveFlags = 0b100000000000;
+const ChildDeletion = 0b10000;
+const Visibility = 0b10000000000000;
+const LegacyRoot = 0;
+
+/**
+ * Whether React will say when this commit's passive effects have run: React 18 or 19, a root made
+ * with `createRoot`, and a committed tree whose flags hold passive work. React makes no such call for a
+ * commit without it, though it can still run the passive phase for one (every commit it timed, in a
+ * React 19 development build). A legacy root runs a click's effects whenever React next renders, maybe
+ * inside the same handler, so the time up to its call is not the effects' and it is left out.
+ */
+export function reportsPassiveEffects(root: FiberRoot, reactMajor: number): boolean {
+  if (reactMajor < 18 || root.tag === LegacyRoot) return false;
+  const fiber = root.current;
+  const passive = PassiveFlags | ChildDeletion | (reactMajor >= 19 ? Visibility : 0);
+  return ((fiber.flags | (fiber.subtreeFlags ?? 0)) & passive) !== 0;
 }
 
 /**
@@ -819,6 +845,8 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     coarseClock,
     total: hasDurations ? renderTime : 0,
     startedAt: renderStartOf(rootFiber, at),
+    effectsStartedAt: null,
+    effectsEndedAt: null,
     priority: context.priority,
     didError: context.didError,
   };

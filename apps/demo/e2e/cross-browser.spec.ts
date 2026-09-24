@@ -41,7 +41,9 @@ test('reports name the component in any browser, with frames null where Long Ani
   if (coarse) {
     expect(c.components[0]).toMatchObject({ name: 'LineItem', self: null, total: null });
     expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'OrderSummary', confidence: 'inferred' });
-    expect(r.explanation.blame.ms).toBe(c.total);
+    // The commit's time in all: its render, and whatever committing it and its effects took.
+    expect(r.explanation.blame.ms!).toBeGreaterThanOrEqual(c.total);
+    expect(r.explanation.blame.ms!).toBeLessThanOrEqual(r.processing);
   }
 });
 

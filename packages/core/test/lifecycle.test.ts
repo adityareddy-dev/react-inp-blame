@@ -28,6 +28,8 @@ function commit(at: number, inputTs: number): CommitSummary {
     coarseClock: false,
     total: 60,
     startedAt: null,
+    effectsStartedAt: null,
+    effectsEndedAt: null,
     walkMs: 0,
     priority: 3,
     didError: false,

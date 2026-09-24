@@ -894,6 +894,249 @@ test('a commit outside any dispatch joins the newest input while it lands inside
   });
 });
 
+/** Marks the tree `root` just committed as holding `useEffect`s to run: React's Passive flag on the root's subtree. */
+function withEffects(root: { current: Record<string, any> }): void {
+  root.current.subtreeFlags = 0b100000000000;
+}
+
+test('a commit gets the time the hook call returned and the time React says its passive effects ended, and a call with no commit waiting changes nothing', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    // React DevTools reads the commit after this library does, for 4 ms: not the effects' time.
+    existing.onCommitFiberRoot = () => {
+      clock.now += 4;
+    };
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.duringClick(() => {
+      clock.now = 1010;
+      commitAgain(root, 5);
+      withEffects(root);
+      page.window[HOOK].onCommitFiberRoot(id, root, 1, false);
+      assert.equal(api.debug.commits()[0]?.effectsEndedAt, null);
+      // React runs a click's passive effects in the same task, then says so.
+      clock.now = 1310;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+    });
+    const [commit] = api.debug.commits();
+    assert.equal(commit?.at, 1010);
+    assert.equal(commit?.effectsStartedAt, 1014);
+    assert.equal(commit?.effectsEndedAt, 1310);
+    assert.ok(Object.isFrozen(commit));
+    // Nothing is waiting any more: the mount's tree had no effects, and its place is passed over.
+    clock.now = 1400;
+    page.window[HOOK].onPostCommitFiberRoot(id, root);
+    page.window[HOOK].onPostCommitFiberRoot(id, root);
+    assert.equal(api.debug.commits()[0]?.effectsEndedAt, 1310);
+    api.dispose();
+  });
+});
+
+test('a commit an effect flushes with flushSync gets its own post-commit, which React makes before the one of the commit that ran the effect', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.duringClick(() => {
+      clock.now = 1010;
+      commitAgain(root, 5);
+      withEffects(root);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      // An effect calls flushSync. React commits that update once the effects are done, and runs its
+      // effects, before it says the first commit's ran.
+      clock.now = 1200;
+      commitAgain(root, 40);
+      withEffects(root);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      clock.now = 1210;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+      clock.now = 1215;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+    });
+    assert.deepEqual(api.debug.commits().map((c) => [c.at, c.effectsEndedAt]), [[1010, 1215], [1200, 1210]]);
+    api.dispose();
+  });
+});
+
+test("a layout effect's update without effects of its own never takes the call for the commit it was made in", async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('18.3.1'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.duringClick(() => {
+      clock.now = 1010;
+      commitAgain(root, 5);
+      withEffects(root);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      // A layout effect measured something and set state. React renders that once the passive effects
+      // are done and before it says so, and the update has no effects, so React makes no call for it.
+      clock.now = 1250;
+      commitAgain(root, 3);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      clock.now = 1260;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+    });
+    assert.deepEqual(api.debug.commits().map((c) => [c.at, c.effectsEndedAt]), [[1010, 1260], [1250, null]]);
+    api.dispose();
+  });
+});
+
+test('a call React makes for a commit without effects passes to the commit it was made in, whose effects had ended by then', async (t) => {
+  // A React 19 development build runs the passive phase for every commit it timed, effects or not.
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.duringClick(() => {
+      clock.now = 1010;
+      commitAgain(root, 5);
+      withEffects(root);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      clock.now = 1250;
+      commitAgain(root, 3);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      clock.now = 1255;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+      clock.now = 1260;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+    });
+    assert.deepEqual(api.debug.commits().map((c) => [c.at, c.effectsEndedAt]), [[1010, 1255], [1250, null]]);
+    api.dispose();
+  });
+});
+
+test("a commit that was not walked keeps its place, so React's word about its effects never lands on an older commit", async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    // The click's call is held back here, to show the pairing alone.
+    page.duringClick(() => {
+      clock.now = 1010;
+      commitAgain(root, 5);
+      withEffects(root);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    // A poll commits long after the window closed. It is not walked, and its effects are its own.
+    clock.now = 9000;
+    commitAgain(root, 3);
+    withEffects(root);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    clock.now = 9100;
+    page.window[HOOK].onPostCommitFiberRoot(id, root);
+    assert.equal(api.debug.commits().length, 1);
+    assert.equal(api.debug.commits()[0]?.effectsEndedAt, null);
+    api.dispose();
+  });
+});
+
+test("a root made with ReactDOM.render gets no effects' time, since React runs them whenever it next renders", async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('18.3.1'));
+    const root = { ...mountedRoot(0b11, 4), tag: 0 };
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.duringClick(() => {
+      clock.now = 1010;
+      commitAgain(root, 5);
+      withEffects(root);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      clock.now = 1300;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+    });
+    assert.equal(api.debug.commits()[0]?.effectsEndedAt, null);
+    api.dispose();
+  });
+});
+
+test('a call that finds no commit React reports for clears the ones waiting, so none of them takes a later call', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.duringClick(() => {
+      // A React 19 development build calls for a commit without effects too, and nothing below it waits.
+      clock.now = 1010;
+      commitAgain(root, 5);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      clock.now = 1020;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+      clock.now = 1030;
+      commitAgain(root, 5);
+      withEffects(root);
+      existing.onCommitFiberRoot(id, root, 1, false);
+      clock.now = 1100;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+      clock.now = 1200;
+      page.window[HOOK].onPostCommitFiberRoot(id, root);
+    });
+    assert.deepEqual(api.debug.commits().map((c) => [c.at, c.effectsEndedAt]), [[1010, null], [1030, 1100]]);
+    api.dispose();
+  });
+});
+
+test("under the shim, too, the effects' time starts once the hook call returned, after the walk", async (t) => {
+  // Every reading moves the clock on a little, so the walk takes time and its end is not its start.
+  let now = 0;
+  t.mock.method(performance, 'now', () => (now += 0.25));
+  await inBrowser((page) => {
+    const api = install();
+    const shim = page.window[HOOK];
+    const id = shim.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    shim.onCommitFiberRoot(id, root);
+    now = 1000;
+    page.duringClick(() => {
+      now = 1010;
+      commitAgain(root, 5);
+      withEffects(root);
+      shim.onCommitFiberRoot(id, root, 1, false);
+      now = 1300;
+      shim.onPostCommitFiberRoot(id, root);
+    });
+    assert.equal(api.stats().mode, 'shim');
+    const [commit] = api.debug.commits();
+    assert.ok(commit && commit.walkMs > 0 && commit.effectsStartedAt !== null && commit.effectsEndedAt !== null);
+    assert.ok(commit.effectsStartedAt >= commit.at + commit.walkMs, `${commit.effectsStartedAt} is before the walk ended`);
+    assert.ok(commit.effectsEndedAt > 1300);
+    api.dispose();
+  });
+});
+
 test('an inputWindow over 1.5 s reaches the report: a render the hook walks under it joins as a later render', async (t) => {
   // The report used to take a later render only within a fixed 1.5 s of the paint, so a longer window
   // paid for the walk and the render still never reached the report.
