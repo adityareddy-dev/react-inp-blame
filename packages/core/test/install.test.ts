@@ -1268,7 +1268,7 @@ test("a click takes the press of the input whose task made it, whatever its poin
     });
 
     // A mouse click on a label, which forwards a click of its own to its checkbox in the same task. Where
-    // the forwarded click has pointerId -1, as Chrome gave it before 148, it is still the mouse press.
+    // the forwarded click has pointerId -1, it is still the mouse press.
     input('pointerdown', 1000, { pointerId: 1 });
     await nextTask();
     input('pointerup', 1060, { pointerId: 1 });
@@ -1281,12 +1281,21 @@ test("a click takes the press of the input whose task made it, whatever its poin
     await nextTask();
     // A tap whose click comes in a task of its own after the touchend, with a key pressed in between whose
     // task marker has not been cleared yet. The click is still the tap's.
-    input('pointerdown', 3000, { pointerId: 2 });
+    input('pointerdown', 3000, { pointerId: 2, pointerType: 'touch' });
     await nextTask();
-    input('pointerup', 3080, { pointerId: 2 });
+    input('pointerup', 3080, { pointerId: 2, pointerType: 'touch' });
     await nextTask();
     input('keydown', 3082, { code: 'ShiftLeft' });
-    input('click', 3083, { pointerId: 2 }, 40);
+    input('click', 3083, { pointerId: 2, pointerType: 'touch' }, 40);
+    await nextTask();
+    // A mouse press let go with no click, as a drag or a right click is, then Enter's click carrying the
+    // mouse's pointerId. The mouse press is not waiting for a click, so the click is still Enter's.
+    input('pointerdown', 4000, { pointerId: 1, pointerType: 'mouse' });
+    await nextTask();
+    input('pointerup', 4060, { pointerId: 1, pointerType: 'mouse' });
+    await nextTask();
+    input('keydown', 4500, { code: 'Enter' });
+    input('click', 4501, { pointerId: 1, pointerType: 'mouse' }, 40);
     await nextTask();
     assert.deepEqual(
       api.debug.commits().map((c) => ({ input: c.inputTs, gesture: c.gestureTs })),
@@ -1294,6 +1303,7 @@ test("a click takes the press of the input whose task made it, whatever its poin
         { input: 1062, gesture: 1000 },
         { input: 2001, gesture: 2000 },
         { input: 3083, gesture: 3000 },
+        { input: 4501, gesture: 4500 },
       ],
     );
     api.dispose();

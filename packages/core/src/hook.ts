@@ -65,6 +65,7 @@ interface DispatchedInput {
   readonly timeStamp: number;
   readonly target: EventTarget | null;
   readonly pointerId?: number;
+  readonly pointerType?: string;
   readonly code?: string;
 }
 
@@ -322,13 +323,15 @@ function gestureOf(e: DispatchedInput, isKey: boolean): number {
 }
 
 /**
- * Whether this click's pointer went down and has had no click since. A tap's click comes in a task of its
- * own after the touchend, and a key pressed in between is still `state.inTask` when it runs, since Chromium
- * runs input ahead of the timer that clears it. That click is the tap's, and pairs by its pointerId. A
- * click from the keyboard carrying the mouse's pointerId finds that pointer's press already clicked.
+ * Whether this is a tap's click whose pointer went down and has had no click since. A tap's click comes in
+ * a task of its own after the touchend, and a key pressed just before it can still be `state.inTask` then,
+ * since Chromium runs input ahead of the timer the key's task left to clear it. That click is the tap's,
+ * and pairs by its pointerId. Only touch and pen go that way: a mouse's click comes in its pointerup's
+ * task, and a mouse press that never clicked (a right click, a drag) must not take a keyboard click that
+ * carries its pointerId.
  */
 function tapInFlight(e: DispatchedInput): boolean {
-  if (e.pointerId === undefined || e.pointerId === -1) return false;
+  if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return false;
   for (let i = state.inputs.length - 1; i >= 0; i--) {
     const r = state.inputs[i];
     if (!r || r.press !== e.pointerId || e.timeStamp - r.ts > PRESS_WINDOW) continue;
