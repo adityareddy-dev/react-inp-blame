@@ -111,14 +111,22 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node scripts/vite-app.mjs --fresh --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
-  # The app `npx create-react-router` makes, with the README's React Router setup, installed and tested the
-  # same way. React Router writes its own HTML, so the Vite plugin's script never runs there, and the
-  # install is the module the client entry imports first. On the dev server React Router's Fast Refresh
-  # runtime makes the hook, as plugin-react's preamble does; a build has none.
-  react-router-app:
-    name: create-react-router app from the packed tarball
+  # The frameworks that write their own HTML, each an app from its own template with the README's setup
+  # for it, installed and tested the same way. The Vite plugin's script never runs there, so the install is
+  # a module the client entry imports first. On the dev server a Fast Refresh preamble makes the hook, as
+  # plugin-react's does in the Vite app; a build has none.
+  framework-app:
+    name: ${{ matrix.name }} app from the packed tarball
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fixture: react-router
+            name: create-react-router
+          - fixture: tanstack-start
+            name: TanStack Start
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -127,11 +135,11 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            fixtures/react-router/package-lock.json
+            fixtures/${{ matrix.fixture }}/package-lock.json
       - run: npm ci
       - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
       - run: npx playwright install --with-deps chromium
-      - run: node scripts/vite-app.mjs --fixture react-router --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
+      - run: node scripts/vite-app.mjs --fixture ${{ matrix.fixture }} --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
   e2e:
     name: Vite demo, React 17 to 19.2, Next.js

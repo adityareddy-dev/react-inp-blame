@@ -1,6 +1,6 @@
 // Runs an app from fixtures/ the way a user has it: fixtures/vite-react-ts, the app `npm create vite --
-// --template react-ts` makes with the README's vite.config.ts pasted in, or with `--fixture react-router`
-// fixtures/react-router, the one `npx create-react-router` makes with the README's React Router setup. The
+// --template react-ts` makes with the README's vite.config.ts pasted in, or with `--fixture` one of the
+// frameworks that write their own HTML, each from its own template with the README's setup for it. The
 // script copies it out of the repo into the temp directory and installs its dependencies there from its
 // own lockfile, with react-inp-blame from the tarball `npm pack` makes. It then builds the app and runs its
 // Playwright specs on the dev server (for the Vite app, a Fast Refresh edit included) and on the build.
@@ -8,7 +8,7 @@
 //   node scripts/vite-app.mjs                          # pack packages/core, then install and test
 //   node scripts/vite-app.mjs --tarball <path>         # a tarball that already exists
 //   node scripts/vite-app.mjs --fresh                  # no lockfile: every dependency as npm resolves it today
-//   node scripts/vite-app.mjs --fixture react-router   # the React Router app instead
+//   node scripts/vite-app.mjs --fixture react-router   # the React Router app, or tanstack-start
 //   node scripts/vite-app.mjs -- --project=dev         # anything after -- goes to Playwright
 //
 // The copy is what makes it the user's install. Inside the repo the app could resolve react-inp-blame
@@ -45,6 +45,14 @@ const FIXTURES = {
     reported: ['react-router', '@react-router/dev', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     // The template's own check, route types first. Its tsconfig takes in every file, the specs included.
     typecheck: (app) => npm('run typecheck', app),
+  },
+  'tanstack-start': {
+    readme: '## Install with TanStack Start',
+    files: ['vite.config.ts', 'src/inp-blame.ts', 'src/client.tsx'],
+    reported: ['@tanstack/react-start', '@tanstack/react-router', 'vite', '@vitejs/plugin-react', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    // The template has no check of its own. Its tsconfig takes in every file, the specs and the route tree
+    // the build generates included.
+    typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
   },
 };
 // Left behind by a run in the fixture folder itself, and not part of the app.

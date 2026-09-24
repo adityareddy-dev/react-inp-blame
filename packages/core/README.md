@@ -172,7 +172,8 @@ None of this has been tried on a real backend yet. React Router in framework mod
 HTML too. There the install is an `install()` call in a module of the app's own that
 `app/entry.client.tsx` imports first, with the plugin kept for names: the
 [repository README](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router) has
-the three files, and CI runs them on React Router 8.4. Remix, TanStack Start and Astro have no setup
+the three files, and CI runs them on React Router 8.4. TanStack Start takes the same setup in
+`src/client.tsx`, also in CI. Remix and Astro have no setup
 yet: the plugin most likely installs nothing there either, and nothing says so. Not tried yet.
 
 Without the Vite plugin or the Next.js wrapper, make `import 'react-inp-blame/auto'` the first
