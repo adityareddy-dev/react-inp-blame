@@ -244,8 +244,15 @@ test('entry puts the install first in that module, on its first line, in the bro
   assert.ok(entryRuntime('serve', { entry: './app/root.tsx' }).transform(code, '/app/app/root.tsx'));
   assert.ok(entryRuntime('serve', { entry: '/app/app/root.tsx' }).transform(code, '/app/app/root.tsx'));
   assert.ok(entryRuntime('serve', { entry: 'C:\\site\\app\\root.tsx' }, 'C:/site').transform(code, 'C:/site/app/root.tsx'));
-  // A directive prologue stays first, on the same line.
+  // A directive prologue stays first, on the same line, and one with no semicolon gets one before the import.
   assert.equal(transform("'use client';\nexport {}", '/app/app/root.tsx').code, `'use client';import '${INSTALL_MODULE}';\nexport {}`);
+  assert.equal(transform("'use client'\nexport {}", '/app/app/root.tsx').code, `'use client';import '${INSTALL_MODULE}';\nexport {}`);
+  // A string that starts an expression is no directive.
+  assert.equal(transform("'a' + b;\n", '/app/app/root.tsx').code, `import '${INSTALL_MODULE}';'a' + b;\n`);
+  // A leading slash outside the root is read from the root, as `pages` paths are, and .. is resolved.
+  assert.ok(entryRuntime('serve', { entry: '/app/root.tsx' }, '/project').transform(code, '/project/app/root.tsx'));
+  assert.ok(entryRuntime('serve', { entry: 'app/../app/root.tsx' }).transform(code, '/app/app/root.tsx'));
+  assert.ok(entryRuntime('serve', { entry: 'c:\\site\\app\\root.tsx' }, 'C:/site').transform(code, 'C:/site/app/root.tsx'));
 });
 
 test('entry gives the install a chunk of its own, not an entry, and fails a build where the path matched nothing', () => {
@@ -266,7 +273,7 @@ test('entry gives the install a chunk of its own, not an entry, and fails a buil
   // An object cannot be added to, so it is left as it is, with a warning.
   const warnings: string[] = [];
   assert.equal(found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, { manualChunks: { vendor: ['react'] } }), null);
-  assert.match(warnings[0]!, /beside a manualChunks object/);
+  assert.match(warnings[0]!, /a manualChunks object/);
   // Without entry the output is left alone, and so is one that cannot be split, which would fail the build.
   assert.equal(entryRuntime('build', {}).runtime.outputOptions.call({}, {}), null);
   for (const output of [{ inlineDynamicImports: true }, { preserveModules: true }, { codeSplitting: false }, { format: 'iife' }, { format: 'umd' }]) {
@@ -282,6 +289,49 @@ test('entry gives the install a chunk of its own, not an entry, and fails a buil
   // With entry the HTML pages get no script: the module's import is the install.
   const plugins = pluginsFor('serve', { entry: 'app/root.tsx' });
   assert.equal(tagsFor(plugins, '/index.html'), undefined);
+});
+
+test("entry decides the chunk from the output's own environment, before buildStart as Rolldown calls it", () => {
+  const runtime = pluginsFor('build', { enabled: true, entry: 'app/root.tsx' }).find((p) => p.name === INSTALL)!;
+  runtime.configResolved({ command: 'build', root: '/app', base: '/', build: {}, plugins: [] });
+  const client = { environment: { name: 'client', config: { consumer: 'client', build: {} } }, warn: () => {} };
+  const ssr = { environment: { name: 'ssr', config: { consumer: 'server', build: { ssr: true } } }, warn: () => {} };
+  // Rolldown: the client's outputOptions first, then an ssr build's, each before its own buildStart.
+  assert.equal(typeof runtime.outputOptions.call(client, {}).manualChunks, 'function');
+  assert.equal(runtime.outputOptions.call(ssr, {}), null);
+  // And in the other order, after a client build ran in the same instance, the server still gets nothing.
+  runtime.buildStart.call({ ...client, emitFile: () => {} });
+  assert.equal(runtime.outputOptions.call(ssr, {}), null);
+});
+
+test("the install's chunk takes everything the install imports, whatever the app's own manualChunks says", () => {
+  const found = entryRuntime('build', { entry: 'app/root.tsx' });
+  const lib = '/app/node_modules/react-inp-blame/dist/index.js';
+  const hook = '/app/node_modules/react-inp-blame/dist/hook.js';
+  const overlay = '/app/node_modules/react-inp-blame/dist/overlay.js';
+  const imports: Record<string, string[]> = { [`\0${INSTALL_MODULE}`]: [lib], [lib]: [hook], [hook]: [] };
+  const meta = { getModuleInfo: (id: string) => ({ importedIds: imports[id] ?? [], dynamicallyImportedIds: id === lib ? [overlay] : [] }) };
+  // An app rule that sends node_modules to one vendor chunk, with react-dom in it.
+  const vendor = (id: string) => (id.includes('/node_modules/') ? 'vendor' : undefined);
+  const { manualChunks } = found.runtime.outputOptions.call({ warn: () => {} }, { manualChunks: vendor });
+  assert.equal(manualChunks(lib, meta), 'react-inp-blame-install');
+  assert.equal(manualChunks(hook, meta), 'react-inp-blame-install');
+  // The badge, which the install loads with import(), and react-dom stay where the app puts them.
+  assert.equal(manualChunks(overlay, meta), 'vendor');
+  assert.equal(manualChunks('/app/node_modules/react-dom/index.js', meta), 'vendor');
+  // Rolldown's own chunk groups cannot be added to either, so they get the warning a manualChunks object does.
+  for (const output of [{ advancedChunks: { groups: [] } }, { codeSplitting: { groups: [] } }]) {
+    const warnings: string[] = [];
+    assert.equal(found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, output), null);
+    assert.match(warnings[0]!, /Rolldown chunk groups/);
+  }
+});
+
+test('a wrong entry path fails every browser build, one written as a single iife script too', () => {
+  const found = entryRuntime('build', { entry: 'app/roots.tsx' });
+  found.runtime.configResolved({ command: 'build', root: '/app', base: '/', build: { rollupOptions: { output: { format: 'iife' } } }, plugins: [] });
+  found.finish();
+  assert.equal(found.errors.length, 1);
 });
 
 test('entry leaves a server build alone: no chunk, no import, no error', () => {

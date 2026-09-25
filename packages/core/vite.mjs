@@ -10,6 +10,7 @@
 //
 // Nothing here imports Vite: a plugin is a plain object.
 
+import path from 'node:path';
 import loader from './display-names-loader.cjs';
 
 // What the added script imports. A leading \0 is how Vite marks a module no file backs.
@@ -22,16 +23,24 @@ const OPTION_KEYS = ['enabled', 'runtime', 'pages', 'entry'];
 // level, which these plugins would otherwise ignore into silence, is named for what it is.
 const INSTALL_KEYS = ['overlay', 'threshold', 'labels', 'hook', 'sampleRate', 'walkBudget', 'inputWindow', 'devtoolsTrack', 'debugGlobal'];
 
-/** A module id as a path with forward slashes and no query, which is how `entry` is matched against it. */
+/**
+ * A module id as a path with forward slashes, no query and an upper-case drive letter, which is how
+ * `entry` is matched against it.
+ */
 function fileOf(id) {
-  return id.split('?')[0].replaceAll('\\', '/');
+  return id.split('?')[0].replaceAll('\\', '/').replace(/^[a-z]:\//, (drive) => drive.toUpperCase());
 }
 
-/** `entry` as the absolute path Vite gives the module: as it is when absolute, else from the project root. */
+/**
+ * `entry` as the absolute path Vite gives the module. A path inside the project root, or on a drive, is
+ * taken as it is; any other, a leading slash included, is read from the project root, the way `pages`
+ * paths are written.
+ */
 function entryPath(root, entry) {
-  const written = entry.replaceAll('\\', '/');
-  if (written.startsWith('/') || /^[A-Za-z]:\//.test(written)) return fileOf(written);
-  return fileOf(`${String(root).replaceAll('\\', '/').replace(/\/$/, '')}/${written.replace(/^\.\//, '')}`);
+  const base = fileOf(String(root)).replace(/\/$/, '');
+  const written = fileOf(entry);
+  const absolute = /^[A-Z]:\//.test(written) || written === base || written.startsWith(`${base}/`);
+  return path.posix.normalize(absolute ? written : `${base}/${written.replace(/^\//, '')}`);
 }
 
 /**
@@ -43,8 +52,37 @@ function splittable(output) {
   return !output.inlineDynamicImports && !output.preserveModules && output.codeSplitting !== false && output.format !== 'iife' && output.format !== 'umd';
 }
 
-// A directive prologue, such as "use client", has to stay first in its module to mean anything.
-const DIRECTIVES = /^(?:\s*(?:'[^'\n]*'|"[^"\n]*");?)+/;
+/**
+ * The config of the build a hook runs in. Vite 6 and later hand every hook its environment, whose config
+ * is that build's own; the one configResolved stored can be another build's, since React Router runs a
+ * second Vite through the same plugins. Vite 5 has no environments, and one build per plugin.
+ */
+function ownConfig(stored, environment) {
+  return environment?.config?.command ? environment.config : stored;
+}
+
+/** Whether a build is the browser's: `vite build` of a client environment, not a server one. */
+function clientBuild(stored, environment) {
+  const config = ownConfig(stored, environment);
+  if (config?.command !== 'build') return false;
+  if (environment?.config?.consumer === 'server') return false;
+  return !(environment?.config?.build ?? config.build)?.ssr;
+}
+
+/**
+ * The install module and every module it imports statically: what its chunk has to hold, so that an app's
+ * own manualChunks cannot send the library to a vendor chunk beside react-dom. Not what it loads with
+ * import(), which is the badge, loaded later on its own.
+ */
+function installGraph(getModuleInfo) {
+  const graph = new Set([RESOLVED_INSTALL_MODULE]);
+  for (const id of graph) for (const imported of getModuleInfo(id)?.importedIds ?? []) graph.add(imported);
+  return graph;
+}
+
+// A directive prologue, such as "use client": string literals that are whole statements, ended by a
+// semicolon or a line break. It has to stay first in its module to mean anything.
+const DIRECTIVES = /^(?:\s*(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")[ \t]*(?:;|(?=\r?\n)|$))+/;
 
 /** The file name of the chunk holding the install call, or undefined when this build has none. */
 function installChunk(bundle) {
@@ -69,7 +107,8 @@ function pagePath(root, input) {
  * a single-file output format or the SystemJS bundle @vitejs/plugin-legacy adds either cannot be
  * split at all or gains nothing from document order.
  */
-function separateScript(config, environment) {
+function separateScript(stored, environment) {
+  const config = ownConfig(stored, environment);
   if (config?.command !== 'build') return false;
   if (environment?.config?.consumer === 'server') return false;
   const build = environment?.config?.build ?? config.build;
@@ -157,8 +196,6 @@ export function inpBlame(options = {}) {
     let entryFile = null;
     // The builds, by environment, that have put the install first in `entry`, which a wrong path never does.
     const entryImports = new Set();
-    // Whether this build is the browser's, with chunks of its own: the one `entry` gives a chunk to.
-    let entryChunk = false;
     const environmentOf = (context) => context.environment?.name ?? 'client';
     plugins.push({
       name: 'react-inp-blame:install',
@@ -181,7 +218,6 @@ export function inpBlame(options = {}) {
        */
       buildStart() {
         entryImports.delete(environmentOf(this));
-        entryChunk = entryFile !== null && separateScript(config, this.environment);
         if (entry === undefined && buildsPages(config, this.environment, pages)) this.emitFile({ type: 'chunk', id: INSTALL_MODULE, name: 'react-inp-blame-install' });
       },
       /**
@@ -191,16 +227,28 @@ export function inpBlame(options = {}) {
        * manifest wants one). A manualChunks function the app already has decides every other module.
        */
       outputOptions(output) {
-        // A server build never runs the install, and some outputs cannot be split at all.
-        if (!entryChunk || !splittable(output)) return null;
+        // Decided here, from this output's own environment: Rolldown (Vite 8) calls this hook before
+        // buildStart, Rollup at the end of the build. A server build never runs the install, and some
+        // outputs cannot be split at all.
+        if (!entryFile || !separateScript(config, this.environment) || !splittable(output)) return null;
         const theirs = output.manualChunks;
-        if (theirs !== undefined && typeof theirs !== 'function') {
-          this.warn('inpBlame: entry cannot give the install a chunk of its own beside a manualChunks object. Write manualChunks as a function, or the install may run after react-dom in a build.');
+        const groups = output.advancedChunks ?? (typeof output.codeSplitting === 'object' ? output.codeSplitting : undefined);
+        if ((theirs !== undefined && typeof theirs !== 'function') || groups !== undefined) {
+          this.warn('inpBlame: entry gives the install a chunk of its own through a manualChunks function, and this build already sorts modules into chunks another way (a manualChunks object, or Rolldown chunk groups). Write it as a manualChunks function, or the install may run after react-dom in a build.');
           return null;
         }
+        // One walk per build: every module id is asked, and the install's graph is the same for all of them.
+        let graph = null;
         return {
           ...output,
-          manualChunks: (id, meta) => (id === RESOLVED_INSTALL_MODULE ? 'react-inp-blame-install' : theirs?.(id, meta)),
+          manualChunks: (id, meta) => {
+            if (id === RESOLVED_INSTALL_MODULE) return 'react-inp-blame-install';
+            if (meta?.getModuleInfo) {
+              graph ??= installGraph(meta.getModuleInfo);
+              if (graph.has(id)) return 'react-inp-blame-install';
+            }
+            return theirs?.(id, meta);
+          },
         };
       },
       // Side effects are what the module is for, whatever the app's package.json says of its own files.
@@ -208,7 +256,7 @@ export function inpBlame(options = {}) {
       load: (id) => (id === RESOLVED_INSTALL_MODULE ? `import { install } from 'react-inp-blame';\ninstall(${JSON.stringify(install)});\n` : null),
       /** A path that matched nothing would leave the page without the install, and say nothing. */
       generateBundle() {
-        if (entryFile && separateScript(config, this.environment) && !entryImports.has(environmentOf(this))) {
+        if (entryFile && clientBuild(config, this.environment) && !entryImports.has(environmentOf(this))) {
           this.error(`inpBlame: entry is '${entry}', and this build has no module at ${entryFile}. It is the path of a module of the app from the project root, such as 'app/root.tsx'.`);
         }
       },
@@ -247,7 +295,9 @@ export function inpBlame(options = {}) {
           if (transformOptions?.ssr || this.environment?.config?.consumer === 'server') return null;
           entryImports.add(environmentOf(this));
           const directives = DIRECTIVES.exec(code)?.[0] ?? '';
-          return { code: `${directives}import '${INSTALL_MODULE}';${code.slice(directives.length)}`, map: null };
+          // A directive ended by a line break needs a semicolon before the import, on the same line.
+          const separator = directives && !directives.trimEnd().endsWith(';') ? ';' : '';
+          return { code: `${directives}${separator}import '${INSTALL_MODULE}';${code.slice(directives.length)}`, map: null };
         },
       });
     }

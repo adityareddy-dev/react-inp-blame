@@ -25,8 +25,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   also covers what that could not: in Remix's template the root route's chunk loads react-dom before its
   own body, and `"sideEffects": false` drops an import with no names from the build, so on Remix 2 an
   install written in `app/root.tsx` worked on the dev server and never ran in a production build. A build
-  in which no module has the path fails, and a server build or an output that cannot be split into chunks
-  gets neither the import nor the chunk. On the dev server the plugin asks Vite to pre-bundle
+  in which no module has the path fails. A server build gets neither the import nor the chunk, and an output
+  that cannot be split into chunks keeps the import with no chunk of its own. The chunk holds everything the
+  install imports, so an app's vendor rule cannot put the library beside react-dom. On the dev server the
+  plugin asks Vite to pre-bundle
   react-inp-blame, which it cannot find in the source by itself, so the first visit does not reload the
   page while it hydrates. CI runs Remix 2.17 from `npx create-remix@2.17.5`, on React 18.3, beside the
   React Router 8, React Router 7 on React 18 and TanStack Start apps, all on `entry` now.
