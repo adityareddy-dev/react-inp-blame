@@ -1749,3 +1749,19 @@ test("the dev overlay's own react-dom does not keep a page supported whose app R
     api.dispose();
   });
 });
+
+test("the pointer an input came from is kept at dispatch, and a mouse's pointerdown alone reads as a click", async (t) => {
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
+    clock.now = 1000;
+    page.fire('pointerdown', { isTrusted: true, type: 'pointerdown', timeStamp: 1000, target: null, pointerId: 1, pointerType: 'mouse' });
+    page.paint([pointer('pointerdown', 7, 1000, 120)]);
+    await nextTask();
+    assert.equal(api.last()?.pointerType, 'mouse');
+    assert.match(api.last()?.verdict ?? '', /^120 ms click\b/);
+    api.dispose();
+  });
+});

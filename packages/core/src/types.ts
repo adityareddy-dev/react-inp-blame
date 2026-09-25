@@ -251,12 +251,16 @@ export interface TargetInfo {
    * every dotted part is the same (`Primitive.button` names the element, not a component). The
    * nearest owner of all where the chain holds no such name, and null where there is no chain.
    * Enclosing follows the tree React rendered the element in, which is not React's owner chain: a
-   * button that Page passes into Card as children is in Card.
+   * button that Page passes into Card as children is in Card. A click on an icon (an `<svg>` or something
+   * in one, an `<img>`, a `<picture>`) inside a control is read from the control, as `label` is.
    */
   readonly component: string | null;
-  /** The components enclosing the target, nearest first, by the same tree. */
+  /** The components enclosing the target (for a click on an icon, the control around it), nearest first, by the same tree. */
   readonly owners: readonly string[];
-  /** Name of the React prop handler on the target chain for this event type, if it has one. */
+  /**
+   * Name of the React prop handler on the target chain for the event that did the work: of the entries
+   * painted with the headline, the ones whose own handlers ran longest, the best-known of them first.
+   */
   readonly handler: string | null;
 }
 

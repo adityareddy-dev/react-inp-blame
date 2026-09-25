@@ -1,5 +1,5 @@
 import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
-import { controlOf } from './element.js';
+import { controlOf, namedFrom } from './element.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
@@ -92,7 +92,7 @@ export interface InputRecord extends InputStamp {
    */
   readonly control?: Node | null;
   /**
-   * The components enclosing the control at dispatch, nearest first. Read before React's handlers run:
+   * The components enclosing the target at dispatch (the control, for a click on an icon inside one), nearest first. Read before React's handlers run:
    * once React commits the deletion of an element, React 18 and 19 clear its fiber's links and props, so
    * a clicked row that deleted itself is still named after what it was.
    */
@@ -261,10 +261,12 @@ function record(e: DispatchedInput): InputRecord {
   // Read now, before React's handlers run: once React commits the deletion of the element, React 18
   // and 19 clear its fiber's links and props, and the Event Timing entry arrives after that.
   const fiber = fiberFromNode(target);
-  // The component a click is named by is the control's: an icon library's `Trash2` inside the button is
-  // not what anyone clicked. Found now, since a click that swaps the icon detaches it before the entry.
+  // The control labels the click, and names it when the click was on an icon: an icon library's `Trash2`
+  // inside the button is not what anyone clicked. Found now, since a click that swaps the icon detaches it
+  // before the entry.
   const control = controlOf(target);
-  const controlFiber = (control !== target && fiberFromNode(control)) || fiber;
+  const named = namedFrom(target);
+  const namedFiber = (named !== target && fiberFromNode(named)) || fiber;
   const rec: InputRecord = {
     ts: e.timeStamp,
     type: e.type,
@@ -273,7 +275,7 @@ function record(e: DispatchedInput): InputRecord {
     pointerType: e.pointerType,
     target,
     control,
-    owners: Object.freeze(ownersOf(controlFiber)),
+    owners: Object.freeze(ownersOf(namedFiber)),
     handler: handlerOf(fiber, e.type, isKey ? e.code : null),
     work: { endedAt: e.timeStamp, ownEndedAt: e.timeStamp, unjoined: [] },
     // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting

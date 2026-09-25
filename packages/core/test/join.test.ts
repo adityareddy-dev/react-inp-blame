@@ -1532,8 +1532,17 @@ test('a render is named after its deepest readable component, and what it was mo
   assert.equal(styled.blame.detail, 'DayCell ×90');
   assert.ok(styled.cause.includes('inside MonthGrid, mostly DayCell (90 of them)'), styled.cause);
 
-  // A readable root stands in when the hot path holds nothing readable.
-  assert.equal(blameOf({ roots: ['$', 'Calendar'], hotPath: ['$', '_'], components: [] }).blame.name, 'Calendar');
+  // Another root is not: the hot path starts at the heaviest root, so any other one is a subtree beside the
+  // work, such as a one-line status bar that re-rendered with a grid of 300 cells.
+  assert.equal(blameOf({ roots: ['$', 'Calendar'], hotPath: ['$', '_'], components: [] }).blame.name, '_');
+
+  // "Mostly" is a readable component only while it carries a real share of the render: 2 Panels beside 120
+  // components a minifier named is not what the render was made of.
+  const scattered = blameOf({ roots: ['Xe'], hotPath: ['Xe'], components: [{ name: 'Nu', count: 120, self: null, total: null }, { name: 'Panel', count: 2, self: null, total: null }] });
+  assert.equal(scattered.blame.detail, 'Nu ×120');
+  // Where React measured, the share is the time.
+  const timed = blameOf({ hasDurations: true, total: 60, roots: ['Xe'], hotPath: ['Xe'], components: [{ name: 'Nu', count: 5, self: 40, total: 40 }, { name: 'Panel', count: 50, self: 12, total: 12 }] });
+  assert.equal(timed.blame.detail, 'Nu ×5');
 
   // With nothing readable anywhere the names are kept as they stand, rather than one being invented.
   const minified = blameOf({ roots: ['Xe'], hotPath: ['Xe', '$'], components: [{ name: 'et', count: 113, self: null, total: null }] });
@@ -1606,6 +1615,16 @@ test('the handler named is the one whose event did the work, with PREFERRED sett
   assert.equal(report(press(3, 0.1), [], []).target?.handler, 'selectRow');
   // A click whose own handler did the work is named by it, whatever else ran.
   assert.equal(report(press(20, 60), [], []).target?.handler, 'selectRow');
+  // The tie is strictly under 4 ms.
+  assert.equal(report(press(3.9, 0.1), [], []).target?.handler, 'selectRow');
+  assert.equal(report(press(4.2, 0.1), [], []).target?.handler, 'openMenu');
+
+  // Where the pointerdown's work was a listener of the page's own, no React handler did it: the onClick
+  // that did nothing is not named for it.
+  const plainButton = fiberOf(5, 'button', rowDiv, { 'aria-label': 'Row actions' });
+  const plain = Object.assign(element('button', [], { 'aria-label': 'Row actions' }), { __reactFiber$k1: plainButton });
+  const native = report([entry('pointerdown', 0, 120, 2, 92, { target: plain }), entry('pointerup', 100, 16, 101, 101.2, { target: plain }), entry('click', 100, 16, 101.3, 101.4, { target: plain })], [], []);
+  assert.equal(native.target?.handler, null);
 
   // The same order where the node left the page and the ring's handlers stand in.
   const ring = [
@@ -1639,4 +1658,23 @@ test("a mouse's pointerdown alone reads as a click, a finger's as a tap", () => 
   assert.match(unseen.verdict, /^120 ms tap\b/);
   // A key's click carries no pointer.
   assert.equal(report([entry('click', 0, 120, 2, 92)], [], [], [input(0, 'click', { pointerType: '' })]).pointerType, null);
+});
+
+test('a click inside a link or an option is named by the component it landed in; only an icon gives way to its control', () => {
+  function ProductCard() {}
+  function ProductList() {}
+  const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null });
+  // <ProductList> renders <a href> around each <ProductCard>, which renders a div with the product's name.
+  const list = fiberOf(0, ProductList, null);
+  const linkFiber = fiberOf(5, 'a', list, { href: '/p/1' });
+  const card = fiberOf(0, ProductCard, linkFiber);
+  const nameFiber = fiberOf(5, 'span', card, {});
+  const name = Object.assign(element('span', [text('Kettle')]), { __reactFiber$k1: nameFiber });
+  Object.assign(element('a', [name], { href: '/p/1', 'aria-label': 'Kettle' }), { __reactFiber$k1: linkFiber });
+  const r = report([entry('click', 0, 120, 3, 100, { target: name })], [], []);
+  assert.equal(r.target?.component, 'ProductCard');
+  assert.deepEqual(r.target?.owners, ['ProductCard', 'ProductList']);
+  // The label is still the link's.
+  assert.equal(r.target?.label, 'link "Kettle"');
 });

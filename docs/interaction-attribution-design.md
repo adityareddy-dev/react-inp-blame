@@ -404,8 +404,9 @@ and stays off the headline (since 2026-09-14; before that the headline was the w
 The target element resolves to its component through the `__reactFiber$` expando, and the
 React handler prop for the event type is looked up on the same chain, so "no React render;
 120ms in the click handler computeChecksum" is possible without a profile. Of a click's pointerdown,
-pointerup and click, the event whose own processing ran longest is asked first, since its handlers did
-the work; within 4 ms they tie and the click is asked first (since 0.6.0). The element's label
+pointerup and click, only the events whose own processing ran longest are asked, since their handlers did
+the work; under 4 ms apart they tie and the click is asked first, and where none of them has a React
+handler, none is named (since 0.6.0). The element's label
 names it by its tag and a name of at most 40 characters, and its whole `textContent` is never read,
 because a click can land on a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
 form field's placeholder, name or type, or its data-testid or data-test), and, where text is

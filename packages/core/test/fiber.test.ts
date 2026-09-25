@@ -81,18 +81,29 @@ test('only component fibers count against the walk budget, not the DOM and text 
   );
 });
 
-test("@emotion/styled's Insertion is counted under the styled element's name, never as a component of the app's", () => {
+test("@emotion/styled's Insertion is not counted as a component, whatever the minifier named it", () => {
   function Row() {}
   function Insertion() {}
   function OtherInsertion() {}
-  // A styled component from @emotion/styled: a forwardRef that carries the tag it wraps as __emotion_base.
-  const styled = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'Styled(td)', __emotion_base: 'td' };
-  const cell = () => fiber(11, styled, [rendered(Insertion), element('td', text())], 1);
+  function Button() {}
+  // A styled component from @emotion/styled: a forwardRef that carries the tag it wraps as __emotion_base,
+  // rendering its Insertion first and the element it styles beside it.
+  const styled = (base: unknown, name: string) => ({ $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: name, __emotion_base: base });
+  const cell = () => fiber(11, styled('td', 'Styled(td)'), [rendered(Insertion), element('td', text())], 1);
   const table = root(rendered(Row, element('tr', cell(), cell(), cell())));
   const walked = walkCommit(table as any, 100, 100, click, development);
   assert.deepEqual(
     walked.components.map((c) => `${c.name} ×${c.count}`),
-    ['Styled(td) ×6', 'Row ×1'],
+    ['Styled(td) ×3', 'Row ×1'],
+  );
+  assert.equal(walked.rendered, 4);
+  // A production build renames Insertion; its place still tells it. A component emotion styles is the
+  // app's and is counted.
+  const minifiedInsertion = Object.defineProperty(function () {}, 'name', { value: 'q' });
+  const styledButton = fiber(11, styled(Button, 'Styled(Button)'), [rendered(minifiedInsertion), rendered(Button, element('button', text()))], 1);
+  assert.deepEqual(
+    walkCommit(root(styledButton) as any, 100, 100, click, development).components.map((c) => c.name).sort(),
+    ['Button', 'Styled(Button)'],
   );
   // An Insertion anywhere else is an ordinary component with that name.
   Object.defineProperty(OtherInsertion, 'name', { value: 'Insertion' });
@@ -377,6 +388,8 @@ test("a compiler temporary, Radix's wrapper and a bound function's prefix are no
   assert.equal(handlerNamed('_temp2'), 'onClick');
   // @radix-ui/primitive's composeEventHandlers.
   assert.equal(handlerNamed('handleEvent'), 'onClick');
+  // lodash's debounce and throttle.
+  assert.equal(handlerNamed('debounced'), 'onClick');
   assert.equal(handlerNamed('handleLogin'), 'handleLogin');
   // Names that only start like one.
   assert.equal(handlerNamed('toggle'), 'toggle');

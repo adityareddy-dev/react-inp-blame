@@ -1,5 +1,5 @@
 import { heaviest, leafName, mostlyComponent, readableName } from './commits.js';
-import { controlAround, controlOf, elementOf, selector } from './element.js';
+import { controlAround, elementOf, namedFrom, selector } from './element.js';
 import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
 import { rateInp } from './inp.js';
@@ -11,7 +11,8 @@ import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary
 // they agree to the timer's resolution; 1 ms covers the coarsening.
 const STAMP_TOLERANCE = 1;
 // Handlers whose processing differs by less than this did about the same work, and the handler named
-// for them is the best-known event's (see byWork).
+// for them is the best-known event's (see byWork). Chromium gives processing times to 0.1 ms, and a
+// handler that does nothing takes under 2 ms.
 const HANDLER_TIE_MS = 4;
 // Entries presented in the same frame share a render time to within 8 ms, the rounding
 // Event Timing applies to durations. Same rule as web-vitals' groupEntriesByRenderTime.
@@ -194,18 +195,18 @@ const rank = (name: string) => {
 };
 
 /**
- * `sorted`, in PREFERRED order, reordered for looking up the handler: first the entries whose own handlers
- * ran within HANDLER_TIE_MS of the longest, then the rest, each in PREFERRED order. The event whose
- * handlers did the work is the one to name, so a menu that opens on pointerdown is put on its
- * onPointerDown, not on an onClick beside it that only stops the event. Where no handler did any real
- * work every entry ties, and the order is PREFERRED's as it always was.
+ * The entries whose handler is looked for, in PREFERRED order: those whose own processing ran within less
+ * than HANDLER_TIE_MS of the longest. The event whose handlers did the work is the one to name, so a menu
+ * that opens on pointerdown is put on its onPointerDown, not on an onClick beside it that only stops the
+ * event, and where that work was a listener of the page's own rather than a React handler, no React
+ * handler is named for it: the explanation then names the listener. Where no handler did any real work
+ * every entry ties, and the order is PREFERRED's as it always was.
  */
 function byWork(sorted: readonly InteractionTiming[]): InteractionTiming[] {
   const workOf = (e: InteractionTiming) => e.processingEnd - e.processingStart;
   let most = 0;
   for (const e of sorted) most = Math.max(most, workOf(e));
-  const heavy = sorted.filter((e) => workOf(e) > most - HANDLER_TIE_MS);
-  return heavy.concat(sorted.filter((e) => !heavy.includes(e)));
+  return sorted.filter((e) => workOf(e) > most - HANDLER_TIE_MS);
 }
 
 const summarize = (e: InteractionTiming): EventEntrySummary =>
@@ -366,14 +367,15 @@ export function buildReport(
   let owners: readonly string[] = [];
   let handler: string | null = null;
   if (fiber) {
-    // Named by the control the node is inside, as at dispatch; the handler is still looked for from the
-    // node itself, which is where a handler on the icon would be.
-    const control = controlOf(live);
-    owners = ownersOf((control !== live && control && fiberFromNode(control)) || fiber);
+    // Named by the control around an icon, as at dispatch; the handler is still looked for from the node
+    // itself, which is where a handler on the icon would be.
+    const named = namedFrom(live);
+    owners = ownersOf((named !== live && named && fiberFromNode(named)) || fiber);
     for (const e of byWork(sorted)) {
       // An Event Timing entry does not say which key was pressed; the ring entry for the same event
       // does, and which key it was decides whether the press could have submitted a form.
-      const pressed = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime))?.press;
+      // A keypress has no ring entry of its own and shares its keydown's key.
+      const pressed = inputs.find((i) => (i.type === e.name || (e.name === 'keypress' && i.type === 'keydown')) && near(i.ts, e.startTime))?.press;
       handler = handlerOf(fiber, e.name, typeof pressed === 'string' ? pressed : null);
       if (handler) break;
     }

@@ -477,9 +477,11 @@ export function WebVitals() {
 
 The component path goes into `attribution.interactionTarget`, where web-vitals otherwise puts a CSS
 selector, so it shows up wherever that field is already collected and charted, with nothing to change
-downstream. A path names at most four components, and they are the four nearest the element, so in a deep
-tree it starts below the page and the layout rather than ending short of the component that renders what
-was clicked. `generateTarget` returns `undefined` when the node has no React fiber or no named component
+downstream. A path names at most four components, the four nearest the element whose names a reader could
+search their code for (a minifier's `Xe` or a styling library's `styled.div` gives way to the next one out,
+unless the chain has nothing better), starting from the control around a clicked icon as reports do. So in a
+deep tree it starts below the page and the layout rather than ending short of the component that renders
+what was clicked. `generateTarget` returns `undefined` when the node has no React fiber or no named component
 above it, which is web-vitals' signal to fall back to its own selector, and it never throws.
 
 `attributeINP(metric)` returns the metric's attribution (`{}` where there is none, as under
@@ -675,11 +677,13 @@ put on its `onPointerDown`, not on an `onClick` that did nothing.
 `target.component` is the nearest component enclosing the element whose name a reader could search their own
 code for: one React would accept as a component name (capitalised), that a minifier has not cut down to a
 letter or two, and whose every dotted part is the same, so a design system's `Primitive.button` gives way to
-the `TabsTrigger` above it. When the click landed inside a control, it starts from the control the label names
-(see [Labels and personal data](#labels-and-personal-data)), so a click on an icon library's `<svg>` inside a
-button names the component that renders the button, not the icon. `target.owners` keeps the whole chain,
-innermost first, whatever the names are, and where nothing in it passes, `component` is the innermost owner
-as it always was.
+the `TabsTrigger` above it. When the click landed on an icon, an `<svg>` or something in one, an `<img>` or a
+`<picture>`, inside a control, the chain starts from the control the label names (see
+[Labels and personal data](#labels-and-personal-data)), so a click on an icon library's `<svg>` inside a
+button names the component that renders the button, not the icon; anywhere else it starts from the element
+itself, so a card inside a link is named by the card. `target.owners` keeps the whole chain, innermost
+first, whatever the names are, and where nothing in it passes, `component` is the innermost owner as it
+always was.
 
 `duration` is the longest single Event Timing entry, as web-vitals measures it; `holdMs` is how much longer
 the span from press to release ran. Reports are frozen: a late entry, frame or render that joins one reaches
