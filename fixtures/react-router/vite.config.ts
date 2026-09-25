@@ -8,9 +8,11 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     reactRouter(),
-    // Component names that survive the minifier. The install is app/inp-blame.ts, since React Router
-    // writes its own HTML and the plugin's script has no page to go in.
-    inpBlame({ enabled: true, runtime: false }), // production builds too; the default is development only
+    inpBlame({
+      enabled: true,                 // production builds too; the default is development only
+      runtime: { overlay: "query" }, // the badge only on request, such as ?inp-blame in the URL
+      entry: "app/root.tsx",         // React Router writes its own HTML, so the install goes first in the root route
+    }),
   ],
   resolve: {
     tsconfigPaths: true,
