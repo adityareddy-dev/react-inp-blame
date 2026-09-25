@@ -22,6 +22,18 @@ it changes when a field is removed or changes meaning, which a minor release may
   components gets no own-render clause, and neither does a production build or a clock too coarse for single
   components, where no component has a time of its own. `blame.detail` changes value for those renders and
   keeps its meaning, so `schemaVersion` stays at 3.
+- **A render is "mostly" one component only where that component is most of it.** 0.12.0 named the component
+  that rendered most whenever it rendered more than once, however small its share, and on real apps that read
+  "re-rendering 59 components inside DismissableLayer, mostly Label (4 of them)" (the shadcn/ui docs) and
+  "1298 components inside SidePanelSubPageRouter, mostly (anonymous) (124 of them)" (Twenty). The clause is
+  now said only where that component is half of the components rendered or more, not counting the wrappers a
+  styling library puts around each element, or half of the render's time where React timed it. "460
+  components inside CommandList, mostly (anonymous) (422 of them)" reads as before, and so does "721
+  components inside TableBody, mostly TableBodyRow (36 of them, 13 ms)", 13 ms of a 24 ms render. Where it is
+  not, the sentence stops at the component the render is named after, and `blame.detail` is the component count
+  ("59 components") where it was "Label ×4", as its description always said. The panel's line for a later
+  render follows the same rule. Which kind of blame an interaction gets does not change. `blame.detail` keeps
+  its meaning, so `schemaVersion` stays at 3.
 
 ## [0.12.0] - 2026-09-25
 

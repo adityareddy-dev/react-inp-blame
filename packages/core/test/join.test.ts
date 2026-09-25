@@ -537,7 +537,7 @@ test('forced layout the browser measured outranks a render no build timed', () =
   assert.deepEqual(r.explanation.blame, {
     kind: 'layout',
     name: 'Tabs',
-    detail: 'TabsTrigger ×16',
+    detail: '181 components',
     ms: 108,
     confidence: 'measured',
   });
@@ -548,7 +548,7 @@ test('forced layout the browser measured outranks a render no build timed', () =
       // Where the layout happened and where React was working are two records, and only the first is
       // the browser's. The sentence carries both, so the subtree is never the only thing named.
       ' It was charged to DIV#root.onmousedown.' +
-      ' React was re-rendering 181 components inside Tabs, mostly TabsTrigger (16 of them).' +
+      ' React was re-rendering 181 components inside Tabs.' +
       " That happens when code reads an element's size right after changing styles, often in a layout effect.",
   );
   // The note would say the same thing a second time.
@@ -666,7 +666,7 @@ test('a rung the screen update closes still says what it would have named', () =
   const rendered = report([entry('click', 0, 425, 0, 210)], [commit(100, 0, { total: 200, rendered: 300 })], []);
   assert.equal(rendered.explanation.blame.kind, 'painting');
   assert.ok(
-    rendered.explanation.notes.some((note) => note.includes('200 ms') && note.includes('Row')),
+    rendered.explanation.notes.some((note) => note.includes('200 ms') && note.includes('inside List')),
     `expected a note naming the render, got ${JSON.stringify(rendered.explanation.notes)}`,
   );
 
@@ -697,7 +697,7 @@ test('a layout blame names a React subtree only while the commit it came from is
   // interaction's. Those names are still good and are still printed.
   const tight = report(tabs, [rerender], thrash, [input(0, 'click')]);
   assert.equal(tight.explanation.blame.name, 'TabsList');
-  assert.equal(tight.explanation.blame.detail, 'TabsTrigger ×16');
+  assert.equal(tight.explanation.blame.detail, '181 components');
   assert.equal(tight.explanation.blame.confidence, 'measured');
 
   // A commit joined by overlapping the interaction in time, or one whose walk was cut short, is the
@@ -878,7 +878,7 @@ test('the screen update takes the blame off a rung only by taking it, never by e
   // render it would displace and shorter than the working time that render sat in, which used to be
   // the one gap where the ladder rejected the render and then rejected the screen update too.
   const measured = report([entry('click', 0, 200, 5, 105)], [commit(60, 0, { total: 90, rendered: 300 })], []);
-  assert.deepEqual(measured.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 90, confidence: 'measured' });
+  assert.deepEqual(measured.explanation.blame, { kind: 'render', name: 'List', detail: '300 components', ms: 90, confidence: 'measured' });
 
   // The same shape with long animation frames recorded, where the fall was further: past the screen
   // update to the script the render itself ran inside, which blames the handler for React's work.
@@ -887,7 +887,7 @@ test('the screen update takes the blame off a rung only by taking it, never by e
     [commit(60, 0, { total: 190, rendered: 300 })],
     [frame(0, 400, [script('DIV#root.onclick', 5, 199)])],
   );
-  assert.deepEqual(observed.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 190, confidence: 'measured' });
+  assert.deepEqual(observed.explanation.blame, { kind: 'render', name: 'List', detail: '300 components', ms: 190, confidence: 'measured' });
 
   // And the screen update still wins where it is longer than everything the working time holds.
   const painted = report([entry('click', 0, 200, 5, 45)], [commit(20, 0, { total: 30, rendered: 300 })], []);
@@ -1622,7 +1622,8 @@ test('a render is named after its deepest readable component, and what it was mo
   const blameOf = (opts: Partial<CommitSummary>) => report(slow, [commit(4, 0, { hasDurations: false, total: 0, rendered: 332, ...opts })], [], ring).explanation;
 
   // styled-components names every element it wraps `styled.<tag>` or `Styled(<Name>)`, and a minifier
-  // leaves a dependency's components one or two letters: none of them is a name the app wrote.
+  // leaves a dependency's components one or two letters: none of them is a name the app wrote. The
+  // wrappers are not counted against DayCell either, so 90 of the 132 other components are most of them.
   const styled = blameOf({
     roots: ['Calendar'],
     hotPath: ['Calendar', 'MonthGrid', 'styled.tbody', '$'],
@@ -1643,7 +1644,7 @@ test('a render is named after its deepest readable component, and what it was mo
 
   // "Mostly" is a readable component only while it carries a real share of the render: 2 Panels beside 120
   // components a minifier named is not what the render was made of.
-  const scattered = blameOf({ roots: ['Xe'], hotPath: ['Xe'], components: [{ name: 'Nu', count: 120, self: null, total: null }, { name: 'Panel', count: 2, self: null, total: null }] });
+  const scattered = blameOf({ rendered: 122, roots: ['Xe'], hotPath: ['Xe'], components: [{ name: 'Nu', count: 120, self: null, total: null }, { name: 'Panel', count: 2, self: null, total: null }] });
   assert.equal(scattered.blame.detail, 'Nu ×120');
   // Where React measured, the share is the time.
   const timed = blameOf({ hasDurations: true, total: 60, roots: ['Xe'], hotPath: ['Xe'], components: [{ name: 'Nu', count: 5, self: 40, total: 40 }, { name: 'Panel', count: 50, self: 12, total: 12 }] });
@@ -1660,9 +1661,58 @@ test('a render is named after its deepest readable component, and what it was mo
   assert.equal(blameOf({ roots: ['App'], hotPath: ['App', 'Button$1'], components: [] }).blame.name, 'Button$1');
 
   // With nothing readable anywhere the names are kept as they stand, rather than one being invented.
-  const minified = blameOf({ roots: ['Xe'], hotPath: ['Xe', '$'], components: [{ name: 'et', count: 113, self: null, total: null }] });
+  const minified = blameOf({ rendered: 120, roots: ['Xe'], hotPath: ['Xe', '$'], components: [{ name: 'et', count: 113, self: null, total: null }] });
   assert.equal(minified.blame.name, '$');
   assert.equal(minified.blame.detail, 'et ×113');
+});
+
+test('a render is said to be mostly one component only where that component is half of it, by count or by the time React timed', () => {
+  const click = [entry('click', 0, 120, 3, 100)];
+  const counted = (rendered: number, hotPath: string[], components: [string, number][]) =>
+    report(click, [commit(50, 0, { hasDurations: false, total: 0, rendered, roots: [hotPath[0]!], hotPath, components: components.map(([name, count]) => ({ name, count, self: null, total: null })) })], []).explanation;
+
+  // Shaped like reports 0.12.0 gave on the shadcn/ui docs and on Twenty, where the most-rendered component
+  // was a small part of the render.
+  const dialog = counted(59, ['DismissableLayer'], [['Label', 4], ['Button', 3], ['DialogTitle', 1]]);
+  assert.match(dialog.cause, /^React was most likely re-rendering 59 components inside DismissableLayer\. /);
+  assert.equal(dialog.blame.detail, '59 components');
+  const panel = counted(1298, ['SidePanelSubPageRouter'], [['(anonymous)', 124], ['MenuItem', 40]]);
+  assert.match(panel.cause, /^React was most likely re-rendering 1298 components inside SidePanelSubPageRouter\. /);
+  assert.equal(panel.blame.detail, '1298 components');
+  // Where the render is named after that component, the count after it goes too.
+  const presence = counted(56, ['Popover', 'Presence'], [['Presence', 4], ['Label', 2]]);
+  assert.match(presence.cause, /^React was most likely re-rendering 56 components inside Presence\. /);
+
+  // Half of the components is enough, and so is half of the render's time.
+  assert.match(counted(460, ['CommandList'], [['(anonymous)', 422], ['CommandItem', 20]]).cause, /re-rendering 460 components inside CommandList, mostly \(anonymous\) \(422 of them\)\. /);
+  const typed = report(click, [commit(50, 0, { hasDurations: false, total: 0, rendered: 4, roots: ['CommandInput'], hotPath: ['CommandInput'], components: [{ name: '(anonymous)', count: 2, self: null, total: null }, { name: 'Primitive.input', count: 1, self: null, total: null }] })], []).explanation;
+  assert.match(typed.cause, /re-rendering 4 components inside CommandInput, mostly \(anonymous\) \(2 of them\)\)/);
+  const rows = report(
+    [entry('click', 0, 48, 3, 30)],
+    [
+      commit(28, 0, {
+        total: 24,
+        rendered: 721,
+        roots: ['App'],
+        hotPath: ['App', 'TableBody'],
+        components: [
+          { name: 'TableBodyRow', count: 36, self: 13, total: 0.6 },
+          { name: 'cell', count: 612, self: 6, total: 0.1 },
+          { name: 'TableBody', count: 1, self: 3, total: 23 },
+        ],
+      }),
+    ],
+    [],
+  ).explanation;
+  assert.equal(rows.cause, 'React spent 24 ms re-rendering 721 components inside TableBody, mostly TableBodyRow (36 of them, 13 ms).');
+  assert.equal(rows.blame.detail, 'TableBodyRow ×36');
+
+  // Which blame a render gets is decided as before: 60 of one component beside a named handler is a list,
+  // and a list explains the working time, though it is not most of these 200 components.
+  const list = report(click, [commit(50, 0, { hasDurations: false, total: 0, rendered: 200, roots: ['Feed'], hotPath: ['Feed'], components: [{ name: 'Post', count: 60, self: null, total: null }] })], [], loginClick('onClick')).explanation;
+  assert.equal(list.blame.kind, 'render');
+  assert.equal(list.blame.detail, '200 components');
+  assert.doesNotMatch(list.cause, /mostly/);
 });
 
 /**

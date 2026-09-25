@@ -75,6 +75,21 @@ export function mostlyComponent(c: CommitSummary): CommitSummary['components'][n
   return weight(readable) >= weight(first) / 2 ? readable : first;
 }
 
+// A sentence says a commit was "mostly" one component from half of it. On the shadcn/ui docs a render of 59
+// components read "mostly Label (4 of them)", which sends a reader to the wrong file.
+const MOSTLY_MIN_SHARE = 0.5;
+
+/**
+ * `mostlyComponent` where it is most of the commit, for the words that say "mostly": half of the components
+ * rendered or more, not counting the wrappers a styling library puts around each element, or half of the
+ * render time where React timed it. Which blame a render gets still goes by `mostlyComponent`.
+ */
+export function dominantComponent(c: CommitSummary): CommitSummary['components'][number] | undefined {
+  const top = mostlyComponent(c);
+  const wrappers = c.components.reduce((n, x) => n + (STYLING_WRAPPER.test(x.name) ? x.count : 0), 0);
+  return top && (top.count >= MOSTLY_MIN_SHARE * (c.rendered - wrappers) || (top.self != null && c.total > 0 && top.self <= c.total && top.self >= MOSTLY_MIN_SHARE * c.total)) ? top : undefined;
+}
+
 // What a minifier leaves on a function that carries no `displayName`: one or two characters.
 const MINIFIED_NAME = /^[A-Za-z_$][A-Za-z0-9_$]?$/;
 // Fewer names than this say nothing about the build: a page of three components can be called A, B and Nav.

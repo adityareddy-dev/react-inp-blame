@@ -1,4 +1,4 @@
-import { heaviest, leafName, MINIFIED_NAMES_NOTE, mostlyComponent, namesLookMinified, readableName } from './commits.js';
+import { dominantComponent, heaviest, leafName, MINIFIED_NAMES_NOTE, mostlyComponent, namesLookMinified, readableName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
@@ -782,17 +782,20 @@ function ownRender(c: CommitSummary): { readonly name: string; readonly self: nu
   return top.self >= OWN_RENDER_MIN_MS && top.self >= OWN_RENDER_MIN_SHARE * c.total ? { name: top.name, self: top.self } : undefined;
 }
 
-/** "LineItem ×800"; "TableBody's own render" where that was most of the time; else the component count. */
-function mostlyOf(c: CommitSummary): string | null {
+/**
+ * "LineItem ×800" where LineItem was most of the commit (`dominantComponent`); "TableBody's own render" where
+ * that was most of the time; else the component count. The panel's line for a later render says the same.
+ */
+export function mostlyOf(c: CommitSummary): string | null {
   if (c.rendered === 1) return null;
-  const top = mostlyComponent(c);
+  const top = dominantComponent(c);
   if (top && top.count > 1) return `${top.name} ×${top.count}`;
   const own = ownRender(c);
   return own ? `${own.name}'s own render` : renderedCount(c);
 }
 
 /** "801 components"; "at least 5000 components" where the walk stopped before the end of the tree. */
-function renderedCount(c: CommitSummary): string {
+export function renderedCount(c: CommitSummary): string {
   return `${c.truncated ? 'at least ' : ''}${plural(c.rendered, 'component')}`;
 }
 
@@ -804,7 +807,7 @@ function renderedCount(c: CommitSummary): string {
 function renderPhrase(c: CommitSummary): string {
   const verb = c.hydrated ? 'hydrating' : 're-rendering';
   const leaf = leafOf(c);
-  const top = mostlyComponent(c);
+  const top = dominantComponent(c);
   // React commits with nothing rendered: a retry that found the boundary still blocked, or an update
   // every component bailed out of. Calling that a re-render of no components reads as a bug in the
   // report rather than as what it is.
