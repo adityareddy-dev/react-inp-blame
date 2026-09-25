@@ -1,6 +1,6 @@
-import { heaviest, leafName, mostlyComponent } from './commits.js';
+import { heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
-import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
+import { carriesWork, isPointerEvent, isTypingEvent, kindOf, mostlyOf, renderedCount } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { warnOnce } from './warn.js';
@@ -238,7 +238,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
         h('div', { class: 'r1', 'data-rating': r.explanation.rating }, h('i', 'dot'), h('span', 't', titleFor(r)), h('span', 'ms', `${Math.round(r.duration)} ms`)),
         n > 1 && h('div', 'meta', `${n} key presses${DOT}slowest ${Math.round(r.duration)} ms${DOT}typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms`),
         h('div', 'blame', ...blameLine(r)),
-        later && h('div', 'blame later', 'then ', b(where(later)), ` re-rendered after the paint${DOT}${top(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
+        later && h('div', 'blame later', 'then ', b(where(later)), ` re-rendered after the paint${DOT}${laterDetail(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
         h('div', 'bar', ...phaseBar(r.explanation.phases, total)),
       ),
       isExpanded && more(r),
@@ -508,10 +508,8 @@ function swatch(cls: string, p: Phase): HTMLElement {
 function where(c: CommitSummary): string {
   return leafName(c) ?? 'the tree';
 }
-function top(c: CommitSummary): string {
-  const t = mostlyComponent(c);
-  return t ? `${t.name} ×${t.count}` : `${c.truncated ? 'at least ' : ''}${c.rendered} components`;
-}
+/** What a later render was made of, in the words its blame's `detail` would use, and the count for one component. */
+export const laterDetail = (c: CommitSummary): string => mostlyOf(c) ?? renderedCount(c);
 
 function blameLine(r: InteractionReport): Child[] {
   const blame = r.explanation.blame;
