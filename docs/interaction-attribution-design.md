@@ -1577,6 +1577,19 @@ own and the function decides every other module, so the "no" row passes on Rollu
 (`fixtures/vite-vendor-chunk` builds it in CI). A `manualChunks` object is left as it is, and a build
 where react-dom still connects before the install gets a warning naming the module that connects it.
 
+Rolldown's chunk groups (`codeSplitting.groups`, or the older `advancedChunks.groups`) were a second
+way to the same "no" on Vite 8, and a worse one: a vendor group took react-dom and this library
+together, and when a library that imports react-dom (Radix's Portal, for one) was in the group too, its
+module ran react-dom as the vendor chunk loaded, before the install script's own body. The plugin
+now puts a group of its own ahead of the app's, with a priority above all of theirs and no
+size limits, whose `test` takes the install's static graph, so the library leaves every group of the
+app's and the vendor chunk is only what the app's groups keep. A group's `test` gets only the module
+id, so the graph comes from the `getModuleInfo` of the build in progress, kept at `buildEnd`; a function
+`name` would get the graph itself, but Rolldown then warns on every build unless the group has a
+`debugName`, which older Rolldown refuses. With `entry` the group takes the install module too, as the
+`manualChunks` function does, and it is added under any `codeSplitting` object, since Rolldown ignores
+`manualChunks` beside one (`fixtures/vite-vendor-groups` builds the page case in CI).
+
 The demo and its React variants install with the plugin, and every variant runs in CI as a production
 build as well as on the dev server.
 

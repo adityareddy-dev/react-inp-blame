@@ -24,6 +24,24 @@ it changes when a field is removed or changes meaning, which a minor release may
 - **The size check wants the README's table exactly as `--write` writes it.** It let a row a tenth of a
   kilobyte off pass, so a table could go stale by 0.1 KB at a time. The budget check is unchanged.
 
+### Fixed
+
+- **A Vite 8 vendor group no longer runs react-dom before the install.** With a
+  `build.rolldownOptions.output.codeSplitting` group (or the older `advancedChunks` one) sending
+  `node_modules` to one vendor chunk, the library went into that chunk beside react-dom, and the install
+  script imported it. When a library that imports react-dom, such as Radix's Portal, was in the group too,
+  its module ran react-dom as the vendor chunk loaded, so on React 17 and 18 react-dom connected to the hook
+  before `install()` and nothing was blamed; the build only warned. The plugin now adds a group of its own
+  ahead of the app's, with a priority above all of them and no minimum size, that takes the library into a
+  chunk of its own, as it has done for a `manualChunks` function since 0.5.0. With `entry` the group takes the
+  install module too, where the plugin used to warn and leave the groups alone. CI builds
+  `fixtures/vite-vendor-groups`, Vite 8.3 and React 18.3 with such a group and Radix's Portal in the page,
+  and checks the click is blamed on `SlowList` in development and production; React 17 was checked by hand.
+- Under `@vitejs/plugin-legacy`, the warning that react-dom runs before the install names the modern bundle's
+  files, such as `assets/index-a1b2.js`, rather than the legacy copy's, which the plugin writes first. It
+  names the legacy files only when there is no modern bundle (`renderModernChunks: false`), and on Vite 8,
+  which builds the two copies one after the other, it is said once rather than twice.
+
 ## [0.9.0] - 2026-09-25
 
 ### Added

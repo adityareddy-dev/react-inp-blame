@@ -1,0 +1,19 @@
+{
+  // The specs and playwright.config.ts. The build's `tsc -b` never sees them and Playwright strips their
+  // types without checking, so scripts/vite-app.mjs compiles them with this after the build.
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["e2e", "playwright.config.ts"]
+}
