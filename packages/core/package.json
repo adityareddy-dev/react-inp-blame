@@ -51,6 +51,11 @@
       "import": "./vite.mjs",
       "default": "./vite.mjs"
     },
+    "./astro": {
+      "types": "./astro.d.mts",
+      "import": "./astro.mjs",
+      "default": "./astro.mjs"
+    },
     "./display-names-loader": {
       "types": "./display-names-loader.d.cts",
       "import": "./display-names-loader.cjs",
@@ -65,11 +70,12 @@
       "next-client": ["./dist/next-client.d.ts"],
       "web-vitals": ["./dist/web-vitals.d.ts"],
       "vite": ["./vite.d.mts"],
+      "astro": ["./astro.d.mts"],
       "display-names-loader": ["./display-names-loader.d.cts"]
     }
   },
   "sideEffects": ["./dist/auto.js", "./dist/next-client.js", "./src/auto.ts", "./src/next-client.ts"],
-  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "vite.mjs", "vite.d.mts", "README.md", "LICENSE"],
+  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "vite.mjs", "vite.d.mts", "astro.mjs", "astro.d.mts", "README.md", "LICENSE"],
   "engines": {
     "node": ">=20.19"
   },
@@ -78,18 +84,20 @@
     "prepack": "npm run build",
     "test:unit": "node --import ./test/ts-imports.ts --test test/*.test.ts"
   },
-  "keywords": ["react", "inp", "interaction-to-next-paint", "web-vitals", "core-web-vitals", "performance", "profiling", "event-timing", "long-animation-frames", "devtools", "nextjs", "vite"],
+  "keywords": ["react", "inp", "interaction-to-next-paint", "web-vitals", "core-web-vitals", "performance", "profiling", "event-timing", "long-animation-frames", "devtools", "nextjs", "vite", "astro"],
   "peerDependencies": {
     "next": "*",
     "react": "*",
     "react-dom": "*",
-    "vite": "*"
+    "vite": "*",
+    "astro": "*"
   },
   "peerDependenciesMeta": {
     "next": { "optional": true },
     "react": { "optional": true },
     "react-dom": { "optional": true },
-    "vite": { "optional": true }
+    "vite": { "optional": true },
+    "astro": { "optional": true }
   },
   "devDependencies": { "typescript": "^5.6.0" }
 }
