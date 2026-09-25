@@ -19,7 +19,7 @@ export function inertApi(mode: Exclude<Stats['mode'], 'shim' | 'chained'>, optio
     inp: () => null,
     clear: () => {},
     onInteraction: () => () => {},
-    stats: () => ({ mode, unsupportedReason, walks: 0, walkTotalMs: 0, reportTotalMs: 0, installMs: installMs() }),
+    stats: () => ({ mode, unsupportedReason, walks: 0, walkTotalMs: 0, reportTotalMs: 0, installMs: installMs(), react: 'unreadable' }),
     debug: {
       commits: () => [],
       hook: () => ({ owner: 'none', renderers: [], devtoolsLockedOut: false }),

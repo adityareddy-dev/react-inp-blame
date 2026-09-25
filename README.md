@@ -629,7 +629,9 @@ their first value, with a warning, until `dispose()`.
 The API has `reports()` (the last 50 published, oldest first, at their latest revision), `last()`, `inp()`
 (`{ value, rating, interactionId, interactionCount, report }` for this navigation, or null), `onInteraction(fn)`,
 `clear()` (drops reports and commits, and starts the INP estimate over), `dispose()` and `stats()`: `mode`
-(`'shim'`, `'chained'`, `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `walks`, and the
+(`'shim'`, `'chained'`, `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `react` (`'reading'`,
+`'waiting'` while React has not rendered on the page, `'installed-late'` when it has and no react-dom registered
+because install() ran after react-dom loaded, or `'unreadable'`), `walks`, and the
 library's own time in `walkTotalMs`, `reportTotalMs` and `installMs`. `debug.commits()` and `debug.hook()` are
 for debugging and may change in any version. Also exported: [`mountOverlay`](#the-badge-and-panel). Under
 the `react-server` condition every export does nothing, here and on
@@ -642,6 +644,7 @@ the `react-server` condition every export does nothing, here and on
 interface InteractionReport {
   schemaVersion: 2; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
   pointerType: string | null;                            // 'mouse', 'pen' or 'touch' for a pointer's event
+  reactStatus: 'reading' | 'waiting' | 'installed-late' | 'unreadable'; // stats().react as it was built
   start: number; end: number; duration: number; holdMs: number;             // ms, performance.now() clock
   inputDelay: number; processing: number; walkMs: number; presentation: number; // add up to duration
   target: TargetInfo | null; entries: EventEntrySummary[]; // target: selector, label, component, owners, handler
@@ -829,9 +832,9 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 59.0 KB | 21.2 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 12.8 KB | 4.8 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 22.2 KB | 8.4 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 60.3 KB | 21.5 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 14.9 KB | 5.5 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 22.4 KB | 8.4 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
 <!-- size:end -->
 

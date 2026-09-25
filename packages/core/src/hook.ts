@@ -497,6 +497,15 @@ export function hookStats(): Pick<Stats, 'mode' | 'unsupportedReason' | 'walks' 
   return { mode: unsupportedReason ? 'unsupported' : state.mode, unsupportedReason, walks: state.walks, walkTotalMs: state.walkTotalMs };
 }
 
+/** Whether a react-dom the page renders with has registered with the hook in use and can be read. */
+export function readingReactDom(): boolean {
+  if (!state.attached || (state.mode !== 'shim' && state.mode !== 'chained')) return false;
+  for (const renderer of registryOf(state.attached).values()) {
+    if (renderer.isReactDom && !renderer.devToolsOnly && !renderer.problem) return true;
+  }
+  return false;
+}
+
 /** `api.debug.hook()`. */
 export function hookInfo(): HookInfo {
   return { owner: owner(), renderers: knownRenderers(), devtoolsLockedOut: state.devtoolsLockedOut };

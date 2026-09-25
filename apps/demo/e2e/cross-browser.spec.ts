@@ -47,7 +47,7 @@ test('reports name the component in any browser, with frames null where Long Ani
   }
 });
 
-test('a browser that reports no event entries gets nothing installed', async ({ page }) => {
+test('a browser that reports no event entries gets nothing installed, and a badge that says so', async ({ page }) => {
   const warnings: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'warning' && m.text().includes('[react-inp-blame]')) warnings.push(m.text());
@@ -65,7 +65,13 @@ test('a browser that reports no event entries gets nothing installed', async ({ 
     hook: '__REACT_DEVTOOLS_GLOBAL_HOOK__' in window,
     overlay: document.getElementById('react-inp-blame') != null,
   }));
-  expect(installed).toEqual({ mode: 'unsupported', hook: false, overlay: false });
+  // The demo asks for the badge, so it is there to say this browser does not report INP.
+  expect(installed).toEqual({ mode: 'unsupported', hook: false, overlay: true });
+  const badge = page.locator('#react-inp-blame .badge');
+  await expect(badge).toHaveAttribute('data-status', 'unsupported-browser');
+  await expect(badge).toContainText('not measured');
+  await badge.click();
+  await expect(page.locator('#react-inp-blame .panel .status')).toContainText('does not report INP');
   // The install the Vite plugin adds and the demo's own install() call both ran; the reason is logged once.
   expect(warnings).toHaveLength(1);
   expect(warnings[0]).toContain('no Event Timing interactionId');

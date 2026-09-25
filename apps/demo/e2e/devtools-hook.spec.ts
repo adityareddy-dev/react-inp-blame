@@ -97,3 +97,41 @@ test.describe('Fast Refresh', () => {
     expect(await refreshRoots(page)).toBe(0);
   });
 });
+
+test('react-dom loaded before the library: stats(), the report, the badge and the panel say React is not being read', async ({ page }) => {
+  await page.goto('/devtools-hook.html?order=react,library&badge');
+  await page.waitForSelector('[data-test=trigger]');
+  // The library cannot see the click's renders here, so the click is made slow by a listener of the page's
+  // own, which is what gets it reported.
+  await page.evaluate(() =>
+    document.querySelector('[data-test=trigger]')!.addEventListener('click', () => {
+      const end = performance.now() + 150;
+      while (performance.now() < end) {
+        // busy
+      }
+    }),
+  );
+  await page.click('[data-test=trigger]');
+  const handle = await page.waitForFunction(() => window.__REACT_INP_BLAME__.last(), null, { timeout: 8_000 });
+  const report = (await handle.jsonValue()) as InteractionReport;
+  expect(await page.evaluate(() => window.__REACT_INP_BLAME__.stats().react)).toBe('installed-late');
+  expect(report.reactStatus).toBe('installed-late');
+  expect(report.commits).toEqual([]);
+  expect(report.explanation.cause).not.toMatch(/didn't render anything/);
+  expect(report.explanation.notes.join(' ')).toContain('install() ran after react-dom loaded');
+  const badge = page.locator('#react-inp-blame .badge');
+  await expect(badge).toHaveAttribute('data-status', 'installed-late');
+  await badge.click();
+  await expect(page.locator('#react-inp-blame .panel .status')).toContainText('install() ran after react-dom loaded');
+});
+
+test('the badge says nothing is wrong where React is read', async ({ page }) => {
+  await page.goto('/devtools-hook.html?order=library&badge');
+  await page.waitForSelector('[data-test=trigger]');
+  await page.click('[data-test=trigger]');
+  await page.waitForFunction(() => window.__REACT_INP_BLAME__.last(), null, { timeout: 8_000 });
+  expect(await page.evaluate(() => window.__REACT_INP_BLAME__.stats().react)).toBe('reading');
+  await expect(page.locator('#react-inp-blame .badge')).toHaveAttribute('data-status', /^(ok|no-frames)$/);
+  await page.locator('#react-inp-blame .badge').click();
+  await expect(page.locator('#react-inp-blame .panel .status.warn')).toHaveCount(0);
+});
