@@ -10,7 +10,7 @@
 //
 // Nothing here imports Vite: a plugin is a plain object.
 
-import path from 'node:path';
+import { posix } from 'node:path';
 import loader from './display-names-loader.cjs';
 
 // What the added script imports. A leading \0 is how Vite marks a module no file backs.
@@ -40,7 +40,7 @@ function entryPath(root, entry) {
   const base = fileOf(String(root)).replace(/\/$/, '');
   const written = fileOf(entry);
   const absolute = /^[A-Z]:\//.test(written) || written === base || written.startsWith(`${base}/`);
-  return path.posix.normalize(absolute ? written : `${base}/${written.replace(/^\//, '')}`);
+  return posix.normalize(absolute ? written : `${base}/${written.replace(/^\//, '')}`);
 }
 
 /**
@@ -52,18 +52,8 @@ function splittable(output) {
   return !output.inlineDynamicImports && !output.preserveModules && output.codeSplitting !== false && output.format !== 'iife' && output.format !== 'umd';
 }
 
-/**
- * The config of the build a hook runs in. Vite 6 and later hand every hook its environment, whose config
- * is that build's own; the one configResolved stored can be another build's, since React Router runs a
- * second Vite through the same plugins. Vite 5 has no environments, and one build per plugin.
- */
-function ownConfig(stored, environment) {
-  return environment?.config?.command ? environment.config : stored;
-}
-
 /** Whether a build is the browser's: `vite build` of a client environment, not a server one. */
-function clientBuild(stored, environment) {
-  const config = ownConfig(stored, environment);
+function clientBuild(config, environment) {
   if (config?.command !== 'build') return false;
   if (environment?.config?.consumer === 'server') return false;
   return !(environment?.config?.build ?? config.build)?.ssr;
@@ -81,7 +71,9 @@ function installGraph(getModuleInfo) {
 }
 
 // A directive prologue, such as "use client": string literals that are whole statements, ended by a
-// semicolon or a line break. It has to stay first in its module to mean anything.
+// semicolon or a line break. It has to stay first in its module to mean anything. A comment after one on
+// its line is not read, so that directive ends up after the import, as a plain expression; compilers
+// print directives without one.
 const DIRECTIVES = /^(?:\s*(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")[ \t]*(?:;|(?=\r?\n)|$))+/;
 
 /** The file name of the chunk holding the install call, or undefined when this build has none. */
@@ -107,8 +99,7 @@ function pagePath(root, input) {
  * a single-file output format or the SystemJS bundle @vitejs/plugin-legacy adds either cannot be
  * split at all or gains nothing from document order.
  */
-function separateScript(stored, environment) {
-  const config = ownConfig(stored, environment);
+function separateScript(config, environment) {
   if (config?.command !== 'build') return false;
   if (environment?.config?.consumer === 'server') return false;
   const build = environment?.config?.build ?? config.build;
@@ -239,6 +230,8 @@ export function inpBlame(options = {}) {
         }
         // One walk per build: every module id is asked, and the install's graph is the same for all of them.
         let graph = null;
+        let warnedGraph = false;
+        const warn = (message) => this.warn(message);
         return {
           ...output,
           manualChunks: (id, meta) => {
@@ -246,6 +239,10 @@ export function inpBlame(options = {}) {
             if (meta?.getModuleInfo) {
               graph ??= installGraph(meta.getModuleInfo);
               if (graph.has(id)) return 'react-inp-blame-install';
+            } else if (!warnedGraph) {
+              // Rollup and Rolldown both hand it over; a bundler that did not would leave the library to the app's rules.
+              warnedGraph = true;
+              warn('inpBlame: this bundler gives manualChunks no getModuleInfo, so only the install call gets a chunk of its own, and the library goes where your manualChunks puts it. Keep react-inp-blame out of a vendor rule.');
             }
             return theirs?.(id, meta);
           },

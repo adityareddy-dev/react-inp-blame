@@ -282,7 +282,8 @@ keeps every module as its own file, or is an `iife` or `umd` script) keeps the i
 own, so there the install runs wherever the bundler puts it. A build in which no module has that path fails,
 rather than shipping without the install. The chunk comes from `manualChunks`: the install and everything it
 imports always go in it, so a rule of your own that sends `node_modules` to a vendor chunk cannot put the
-library beside react-dom, and your `manualChunks` function keeps deciding every other module. A
+library beside react-dom, and your `manualChunks` function keeps deciding every other module. Under Rollup
+that keeps the install first; under Rolldown the module can still import the vendor chunk before it. A
 `manualChunks` object, or Rolldown's own chunk groups, cannot be added to, so the plugin warns and leaves them
 be, and the install may then run late in a build. `entry` needs the runtime, so it cannot go with
 `runtime: false`.
