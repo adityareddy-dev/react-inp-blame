@@ -2051,6 +2051,46 @@ test('a report looks for React again when React rendered after the last look, ho
   });
 });
 
+test('a page with no React on it is looked at a bounded number of times, however many interactions it gets', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    // An Astro page whose islands are all another framework's: the integration installs, and no react-dom ever registers.
+    let looks = 0;
+    const doc = documentOf([{}, {}, {}]);
+    const walk = doc.createTreeWalker;
+    doc.createTreeWalker = () => {
+      looks++;
+      return walk();
+    };
+    Object.defineProperty(globalThis, 'document', { value: doc, configurable: true, writable: true });
+    page.window[HOOK] = existingHook();
+    clock.now = 100;
+    const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
+    // The badge asks as it mounts.
+    assert.equal(api.stats().react, 'waiting');
+    // A click, its report, and the badge redrawing for it, each more than the second a look is otherwise good for after the last.
+    const interact = (id: number) => {
+      clock.now += 1500;
+      page.fire('click', { isTrusted: true, type: 'click', timeStamp: clock.now, target: null });
+      page.paint([click(id, clock.now, 200)]);
+      api.stats();
+    };
+    let id = 1;
+    for (; id <= 3; id++) interact(id);
+    // The check 3 s after install, and the one at the first interaction after it.
+    t.mock.timers.tick(3000);
+    for (; id <= 20; id++) interact(id);
+    const settled = looks;
+    assert.ok(settled <= 8, `looked at the page ${settled} times over the first 20 interactions`);
+    for (; id <= 220; id++) interact(id);
+    assert.equal(looks, settled, `looked at the page ${looks - settled} more times over the next 200 interactions`);
+    assert.equal(api.stats().react, 'waiting');
+    api.dispose();
+  });
+});
+
 test("the pointer an input came from is kept at dispatch, and a mouse's pointerdown alone reads as a click", async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {
