@@ -75,6 +75,11 @@ function viteAnchors(): string[] {
   return [...source.matchAll(/\$\{README\}([a-z0-9-]+)/g), ...source.matchAll(/section: '([a-z0-9-]+)'/g)].map((m) => m[1]!);
 }
 
+/** The anchors the Astro integration's messages link to. */
+function astroAnchors(): string[] {
+  return [...read('astro.mjs').matchAll(/react-inp-blame#([a-z0-9-]+)/g)].map((m) => m[1]!);
+}
+
 test('a warning in the browser ends with a link to its anchor in the README', (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   warnOnce('troubleshooting-test', 'something happened.');
@@ -85,11 +90,12 @@ test('a warning in the browser ends with a link to its anchor in the README', (t
 
 test('every anchor a warning links to is in README.md', () => {
   const readme = readmeAnchors();
-  const linked = { runtime: runtimeAnchors(), next: nextAnchors(), vite: viteAnchors() };
+  const linked = { runtime: runtimeAnchors(), next: nextAnchors(), vite: viteAnchors(), astro: astroAnchors() };
   // Enough found that a regex gone stale would show.
   assert.ok(linked.runtime.length >= 14, linked.runtime.join(', '));
   assert.ok(linked.next.length >= 4, linked.next.join(', '));
   assert.ok(linked.vite.length >= 8, linked.vite.join(', '));
+  assert.ok(linked.astro.length >= 1, linked.astro.join(', '));
   for (const [where, anchors] of Object.entries(linked)) {
     const missing = anchors.filter((anchor) => !readme.has(anchor));
     assert.deepEqual(missing, [], `${where} warnings link to anchors README.md does not have`);

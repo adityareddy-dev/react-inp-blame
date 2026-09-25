@@ -418,7 +418,10 @@ is the adjacent text nodes React renders an interpolated string as, `Add to cart
 it takes in the `<!-- -->` the server renderer puts between them to keep hydration straight: without
 that, the same button would be labelled `Add to cart (` after hydration and `Add to cart (3)` after a
 client-only render. A run stops after a fixed number of siblings, so skipping those separators is
-never a way to walk a whole element.
+never a way to walk a whole element. The label is read by the capture listener as the input is
+dispatched, before React's handlers run, and kept with the input: read when the entry arrives, after the
+paint, a counter's button clicked as `Count is 0` was labelled `Count is 1`. Where the entry's target is
+not the node the listener saw, the label is read from the entry's target when the report is built.
 Text is allowed under a development build of React and wherever `install({ labels: 'text' })`
 asks for it, not by default under a production build: an element's text can be a person's name
 or email (a clicked table cell), and production reports are the ones forwarded to Sentry, Faro

@@ -6,7 +6,7 @@ type Options = Parameters<typeof inpBlame>[0];
 type Command = 'dev' | 'build' | 'preview' | 'sync';
 
 /** What the integration asks of Astro in a run of `command`: the scripts it injects and the Vite plugins it adds. */
-function setup(command: Command, options?: Options) {
+function setup(command: Command, options?: Options, warnings: string[] = []) {
   const scripts: { stage: string; content: string }[] = [];
   const plugins: Record<string, any>[] = [];
   const integration = inpBlame(options) as Record<string, any>;
@@ -14,6 +14,7 @@ function setup(command: Command, options?: Options) {
     command,
     injectScript: (stage: string, content: string) => scripts.push({ stage, content }),
     updateConfig: (config: { vite?: { plugins?: Record<string, any>[] } }) => plugins.push(...(config.vite?.plugins ?? [])),
+    logger: { warn: (message: string) => warnings.push(message) },
   });
   return { name: integration.name, scripts, plugins: plugins.map((p) => p.name) };
 }
@@ -24,6 +25,18 @@ test('by default astro dev gets the install and the displayName transform, and a
   assert.deepEqual(dev.scripts, [{ stage: 'before-hydration', content: "import { install } from 'react-inp-blame';\ninstall({});" }]);
   assert.deepEqual(dev.plugins, ['react-inp-blame:display-names']);
   assert.deepEqual(setup('build'), { name: 'react-inp-blame', scripts: [], plugins: [] });
+});
+
+test('astro build says the default leaves the library out, and an enabled written out, dev and preview do not', () => {
+  const warnings: string[] = [];
+  setup('dev', undefined, warnings);
+  setup('preview', undefined, warnings);
+  setup('build', { enabled: 'development' }, warnings);
+  setup('build', { enabled: false }, warnings);
+  assert.deepEqual(warnings, []);
+  setup('build', undefined, warnings);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /^left out of this production build \(enabled defaults to 'development'\)\. Pass enabled: true to include it.*#left-out-of-a-production-build$/);
 });
 
 test("enabled: 'production' is astro build alone, true is both, false neither, and preview and sync get nothing", () => {

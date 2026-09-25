@@ -13,10 +13,15 @@ on purpose. Click something and read what the badge blames.
 ## Start with Next.js 14.2 or later
 
     // next.config.ts
+    import type { NextConfig } from 'next';
     import { withInpBlame } from 'react-inp-blame/next';
 
+    const nextConfig: NextConfig = {
+      /* config options here */
+    };
+
     // Your config first, this library's options second. They are not Next.js config keys.
-    export default withInpBlame({ /* your config */ }, { runtime: { overlay: true } });
+    export default withInpBlame(nextConfig, { runtime: { overlay: true } });
 
 On Next.js 15.3 to 16.2, add one line to `instrumentation-client.ts` as well. `withInpBlame` prints it
 until the file has it (14.2 to 15.2 need nothing more, and 14.2 a `next.config.mjs`, since `.ts` came in 15):
@@ -40,13 +45,16 @@ plugin never sees on its own, so each has a setup of its own:
 [TanStack Start](https://github.com/adityareddy-dev/react-inp-blame#install-with-tanstack-start),
 [Astro](https://github.com/adityareddy-dev/react-inp-blame#install-with-astro).
 
-**What you will see.** Reload, then click something slow. A small dark badge appears in the corner,
-bottom-right by default, with the page's INP so far in milliseconds: green at 200 or under, amber up
-to 500, red above. INP, Interaction to Next Paint, is the Core Web Vital for responsiveness: how long
-a click, tap or key press took to reach the next frame drawn, at the page's slowest. Click the badge
-for a panel of the recent slow interactions, newest first, and click a row for the whole explanation.
-The demo above sets `position: 'bottom-left'`, which is why its badge sits on the left: its own
-explanation column has the right-hand side. From the demo's sign-in page, in development:
+**What you will see.** Reload the page. A small dark badge sits in the corner, bottom-right by
+default, and reads `INP —` until you interact. Click something slow and it shows the page's INP so far
+in milliseconds: green at 200 or under, amber up to 500, red above. INP, Interaction to Next Paint, is
+the Core Web Vital for responsiveness: how long a click, tap or key press took to reach the next frame
+drawn, at the page's slowest. Click the badge for a panel of the recent slow interactions, newest
+first, and click a row for the whole explanation. A click, tap or key press of 40 ms or more gets a
+row (the `threshold` option), so a 150 ms click has one, though the badge stays green and the panel
+says Good: INP counts anything up to 200 ms as good. The demo above sets `position: 'bottom-left'`,
+which is why its badge sits on the left: its own explanation column has the right-hand side. From the
+demo's sign-in page, in development:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
@@ -57,8 +65,10 @@ explanation column has the right-hand side. From the demo's sign-in page, in dev
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
 production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
 defaults to `'development'`, so a production build carries nothing from either plugin until you say
-`enabled: true` or `enabled: 'production'`. The one exception is the line on Next.js 15.3 to 16.2:
-its code is in every build, and in the ones `enabled` leaves out it ships unused and installs nothing.
+`enabled: true` or `enabled: 'production'`. So `vite preview` and `next start`, which serve a
+production build, show no badge by default, and the build prints a line saying it left the library
+out. The one exception is the line on Next.js 15.3 to 16.2: its code is in every build, and in the
+ones `enabled` leaves out it ships unused and installs nothing.
 
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
@@ -168,7 +178,11 @@ chunk's imports itself, and the apps CI builds with it come out right, which is 
 A build in which no module has that path fails.
 
     // vite.config.ts, React Router or Remix; under TanStack Start, entry: 'src/client.tsx'
-    inpBlame({ enabled: true, runtime: { overlay: 'query' }, entry: 'app/root.tsx' })
+    inpBlame({ runtime: { overlay: true }, entry: 'app/root.tsx' })
+
+That shows the badge on the dev server. To keep the library in production builds too, add
+`enabled: true` and make the overlay `'query'`, so a visitor sees the badge only with `?inp-blame`
+in the URL.
 
 CI runs this on React Router 8.4, on React Router 7.18 with React 18.3, on Remix 2.17 and on
 TanStack Start 1.168, each under its dev server and a production build. The
@@ -211,7 +225,7 @@ meaning `astro build`; list it after `react()`:
     import react from '@astrojs/react';
     import { inpBlame } from 'react-inp-blame/astro';
 
-    export default defineConfig({ integrations: [react(), inpBlame({ runtime: { overlay: 'query' } })] });
+    export default defineConfig({ integrations: [react(), inpBlame({ runtime: { overlay: true } })] });
 
 The install runs as soon as the page's first island has been parsed, whatever its `client:`
 directive, and React may load much later or not at all; the library warns about a late install only
@@ -449,8 +463,8 @@ current:
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 62.7 KB | 22.4 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 15.7 KB | 5.9 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 62.8 KB | 22.4 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 15.8 KB | 6.0 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 24.2 KB | 9.0 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
 <!-- size:end -->

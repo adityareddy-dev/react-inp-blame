@@ -175,6 +175,18 @@ test('a null entry target falls back to the node, the components and the handler
   assert.equal(r.verdict.startsWith('120 ms click on button "Close" in CloseButton.'), true);
 });
 
+test('the label is the one read at dispatch, before a handler changed the text, and read now when the ring has another node', () => {
+  // A counter's click renders "Count is 1" before the entry arrives; the ring labelled it "Count is 0".
+  const button = element('button', [text('Count is 1')]);
+  const ring = [input(0, 'click', { target: button as unknown as Node, label: 'button "Count is 0"' })];
+  const r = report([entry('click', 0, 120, 3, 100, { target: button })], [], [], ring, 'text');
+  assert.equal(r.target?.label, 'button "Count is 0"');
+  assert.equal(r.verdict.startsWith('120 ms click on button "Count is 0"'), true);
+  // Not the entry's node: the ring's label is some other element's.
+  const other = [input(0, 'click', { target: element('div', []) as unknown as Node, label: 'div "Elsewhere"' })];
+  assert.equal(report([entry('click', 0, 120, 3, 100, { target: button })], [], [], other, 'text').target?.label, 'button "Count is 1"');
+});
+
 test('a late entry of a long press makes the next revision, rebuilt from every entry, and leaves the one before as it was', () => {
   const first = buildReport(longPress.slice(0, 1), [], []);
   assert.equal(first.duration, 32);

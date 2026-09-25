@@ -48,6 +48,8 @@ test('context storm: blames the OrderSummary subtree, LineItem x800', async ({ p
   expect(c.components[0].name).toBe('LineItem');
   expect(c.components[0].count).toBeGreaterThanOrEqual(800);
   expect(r.target?.component).toBe('ContextStorm');
+  // The button reads "Add to cart (1)" by the time the entry arrives; the label is what was clicked.
+  expect(r.target?.label).toBe(prod ? 'button "trigger"' : 'button "Add to cart (0)"');
   expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'OrderSummary', detail: `LineItem ×${c.components[0].count}`, confidence: renderConfidence });
 
   // The phases are the report's own numbers, and with this library's walk they make up the duration.

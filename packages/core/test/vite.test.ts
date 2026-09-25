@@ -9,6 +9,7 @@ const INSTALL = 'react-inp-blame:install';
 const SCRIPT = 'react-inp-blame:install-script';
 const NAMES = 'react-inp-blame:display-names';
 const ENTRY = 'react-inp-blame:entry';
+const LEFT_OUT = 'react-inp-blame:left-out';
 const INSTALL_MODULE = 'virtual:react-inp-blame/install';
 
 type Options = Parameters<typeof inpBlame>[0];
@@ -40,7 +41,34 @@ function scriptCode(plugins: Plugin[]): string {
 
 test('by default the dev server gets the runtime and the displayName transform, and vite build gets nothing', () => {
   assert.deepEqual(names(pluginsFor('serve')), [INSTALL, NAMES]);
-  assert.deepEqual(names(pluginsFor('build')), []);
+  // Nothing but the line saying so.
+  assert.deepEqual(names(pluginsFor('build')), [LEFT_OUT]);
+});
+
+test('a production build that leaves the library out by default says so once, and not for an enabled written out', () => {
+  const warnings: string[] = [];
+  const logger = { warn: (message: string) => warnings.push(message) };
+  const vitest = process.env.VITEST;
+  delete process.env.VITEST;
+  try {
+    const build = (options?: Options, config: Record<string, any> = {}) => {
+      for (const plugin of pluginsFor('build', options)) plugin.configResolved?.({ command: 'build', root: '/app', plugins: [], logger, build: {}, ...config });
+    };
+    // Written out, `enabled` is the app's choice, and a server or library build is not the page.
+    build({ enabled: 'development' });
+    build(undefined, { build: { ssr: true } });
+    build(undefined, { build: { lib: { entry: 'src/index.ts' } } });
+    assert.deepEqual(warnings, []);
+    // React Router and Remix build the client and the server as two Vite builds in one process.
+    build();
+    build();
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /^\[react-inp-blame\] left out of this production build \(enabled defaults to 'development'\)\. Pass enabled: true to include it.*#left-out-of-a-production-build$/);
+    assert.deepEqual(names(pluginsFor('serve')), [INSTALL, NAMES]);
+    assert.ok(!names(pluginsFor('build', { enabled: 'production' })).includes(LEFT_OUT));
+  } finally {
+    if (vitest !== undefined) process.env.VITEST = vitest;
+  }
 });
 
 test("enabled: 'production' applies them to vite build only, true to both runs, and false adds no plugins", () => {

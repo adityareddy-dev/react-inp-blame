@@ -215,6 +215,17 @@ function isEnabled(enabled, nodeEnv) {
   throw new TypeError(`withInpBlame: enabled is 'development', 'production', true or false, not ${JSON.stringify(enabled)}.`);
 }
 
+/**
+ * The Next.js command this process runs, such as 'build' or 'start', read from its arguments, which is
+ * where `next build` and `next start` differ when Next.js reads the config: both set NODE_ENV to
+ * 'production'. Undefined in the worker processes Next.js starts, which have other arguments.
+ */
+function nextCommand() {
+  const bin = process.argv[1] || '';
+  if (!/[\\/]next(?:[\\/]dist[\\/]bin[\\/]next)?(?:\.js)?$/.test(bin)) return undefined;
+  return process.argv.slice(2).find((arg) => !arg.startsWith('-'));
+}
+
 /** The options install() gets: {} for `runtime: true`, the object itself, null for `runtime: false`. */
 function installOptions(runtime) {
   if (runtime === true) return {};
@@ -233,7 +244,18 @@ function wrap(nextConfig, options, dirs) {
   const { enabled = 'development', runtime = true } = options;
   const install = installOptions(runtime);
   // Off means the config comes back as it went in, so the build carries nothing from here.
-  if (!isEnabled(enabled, process.env.NODE_ENV)) return nextConfig;
+  if (!isEnabled(enabled, process.env.NODE_ENV)) {
+    // Left at its default, that looks exactly like the library failing: `next build` prints nothing and
+    // `next start` shows no badge. So the build says so, and not for an `enabled` the app wrote itself.
+    if (options.enabled === undefined && nextCommand() === 'build') {
+      warnOnce(
+        'LEFT_OUT',
+        "react-inp-blame is left out of this production build (enabled defaults to 'development'). Pass enabled: true to include it, or write enabled: 'development' to keep it out without this line.",
+        'left-out-of-a-production-build',
+      );
+    }
+    return nextConfig;
+  }
   const found = projectNextVersion(dirs);
   if (!atLeast(found, NEXT_ENTRY)) {
     warnOnce('VERSION', `Next.js ${found.version} is older than 14.2, the oldest this wrapper installs in, so your config was left as it was. Upgrade Next.js to 14.2 or later.`, 'next-too-old');

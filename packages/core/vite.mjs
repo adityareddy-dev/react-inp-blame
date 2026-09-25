@@ -147,6 +147,9 @@ const FRAMEWORKS = [
 // Said once per process, however many Vite configs a framework resolves through the same plugins.
 const said = new Set();
 
+// Said when a production build leaves the library out because `enabled` was left at its default.
+const LEFT_OUT = `left out of this production build (enabled defaults to 'development'). Pass enabled: true to include it, or write enabled: 'development' to keep it out without this line. See ${README}left-out-of-a-production-build`;
+
 /**
  * What to tell an app where the runtime is on, `entry` is not set, and the install script will reach no
  * page: a framework that writes its own HTML, or a build whose inputs are all scripts (Laravel, Rails,
@@ -364,6 +367,20 @@ export function inpBlame(options = {}) {
   const apply = (_config, { command }) => enabled === true || command === (enabled === 'development' ? 'serve' : 'build');
 
   const plugins = [];
+  // Left at its default, `enabled` keeps the library out of a production build, which then looks exactly
+  // like one where it failed: the build prints nothing and the served page shows no badge. So the build
+  // says so, once, and not for an `enabled` the app wrote itself.
+  if (options.enabled === undefined) {
+    plugins.push({
+      name: 'react-inp-blame:left-out',
+      apply: (_config, { command }) => command === 'build',
+      configResolved(resolved) {
+        if (resolved.build?.ssr || resolved.build?.lib || process.env.VITEST || said.has(LEFT_OUT)) return;
+        said.add(LEFT_OUT);
+        resolved.logger?.warn(`[react-inp-blame] ${LEFT_OUT}`);
+      },
+    });
+  }
   if (install) {
     // The build in progress, from configResolved: its `base`, and whether it is a build at all.
     let config = null;

@@ -45,6 +45,42 @@ test('by default next dev gets the runtime and the loader, and next build gets t
   assert.equal(wrapped('production', config), config);
 });
 
+test('next build says once that the default leaves the library out, and next start and an enabled written out do not', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const argv = process.argv;
+  t.after(() => {
+    process.argv = argv;
+    forgetWarnings();
+  });
+  const run = (args: string[], options?: { enabled?: unknown }) => {
+    process.argv = [argv[0]!, '/app/node_modules/.bin/next', ...args];
+    return wrapped('production', {}, options);
+  };
+  forgetWarnings();
+  run(['start']);
+  run(['build'], { enabled: 'development' });
+  run(['build'], { enabled: false });
+  assert.equal(warn.mock.callCount(), 0);
+  process.argv = [argv[0]!, '/app/node_modules/next/dist/compiled/jest-worker/processChild.js'];
+  wrapped('production', {});
+  assert.equal(warn.mock.callCount(), 0);
+  // The config comes back untouched, and the line is printed once however often Next.js reads it.
+  const config = { reactStrictMode: true };
+  process.argv = [argv[0]!, '/app/node_modules/next/dist/bin/next', 'build', '--turbopack'];
+  assert.equal(wrapped('production', config), config);
+  run(['build']);
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(
+    String(warn.mock.calls[0]!.arguments[0]),
+    /^withInpBlame: react-inp-blame is left out of this production build \(enabled defaults to 'development'\)\. Pass enabled: true to include it.*See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#left-out-of-a-production-build$/,
+  );
+  // Nor next dev.
+  forgetWarnings();
+  process.argv = [argv[0]!, '/app/node_modules/.bin/next', 'dev'];
+  wrapped('development', {});
+  assert.equal(warn.mock.callCount(), 1);
+});
+
 test("enabled: 'production' adds them to next build only, true to both runs, false to neither", () => {
   const runs = (enabled: unknown) => [added(wrapped('development', {}, { enabled })), added(wrapped('production', {}, { enabled }))];
   assert.deepEqual(runs('production'), [NOTHING, EVERYTHING]);

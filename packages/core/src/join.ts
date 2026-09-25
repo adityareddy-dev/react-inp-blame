@@ -440,7 +440,8 @@ export function buildReport(
     walkMs,
     presentation: end - processingEnd,
     // A node that left the page has no control above it any more; the one found at dispatch labels it.
-    target: targetNode ? describeTarget(targetNode, owners, handler, labels, live ?? ring?.control ?? targetNode) : null,
+    // Labelled as it read at dispatch where the ring has that node: a handler can change the text.
+    target: targetNode ? describeTarget(targetNode, owners, handler, labels, live ?? ring?.control ?? targetNode, ring && (!live || ring.target === live) ? ring.label : null) : null,
     hydration: hydrationOf(inWindow, inputs, stamps),
     navigationURL: navigation?.url ?? '',
     navigationType: navigation?.type ?? 'navigate',
@@ -622,10 +623,10 @@ function namedOwner(owners: readonly string[]): string | null {
   return owners.find(readableName) ?? owners[0] ?? null;
 }
 
-function describeTarget(node: Node, owners: readonly string[], handler: string | null, labels: LabelSource, labelled: Node = node): TargetInfo {
+function describeTarget(node: Node, owners: readonly string[], handler: string | null, labels: LabelSource, labelled: Node = node, dispatched?: string | null): TargetInfo {
   return Object.freeze({
     selector: selector(node),
-    label: labelOf(labelled, labels),
+    label: dispatched ?? labelOf(labelled, labels),
     component: namedOwner(owners),
     owners: Object.isFrozen(owners) ? owners : Object.freeze(owners.slice()),
     handler,
@@ -638,7 +639,7 @@ function describeTarget(node: Node, owners: readonly string[], handler: string |
  * data-testid or data-test. Where `labels` is 'text', an element with no aria-label that is not a
  * form field is named by its first run of text before those data attributes are tried.
  */
-function labelOf(node: Node, labels: LabelSource): string | null {
+export function labelOf(node: Node, labels: LabelSource): string | null {
   const landed = elementOf(node);
   if (!landed) return null;
   const el = controlAround(landed);

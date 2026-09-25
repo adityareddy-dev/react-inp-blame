@@ -8,13 +8,15 @@
 //   import { defineConfig } from 'astro/config';
 //   import react from '@astrojs/react';
 //   import { inpBlame } from 'react-inp-blame/astro';
-//   export default defineConfig({ integrations: [react(), inpBlame({ runtime: { overlay: 'query' } })] });
+//   export default defineConfig({ integrations: [react(), inpBlame({ runtime: { overlay: true } })] });
 //
 // Nothing here imports Astro: an integration is a plain object.
 
 import { inpBlame as vitePlugins } from './vite.mjs';
 
 const ENABLED = ['development', 'production', true, false];
+// Said when `astro build` leaves the library out because `enabled` was left at its default.
+const LEFT_OUT = "left out of this production build (enabled defaults to 'development'). Pass enabled: true to include it, or write enabled: 'development' to keep it out without this line. See https://github.com/adityareddy-dev/react-inp-blame#left-out-of-a-production-build";
 const OPTION_KEYS = ['enabled', 'runtime'];
 // install()'s own options, which belong under `runtime`, as for the Vite plugins.
 const INSTALL_KEYS = ['overlay', 'threshold', 'labels', 'hook', 'sampleRate', 'walkBudget', 'inputWindow', 'devtoolsTrack', 'debugGlobal'];
@@ -61,8 +63,13 @@ export function inpBlame(options = {}) {
        * Astro's `command` is 'dev' for `astro dev` and 'build' for `astro build`, whose output `astro
        * preview` serves as built. 'preview' and 'sync' bundle nothing, so they get nothing either.
        */
-      'astro:config:setup': ({ command, injectScript, updateConfig }) => {
-        if (!commands.includes(command)) return;
+      'astro:config:setup': ({ command, injectScript, updateConfig, logger }) => {
+        if (!commands.includes(command)) {
+          // Left at its default, that looks exactly like the library failing: the build prints nothing
+          // and `astro preview` shows no badge. So the build says so, and not for an `enabled` written out.
+          if (command === 'build' && options.enabled === undefined) logger?.warn(LEFT_OUT);
+          return;
+        }
         // Every island imports the before-hydration script, and waits for it to finish, before it imports
         // its component and its renderer, and the renderer is what loads react-dom. A page with no island
         // has no React to read and never loads it. The script is one module shared by every island, so
