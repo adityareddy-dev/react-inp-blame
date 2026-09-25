@@ -10,6 +10,9 @@ import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
 // they agree to the timer's resolution; 1 ms covers the coarsening.
 const STAMP_TOLERANCE = 1;
+// Handlers whose processing differs by less than this did about the same work, and the handler named
+// for them is the best-known event's (see byWork).
+const HANDLER_TIE_MS = 4;
 // Entries presented in the same frame share a render time to within 8 ms, the rounding
 // Event Timing applies to durations. Same rule as web-vitals' groupEntriesByRenderTime.
 const RENDER_GROUP_MS = 8;
@@ -118,8 +121,12 @@ interface PaintGroup {
   entries: InteractionTiming[];
 }
 
-/** What a person would call the interaction: "click", "tap", "key press" or "typing", from the event type. Display text. */
-export function kindOf(type: string): string {
+/**
+ * What a person would call the interaction: "click", "tap", "key press" or "typing", from the event type
+ * and, for a pointer event, the pointer it came from (a mouse's pointerdown is a click). Display text.
+ */
+export function kindOf(type: string, pointerType?: string | null): string {
+  if (pointerType === 'mouse' && (type === 'pointerdown' || type === 'pointerup')) return 'click';
   return FRIENDLY[type] || type;
 }
 
@@ -185,6 +192,21 @@ const rank = (name: string) => {
   const i = PREFERRED.indexOf(name);
   return i < 0 ? PREFERRED.length : i;
 };
+
+/**
+ * `sorted`, in PREFERRED order, reordered for looking up the handler: first the entries whose own handlers
+ * ran within HANDLER_TIE_MS of the longest, then the rest, each in PREFERRED order. The event whose
+ * handlers did the work is the one to name, so a menu that opens on pointerdown is put on its
+ * onPointerDown, not on an onClick beside it that only stops the event. Where no handler did any real
+ * work every entry ties, and the order is PREFERRED's as it always was.
+ */
+function byWork(sorted: readonly InteractionTiming[]): InteractionTiming[] {
+  const workOf = (e: InteractionTiming) => e.processingEnd - e.processingStart;
+  let most = 0;
+  for (const e of sorted) most = Math.max(most, workOf(e));
+  const heavy = sorted.filter((e) => workOf(e) > most - HANDLER_TIE_MS);
+  return heavy.concat(sorted.filter((e) => !heavy.includes(e)));
+}
 
 const summarize = (e: InteractionTiming): EventEntrySummary =>
   Object.freeze({
@@ -332,6 +354,7 @@ export function buildReport(
   // A click arrives as pointerdown, pointerup and click entries sharing one interactionId.
   // Name the interaction by the most meaningful entry painted with the headline.
   const sorted = group.entries.slice().sort((a, b) => rank(a.name) - rank(b.name));
+  const named = sorted[0] ?? longest;
   const stamps = entries.map((e) => e.startTime);
   const ring = ringInput(inputs, stamps);
   // The entry's target is null when the node left the DOM before the observer ran (a close button, a
@@ -347,7 +370,7 @@ export function buildReport(
     // node itself, which is where a handler on the icon would be.
     const control = controlOf(live);
     owners = ownersOf((control !== live && control && fiberFromNode(control)) || fiber);
-    for (const e of sorted) {
+    for (const e of byWork(sorted)) {
       // An Event Timing entry does not say which key was pressed; the ring entry for the same event
       // does, and which key it was decides whether the press could have submitted a form.
       const pressed = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime))?.press;
@@ -356,7 +379,7 @@ export function buildReport(
     }
   } else if (ring) {
     owners = ring.owners;
-    for (const e of sorted) {
+    for (const e of byWork(sorted)) {
       handler = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime))?.handler ?? null;
       if (handler) break;
     }
@@ -389,7 +412,8 @@ export function buildReport(
   return {
     schemaVersion: 2,
     interactionId: longest.interactionId,
-    type: (sorted[0] ?? longest).name,
+    type: named.name,
+    pointerType: inputs.find((i) => i.type === named.name && near(i.ts, named.startTime))?.pointerType || null,
     start,
     end,
     duration,
@@ -817,7 +841,7 @@ const say = (confidence: Blame['confidence'], measured: string, likely: string):
 /** The report in plain words. Frozen, like the report it explains. */
 function explain(r: InteractionReport): Explanation {
   const rating = rateInp(r.duration);
-  const kind = kindOf(r.type);
+  const kind = kindOf(r.type, r.pointerType);
   const headline = `${ms(r.duration)} ${kind}`;
   const where = r.target ? [r.target.label || r.target.selector, r.target.component ? `in ${r.target.component}` : ''].filter(Boolean).join(' ') || null : null;
   const notes: string[] = [];

@@ -1577,3 +1577,66 @@ test("a click on an icon inside a button is named by the button's component, not
   assert.equal(gone.target?.component, 'DeleteButton');
   assert.equal(gone.target?.selector, 'path');
 });
+
+test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {
+  // A row that selects itself on click, holding a menu button that opens on pointerdown, as Radix's
+  // DropdownMenu does: the pointerdown's handlers ran for 90 ms, the pointerup's and the click's for none.
+  function selectRow() {}
+  function openMenu() {}
+  function Row() {}
+  const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null });
+  const row = fiberOf(0, Row, null);
+  const rowDiv = fiberOf(5, 'div', row, { onClick: selectRow });
+  const buttonFiber = fiberOf(5, 'button', rowDiv, { onPointerDown: openMenu, 'aria-label': 'Row actions' });
+  const button = Object.assign(element('button', [], { 'aria-label': 'Row actions' }), { __reactFiber$k1: buttonFiber });
+  const press = (down: number, click: number) => [
+    entry('pointerdown', 0, 120, 2, 2 + down, { target: button }),
+    entry('pointerup', 100, 16, 101, 101.2, { target: button }),
+    entry('click', 100, 16, 101.3, 101.3 + click, { target: button }),
+  ];
+
+  const opened = report(press(90, 0.1), [], []);
+  assert.equal(opened.target?.handler, 'openMenu');
+  // The report is still named by the click, the event people know.
+  assert.equal(opened.type, 'click');
+
+  // Handlers that did about the same work tie, and the click's is named as it always was.
+  assert.equal(report(press(0.2, 0.1), [], []).target?.handler, 'selectRow');
+  assert.equal(report(press(3, 0.1), [], []).target?.handler, 'selectRow');
+  // A click whose own handler did the work is named by it, whatever else ran.
+  assert.equal(report(press(20, 60), [], []).target?.handler, 'selectRow');
+
+  // The same order where the node left the page and the ring's handlers stand in.
+  const ring = [
+    input(0, 'pointerdown', { target: element('button', []) as unknown as Node, owners: ['Row'], handler: 'openMenu' }),
+    input(100, 'pointerup', { target: element('button', []) as unknown as Node, owners: ['Row'], handler: null }),
+    input(100, 'click', { target: element('button', []) as unknown as Node, owners: ['Row'], handler: 'selectRow' }),
+  ];
+  const gone = [entry('pointerdown', 0, 120, 2, 92), entry('pointerup', 100, 16, 101, 101.2), entry('click', 100, 16, 101.3, 101.4)];
+  assert.equal(report(gone, [], [], ring).target?.handler, 'openMenu');
+
+  // A key press and its release keep the keydown's handler.
+  function save() {}
+  const input$ = fiberOf(5, 'div', row, { onKeyDown: save, onKeyUp: () => {} });
+  const field = Object.assign(element('div', []), { __reactFiber$k1: input$ });
+  const keys = report([entry('keydown', 0, 120, 2, 80, { target: field }), entry('keyup', 110, 8, 111, 111.1, { target: field })], [], []);
+  assert.equal(keys.target?.handler, 'save');
+});
+
+test("a mouse's pointerdown alone reads as a click, a finger's as a tap", () => {
+  const alone = [entry('pointerdown', 0, 120, 2, 92)];
+  const mouse = report(alone, [], [], [input(0, 'pointerdown', { pointerType: 'mouse' })]);
+  assert.equal(mouse.type, 'pointerdown');
+  assert.equal(mouse.pointerType, 'mouse');
+  assert.match(mouse.verdict, /^120 ms click\b/);
+  const touch = report(alone, [], [], [input(0, 'pointerdown', { pointerType: 'touch' })]);
+  assert.equal(touch.pointerType, 'touch');
+  assert.match(touch.verdict, /^120 ms tap\b/);
+  // Not seen at dispatch: as before.
+  const unseen = report(alone, [], []);
+  assert.equal(unseen.pointerType, null);
+  assert.match(unseen.verdict, /^120 ms tap\b/);
+  // A key's click carries no pointer.
+  assert.equal(report([entry('click', 0, 120, 2, 92)], [], [], [input(0, 'click', { pointerType: '' })]).pointerType, null);
+});

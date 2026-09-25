@@ -403,7 +403,9 @@ same numbers. The span of every entry with the id, press to release, is kept as 
 and stays off the headline (since 2026-09-14; before that the headline was the whole span).
 The target element resolves to its component through the `__reactFiber$` expando, and the
 React handler prop for the event type is looked up on the same chain, so "no React render;
-120ms in the click handler computeChecksum" is possible without a profile. The element's label
+120ms in the click handler computeChecksum" is possible without a profile. Of a click's pointerdown,
+pointerup and click, the event whose own processing ran longest is asked first, since its handlers did
+the work; within 4 ms they tie and the click is asked first (since 0.6.0). The element's label
 names it by its tag and a name of at most 40 characters, and its whole `textContent` is never read,
 because a click can land on a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
 form field's placeholder, name or type, or its data-testid or data-test), and, where text is

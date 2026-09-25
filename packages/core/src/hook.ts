@@ -83,6 +83,8 @@ export interface InputStamp {
 export interface InputRecord extends InputStamp {
   /** `pointerId` for pointer events, `code` for key events: how a pointerup or keyup finds its press. */
   readonly press: string | number | undefined;
+  /** 'mouse', 'pen' or 'touch' for a pointer event; empty or absent for a key, and for a click a key made. */
+  readonly pointerType?: string;
   readonly target: Node | null;
   /**
    * The control the target is inside (the button around a clicked icon), found at dispatch while both
@@ -268,6 +270,7 @@ function record(e: DispatchedInput): InputRecord {
     type: e.type,
     gestureTs: gestureOf(e, isKey),
     press: isKey ? e.code : e.pointerId,
+    pointerType: e.pointerType,
     target,
     control,
     owners: Object.freeze(ownersOf(controlFiber)),
