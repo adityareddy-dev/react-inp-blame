@@ -47,8 +47,11 @@ test('a page whose only island hydrates when it scrolls into view gets no warnin
     if (type === 'error' || (type === 'warning' && message.text().startsWith('[react-inp-blame]'))) problems.push(`${type}: ${message.text()}`);
   });
   await page.goto('/below-the-fold?inp-blame');
+  // The badge mounts once install() has run, and the check comes 3 s after that, however long a cold dev
+  // server took to get there.
   await page.locator('#react-inp-blame .badge').waitFor();
-  await page.waitForFunction(() => performance.now() > 4000, undefined, { timeout: 10_000 });
+  const installed = await page.evaluate(() => performance.now());
+  await page.waitForFunction((since) => performance.now() > since + 3500, installed, { timeout: 10_000 });
   expect(await page.locator('body[data-visible-note]').count()).toBe(0);
   expect(problems).toEqual([]);
 

@@ -36,14 +36,19 @@ const SHOW_ELEMENT = 1;
  * registered, so a page that installed in time never pays for it.
  */
 function reactRendered(): boolean {
-  if (typeof document.createTreeWalker !== 'function') return false;
-  const marked = (node: Node) => Object.keys(node).some((key) => key.startsWith('__reactContainer$') || key.startsWith('__reactFiber$'));
-  if (marked(document)) return true;
-  const walker = document.createTreeWalker(document.documentElement, SHOW_ELEMENT);
-  for (let node: Node | null = walker.currentNode, read = 0; node && read < RENDERED_SCAN_LIMIT; node = walker.nextNode(), read++) {
-    if (marked(node)) return true;
+  // A document this does not know how to walk is one it says nothing about, rather than an error from a timer.
+  try {
+    if (typeof document.createTreeWalker !== 'function') return false;
+    const marked = (node: Node) => Object.keys(node).some((key) => key.startsWith('__reactContainer$') || key.startsWith('__reactFiber$'));
+    if (marked(document)) return true;
+    const walker = document.createTreeWalker(document.documentElement, SHOW_ELEMENT);
+    for (let node: Node | null = walker.currentNode, read = 0; node && read < RENDERED_SCAN_LIMIT; node = walker.nextNode(), read++) {
+      if (marked(node)) return true;
+    }
+    return false;
+  } catch {
+    return false;
   }
-  return false;
 }
 
 /** The options only a first install() can set; a later call that changes one is warned about. */
@@ -213,26 +218,33 @@ function installNow(opts: InstallOptions): Api {
   const stopFrames = frames ? observeFrames(frames, lifecycle.onFrame) : () => {};
   // Observe at the browser's floor so short interactions with a heavy later render are not lost, and
   // so the INP estimate sees every interaction it can; everything else under the threshold stays quiet.
-  const stopEvents = observeEventTiming((batch) => {
-    checkHookReplaced();
-    lifecycle.onEntries(batch);
-  });
-
   // React on the page with no react-dom registered means install() ran after react-dom loaded. Without
   // React on the page nothing is said: a host may load it later by design, as Astro does for an island
-  // hydrated once it scrolls into view, or never, on a page whose islands are another framework's.
-  const rendererCheck = setTimeout(() => {
+  // hydrated once it scrolls into view, or never, on a page whose islands are another framework's. So the
+  // page is looked at RENDERER_CHECK_MS after install, and where it had no React on it then, once more at
+  // the first interaction after that, for a root a late react-dom created later on.
+  let rendererCheck: 'waiting' | 'again' | 'done' = 'waiting';
+  const checkRenderer = () => {
     checkHookReplaced();
     const { mode } = hookStats();
-    if ((mode === 'shim' || mode === 'chained') && !knownRenderers().some((r) => r.rendererPackageName === 'react-dom') && reactRendered()) {
+    const unregistered = (mode === 'shim' || mode === 'chained') && !knownRenderers().some((r) => r.rendererPackageName === 'react-dom');
+    const rendered = unregistered && reactRendered();
+    rendererCheck = unregistered && !rendered && rendererCheck === 'waiting' ? 'again' : 'done';
+    if (rendered) {
       warnOnce(
         'no-renderer',
-        `React has rendered on this page, but no react-dom registered with the DevTools hook within ${RENDERER_CHECK_MS / 1000}s, so install() ran after react-dom loaded. ` +
+        'React has rendered on this page, but no react-dom has registered with the DevTools hook, so install() ran after react-dom loaded. ' +
           'Install with react-inp-blame/vite (with `entry` where the framework writes its own HTML), react-inp-blame/next or react-inp-blame/astro, ' +
           "or make `import 'react-inp-blame/auto'` the first import of your entry module.",
       );
     }
-  }, RENDERER_CHECK_MS);
+  };
+  const stopEvents = observeEventTiming((batch) => {
+    checkHookReplaced();
+    if (rendererCheck === 'again') checkRenderer();
+    lifecycle.onEntries(batch);
+  });
+  const rendererTimer = setTimeout(checkRenderer, RENDERER_CHECK_MS);
   const debugName = debugGlobalName(settings.debugGlobal);
 
   const api: Api = {
@@ -251,7 +263,7 @@ function installNow(opts: InstallOptions): Api {
     },
     dispose: () => {
       if (page.installed?.api !== api) return;
-      clearTimeout(rendererCheck);
+      clearTimeout(rendererTimer);
       if (delivery !== null) clearTimeout(delivery);
       undelivered.length = 0;
       if (cancelDraw) cancelDraw();
