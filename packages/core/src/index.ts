@@ -181,13 +181,16 @@ function installNow(opts: InstallOptions): Api {
   // announces and each restore from the back/forward cache, oldest first.
   const navigations: PageNavigation[] = [documentNavigation()];
   // Whether React has rendered on the page: sticky once seen, and looked for at most once a second while
-  // no react-dom has registered, since each look reads the page's elements.
+  // no react-dom has registered, since each look reads the page's elements. Input the page has seen since
+  // the last look makes the next one due, so a report never goes by a look from before React rendered.
   let sawReact = false;
   let lookedForReact = -Infinity;
+  let reactLookDue = false;
   const reactRenderedHere = (force = false): boolean => {
     const now = performance.now();
-    if (!sawReact && (force || now - lookedForReact >= REACT_LOOK_MS)) {
+    if (!sawReact && (force || reactLookDue || now - lookedForReact >= REACT_LOOK_MS)) {
       lookedForReact = now;
+      reactLookDue = false;
       sawReact = reactRendered();
     }
     return sawReact;
@@ -272,6 +275,7 @@ function installNow(opts: InstallOptions): Api {
   };
   const stopEvents = observeEventTiming((batch) => {
     checkHookReplaced();
+    reactLookDue = true;
     if (rendererCheck === 'again') checkRenderer();
     lifecycle.onEntries(batch);
   });
