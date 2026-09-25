@@ -42,7 +42,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   for each component rendered (`RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER`). Past that the handler keeps
   the blame, as inferred, and the sentence says why the render was passed over. Builds with durations, and
   the coarse clock of Firefox and WebKit, went by time already and are unchanged. The component-libraries
-  fixture clicks a menu item with a slow `onSelect` in both builds.
+  fixture clicks a menu item with a slow `onSelect` in both builds. What this gives up: a click whose handler
+  only sets state, and whose render of many different components is slow (60 chart widgets at 5 ms each),
+  now reads in a production build as the handler, most likely, where it read as the render. A development or
+  profiling build, which has the durations, still names the render.
 - **A Radix `Slot` is passed over for the component that rendered it.** Radix renders a slot inside most of
   its parts, named after the part (`RovingFocusGroupCollectionItemSlot.Slot`, `Primitive.button.SlotClone`),
   and it renders nothing of its own: it merges its props into the child it is given. A click on a
@@ -58,8 +61,7 @@ it changes when a field is removed or changes meaning, which a minor release may
   painting", said with confidence, with the real cause left to a note. The blame is now `none` and
   `inferred`, and the cause says what React did was not seen and why, naming the script the browser
   recorded across the time where there is one. A wait, a paint or a forced layout the browser measured
-  still outranks it, as before. The panel's blame line says nothing is blamed. `schemaVersion` stays at 2:
-  no field is removed and none changes meaning.
+  still outranks it, as before. The panel's blame line says nothing is blamed.
 
 ### Fixed
 
@@ -80,7 +82,9 @@ it changes when a field is removed or changes meaning, which a minor release may
   through a rule whose loader adds it at the top of `next-dev-turbopack.js`. `apps/next-demo` has a Pages Router
   page, checked in every Next.js suite CI runs, from 15.3.9 to 16.3.5 under both bundlers, and
   `fixtures/next-14` has one beside its App Router page. The Troubleshooting entry for this warning now lists the
-  setups that still load react-dom first.
+  setups that still load react-dom first. The line added to `next-dev-turbopack.js` requires the install by its
+  path from that file, not by the package name, which a strict `node_modules` (pnpm with hoisting off) would not
+  let Next.js's own file resolve.
 - **The README says `target.owners` holds the eight innermost components**, which it always has, and that
   `component` is picked from those eight. It said the whole chain.
 - **The Next.js quick start has a `next.config.mjs` for 14.2**, which reads no `next.config.ts`. It told 14.2
