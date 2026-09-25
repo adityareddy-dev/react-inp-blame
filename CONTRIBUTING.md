@@ -8,7 +8,8 @@ we can agree on the approach before you spend time on it.
 - `packages/core`: the library, the `react-inp-blame` package. Source in `src`, unit tests in `test`.
 - `apps/demo`: a Vite app with a sign-in flow, seven slow scenarios and a control, checked by the
   Playwright specs in `apps/demo/e2e`.
-- `apps/next-demo`: the Next.js checks in `e2e/` (load order, hydration, `useReportWebVitals`), run
+- `apps/next-demo`: the Next.js checks in `e2e/` (load order, hydration, `useReportWebVitals`, a Pages
+  Router page), run
   under `next dev` and two production builds.
 - `scripts/react-matrix.mjs`: generates the copies of the demo pinned to React 19.2, 19.1, 18.3, 18.2
   and 17.

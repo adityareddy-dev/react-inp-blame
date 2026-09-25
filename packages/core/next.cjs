@@ -34,6 +34,13 @@ const NEXT_CLIENT_FILE = { major: 15, minor: 3 };
 const NEXT_ENTRY = { major: 14, minor: 2 };
 // webpack's client entries in Next.js before 15.3: the App Router's and the Pages Router's.
 const CLIENT_ENTRIES = ['main-app', 'main'];
+// From 15.3 the Pages Router's dev entry, next-dev.js under webpack and next-dev-turbopack.js under
+// Turbopack, loads react-dom before it loads instrumentation-client, where the production entry loads it
+// first. So on `next dev` the install goes first in the Pages Router's entry: in webpack's `main`, and
+// under Turbopack through a loader that puts it at the top of next-dev-turbopack.js.
+const PAGES_ENTRIES = ['main'];
+const DEV_ENTRY_LOADER = require.resolve('./next-dev-entry-loader.cjs');
+const DEV_ENTRY_GLOB = 'next-dev-turbopack.js';
 // `condition` on a Turbopack rule, which keeps the loader to the browser and out of node_modules. Before
 // it, the same is written as builtin conditions, and `experimental.turbo` still holds rules.
 const NEXT_RULE_CONDITION = { major: 16, minor: 0 };
@@ -175,10 +182,10 @@ function checkOptionKeys(options) {
  * a config (Sentry's, for one) prepends to and which Next.js makes the Pages Router's `main` of when it is
  * not empty, so the install goes first there too.
  */
-function installFirst(entry) {
+function installFirst(entry, names = CLIENT_ENTRIES) {
   return async () => {
     const entries = typeof entry === 'function' ? await entry() : entry;
-    for (const name of CLIENT_ENTRIES) {
+    for (const name of names) {
       const value = entries[name];
       if (typeof value === 'string' || Array.isArray(value)) {
         const modules = [value].flat();
@@ -202,6 +209,16 @@ function installFirst(entry) {
 function turbopackRule(found) {
   if (!atLeast(found, NEXT_RULE_CONDITION)) return { foreign: false, browser: { loaders: [LOADER] } };
   return { condition: { all: ['browser', { not: 'foreign' }] }, loaders: [LOADER] };
+}
+
+/**
+ * The Turbopack rule that puts the install at the top of the Pages Router's dev entry. That file is in
+ * node_modules, so unlike the names loader's rule this one does not keep out foreign code; the loader
+ * itself leaves any file but Next.js's own entry as it was.
+ */
+function devEntryRule(found) {
+  if (!atLeast(found, NEXT_RULE_CONDITION)) return { browser: { loaders: [DEV_ENTRY_LOADER] } };
+  return { condition: 'browser', loaders: [DEV_ENTRY_LOADER] };
 }
 
 /**
@@ -308,6 +325,11 @@ function wrap(nextConfig, options, dirs) {
     );
   }
   const rules = { ...existing, [GLOB]: rule };
+  // Next.js sets TURBOPACK before it reads the config, under `next dev --turbopack` and wherever Turbopack
+  // is the default, as it is from 16.0. The rule only matters on the dev server, so a build never gets it.
+  if (install && !byEntry && process.env.TURBOPACK && process.env.NODE_ENV !== 'production' && existing[DEV_ENTRY_GLOB] == null) {
+    rules[DEV_ENTRY_GLOB] = devEntryRule(found);
+  }
 
   const webpack = (config, context) => {
     if (!context.isServer) {
@@ -318,8 +340,9 @@ function wrap(nextConfig, options, dirs) {
         use: [{ loader: LOADER }],
       });
       // webpack runs a module when it is first required, so the install, first in the entry, runs before
-      // the entry's next module loads react-dom.
+      // the entry's next module loads react-dom. From 15.3 only the Pages Router's dev entry needs it.
       if (byEntry && install) config.entry = installFirst(config.entry);
+      else if (install && context.dev) config.entry = installFirst(config.entry, PAGES_ENTRIES);
     }
     return typeof nextConfig.webpack === 'function' ? nextConfig.webpack(config, context) : config;
   };
