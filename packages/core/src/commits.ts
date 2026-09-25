@@ -20,13 +20,23 @@ function score(c: CommitSummary): number {
  * `Primitive.button` out: it names the element that was clicked, and "button in Primitive.button"
  * tells a reader nothing they did not write themselves. The same test keeps out the names styling
  * libraries give every element they wrap, `styled.div` (styled-components) and `Styled(Button)`
- * (styled-components and emotion).
+ * (styled-components and emotion). Radix's Slot is kept out by name: it renders nothing of its own, it
+ * merges its props into the child it is given, and Radix names each one after the component that rendered
+ * it (`RovingFocusGroupCollectionItemSlot.Slot`, `Primitive.button.SlotClone`), or `Slot` alone where the
+ * app rendered one itself, as shadcn's Button does for `asChild`. So are the collection slots Radix's parts
+ * register their items through (`MenuCollectionItemSlot`, `RovingFocusGroupCollectionSlot`), which render
+ * only the Slot named after them. The component before is the one to name, where it is readable itself.
  */
 const READABLE_NAME = /^[A-Z][A-Za-z0-9_$]{2,}$/;
+const SLOT = /^Slot(Clone)?$|Collection(Item)?Slot$/;
 // The suffix Vite's development server and Rolldown add to a name that clashes with another in the same
 // scope: `Dt$1` is a minifier's `Dt`, and is judged as `Dt`.
 const DEDUPE_SUFFIX = /\$\d+$/;
-export const readableName = (name: string): boolean => name.split('.').every((part) => READABLE_NAME.test(part.replace(DEDUPE_SUFFIX, '')));
+export const readableName = (name: string): boolean =>
+  name.split('.').every((part) => {
+    const plain = part.replace(DEDUPE_SUFFIX, '');
+    return READABLE_NAME.test(plain) && !SLOT.test(plain);
+  });
 
 /**
  * The component a commit is named after: the deepest readable name on its hot path, else the end of its

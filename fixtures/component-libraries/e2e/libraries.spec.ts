@@ -120,5 +120,7 @@ test("a Radix menu item whose onSelect is slow is put on the handler, not on the
   // A development build times the render; a production build has only the count of the components the
   // closing menu re-rendered, a tree of different ones at more of the working time than a tree accounts for.
   expect(r.explanation.blame.kind).toBe('handler');
+  // Radix's Slot components merge their props into their child and render nothing of their own.
+  expect(r.target?.component).not.toMatch(/Slot(Clone)?$/);
   expect(problems).toEqual([]);
 });

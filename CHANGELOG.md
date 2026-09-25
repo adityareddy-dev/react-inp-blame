@@ -43,6 +43,15 @@ it changes when a field is removed or changes meaning, which a minor release may
   the blame, as inferred, and the sentence says why the render was passed over. Builds with durations, and
   the coarse clock of Firefox and WebKit, went by time already and are unchanged. The component-libraries
   fixture clicks a menu item with a slow `onSelect` in both builds.
+- **A Radix `Slot` is passed over for the component that rendered it.** Radix renders a slot inside most of
+  its parts, named after the part (`RovingFocusGroupCollectionItemSlot.Slot`, `Primitive.button.SlotClone`),
+  and it renders nothing of its own: it merges its props into the child it is given. A click on a
+  `DropdownMenu.Item` was named "in RovingFocusGroupCollectionItemSlot.Slot", and a render or a layout inside
+  one took the same name. Those names, the bare `Slot` or `SlotClone` of an `asChild` the app rendered
+  itself, and the collection slots Radix's parts register their items through (`MenuCollectionItemSlot`),
+  which render only such a Slot, are now skipped the way an icon or a styling wrapper is, and the component
+  before them is named. The library part that composed a handler is still the one named where the app's own
+  component sits further up than the owners a report keeps.
 
 ### Fixed
 
