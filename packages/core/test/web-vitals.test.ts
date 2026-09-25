@@ -62,6 +62,15 @@ test('the target names the components enclosing the element, outermost first, th
   assert.equal(generateTarget(asNode(tile)), 'ProfilePage > PhotoTile (button.tile)');
 });
 
+test("names a reader could not search their code for make way for the next owner out, unless nothing better is there", () => {
+  // A minifier's `Xe` and styled-components' `styled.button` between the element and the app's own components.
+  const save = element('button', { classes: ['save'], fiber: owners('App', 'Editor', 'Panel', 'Toolbar', 'SaveButton', 'styled.button', 'Xe') });
+  assert.equal(generateTarget(asNode(save)), 'Editor > Panel > Toolbar > SaveButton (button.save)');
+  // A chain with no readable name keeps its names as they stand rather than inventing one.
+  const minified = element('button', { classes: ['x'], fiber: owners('Qe', 'Styled(div)', 'Xe') });
+  assert.equal(generateTarget(asNode(minified)), 'Qe > Styled(div) > Xe (button.x)');
+});
+
 test('a node with no fiber of its own is placed by the nearest element that has one', () => {
   // React puts a fiber on every element it renders, so in a page this is the text inside the button.
   const tile = element('button', { classes: ['tile'], fiber: owners('ProfilePage', 'PhotoTile') });

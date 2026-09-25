@@ -1,4 +1,4 @@
-import { heaviest } from './commits.js';
+import { heaviest, readableName } from './commits.js';
 import { selector } from './element.js';
 import { fiberFromNode, ownersOf } from './fiber.js';
 import { page } from './install-state.js';
@@ -24,6 +24,8 @@ const SCHEMA_VERSION = 2;
  * and the layout rather than the component that actually renders what was clicked.
  */
 const MAX_OWNERS = 4;
+// How far up the tree the owners are read, so that dropping unreadable names still leaves MAX_OWNERS.
+const OWNERS_READ = 16;
 /** Components named in a `ReactAttribution`. A report names a culprit; the full list stays on the report. */
 const MAX_COMPONENTS = 5;
 /** Longest target string. web-vitals caps its own selectors at 100 characters, and these go to the same analytics fields. */
@@ -112,7 +114,11 @@ export function generateTarget(node: Node | null): string | undefined {
     const fiber = fiberFromNode(node);
     if (!fiber) return undefined;
     // Nearest first from the tree React rendered the node in, which is the order a path reads in reverse.
-    const path = ownersOf(fiber, MAX_OWNERS).reverse();
+    // Names a reader could not search their code for (a minifier's `Xe`, a styling library's `styled.div`)
+    // make way for the next owner out, unless the chain has nothing better.
+    const owners = ownersOf(fiber, OWNERS_READ);
+    const readable = owners.filter(readableName);
+    const path = (readable.length ? readable : owners).slice(0, MAX_OWNERS).reverse();
     if (!path.length) return undefined;
     const element = selector(node);
     const described = element ? ` (${element.slice(0, MAX_SELECTOR_CHARS)})` : '';
