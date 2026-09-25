@@ -18,6 +18,7 @@ import loader from './display-names-loader.cjs';
 const INSTALL_MODULE = 'virtual:react-inp-blame/install';
 const RESOLVED_INSTALL_MODULE = `\0${INSTALL_MODULE}`;
 const COMPONENT_FILE = /\.[jt]sx$/;
+const hoistDefaultExport = loader[Symbol.for('react-inp-blame.hoistDefaultExport')];
 const ENABLED = ['development', 'production', true, false];
 const OPTION_KEYS = ['enabled', 'runtime', 'pages', 'entry'];
 // install()'s own options, which belong under `runtime`. Listed so that `{ overlay: true }` at the top
@@ -30,6 +31,12 @@ const INSTALL_KEYS = ['overlay', 'threshold', 'labels', 'hook', 'sampleRate', 'w
  */
 function fileOf(id) {
   return id.split('?')[0].replaceAll('\\', '/').replace(/^[a-z]:\//, (drive) => drive.toUpperCase());
+}
+
+/** Whether a module is one of the app's own .jsx or .tsx files, which the displayName passes read. */
+function appComponentFile(id) {
+  const file = id.split('?')[0];
+  return COMPONENT_FILE.test(file) && !file.includes('node_modules');
 }
 
 /**
@@ -649,10 +656,26 @@ export function inpBlame(options = {}) {
     enforce: 'post',
     apply,
     transform(code, id) {
-      const file = id.split('?')[0];
-      if (!COMPONENT_FILE.test(file) || file.includes('node_modules')) return null;
+      if (!appComponentFile(id)) return null;
       const stamped = loader.stamp(code);
       return stamped === code ? null : { code: stamped, map: null };
+    },
+  });
+  /**
+   * Before any other plugin, so that a framework plugin that wraps a module's default export finds
+   * `export default Foo` and wraps the binding, which the pass above then names. React Router's does:
+   * without this, `export default function Home()` in a route module became an anonymous function in
+   * the build, and a click inside it was put down to the nearest named component above, `Layout`.
+   * Builds only: the dev server keeps every function's own name.
+   */
+  plugins.push({
+    name: 'react-inp-blame:default-exports',
+    enforce: 'pre',
+    apply: (resolved, env) => env.command === 'build' && apply(resolved, env),
+    transform(code, id) {
+      if (!appComponentFile(id)) return null;
+      const hoisted = hoistDefaultExport(code);
+      return hoisted === code ? null : { code: hoisted, map: null };
     },
   });
   return plugins;

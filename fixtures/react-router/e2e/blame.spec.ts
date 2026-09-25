@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { blamedRows, counter, hookState, open, showPanel } from "./page";
+import { blamedRows, counter, hookState, open, recordVerdicts, showPanel, verdicts } from "./page";
 
 // The app as a user has it: create-react-router's template with the README's React Router setup, and
 // react-inp-blame installed from the packed tarball. React Router writes the page itself, so nothing
@@ -32,4 +32,20 @@ test("a click is blamed on SlowList", async ({ page }) => {
     await test.info().attach("page loads", { body: String(count), contentType: "text/plain" });
     console.log(`${test.info().project.name}: ${count} page load${count === 1 ? "" : "s"}`);
   }
+});
+
+// React Router wraps a route module's default export in a component of its own, and the build used to
+// leave the function inside that wrapper with no name at all: the click below was put down to `Layout`,
+// the nearest component above it with one. The Vite plugin keeps the route component's name, so the
+// click is in Home in the build as on the dev server.
+test("a slow click handler in a route component is put down to that component", async ({ page }) => {
+  await recordVerdicts(page);
+  const { problems } = await open(page);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await showPanel(page);
+  await expect(page.locator("#react-inp-blame .panel .row")).toHaveCount(1);
+  await expect.poll(() => verdicts(page)).toHaveLength(1);
+  const [verdict] = await verdicts(page);
+  expect(verdict).toMatch(/^\d+ ms click on button( "Save")? in Home\./);
+  expect(problems).toEqual([]);
 });
