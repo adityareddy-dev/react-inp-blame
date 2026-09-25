@@ -390,8 +390,17 @@ function groupRows(reports: InteractionReport[]): Group[] {
   return out;
 }
 
+/**
+ * Whether a report is typing: an input or a change, or a key that typed a character into something
+ * that is not a button or a link. The browser fires a keypress only for a key that makes a character,
+ * so Escape, Tab and the arrow keys are key presses. A report does not keep which key it was, and
+ * Enter in a text field fires a keypress too, so that one still reads as typing.
+ */
 function isTyping(r: InteractionReport): boolean {
-  return isTypingEvent(r.type);
+  if (r.type === 'input' || r.type === 'change') return true;
+  if (!isTypingEvent(r.type)) return false;
+  const kind = r.target?.label?.match(/^\w+/)?.[0];
+  return kind !== 'button' && kind !== 'link' && r.entries.some((e) => e.name === 'keypress');
 }
 
 function sameTarget(a: InteractionReport, b: InteractionReport): boolean {
@@ -546,11 +555,15 @@ function blameText(blame: Blame): Child[] {
   }
 }
 
-/** "Typing in Password" / "Click on Log in", from the report's target. A report with no target is just "Typing" or "Click". */
-function titleFor(r: InteractionReport): string {
+/**
+ * "Typing in Password" / "Key press on Close" / "Click on Log in", from the report's target. A report
+ * with no target is just "Typing", "Key press" or "Click".
+ */
+export function titleFor(r: InteractionReport): string {
   const t = r.target;
   const label = t?.label ? t.label.replace(/^\w+ /, '') : (t?.selector ?? '');
-  if (isTypingEvent(r.type)) return label ? `Typing in ${label}` : 'Typing';
+  if (isTyping(r)) return label ? `Typing in ${label}` : 'Typing';
+  if (isTypingEvent(r.type)) return label ? `Key press on ${label}` : 'Key press';
   if (isPointerEvent(r.type)) return label ? `Click on ${label}` : 'Click';
   return `${kindOf(r.type)} ${label}`.trim();
 }
