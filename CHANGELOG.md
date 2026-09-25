@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-25
+
 ### Fixed
 
 - **Renders that a resize, a scroll, a hover or a media query caused stop joining the last click.** A commit
@@ -568,7 +570,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.3.0...v0.4.0
