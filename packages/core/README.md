@@ -196,9 +196,10 @@ meaning `astro build`; list it after `react()`:
 
     export default defineConfig({ integrations: [react(), inpBlame({ runtime: { overlay: 'query' } })] });
 
-The install runs when the page's first island starts to hydrate, so a page whose islands are all
-`client:idle` or `client:visible` is not watched before then. CI runs this in Astro 7.3's minimal
-template under `astro dev` and on `astro preview` of a production build.
+The install runs as soon as the page's first island has been parsed, whatever its `client:`
+directive, and React may load much later or not at all; the library warns about a late install only
+where React has rendered without registering with it. CI runs this in Astro 7.3's minimal template
+under `astro dev` and on `astro preview` of a production build.
 
 Without the Vite plugin or the Next.js wrapper, make `import 'react-inp-blame/auto'` the first
 import of the entry module: it installs with the default options before react-dom loads. Under
