@@ -78,6 +78,13 @@ const FIXTURES = {
     reported: ['vite', '@vitejs/plugin-react', 'react', 'react-dom', 'styled-components', '@emotion/styled', 'lucide-react', '@radix-ui/react-dropdown-menu', '@playwright/test', PACKAGE],
     typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
   },
+  // Next.js 14.2, which has no instrumentation-client: withInpBlame installs through webpack's client entries.
+  'next-14': {
+    readme: '## Install with Next.js 14.2 or later',
+    files: [],
+    reported: ['next', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
+  },
   // Remix 2, on the React 18 its template brings. @remix-run/react imports react-router-dom, which imports
   // react-dom, so the root route loads react-dom before the client entry does.
   remix: {
@@ -95,7 +102,7 @@ const FIXTURES = {
   },
 };
 // Left behind by a run in the fixture folder itself, and not part of the app.
-const NOT_COPIED = new Set(['node_modules', 'dist', 'build', '.react-router', '.astro', 'test-results', 'playwright-report']);
+const NOT_COPIED = new Set(['node_modules', 'dist', 'build', '.react-router', '.astro', '.next', '.next-dev', 'test-results', 'playwright-report']);
 
 const quoted = (text) => `"${text}"`;
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));

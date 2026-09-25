@@ -1,0 +1,25 @@
+{
+  "name": "next-14-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A Next.js 14.2 App Router app with withInpBlame, which installs ahead of react-dom through webpack's client entries there. Run by scripts/vite-app.mjs --fixture next-14 from a temp copy.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-inp-blame": "^0.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@types/node": "^20.19.0",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "typescript": "~5.9.3"
+  }
+}
