@@ -2223,3 +2223,68 @@ test('names that look minified get a note, and readable or styled names mixed wi
   const vendor = commit(50, 0, { hasDurations: false, total: 0, rendered: 40, roots: ['Vendor'], hotPath: ['Vendor'], components: ['le', 'ue', 'de', 'fe', 'ge', 'he', 'me', 'pe'].map((name) => ({ name, count: 4, self: null, total: null })) });
   assert.equal(report([entry('click', 0, 120, 3, 100)], [vendor], [], []).explanation.notes.some((n) => n.startsWith('Most component names')), false);
 });
+
+test("a minifier's name the report gives, in a build whose names are otherwise readable, gets a note of its own", () => {
+  const oddNote = (name: string) =>
+    `The name ${name} looks like one a minifier left, most likely on a dependency's component, which this library's build steps do not name. Selecting it in React DevTools shows its props and what rendered it, which usually says whose it is.`;
+  const odd = (x: { notes: readonly string[] }) => x.notes.some((n) => n.startsWith('The name '));
+  const named = (names: string[], count = 12) => names.map((name) => ({ name, count, self: null, total: null }));
+  // The app's own components, stamped, beside two a dependency left short.
+  const app = named(['Post', 'PostHeader', 'PostBody', 'Avatar', 'LikeButton', 'Wr', 'Qe']);
+  const walk = (opts: Partial<CommitSummary>) => commit(50, 0, { hasDurations: false, total: 0, rendered: 60, roots: ['Feed'], hotPath: ['Feed'], components: app, ...opts });
+  const click = [entry('click', 0, 120, 3, 100)];
+
+  // Twenty, where React Router's RouterProvider is minified in a build that names the app's own components:
+  // five readable names of the seven beside it.
+  const records = named(['RecordTable', 'RecordTableRow', 'RecordTableCell', 'RecordTableCellDisplayMode', 'RecordShowPage', 'Wr', 'Qe', '(anonymous)']);
+  const twenty = report(click, [walk({ rendered: 4917, truncated: true, roots: ['hl'], hotPath: ['hl'], components: records })], []).explanation;
+  assert.match(twenty.cause, /^React was most likely re-rendering at least 4917 components inside hl\. /);
+  assert.equal(twenty.blame.name, 'hl');
+  assert.ok(twenty.notes.includes(oddNote('hl')), twenty.notes.join('\n'));
+  assert.ok(!twenty.notes.some((n) => n.startsWith('Most component names')));
+
+  // Named after "inside" where the blame is the handler's, and with the `$1` a clash adds.
+  const handler = report([entry('click', 0, 300, 3, 280)], [walk({ hotPath: ['Dt$1'] })], [], loginClick('onClick')).explanation;
+  assert.equal(handler.blame.kind, 'handler');
+  assert.ok(handler.cause.includes(' inside Dt$1, none of them'), handler.cause);
+  assert.ok(handler.notes.includes(oddNote('Dt$1')), handler.notes.join('\n'));
+
+  // And where only a note names it: a render after the paint.
+  const data = buildReport(click, [walk({})], []);
+  const later = sealReport(attachLaterRender(data, walk({ at: 400, sinceInput: 400, hasDurations: true, total: 40, hotPath: ['hl'] }), [])!).explanation;
+  assert.ok(later.notes.some((n) => n.includes('re-rendering 60 components inside hl')), later.notes.join('\n'));
+  assert.ok(later.notes.includes(oddNote('hl')), later.notes.join('\n'));
+
+  // Not where the name the report gives is readable, whatever else in the walk is short.
+  const readable = report(click, [walk({ rendered: 400, hotPath: ['Feed', 'Xe'], components: [...named(['Post'], 400), ...app] })], []).explanation;
+  assert.ok(readable.cause.includes('inside Feed'), readable.cause);
+  assert.ok(!odd(readable), readable.notes.join('\n'));
+
+  // Nor where the short name is a commit's the report never names, and "inside Ta" is not "inside TableBody".
+  const table = walk({ rendered: 400, roots: ['Table'], hotPath: ['Table', 'TableBody'], components: [...named(['TableBodyRow'], 400), ...app] });
+  const beside = report(click, [table, walk({ at: 60, sinceInput: 60, rendered: 3, roots: ['Ta'], hotPath: ['Ta'], components: named(['Ta'], 3) })], []).explanation;
+  assert.ok(beside.cause.includes('inside TableBody'), beside.cause);
+  assert.ok(!odd(beside), beside.notes.join('\n'));
+
+  // Nor where the rest are too few to say the build keeps names, or are not readable: an app that stamps
+  // nothing would be told its own component is a dependency's.
+  const unstamped = (roots: string[], names: string[]) => report(click, [walk({ rendered: 40, roots, hotPath: roots, components: named(names, 8) })], []).explanation;
+  for (const few of [['e', 'Xe', 'Tt'], ['e', 'Xe', 'Tt', 'nc']]) {
+    const r = unstamped([few[0]!], few);
+    assert.match(r.cause, / inside e\b/);
+    assert.ok(!odd(r) && !r.notes.some((n) => n.startsWith('Most component names')), r.notes.join('\n'));
+  }
+  for (const styled of [
+    ['Xe', 'Nu', 'Tt', 'Styled(div)', 'Styled(button)'],
+    ['Xe', 'Nu', 'Tt', 'Styled(div)', 'Styled(button)', 'Styled(span)', 'Styled(li)'],
+  ]) {
+    const r = unstamped(['Xe'], styled);
+    assert.match(r.cause, / inside Xe\b/);
+    assert.ok(!odd(r), r.notes.join('\n'));
+  }
+
+  // Nor where most names are a minifier's: the note for the whole build says it.
+  const minified = unstamped(['e'], ['e', 'Xe', 'Tt', 'nc', '$']);
+  assert.ok(minified.notes.some((n) => n.startsWith('Most component names')));
+  assert.ok(!odd(minified), minified.notes.join('\n'));
+});

@@ -1170,7 +1170,10 @@ The build minified your component names, so reports read like "inside e, mostly 
 fine. To keep your own components' names, use the [Vite plugin](#install-with-vite) or the
 [Next.js wrapper](#install-with-nextjs-142-or-later). With webpack or Rspack, add
 `react-inp-blame/display-names-loader` as the webpack part of [Install with Vite](#install-with-vite) shows. A dependency's
-components keep their names only where the dependency sets `displayName`.
+components keep their names only where the dependency sets `displayName`. Where most of your names are readable
+and only the component a report names is short, the note says that one is most likely a dependency's instead.
+React DevTools shows the same short name, but selecting it there shows its props and what rendered it, which
+usually says whose it is.
 
 <a id="another-copy"></a>
 #### A copy from an incompatible version is already on this page

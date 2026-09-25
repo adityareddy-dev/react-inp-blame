@@ -6,6 +6,18 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **A minifier's name in a build that keeps readable names gets a note.** On Twenty the verdict read "React
+  was most likely re-rendering at least 4917 components inside hl.", where `hl` is React Router's
+  `RouterProvider`: a dependency's component with no `displayName`, which the Vite plugin, the Next.js wrapper
+  and the loader never stamp. Where a component the report names, as the blame or as the one React rendered
+  inside, in the cause or in a note, is one or two characters, and the report holds at least five other names
+  and most of them are readable, a note now says it looks like a name a minifier left, most likely on a
+  dependency's component, and that selecting it in React DevTools shows its props and what rendered it, which
+  usually says whose it is. With fewer names, or mostly unreadable ones, there is no note, since there the
+  short name could be the app's own. The name is left as it stands. The blame is unchanged.
+
 ### Changed
 
 - **A render that was mostly one component's own render says so.** Sorting TanStack Table's virtualized rows

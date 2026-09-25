@@ -102,21 +102,35 @@ const MINIFIED_NAMES_MIN = 5;
  * `styled.div` is not short, so an app styled that way does not look minified.
  */
 export function namesLookMinified(commits: readonly CommitSummary[]): boolean {
-  const names = new Set<string>();
-  for (const c of commits) {
-    // A readable name where the render started or led is the app's own, stamped: the short ones around it
-    // are a dependency's, which nothing in the app's build can name, and the setups the note gives would
-    // change nothing.
-    if (c.roots.some(readableName) || c.hotPath.some(readableName)) return false;
-    for (const x of c.components) names.add(x.name);
-    for (const n of c.hotPath) names.add(n);
-    for (const n of c.roots) names.add(n);
-  }
-  names.delete('(anonymous)');
+  // A readable name where the render started or led is the app's own, stamped: the short ones around it are
+  // a dependency's, which nothing in the app's build can name, and the setups the note gives would change
+  // nothing.
+  if (commits.some((c) => c.roots.some(readableName) || c.hotPath.some(readableName))) return false;
+  const names = namesIn(commits);
   if (names.size < MINIFIED_NAMES_MIN) return false;
   let short = 0;
   for (const n of names) if (MINIFIED_NAME.test(n)) short++;
   return short >= 0.8 * names.size;
+}
+
+/**
+ * Whether `name` is a minifier's in a build that keeps names: past it, `$1` or not, at least five different
+ * names in these commits and most of them readable. There one short name is most likely a dependency's,
+ * where in a build that stamps nothing, or one with too few names to tell, it could be the app's own.
+ */
+export function minifiedAmongReadable(commits: readonly CommitSummary[], name: string): boolean {
+  const bare = name.replace(DEDUPE_SUFFIX, '');
+  if (!MINIFIED_NAME.test(bare)) return false;
+  const others = [...namesIn(commits)].filter((n) => n.replace(DEDUPE_SUFFIX, '') !== bare);
+  return others.length >= MINIFIED_NAMES_MIN && others.filter(readableName).length > others.length / 2;
+}
+
+/** Every root, hot path and component name in these commits but `(anonymous)`. */
+function namesIn(commits: readonly CommitSummary[]): Set<string> {
+  const names = new Set<string>();
+  for (const c of commits) for (const n of [...c.roots, ...c.hotPath, ...c.components.map((x) => x.name)]) names.add(n);
+  names.delete('(anonymous)');
+  return names;
 }
 
 const MINIFIED_NAMES_WHY =

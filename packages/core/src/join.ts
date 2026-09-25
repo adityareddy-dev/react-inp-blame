@@ -1,4 +1,4 @@
-import { dominantComponent, heaviest, leafName, MINIFIED_NAMES_NOTE, mostlyComponent, namesLookMinified, readableName } from './commits.js';
+import { dominantComponent, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
@@ -1456,7 +1456,8 @@ function explain(r: InteractionReport): Explanation {
     if (r.inputDelay > LONG_TASK_MS && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
     if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   }
-  if (namesLookMinified([...r.commits, ...r.followUps])) notes.push(MINIFIED_NAMES_NOTE);
+  const walked = [...r.commits, ...r.followUps];
+  if (namesLookMinified(walked)) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
     notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
   }
@@ -1484,6 +1485,13 @@ function explain(r: InteractionReport): Explanation {
   if (r.walkMs >= 0.5) {
     notes.push(`The ${ms(r.duration)} includes ${ms(r.walkMs)} that react-inp-blame itself spent reading what React rendered; it is not counted as working time.`);
   }
+  // One minifier's name among readable ones is most likely a dependency's component that sets no
+  // displayName, which no build step in the app can name: on Twenty, React Router's RouterProvider read "hl".
+  // Said where the report sends the reader to it, as the blame or as what React rendered inside anywhere in
+  // the text, a whole name ("inside Ta" is not "inside TableBody"), and never as a guess at what it is.
+  const said = [cause, ...notes].join(' ');
+  const odd = walked.map(leafOf).find((n) => minifiedAmongReadable(walked, n) && (n === blame.name || new RegExp(` inside ${n.replace(/\$/g, '\\$&')}(?![\\w$]|\\.[\\w$])`).test(said)));
+  if (odd) notes.push(`The name ${odd} looks like one a minifier left, most likely on a dependency's component, which this library's build steps do not name. Selecting it in React DevTools shows its props and what rendered it, which usually says whose it is.`);
 
   // Hydrating runs inside the event's own dispatch, so it is part of the working time rather than a
   // fourth phase beside it: the three phases go on adding up to the interaction the way they always did.
