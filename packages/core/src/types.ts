@@ -53,8 +53,9 @@ export interface CommitSummary {
   readonly roots: readonly string[];
   /**
    * The chain that carries most of the work, outermost first. For a production walk cut at `walkBudget`,
-   * whose counts cannot choose among subtrees it reached in part or not at all, it stops at the subtree the
-   * cut was in, or is the component its roots all sit under, or is empty where they sit under none.
+   * whose counts cannot choose among subtrees it reached in part or not at all, it stops at its one subtree
+   * where nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
+   * under, or empty where they sit under none.
    */
   readonly hotPath: readonly string[];
   /** Per-component aggregates, heaviest first, at most 12. */

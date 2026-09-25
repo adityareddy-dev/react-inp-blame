@@ -621,7 +621,7 @@ their first value, with a warning, until `dispose()`.
 | `labels` | `'auto'` | Where `target.label` comes from: see [Labels and personal data](#labels-and-personal-data) |
 | `hook` | `'auto'` | `'chain'` wraps an existing `__REACT_DEVTOOLS_GLOBAL_HOOK__` and never creates one; `'shim'` creates one unless one exists; `'auto'` chains or creates |
 | `sampleRate` | `1` | Share of page loads that install anything |
-| `walkBudget` | `5000` | Component fibers visited per commit. A commit past it is reported as partial: its counts say "at least", and in a production build, which has only counts to go on, the blame names the component the cut-short subtree sits in rather than the subtree the walk reached first, or where several subtrees could hold the work, the component they all sit under, or none (`blame.name` null) |
+| `walkBudget` | `5000` | Component fibers visited per commit. A commit past it is reported as partial: its counts say "at least", and in a production build, which has only counts to go on, the blame names the one subtree the walk was in where nothing it did not reach rendered beside it, and otherwise the component the subtrees all sit under, or none (`blame.name` null), rather than the subtree the walk reached first |
 | `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside an input's own dispatch are always walked. It also bounds `followUps`, whose window runs from the paint as a rule |
 | `devtoolsTrack` | `true` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track |
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
@@ -982,7 +982,8 @@ moved to React 18.
   a change of height alone, a phone's keyboard opening, does not count), and, under React 19.1 and later in
   development and profiling builds, one React commits with the priority it gives a hover's or a scroll's
   update. A touch's own pointerover and pointerenter get that priority too, so behind a touch it is not read:
-  a card that opens when a finger enters it is the tap's work. Under React 18 and 19.0, and React 19 in
+  a card that opens when a finger enters it is the tap's work, and on a device with both a touch screen and a
+  mouse, a mouse hover or a wheel soon after a tap still joins the tap. Under React 18 and 19.0, and React 19 in
   production, a hover or a scroll renders in a task of its own with nothing to say whose it is, so within
   the window it still reads as a follow-up render of whatever interaction came last,
   as does an update with no user input behind it at all, a timer or a message arriving. A click whose own

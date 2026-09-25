@@ -24,11 +24,10 @@ it changes when a field is removed or changes meaning, which a minor release may
 - **A render past the walk budget is no longer blamed on the subtree the walk reached first.** The walk stops
   at `walkBudget` components (5,000), depth first, and a production build has no durations, so the blame
   went by counts: the first subtree, counted in full, beat a later one twice its size that the walk had
-  only begun. The blame now stops at the subtree the cut was in, where the counts can no longer choose (a
-  render of 3,000 and then 6,000 rows is blamed on the component holding both), a commit cut short with
-  several roots, or just past the one root it reached, is named by the component they all sit under, and
-  its sentence says "at least" that many
-  components and names none it was "mostly" made of. `blame.name` and `blame.detail` change value for those
+  only begun. A commit cut short is now named by its one subtree where nothing it did not reach rendered
+  beside it (a single long list), and otherwise by the component its subtrees all sit under (a render of
+  3,000 and then 6,000 rows is blamed on the component holding both, wherever the cut fell), and its sentence
+  says "at least" that many components and names none it was "mostly" made of. `blame.name` and `blame.detail` change value for those
   commits; `blame.name` is null where nothing contains them all, and for a render blame on a commit that
   rendered no component (it read "the app"). The Performance panel's render entries say "at least" too.
   Development builds, whose durations cover every subtree, choose as before. The demo's `budget` spec checks
