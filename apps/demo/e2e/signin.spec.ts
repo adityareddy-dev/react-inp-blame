@@ -13,6 +13,9 @@ const on = (all: InteractionReport[], name: string) => all.filter((r) => r.targe
 
 const slowest = (all: InteractionReport[]) => all.reduce((a, b) => (b.duration > a.duration ? b : a));
 
+/** The one whose handlers ran longest: a keystroke whose paint a busy machine held up is slower, and rightly blamed on painting. */
+const busiest = (all: InteractionReport[]) => all.reduce((a, b) => (b.processing > a.processing ? b : a));
+
 test('sign-in flow: email, password, log in, profile, each attributed to what took the time', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('[data-test=email]');
@@ -39,7 +42,7 @@ test('sign-in flow: email, password, log in, profile, each attributed to what to
 
   // Each password keystroke scores the password for 110 ms in the change handler; production
   // builds name the handler by its prop and can only infer that it took the time.
-  const p = slowest(passwords);
+  const p = busiest(passwords);
   expect(p.duration).toBeGreaterThanOrEqual(110);
   expect(p.explanation.blame).toMatchObject(prod ? { kind: 'handler', name: 'onChange', confidence: 'inferred' } : { kind: 'handler', name: 'onPasswordChange', confidence: 'measured' });
 
