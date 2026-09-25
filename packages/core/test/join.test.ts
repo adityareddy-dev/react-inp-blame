@@ -1080,6 +1080,10 @@ test('a production build says React hydrated the boundary and stops short of say
   assert.match(r.explanation.cause, /A profiling build of React would give exact numbers\./);
   assert.equal(r.explanation.blame.ms, null);
   assert.equal(r.explanation.phases[1]?.parts, undefined);
+  assert.match(r.explanation.cause, /first, 40 components:/);
+  // A hydration the walk cut short says it counted at least that many, as its detail does.
+  const cut = report([entry('click', 0, 120, 3, 100)], [{ ...hydration, rendered: 5000, truncated: true }], []);
+  assert.match(cut.explanation.cause, /hydrated the page first, at least 5000 components:/);
 });
 
 test('a hydration commit the interaction did not wait for is a note, not the blame', () => {
@@ -1850,6 +1854,21 @@ test('a click inside a link or an option is named by the component it landed in;
   assert.deepEqual(r.target?.owners, ['ProductCard', 'ProductList']);
   // The label is still the link's.
   assert.equal(r.target?.label, 'link "Kettle"');
+});
+
+test("a render a tap's pointerdown set off joins the tap when Chrome reported no pointerdown entry", () => {
+  // A finger held on a card whose onPointerEnter opens it: React renders the card, stamped with the
+  // pointerdown, after the finger lifts and before the click's handlers can run. The pointerdown's own
+  // entry was under 16 ms, so only the pointerup and the click arrive.
+  const ring = [
+    input(0, 'pointerdown', { gestureTs: 0, pointerType: 'touch' }),
+    input(150, 'pointerup', { gestureTs: 0, pointerType: 'touch' }),
+    input(150, 'click', { gestureTs: 0, pointerType: 'touch' }),
+  ];
+  const card = commit(260, 0, { inputType: 'pointerdown', rendered: 403, roots: ['TapCard'], hotPath: ['TapCard', 'Cells'] });
+  const button = commit(300, 150, { gestureTs: 0, rendered: 1, roots: ['TapButton'], hotPath: ['TapButton'] });
+  const r = report([entry('pointerup', 150, 260, 280, 282), entry('click', 150, 280, 283, 298)], [card, button], [], ring);
+  assert.deepEqual(r.commits.map((c) => [c.at, c.joinedBy]), [[260, 'exact'], [300, 'exact']]);
 });
 
 test('a render whose walk stopped at its budget says "at least", names no component it was "mostly" made of, and no root it reached first', () => {

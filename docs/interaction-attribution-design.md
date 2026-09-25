@@ -885,11 +885,17 @@ outside any input's task, is nobody's and is not walked. That catches the shadcn
 React 17 renders, which it does inside the event. A resize hook that waits for a timer has no event to
 read, so a capture listener notes when the window's width changes and a commit outside any dispatch after
 that is the page's. React 18 and 19 render a hover's or a scroll's update in a task of their own, where
-`window.event` is empty. React 19 passes the hook the priority of the lanes it committed (user-blocking
-for that work, which nothing an input causes is given) in development and profiling builds; React 18
-passes the priority of the moment of the commit, normal in that task, and production builds pass none, so
-there such a render still joins. The demo's `#ambient` page and its spec check every case on React 17 to
-19.3.
+`window.event` is empty. React 19.1 and later pass the hook the priority of the lanes they committed
+(user-blocking for that work) in development and profiling builds; React 18 and 19.0 pass the priority of
+the moment of the commit, normal in that task, and production builds pass none, so there such a render still
+joins. An input's own updates are immediate and what its effects and timers set off is normal or lower, but a
+touch fires pointerover and pointerenter of its own, whose updates get user-blocking priority too: a finger
+held on a card whose onPointerEnter opens it has the card rendered in React's own task, stamped with the
+pointerdown. So behind a touch, and inside an input's own task, the priority is not read. Event Timing may
+leave that pointerdown out, under 16 ms, so a commit joins by the press its interaction's inputs released as
+well as by their own stamps. The demo's `#ambient` page and its spec check the breakpoint case on React 17 to
+19.3, and the hover and scroll cases where the React version and build say whose they are; the phone spec
+checks a finger's hover render stays the tap's.
 
 **Saying it in plain words.** Every report carries an `explanation`: a headline ("264 ms
 click"), a rating on the INP thresholds in web-vitals' words (good to 200 ms, needs improvement to

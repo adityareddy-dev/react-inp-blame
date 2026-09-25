@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { InteractionReport } from 'react-inp-blame';
-import { interact, testAttribute, waitForFrames } from './page';
+import { clearReports, interact, lastReport, settle, testAttribute, waitForFrames } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
 
@@ -139,6 +139,29 @@ test('slow render: tapping a checkbox is the onChange handler React fires from t
 // it rests and the click only after it lifts; INP counts the slower of the two, and the rest of the
 // span is holdMs. Playwright's tap lifts at once, so the touch is sent through the DevTools protocol.
 const HOLD_MS = 250;
+
+// A finger enters what it taps: pointerover and pointerenter come with the touch, and an update they make is
+// rendered in a task of its own, at the priority React gives a hover. With the finger held a moment, that
+// render comes between the pointerup and the click, and it is the tap's.
+test("a tap's own hover render is the tap's: the card the finger enters opens as part of it", async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'the touch is held through the DevTools protocol, which is Chromium only');
+  await page.goto('/#ambient');
+  await page.waitForSelector('[data-test=tap]');
+  await settle(page);
+  await clearReports(page);
+  const cdp = await page.context().newCDPSession(page);
+  const box = await page.locator('[data-test=tap]').boundingBox();
+  if (!box) throw new Error('the button has no box to touch');
+  const touch = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch] });
+  await page.waitForTimeout(150);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.waitForSelector('[data-test=tap-cells]');
+  await expect(page.locator('[data-test=tap]')).toHaveText('Tap (1)');
+  const r = await lastReport(page);
+  const rendered = [...r.commits, ...r.followUps].flatMap((c) => c.components.map((x) => x.name));
+  expect(rendered, r.verdict).toContain('Cell');
+});
 
 test(`a finger held down ${HOLD_MS} ms is kept out of the headline, in holdMs`, async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium', 'the touch is held through the DevTools protocol, which is Chromium only');

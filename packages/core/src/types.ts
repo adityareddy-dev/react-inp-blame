@@ -51,7 +51,11 @@ export interface CommitSummary {
   readonly truncated: boolean;
   /** The outermost components that rendered, at most 5. */
   readonly roots: readonly string[];
-  /** The chain that carries most of the work, outermost first. */
+  /**
+   * The chain that carries most of the work, outermost first. For a production walk cut at `walkBudget`,
+   * whose counts cannot choose among subtrees it reached in part or not at all, it stops at the subtree the
+   * cut was in, or is the component its roots all sit under, or is empty where they sit under none.
+   */
   readonly hotPath: readonly string[];
   /** Per-component aggregates, heaviest first, at most 12. */
   readonly components: readonly RenderedComponent[];

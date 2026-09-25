@@ -13,20 +13,26 @@ it changes when a field is removed or changes meaning, which a minor release may
   input's work, and a `change` from a `MediaQueryList` counted as part of the input the way a form field's
   does. Narrowing the window re-rendered 441 components behind a `useMediaQuery` hook, reported as the second
   render of a click a second earlier. Those commits are now left out, not walked and not counted as
-  `unjoinedCommits`, and so is a commit after the window changed width since the input. Under React 19's
-  development and profiling builds a hover's or a scroll's render, which comes in a task of its own, is told
-  by the priority React commits it with. React 18, and React 19 in production, say nothing that tells it
-  apart, and there it still joins (README, Known limits). The demo's `ambient` spec checks each case on
-  React 17 to 19.3 in development and production.
+  `unjoinedCommits`, and so is a commit after the window changed width since the input. Under React 19.1
+  and later, in development and profiling builds, a hover's or a scroll's render, which comes in a task of
+  its own, is told by the priority React commits it with, except behind a touch, whose own pointerover and
+  pointerenter get that priority too: a card a finger opens by entering it stays the tap's work, and joins
+  the tap even where Event Timing left out its pointerdown. React 18 and 19.0, and React 19 in production,
+  say nothing that tells it apart, and there it still joins (README, Known limits). The demo's `ambient` spec
+  checks the breakpoint case on React 17 to 19.3 and the hover and scroll cases where React says whose they
+  are, in development and production, and its phone spec the finger's card.
 - **A render past the walk budget is no longer blamed on the subtree the walk reached first.** The walk stops
   at `walkBudget` components (5,000), depth first, and a production build has no durations, so the blame
   went by counts: the first subtree, counted in full, beat a later one twice its size that the walk had
   only begun. The blame now stops at the subtree the cut was in, where the counts can no longer choose (a
   render of 3,000 and then 6,000 rows is blamed on the component holding both), a commit cut short with
-  several roots is named by the component they all sit under, and its sentence says "at least" that many
+  several roots, or just past the one root it reached, is named by the component they all sit under, and
+  its sentence says "at least" that many
   components and names none it was "mostly" made of. `blame.name` and `blame.detail` change value for those
-  commits; `blame.name` is null where nothing contains them all. Development builds, whose durations cover
-  every subtree, choose as before. The demo's `budget` spec checks it in both builds.
+  commits; `blame.name` is null where nothing contains them all, and for a render blame on a commit that
+  rendered no component (it read "the app"). The Performance panel's render entries say "at least" too.
+  Development builds, whose durations cover every subtree, choose as before. The demo's `budget` spec checks
+  it in both builds.
 
 ## [0.6.0] - 2026-09-25
 

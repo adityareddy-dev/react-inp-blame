@@ -929,11 +929,13 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // Without durations the path goes by how many components each subtree rendered, and a walk cut at its
   // budget has counted the subtrees it reached first in full and the rest in part or not at all. Choosing
   // among those would follow the walk's order, not the work, so the path stops at a subtree the cut was
-  // in, and where the cut left more than one root to choose from, it names the component they all sit
-  // under, or nothing. React's durations are totals for each subtree, walked or not, so they still choose.
+  // in. Where the cut was not inside the one root it reached, or it reached several, the counts cannot
+  // choose a root: a root counted in full before the cut can be beside a later one the walk never reached.
+  // The path then names the component they all sit under, or nothing. React's durations are totals for
+  // each subtree, walked or not, so they still choose.
   const comparable = (a: Agg) => hasDurations || !a.cut;
   const hotPath: string[] = [];
-  if (performedRoots.length > 1 && !hasDurations && outOfBudget) {
+  if (!hasDurations && outOfBudget && !(performedRoots.length === 1 && performedRoots[0]!.cut)) {
     const shared = sharedAncestor(top);
     if (shared) hotPath.push(shared);
   } else if (performedRoots.length) {

@@ -119,6 +119,17 @@ test('a production walk cut at its budget does not blame the subtree it happened
   // And by nothing where they sit under no component.
   const bare = walkCommit(root(element('main', rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000)))) as any, 5000, 100, click, development);
   assert.deepEqual(bare.hotPath, []);
+
+  // The cut can land just past the one root it counted in full, before the next one: that root is still
+  // not where the work was. App, Orders and 4,998 rows are the 5,000 components the budget allows.
+  const beforeSecond = () => [rendered(Orders, ...rows(Order, 4998)), rendered(Metrics, ...rows(Metric, 6000))];
+  const reachedOne = walkCommit(root(passedThrough(App, ...beforeSecond())) as any, 5000, 100, click, development);
+  assert.deepEqual([reachedOne.truncated, reachedOne.roots], [true, ['Orders']]);
+  assert.deepEqual(reachedOne.hotPath, ['App']);
+  assert.deepEqual(walkCommit(root(element('main', ...beforeSecond())) as any, 5000, 100, click, development).hotPath, []);
+  // Several roots and nothing cut: the heaviest, as ever.
+  const uncut = walkCommit(roots() as any, 10_000, 100, click, development);
+  assert.deepEqual(uncut.hotPath, ['Metrics']);
 });
 
 test("@emotion/styled's Insertion is not counted as a component, whatever the minifier named it", () => {

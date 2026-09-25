@@ -621,7 +621,7 @@ their first value, with a warning, until `dispose()`.
 | `labels` | `'auto'` | Where `target.label` comes from: see [Labels and personal data](#labels-and-personal-data) |
 | `hook` | `'auto'` | `'chain'` wraps an existing `__REACT_DEVTOOLS_GLOBAL_HOOK__` and never creates one; `'shim'` creates one unless one exists; `'auto'` chains or creates |
 | `sampleRate` | `1` | Share of page loads that install anything |
-| `walkBudget` | `5000` | Component fibers visited per commit. A commit past it is reported as partial: its counts say "at least", and in a production build, which has only counts to go on, the blame names the component the cut-short subtree sits in rather than the subtree the walk reached first |
+| `walkBudget` | `5000` | Component fibers visited per commit. A commit past it is reported as partial: its counts say "at least", and in a production build, which has only counts to go on, the blame names the component the cut-short subtree sits in rather than the subtree the walk reached first, or where several subtrees could hold the work, the component they all sit under, or none (`blame.name` null) |
 | `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside an input's own dispatch are always walked. It also bounds `followUps`, whose window runs from the paint as a rule |
 | `devtoolsTrack` | `true` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track |
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
@@ -872,8 +872,8 @@ its own React does not switch off the app's own. Reports carry on without compon
   `$!`, `$~` and `&` opening it and `/$` and `/&` closing it.
 
 Supported: react-dom 17, 18 and 19; only react-dom commits are walked. CI runs the demo's suites on React 19.3
-in development and production builds, its attribution and input-delay specs on React 19.2.8, 19.1.9, 18.3.1,
-18.2.0 and 17.0.2 (legacy root), and the Next.js check on 16.3.5 under `next dev` and both production bundlers,
+in development and production builds, its attribution, input-delay and ambient specs on React 19.2.8, 19.1.9,
+19.0.0, 18.3.1, 18.2.0 and 17.0.2 (legacy root), and the Next.js check on 16.3.5 under `next dev` and both production bundlers,
 on 16.2.12, 15.5.26 and 15.3.9 through the `instrumentation-client` line, and on `next@canary`, whose App Router
 brings a React canary, on every push and once a day, in a job allowed to fail. It also installs the package as
 packed for npm into apps with no peers, with Next.js 15, with Next.js 16.3.5 and with Vite 5, on Node 20.19, the
@@ -979,10 +979,12 @@ moved to React 18.
   something else's and are left out the same way: one React makes while a resize, a scroll, a wheel, a hover
   or a media query's `change` is being dispatched (a `useMediaQuery` hook, and under React 17 any handler of
   those events), one after the window changed width since the input (a resize hook that waits for a timer;
-  a change of height alone, a phone's keyboard opening, does not count), and, under React 19 in development
-  and profiling builds, one React commits with the priority it gives a hover's or a scroll's update. Under
-  React 18, and React 19 in production, a hover or a scroll renders in a task of its own with nothing to say
-  whose it is, so within the window it still reads as a follow-up render of whatever interaction came last,
+  a change of height alone, a phone's keyboard opening, does not count), and, under React 19.1 and later in
+  development and profiling builds, one React commits with the priority it gives a hover's or a scroll's
+  update. A touch's own pointerover and pointerenter get that priority too, so behind a touch it is not read:
+  a card that opens when a finger enters it is the tap's work. Under React 18 and 19.0, and React 19 in
+  production, a hover or a scroll renders in a task of its own with nothing to say whose it is, so within
+  the window it still reads as a follow-up render of whatever interaction came last,
   as does an update with no user input behind it at all, a timer or a message arriving. A click whose own
   follow-up lands after the window was resized loses it, the rule a newer input already follows.
 - **The window runs from the last commit inside the dispatch, not from the end of the dispatch**, which the

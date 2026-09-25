@@ -3,6 +3,8 @@ import { burn } from './burn';
 
 // A page for e2e/ambient.spec.ts, at #ambient and not in the lab's list: renders that a resize, a media
 // query, a hover or a scroll causes, each heavy, beside a quick button. None of them is the button's work.
+// The tap card is the other way round: a finger tapping its button enters the card first, so the card's
+// render is the tap's own (e2e/phone.spec.ts).
 
 const CELLS = 400;
 
@@ -68,6 +70,27 @@ function ScrollList() {
   );
 }
 
+/** A quick button: its click renders the button alone. */
+function TapButton() {
+  const [taps, setTaps] = useState(0);
+  return (
+    <button data-test="tap" onClick={() => setTaps((n) => n + 1)}>
+      Tap ({taps})
+    </button>
+  );
+}
+
+/** A card that opens its 400 cells when a pointer enters it, around the quick button. */
+function TapCard() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div data-test="tap-card" onPointerEnter={() => setOpen(true)} style={{ padding: 8, border: '1px solid' }}>
+      <TapButton />
+      {open ? <Cells name="tap-cells" label="tapped" /> : null}
+    </div>
+  );
+}
+
 /** The quick click: its render is this button alone. */
 function SaveButton() {
   const [saved, setSaved] = useState(0);
@@ -82,6 +105,7 @@ export function Ambient() {
   return (
     <main>
       <SaveButton />
+      <TapCard />
       <HoverCard />
       <ScrollList />
       <BreakpointGrid />

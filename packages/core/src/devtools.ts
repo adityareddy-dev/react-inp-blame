@@ -110,7 +110,8 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
 function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boolean, readPriorities: boolean): void {
   const later = c.at > r.end;
   const name = leafName(c) ?? 'root';
-  const label = `${later ? 'Later render' : c.hydrated ? 'Hydration' : 'React render'} · ${name} (${c.rendered} components)`;
+  const counted = `${c.truncated ? 'at least ' : ''}${c.rendered} components`;
+  const label = `${later ? 'Later render' : c.hydrated ? 'Hydration' : 'React render'} · ${name} (${counted})`;
   const start = Math.max(r.start, c.hasDurations ? c.at - c.total : c.at - 0.5);
   const color = renderColor(c, later, readPriorities);
   if (timeStampTracks) {
@@ -120,7 +121,7 @@ function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boo
   measure(label, start, c.at, {
     track: RENDER_TRACK,
     color,
-    tooltipText: `${c.rendered} components rendered${later ? ' after the screen updated' : ''}; heaviest path ${c.hotPath.join(' > ')}`,
+    tooltipText: `${counted} rendered${later ? ' after the screen updated' : ''}${c.hotPath.length ? `; heaviest path ${c.hotPath.join(' > ')}` : ''}`,
     properties: c.components.slice(0, 6).map((y) => [y.name, y.self != null ? `${y.count} rendered, ${ms(y.self)}` : `${y.count} rendered`]),
   });
 }

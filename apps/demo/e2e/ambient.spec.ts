@@ -44,25 +44,25 @@ test('a render at a breakpoint, from a media query and from resize, is not the l
 
 /**
  * Whether this page's React says whose a hover's or a scroll's render is. React 17 renders inside the
- * event, in any build. React 18 and 19 render it in a task of their own, where only React 19's development
- * and profiling builds say, by the priority they commit it with (README, Known limits).
+ * event, in any build. React 18 and 19 render it in a task of their own, where only the development and
+ * profiling builds of React 19.1 and later say, by the priority they commit it with (README, Known limits).
  */
 async function tellsHovers(page: Page): Promise<boolean> {
   await page.goto('/#ambient');
   await page.waitForSelector('[data-test=trigger]');
   const version = await page.evaluate(() => window.__REACT_INP_BLAME__.debug.hook().renderers[0]?.version ?? '');
-  const major = Number(version.split('.')[0]);
-  return major === 17 || (major >= 19 && !prod);
+  const [major = 0, minor = 0] = version.split('.').map(Number);
+  return major === 17 || ((major > 19 || (major === 19 && minor >= 1)) && !prod);
 }
 
 test("a hover card's render is not the last click's", async ({ page }) => {
-  test.skip(!(await tellsHovers(page)), 'React 18, and React 19 in production, cannot tell a hover\'s render from an effect\'s');
+  test.skip(!(await tellsHovers(page)), 'React 18 and 19.0, and React 19 in production, cannot tell a hover\'s render from an effect\'s');
   const reports = await clickSaveThen(page, () => page.hover('[data-test=hover-card]'), '[data-test=hover]');
   expectNoneJoined(reports);
 });
 
 test("a scrolled list's render is not the last click's", async ({ page }) => {
-  test.skip(!(await tellsHovers(page)), 'React 18, and React 19 in production, cannot tell a scroll\'s render from an effect\'s');
+  test.skip(!(await tellsHovers(page)), 'React 18 and 19.0, and React 19 in production, cannot tell a scroll\'s render from an effect\'s');
   const reports = await clickSaveThen(
     page,
     async () => {

@@ -86,7 +86,7 @@ The React matrix runs the demo's attribution and input-delay specs against React
 
     node scripts/react-matrix.mjs
     npm install
-    npm test -w apps/demo-react192            # or demo-react191, demo-react18, demo-react182, demo-react17
+    npm test -w apps/demo-react192            # or demo-react191, demo-react190, demo-react18, demo-react182, demo-react17
     npm run test:prod -w apps/demo-react192   # the same, production build
 
 The `apps/demo-react*` folders are generated and gitignored. Change `apps/demo` and run

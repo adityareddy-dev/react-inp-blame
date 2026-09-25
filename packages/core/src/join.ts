@@ -257,6 +257,18 @@ function ringInputs(inputs: readonly InputRecord[], stamps: number[]): InputReco
 }
 
 /**
+ * The stamps a commit of this interaction can carry: its entries' start times, and the press each of its
+ * inputs released. Event Timing leaves out an entry under 16 ms, so a tap's pointerdown can be missing from
+ * the entries while a render it set off, stamped with it, lands inside the click: a finger held a moment on
+ * a card whose onPointerEnter opens it.
+ */
+function commitStamps(inputs: readonly InputRecord[], stamps: number[]): number[] {
+  const out = stamps.slice();
+  for (const i of ringInputs(inputs, stamps)) if (!out.some((s) => near(s, i.gestureTs))) out.push(i.gestureTs);
+  return out;
+}
+
+/**
  * Whether a newer interaction had already begun when this commit ran, so the commit is at best
  * ambiguous and must not be attached to this report as a later render.
  *
@@ -391,8 +403,9 @@ export function buildReport(
   const paintBound = Math.max(end, group.processingEnd);
   const inWindow: CommitSummary[] = [];
   const followUps: CommitSummary[] = [];
+  const ownStamps = commitStamps(inputs, stamps);
   for (const c of commits) {
-    if (stampMatches(c, stamps)) {
+    if (stampMatches(c, ownStamps)) {
       // Work before the headline entry's own input (a press held before a click) is not
       // part of what INP measured for it; `holdMs` covers that time.
       if (c.at < start - STAMP_TOLERANCE) continue;
@@ -583,7 +596,7 @@ function followUpFrom(c: CommitSummary, end: number, inputs: readonly InputRecor
 /** Does this commit belong to the report's input, landing after its paint and inside its later-render window (`followUpFrom`)? */
 export function isLaterRender(r: ReportData, c: CommitSummary, inputs: readonly InputRecord[] = [], inputWindow = DEFAULT_INPUT_WINDOW): boolean {
   const stamps = r.entries.map((e) => e.startTime);
-  return c.at > r.end && stampMatches(c, stamps) && isFollowUp(c, r.end, inputs, stamps, inputWindow);
+  return c.at > r.end && stampMatches(c, commitStamps(inputs, stamps)) && isFollowUp(c, r.end, inputs, stamps, inputWindow);
 }
 
 /** The next revision of a report, with a later render attached; null when it holds that render already. */
@@ -1160,7 +1173,7 @@ function explain(r: InteractionReport): Explanation {
     const first = `The ${kind} landed on server-rendered HTML that had not been hydrated yet, so React hydrated ${boundaryPhrase(boundary)} first`;
     cause =
       boundary.ms == null
-        ? `${first}, ${plural(commit.rendered, 'component')}: ${HEDGE} what the ${ms(r.processing)} of working time went on. This React build records no render durations, so that is read from the component count.${profiling}`
+        ? `${first}, ${renderedCount(commit)}: ${HEDGE} what the ${ms(r.processing)} of working time went on. This React build records no render durations, so that is read from the component count.${profiling}`
         : say(confidence, `${first}: ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.`, `${first}, ${HEDGE} ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.${profiling}`);
     blame = { kind: 'hydration', name: boundaryPhrase(boundary), detail: mostlyOf(commit), ms: boundary.ms, confidence };
   } else if (layoutMatters) {
