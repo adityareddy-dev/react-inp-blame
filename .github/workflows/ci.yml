@@ -135,6 +135,8 @@ jobs:
             name: TanStack Start
           - fixture: astro
             name: Astro
+          - fixture: vite-vendor-chunk
+            name: Vite 7 with a vendor chunk
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

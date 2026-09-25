@@ -6,6 +6,30 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **The Vite plugin says when nothing will install.** Its install script only reaches HTML pages Vite
+  serves or builds, so in React Router, Remix, TanStack Start and Astro, and in a build whose inputs are all
+  scripts (Laravel, Rails, Django), the plugin with the runtime on and no `entry` installed nothing and said
+  nothing. It now warns once, when the dev server starts and when the app builds, naming the fix: the
+  `entry` for that framework, the Astro integration, or `entry` for the first script. Not under Vitest.
+- A build whose install chunk imports the chunk holding react-dom, however the chunks came out, gets a
+  warning naming both: react-dom runs before `install()` there, and the build looks fine otherwise.
+
+### Changed
+
+- **`entry` naming a file that does not exist stops the dev server and the build at once**, with the path it
+  looked for. The dev server used to run without the install and say nothing; a build failed only at the end.
+
+### Fixed
+
+- **A `manualChunks` vendor rule no longer runs react-dom before the install on an HTML page.** A function
+  sending all of `node_modules` to one chunk put this library there with react-dom, and the page's install
+  script imported that chunk, so on Rollup (Vite 7 and before) with React 17 or 18 nothing was blamed in a
+  production build. When the app's `manualChunks` is a function, the library now gets a chunk of its own
+  and the function decides every other module. CI builds the case on Vite 7.3 with React 18.3
+  (`fixtures/vite-vendor-chunk`), which fails on 0.4.0.
+
 ## [0.4.0] - 2026-09-25
 
 ### Added

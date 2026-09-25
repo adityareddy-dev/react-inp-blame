@@ -195,16 +195,19 @@ it beside your React plugin, not instead of it.
 `entry`, a module's path from the project root, is for a framework that writes its own HTML: that module gets
 the install as its first import instead, as the React Router, Remix and TanStack Start setups below show.
 
-**A `manualChunks` vendor rule.** A rule sending all of `node_modules` to one vendor chunk puts this library
-in that chunk with react-dom, and the install script's import of the chunk can then evaluate react-dom before
-`install()` runs. Nothing the plugin can reach decides that order, so keep react-inp-blame out of the rule, or
-give it a chunk of its own, whatever your Vite version. A rule sending only react and react-dom to `vendor` is
-fine. Seen failing on Vite 5.4.21, 6.4.3 and 7.3.6, built with React 17 and a default import of react-dom. On
-8.3.0 the same build came out right, but that was the bundler's doing.
+**A `manualChunks` vendor rule.** A rule sending all of `node_modules` to one vendor chunk used to put this
+library in that chunk with react-dom, so the install script's import of the chunk ran react-dom before
+`install()` (seen on Vite 5.4.21, 6.4.3 and 7.3.6, with React 17 and 18). When `manualChunks` is a function the
+plugin now takes the library out of it into a chunk of its own, and your function keeps deciding every other
+module. CI builds that on Vite 7.3 with React 18.3 and a rule sending all of `node_modules` to `vendor`. A
+`manualChunks` object cannot be added to, so there, keep react-inp-blame out of the rule. Either way, a build
+whose install chunk still imports the chunk holding react-dom gets a warning naming both chunks.
 
 **No HTML page in the build** (Laravel, Rails, Django, or any backend that writes the page from
 `manifest.json`). The plugin has no page to put its script in, so it installs nothing, on the dev server or
-in a build, and says nothing about it. Keep it for names with `inpBlame({ runtime: false })`, and give the
+in a build; when every input the build lists is a script, it warns that it will not. `entry`, naming the
+script every page loads first, puts the install first in it as it does for the frameworks below (not tried on
+a real backend yet). Or keep the plugin for names with `inpBlame({ runtime: false })`, and give the
 install an entry of its own that each page loads first: a file such as `inp-blame.ts` holding
 `import 'react-inp-blame/auto'` or your own `install()` call. List it first in the build's inputs
 (`build.rollupOptions.input`, or your backend plugin's, such as `laravel({ input: [...] })`) and first in the
@@ -263,7 +266,9 @@ export default defineConfig({
 ```
 
 That is the whole setup: the plugin adds the import to the browser's copy of the module (never the server's),
-and nothing in your own files changes. An import you write yourself first in the root route, or in the client
+and nothing in your own files changes. Leave `entry` out and the plugin warns, when the dev server starts and
+when the app builds, that nothing will install and what to add; name a file that does not exist and both stop
+with an error naming the path. An import you write yourself first in the root route, or in the client
 entry, is not the same thing. On React 18, `react-dom` connects to React's DevTools hook as it loads, and a
 route, or a library a route uses, can load it before the client entry does. In a production build, a chunk a
 module imports is evaluated before the module's own body, so an install written in the root route runs after
@@ -861,8 +866,9 @@ moved to React 18.
 - **Frameworks that render their own HTML need a setup of their own**, and only React Router's, Remix's,
   TanStack Start's and Astro's above have been tried. The Vite plugin adds its install script only to the
   HTML pages Vite itself serves and builds, so without `entry` it installs nothing on another framework's
-  pages, and nothing says so. On a Vite-based one, `entry` naming the first of the app's modules the browser
-  runs may be enough. React Native is out of scope: only react-dom commits are walked.
+  pages. For those four, and for a build whose inputs are all scripts, the plugin warns when that happens and
+  names the fix; any other framework gets no warning. On a Vite-based one, `entry` naming the first of the
+  app's modules the browser runs may be enough. React Native is out of scope: only react-dom commits are walked.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.

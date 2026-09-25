@@ -62,6 +62,14 @@ const FIXTURES = {
     // the build generates included.
     typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
   },
+  // The create-vite app on Vite 7 (Rollup) and React 18 with a manualChunks rule sending node_modules to one
+  // vendor chunk: the build where the page's install used to run after react-dom. No README block of its own.
+  'vite-vendor-chunk': {
+    readme: '## Install with Vite',
+    files: [],
+    reported: ['vite', '@vitejs/plugin-react', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
+  },
   // Remix 2, on the React 18 its template brings. @remix-run/react imports react-router-dom, which imports
   // react-dom, so the root route loads react-dom before the client entry does.
   remix: {

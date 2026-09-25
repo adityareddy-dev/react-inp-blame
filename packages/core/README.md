@@ -172,17 +172,16 @@ TanStack Start 1.168, each under its dev server and a production build. The
 [repository README](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router)
 has each app's whole config.
 
-The page script cannot fix a `manualChunks` rule sending all of `node_modules` to one vendor
-chunk. The rule puts this library in that chunk with react-dom, and the install script's import of
-the chunk can then evaluate react-dom before `install()` runs; nothing the plugin can reach decides
-that order. Keep react-inp-blame out of the rule, or give it a chunk of its own, whatever the Vite
-version. (`entry`, above, is different: it keeps the library in the install's own chunk.) A rule sending only react and react-dom to `vendor` is fine. Seen failing on Vite 5.4.21,
-6.4.3 and 7.3.6, built with React 17 and a default import of react-dom. On 8.3.0 the same build
-came out right, but that was the bundler's doing.
+A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put this library
+in that chunk with react-dom, so the install script ran after react-dom. When `manualChunks` is a
+function the plugin now takes the library out into a chunk of its own; CI builds that on Vite 7.3
+with React 18.3. A `manualChunks` object cannot be added to, so keep react-inp-blame out of one.
+A build whose install chunk still imports react-dom's chunk gets a warning naming both.
 
 A build with no HTML page, as under Laravel, Rails, Django or any backend that writes the page from
 `manifest.json`, gives the plugin nowhere to put its script, so it installs nothing, on the dev
-server or in a build, and says nothing about it. Keep the plugin for names with
+server or in a build; when every input is a script it warns that it will not. `entry`, naming the
+script every page loads first, may be all it needs (not tried on a real backend). Or keep the plugin for names with
 `inpBlame({ runtime: false })`, and give the install an entry of its own that each page loads first:
 a file such as `inp-blame.ts` holding `import 'react-inp-blame/auto'` or the app's own `install()`
 call. List it first in the build's inputs (`build.rollupOptions.input`, or the backend plugin's,
