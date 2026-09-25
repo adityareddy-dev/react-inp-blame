@@ -44,8 +44,9 @@ it changes when a field is removed or changes meaning, which a minor release may
   whenever no react-dom had registered with the hook, which is also a page that has not loaded React yet:
   under Astro, one whose only React island is `client:visible` below the fold, or whose islands are all
   another framework's. It now also needs an element react-dom has rendered, or a root container, which a
-  react-dom that loaded before the install leaves behind, and names `react-inp-blame/astro` among the
-  setups. Found by review.
+  react-dom that loaded before the install leaves behind. A page with neither at 3 s is looked at once
+  more at its first interaction, for a root created later. The late-install warnings name
+  `react-inp-blame/astro` and the Vite plugin's `entry` among the setups. Found by review.
 - **A click made from the keyboard belongs to its key, not to the mouse click before it.** A pointerup
   or a click is tied to the press it releases by its `pointerId`, and the click that Enter or Space makes
   has none to go by: its `pointerId` is -1. It took the newest pointerdown of the last 5 s instead. So

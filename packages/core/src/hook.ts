@@ -679,7 +679,7 @@ function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
   // A root's first commit replaces the empty fiber createRoot made. A rendered tree behind the
   // first commit seen here means the root rendered before install(), and those commits were missed.
   if (root.current.alternate?.child) {
-    warnOnce('late-install', "install() ran after a React root had already rendered, so its earlier commits were missed. Install ahead of the app with react-inp-blame/vite or react-inp-blame/next, or make `import 'react-inp-blame/auto'` the first import of your entry module.");
+    warnOnce('late-install', "install() ran after a React root had already rendered, so its earlier commits were missed. Install ahead of the app with react-inp-blame/vite (with `entry` where the framework writes its own HTML), react-inp-blame/next or react-inp-blame/astro, or make `import 'react-inp-blame/auto'` the first import of your entry module.");
   }
 }
 
