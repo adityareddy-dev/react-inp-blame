@@ -158,11 +158,41 @@ function Row() {
   )
 }
 
+// A menu item whose onSelect is slow. Radix closes the menu on select, which re-renders the menu's own tree
+// of components, none of them many times over; the handler is what took the time.
+function ExportMenu() {
+  const [last, setLast] = useState('')
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger data-testid="export" aria-label="Export">
+        Export {last}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content>
+          <DropdownMenu.Item
+            data-testid="export-csv"
+            onSelect={() => {
+              burn(200)
+              setLast('csv')
+            }}
+          >
+            Export CSV
+          </DropdownMenu.Item>
+          <DropdownMenu.Item>Export PDF</DropdownMenu.Item>
+          <DropdownMenu.Item>Export XLSX</DropdownMenu.Item>
+          <DropdownMenu.Item>Export JSON</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  )
+}
+
 export default function App() {
   return (
     <main>
       <Icons />
       <Row />
+      <ExportMenu />
       <Prices />
       <Tags />
       <Notes />
