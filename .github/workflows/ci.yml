@@ -143,6 +143,8 @@ jobs:
             name: Vite with styled-components, emotion, lucide and Radix
           - fixture: next-14
             name: Next.js 14.2
+          - fixture: webpack
+            name: webpack 5 with a vendor chunk
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

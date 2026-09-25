@@ -1,0 +1,34 @@
+{
+  "name": "webpack-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "A React 18.3 app built by webpack 5 and babel-loader, set up the way the README's webpack section says: react-inp-blame/auto as the entry's first import and the names loader rule, with a splitChunks rule that puts every dependency in one vendor chunk. Run by scripts/vite-app.mjs --fixture webpack from a temp copy.",
+  "scripts": {
+    "dev": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "preview": "webpack serve --mode production",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-inp-blame": "^0.3.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^8.0.6",
+    "@babel/preset-env": "^8.0.6",
+    "@babel/preset-react": "^8.0.1",
+    "@babel/preset-typescript": "^8.0.1",
+    "@playwright/test": "1.59.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "babel-loader": "^10.1.1",
+    "html-webpack-plugin": "^5.6.8",
+    "typescript": "~6.0.2",
+    "webpack": "^5.111.1",
+    "webpack-cli": "^7.2.3",
+    "webpack-dev-server": "^6.0.0"
+  }
+}

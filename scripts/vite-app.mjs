@@ -85,6 +85,14 @@ const FIXTURES = {
     reported: ['next', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
   },
+  // webpack 5 and babel-loader on React 18.3, set up as the README's webpack paragraph says, with a vendor chunk
+  // holding react-dom and the library. The README has no block for it: the setup is one import and one rule.
+  webpack: {
+    readme: '## Install with Vite',
+    files: [],
+    reported: ['webpack', 'webpack-dev-server', 'babel-loader', '@babel/core', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
+  },
   // Remix 2, on the React 18 its template brings. @remix-run/react imports react-router-dom, which imports
   // react-dom, so the root route loads react-dom before the client entry does.
   remix: {

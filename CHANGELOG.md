@@ -14,6 +14,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   loads, adds the name loader to webpack alone, and writes no `turbopack` key. Under `next dev
   --turbo` nothing can install, and the wrapper says so; soft navigations are not announced there. CI runs a
   14.2.35 App Router app (`fixtures/next-14`) in dev and production; 15.2.9 was checked by hand.
+- **The README's webpack setup is tested.** `fixtures/webpack` is a React 18.3 app built by webpack 5 and
+  babel-loader with `import 'react-inp-blame/auto'` first in its entry, the names loader rule and a
+  `splitChunks` rule that puts react-dom and the library in one vendor chunk; CI clicks it in development and
+  production and checks the blame names `SlowList`, which in production only the loader's `displayName` can.
 
 ### Changed
 
