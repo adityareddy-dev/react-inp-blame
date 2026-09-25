@@ -1,4 +1,4 @@
-import { heaviest, leafName, mostlyComponent, readableName } from './commits.js';
+import { heaviest, leafName, MINIFIED_NAMES_NOTE, mostlyComponent, namesLookMinified, readableName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
@@ -1363,6 +1363,7 @@ function explain(r: InteractionReport): Explanation {
     if (r.inputDelay > LONG_TASK_MS && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
     if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   }
+  if (namesLookMinified([...r.commits, ...r.followUps])) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
     notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
   }

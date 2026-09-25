@@ -64,3 +64,32 @@ export function mostlyComponent(c: CommitSummary): CommitSummary['components'][n
   const weight = (component: CommitSummary['components'][number]) => (bySelf ? component.self! : component.count);
   return weight(readable) >= weight(first) / 2 ? readable : first;
 }
+
+// What a minifier leaves on a function that carries no `displayName`: one or two characters.
+const MINIFIED_NAME = /^[A-Za-z_$][A-Za-z0-9_$]?$/;
+// Fewer names than this say nothing about the build: a page of three components can be called A, B and Nav.
+const MINIFIED_NAMES_MIN = 5;
+
+/**
+ * Whether the component names in these commits look minified: at least five different names, and four in
+ * five of them one or two characters long. That is a production build with nothing stamping `displayName`
+ * (no Vite plugin, Next.js wrapper or loader), where blames read "inside e, mostly Xe". A styling library's
+ * `styled.div` is not short, so an app styled that way does not look minified.
+ */
+export function namesLookMinified(commits: readonly CommitSummary[]): boolean {
+  const names = new Set<string>();
+  for (const c of commits) {
+    for (const x of c.components) names.add(x.name);
+    for (const n of c.hotPath) names.add(n);
+    for (const n of c.roots) names.add(n);
+  }
+  names.delete('(anonymous)');
+  if (names.size < MINIFIED_NAMES_MIN) return false;
+  let short = 0;
+  for (const n of names) if (MINIFIED_NAME.test(n)) short++;
+  return short >= 0.8 * names.size;
+}
+
+/** What a report says, and the console once, when `namesLookMinified`. */
+export const MINIFIED_NAMES_NOTE =
+  "Most component names here look minified, because nothing in this build stamps displayName on the app's components: react-inp-blame/vite, withInpBlame for Next.js or react-inp-blame/display-names-loader for webpack keeps them.";

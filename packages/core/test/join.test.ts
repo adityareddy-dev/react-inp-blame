@@ -1890,3 +1890,15 @@ test('a render whose walk stopped at its budget says "at least", names no compon
   // Nor the one root it reached, when the walk says the work may be beside it (an empty hot path).
   assert.equal(blameOf({ roots: ['Orders'], hotPath: [], components }).blame.name, null);
 });
+
+test('names that look minified get a note, and readable or styled names mixed with a few short ones do not', () => {
+  const noteOf = (names: string[]) =>
+    report([entry('click', 0, 120, 3, 100)], [commit(50, 0, { hasDurations: false, total: 0, rendered: 40, roots: [names[0]!], hotPath: [names[0]!], components: names.map((name) => ({ name, count: 8, self: null, total: null })) })], [], [])
+      .explanation.notes.some((n) => n.startsWith('Most component names here look minified'));
+  assert.equal(noteOf(['e', 'Xe', 'Tt', 'nc', '$']), true);
+  assert.equal(noteOf(['e', 'Xe', 'Tt', 'nc', 'OrderList']), true);
+  assert.equal(noteOf(['OrderList', 'Row', 'Td', 'Li', 'Cell']), false);
+  assert.equal(noteOf(['styled.div', 'Styled(li)', 'Row', 'List', 'Item']), false);
+  // Too few names to say anything about the build.
+  assert.equal(noteOf(['e', 'Xe', 'Tt']), false);
+});
