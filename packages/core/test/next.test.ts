@@ -422,6 +422,13 @@ test('from 14.2 to 15.2 the install goes first in webpack\'s client entries, wit
     assert.deepEqual(entries['main-app'], [CLIENT_MODULE, './app-next.js']);
     assert.deepEqual(entries.main.import, [CLIENT_MODULE, './main.js']);
     assert.deepEqual(entries['pages/_app'], ['./_app.js']);
+    // Next.js's own shape: `main` a module, and the `main.js` list a config prepends to, which Next.js then
+    // makes `main` of. The install goes first in both.
+    const nextShape = { module: { rules: [] as unknown[] }, entry: async () => ({ main: './client/next.js', 'main-app': ['./app-next.js'], 'main.js': ['./polyfills.js'] }) };
+    config.webpack(nextShape, { isServer: false });
+    const shaped = await (nextShape.entry as () => Promise<Record<string, any>>)();
+    assert.deepEqual(shaped.main, [CLIENT_MODULE, './client/next.js']);
+    assert.deepEqual(shaped['main.js'], [CLIENT_MODULE, './polyfills.js']);
     // Asked again, as Next.js does as pages are added, the install is not put in twice.
     const again = async () => ({ 'main-app': [CLIENT_MODULE, './app-next.js'] });
     const twice = { module: { rules: [] as unknown[] }, entry: again };

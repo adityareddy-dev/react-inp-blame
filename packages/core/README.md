@@ -19,7 +19,7 @@ on purpose. Click something and read what the badge blames.
     export default withInpBlame({ /* your config */ }, { runtime: { overlay: true } });
 
 On Next.js 15.3 to 16.2, add one line to `instrumentation-client.ts` as well. `withInpBlame` prints it
-until the file has it (14.2 to 15.2 need nothing more, and `next.config.mjs` there, since `.ts` came in 15):
+until the file has it (14.2 to 15.2 need nothing more, and 14.2 a `next.config.mjs`, since `.ts` came in 15):
 
     // instrumentation-client.ts
     export { onRouterTransitionStart } from 'react-inp-blame/next-client';

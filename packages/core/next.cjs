@@ -169,7 +169,9 @@ function checkOptionKeys(options) {
 /**
  * webpack's `entry` with the install first in each client entry, as a function, which is how Next.js gives
  * it (it adds pages as they are asked for, and calls it again). Entries are a module or a list of them, or
- * an object whose `import` is; any other entry is left as it was.
+ * an object whose `import` is; any other entry is left as it was. Next.js also keeps a `main.js` list, which
+ * a config (Sentry's, for one) prepends to and which Next.js makes the Pages Router's `main` of when it is
+ * not empty, so the install goes first there too.
  */
 function installFirst(entry) {
   return async () => {
@@ -184,6 +186,8 @@ function installFirst(entry) {
         if (!modules.includes(CLIENT_MODULE)) value.import = [CLIENT_MODULE, ...modules];
       }
     }
+    const legacyMain = entries['main.js'];
+    if (Array.isArray(legacyMain) && !legacyMain.includes(CLIENT_MODULE)) entries['main.js'] = [CLIENT_MODULE, ...legacyMain];
     return entries;
   };
 }
