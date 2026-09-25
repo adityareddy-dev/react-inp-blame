@@ -60,6 +60,21 @@ function PeoplePicker() {
   )
 }
 
+// A gallery whose thumbnails handle their own clicks: an image with a handler is what was clicked.
+function Thumbnail({ i }: { i: number }) {
+  return <img src={PHOTO} width={48} height={48} alt="" data-testid={`thumb-${i}`} onClick={() => burn(120)} />
+}
+
+function Gallery() {
+  return (
+    <div>
+      {[0, 1, 2].map((i) => (
+        <Thumbnail key={i} i={i} />
+      ))}
+    </div>
+  )
+}
+
 // MUI labels each root it styles with @emotion/styled, so its wrapper has a name that reads like the app's.
 const ShopButtonRoot = emotionStyled('button', { label: 'ShopButtonRoot' })`
   padding: 4px 8px;
@@ -78,6 +93,7 @@ export function Shop() {
     <section>
       <ProductList />
       <PeoplePicker />
+      <Gallery />
       <BuyButton />
     </section>
   )

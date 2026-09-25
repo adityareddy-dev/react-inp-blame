@@ -680,7 +680,8 @@ letter or two, and whose every dotted part is the same, so a design system's `Pr
 the `TabsTrigger` above it. When the click landed on an icon, an `<svg>` or something in one, an `<img>` or a
 `<picture>`, the chain starts from what the icon belongs to in the tree React rendered: above every component
 that renders nothing but the icon (an icon library's `Trash2` and the `Icon` under it), at the control around
-it or at the first element or component that renders something beside it. So a click on an icon library's
+it, at an element with a click handler of its own (a thumbnail's `<img onClick>`), or at the first element or
+component that renders something beside it. So a click on an icon library's
 `<svg>` inside a button names the component that renders the button, not the icon, an icon beside a name in
 an option names the option's component, and a card's photo inside a link names the card. Anywhere else the
 chain starts from the element itself. `target.owners` keeps the whole chain, innermost

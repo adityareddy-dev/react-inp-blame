@@ -33,7 +33,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   were read from there: `Trash2` from lucide-react rather than the `DeleteButton` around it. For a click on
   an icon (an `<svg>` or something in one, an `<img>`, a `<picture>`) they are now read from what the icon
   belongs to in the fiber tree: above the components that render nothing but the icon, at the control
-  around it or at the first element or component that renders something beside it. So the trash icon is
+  around it, at an element with a click handler of its own, or at the first element or component that
+  renders something beside it. So the trash icon is
   `DeleteButton`'s, an icon beside a name in an option is the option component's, and a card's photo inside
   a link is still the card's; `generateTarget`'s string follows. A click anywhere else is named as before.
   When the icon was swapped by the render (a minus for a check), the label and the names still come from
