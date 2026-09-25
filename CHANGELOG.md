@@ -58,7 +58,11 @@ it changes when a field is removed or changes meaning, which a minor release may
   `component` is picked from those eight. It said the whole chain.
 - **The Next.js quick start has a `next.config.mjs` for 14.2**, which reads no `next.config.ts`. It told 14.2
   users to use that file and showed only the TypeScript one, which is a syntax error there.
-
+- **Escape, Tab and the other keys that type nothing read as a key press in the panel.** A row for any key
+  event was titled "Typing in", so Escape on a close button read `Typing in "Close"`. A key is now typing only
+  when it typed a character, which the browser marks with a keypress, into something that is not a button or
+  a link, and only those rows collapse into one per field. Any other key reads `Key press on "Close"`. Enter
+  in a text field still reads as typing, since a report does not keep which key it was.
 - **A component named like the import it renames is named.** shadcn writes every component this way,
   `import { Button as ButtonPrimitive } from '@base-ui/react/button'` and then `function Button`, and the
   displayName pass took both sides of the `as` for names the module imports, so it left `Button` unnamed and a
