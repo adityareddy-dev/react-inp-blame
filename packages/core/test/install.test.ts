@@ -2020,6 +2020,29 @@ test('stats().react says whether React can be seen, and a report built while it 
   });
 });
 
+test('a report looks for React again when React rendered after the last look, however recent that look was', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const app: Record<string, unknown> = {};
+    Object.defineProperty(globalThis, 'document', { value: documentOf([{}, app]), configurable: true, writable: true });
+    page.window[HOOK] = existingHook();
+    clock.now = 100;
+    const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
+    // Looked at before React rendered, as the badge does when it mounts.
+    assert.equal(api.stats().react, 'waiting');
+    app.__reactContainer$late = {};
+    // Well inside the second a look is otherwise good for.
+    clock.now = 300;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 300, target: null });
+    page.paint([click(7, 300, 200)]);
+    await nextTask();
+    assert.equal(api.last()?.reactStatus, 'installed-late');
+    assert.equal(api.stats().react, 'installed-late');
+    api.dispose();
+  });
+});
+
 test("the pointer an input came from is kept at dispatch, and a mouse's pointerdown alone reads as a click", async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {
