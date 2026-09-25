@@ -638,10 +638,10 @@ root is an open one on `#react-inp-blame`, but a test that wants the reports sho
 constructed one adopted by the shadow root, which `style-src` does not govern, and their colours and bar
 widths are set through classes and the style object rather than `style` attributes. Safari before 16.4 has
 no constructed stylesheets and gets a `<style>` element instead, which needs `'unsafe-inline'` in
-`style-src` there. A page that enforces Trusted Types (`require-trusted-types-for 'script'`) with a
-`trusted-types` directive lists `react-inp-blame` in it, the policy the panel's markup goes through; where it
-does not, the console says so once and the badge stays an empty pill, but the runtime still installs and
-measures, so reports come through `onInteraction` and the Performance panel track. On Vite, `html.cspNonce` puts the
+`style-src` there. They need nothing from Trusted Types either: they are built from elements and text nodes,
+never from markup, so a page that enforces them (`require-trusted-types-for 'script'`) draws them under any
+`trusted-types` directive, `'none'` included, and the library creates no policy. A page set up for 0.9.0 to
+0.11.0 can drop `react-inp-blame` from its directive. On Vite, `html.cspNonce` puts the
 nonce on the plugin's script in development and in a build, and the badge's chunk loads through that
 script's import, so a nonce-based `script-src` needs nothing more.
 
@@ -884,7 +884,7 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
 | `react-inp-blame/auto`: everything that loads with the page | 62.8 KB | 22.4 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 15.8 KB | 6.0 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 14.8 KB | 5.8 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 24.2 KB | 9.0 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
 <!-- size:end -->
@@ -1188,8 +1188,10 @@ for the chunk, and a `script-src` policy that blocks it. Reports still come thro
 <a id="overlay-draw"></a>
 #### The badge and panel could not be drawn
 
-Usually Trusted Types. If the page enforces them, add `react-inp-blame` to its `trusted-types` directive.
-See [the badge and panel](#the-badge-and-panel). Reports still come through `onInteraction`.
+Building the badge threw. It is made from elements and text, so no Content Security Policy or Trusted Types
+directive should stop it: this is a bug in the library, or a page that replaced a DOM method. Please open a
+[setup problem](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=setup-problem.yml)
+issue with the warning text and your browser. Reports still come through `onInteraction`.
 
 ### At build time, any setup
 

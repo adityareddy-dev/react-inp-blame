@@ -6,6 +6,18 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Security
+
+- **The badge and panel need no Trusted Types policy, and leave none for other scripts to use.** Since 0.9.0
+  their markup went through a policy named `react-inp-blame` that passed strings on as they were, and the policy
+  was kept in the library's page-wide state, where any script on the page could reach it
+  (`globalThis[Symbol.for('react-inp-blame')]`). On a page that listed the name in its `trusted-types`
+  directive, as the README said to, that gave every script a way to put any markup into any sink, which is what
+  Trusted Types are there to stop. The badge and panel are now built from elements and text nodes, so they need
+  no policy and create none, and draw under any `trusted-types` directive, `'none'` included. They look as they
+  did. A page that listed `react-inp-blame` can drop it. The CSP spec now runs under `trusted-types 'none'` and
+  checks that nothing reachable from the shared state is a policy.
+
 ## [0.11.0] - 2026-09-25
 
 ### Added

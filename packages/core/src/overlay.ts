@@ -2,7 +2,6 @@ import { heaviest, leafName, mostlyComponent } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
-import { shared } from './session.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { warnOnce } from './warn.js';
 
@@ -77,6 +76,9 @@ const RATING_CSS = Object.entries(RATING)
   .join('\n');
 const CORNER = { 'bottom-right': 'br', 'bottom-left': 'bl', 'top-right': 'tr', 'top-left': 'tl' } as const;
 const STORE = 'react-inp-blame:overlay';
+/** The dash the badge and the panel's head show before the page has an interaction. */
+const NONE = '\u2014';
+const DOT = ' · ';
 
 // The phone sizes come after the rules they override, which have the same specificity.
 const CSS = `
@@ -141,14 +143,9 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   const host = document.createElement('div');
   host.id = OVERLAY_ID;
   const root = host.attachShadow({ mode: 'open' });
-  const wrap = document.createElement('div');
-  wrap.className = `wrap ${CORNER[opts.position ?? 'bottom-right']}`;
-  const badge = document.createElement('button');
-  badge.className = 'badge';
-  badge.type = 'button';
-  badge.title = 'Interaction to Next Paint. Click for what took the time.';
-  const panel = document.createElement('div');
-  panel.className = 'panel';
+  const wrap = h('div', `wrap ${CORNER[opts.position ?? 'bottom-right']}`);
+  const badge = h('button', { class: 'badge', type: 'button', title: 'Interaction to Next Paint. Click for what took the time.' });
+  const panel = h('div', 'panel');
   panel.hidden = true;
   wrap.append(panel, badge);
   root.append(wrap);
@@ -158,13 +155,13 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
-  // Drawn from timers and event listeners, so a draw the page refuses (markup under Trusted Types the
-  // page has not allowed this library's policy for) is said once in the console rather than thrown.
+  // Drawn from timers and event listeners, so a draw that throws is said once in the console rather than
+  // left as an error on the page at every interaction.
   function render() {
     try {
       draw();
     } catch (error) {
-      warnOnce('overlay-draw', `the badge and panel could not be drawn (${String(error)}). If the page enforces Trusted Types, it allows them by listing ${POLICY} in its trusted-types directive.`);
+      warnOnce('overlay-draw', `the badge and panel could not be drawn (${String(error)}). Reports still come through onInteraction().`);
     }
   }
 
@@ -177,16 +174,16 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const inp = source.inp();
     const status = statusOf(source);
     badge.dataset.status = status?.key ?? 'ok';
-    const mark = status?.level === 'warn' ? `<span class="mark" title="${esc(status.text)}">!</span>` : '';
+    const mark = status?.level === 'warn' ? h('span', { class: 'mark', title: status.text }, '!') : null;
     if (status?.key === 'unsupported-browser') {
       badge.dataset.rating = 'none';
-      setHTML(badge, `<i class="dot"></i>INP <span class="n">not measured</span>`);
+      fill(badge, h('i', 'dot'), 'INP ', h('span', 'n', 'not measured'));
     } else if (!inp) {
       badge.dataset.rating = 'none';
-      setHTML(badge, `<i class="dot"></i>INP <span class="n">&mdash;</span>${mark}`);
+      fill(badge, h('i', 'dot'), 'INP ', h('span', 'n', NONE), mark);
     } else {
       badge.dataset.rating = inp.rating;
-      setHTML(badge, `<i class="dot"></i>INP <span class="ms">${Math.round(inp.value)} ms</span>${mark}`);
+      fill(badge, h('i', 'dot'), 'INP ', h('span', 'ms', `${Math.round(inp.value)} ms`), mark);
     }
     if (panel.hidden) return;
     // The panel is rebuilt below, so the control that has the focus is given it back afterwards.
@@ -194,14 +191,19 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const groups = groupRows(all).slice(-max).reverse();
     const cost = all.length ? all.reduce((a, r) => a + r.overheadMs, 0) / all.length : 0;
     const head = inp
-      ? `<div><div class="big">${Math.round(inp.value)}<small>ms</small>${tag(inp.rating)}</div><div class="sub">Page INP so far${inp.report ? `, from ${esc(inSentence(titleFor(inp.report)))}` : ''} &middot; ${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}</div></div>`
-      : `<div><div class="big">&mdash;<small>ms</small></div><div class="sub">Interaction to Next Paint. Nothing slow yet.</div></div>`;
-    setHTML(
+      ? h(
+          'div',
+          '',
+          h('div', 'big', String(Math.round(inp.value)), h('small', '', 'ms'), tag(inp.rating)),
+          h('div', 'sub', `Page INP so far${inp.report ? `, from ${inSentence(titleFor(inp.report))}` : ''}${DOT}${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}`),
+        )
+      : h('div', '', h('div', 'big', NONE, h('small', '', 'ms')), h('div', 'sub', 'Interaction to Next Paint. Nothing slow yet.'));
+    fill(
       panel,
-      `<div class="head">${head}<button class="x" type="button" aria-label="Close">&times;</button></div>` +
-        (status ? `<div class="status ${status.level}" data-status="${status.key}">${esc(status.text)}</div>` : '') +
-        (groups.length ? groups.map(row).join('') : `<div class="empty">Click or type. Anything slow shows up here, with the component to blame.</div>`) +
-        `<div class="foot"><span>react-inp-blame &middot; measuring cost ${costText(cost)} per interaction</span><button class="clear" type="button">Clear</button></div>`,
+      h('div', 'head', head, h('button', { class: 'x', type: 'button', 'aria-label': 'Close' }, '×')),
+      status && h('div', { class: `status ${status.level}`, 'data-status': status.key }, status.text),
+      ...(groups.length ? groups.map(row) : [h('div', 'empty', 'Click or type. Anything slow shows up here, with the component to blame.')]),
+      h('div', 'foot', h('span', '', `react-inp-blame${DOT}measuring cost ${costText(cost)} per interaction`), h('button', { class: 'clear', type: 'button' }, 'Clear')),
     );
     if (focused) panel.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });
   }
@@ -221,62 +223,63 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     return null;
   }
 
-  function row(g: Group): string {
+  function row(g: Group): HTMLElement {
     const r = slowest(g.reports);
-    const title = titleFor(r);
     const total = Math.max(r.duration, 1);
-    const bar = phaseBar(r.explanation.phases, total);
     const later = laterRender(r);
     const n = g.reports.length;
     const isExpanded = expanded.has(r.interactionId);
-    const meta = n > 1 ? `<div class="meta">${n} key presses &middot; slowest ${Math.round(r.duration)} ms &middot; typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms</div>` : '';
-    return (
-      `<div class="row" data-id="${r.interactionId}">` +
-      `<div class="toggle" role="button" tabindex="0" aria-expanded="${isExpanded}">` +
-      `<div class="r1" data-rating="${r.explanation.rating}"><i class="dot"></i><span class="t">${esc(title)}</span><span class="ms">${Math.round(r.duration)} ms</span></div>` +
-      meta +
-      `<div class="blame">${blameLine(r)}</div>` +
-      (later ? `<div class="blame later">then <b>${esc(where(later))}</b> re-rendered after the paint &middot; ${esc(top(later))}${later.hasDurations ? ` &middot; ${Math.round(later.total)} ms` : ''}</div>` : '') +
-      `<div class="bar">${bar}</div>` +
-      `</div>` +
-      (isExpanded ? more(r) : '') +
-      `</div>`
+    return h(
+      'div',
+      { class: 'row', 'data-id': String(r.interactionId) },
+      h(
+        'div',
+        { class: 'toggle', role: 'button', tabindex: '0', 'aria-expanded': String(isExpanded) },
+        h('div', { class: 'r1', 'data-rating': r.explanation.rating }, h('i', 'dot'), h('span', 't', titleFor(r)), h('span', 'ms', `${Math.round(r.duration)} ms`)),
+        n > 1 && h('div', 'meta', `${n} key presses${DOT}slowest ${Math.round(r.duration)} ms${DOT}typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms`),
+        h('div', 'blame', ...blameLine(r)),
+        later && h('div', 'blame later', 'then ', b(where(later)), ` re-rendered after the paint${DOT}${top(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
+        h('div', 'bar', ...phaseBar(r.explanation.phases, total)),
+      ),
+      isExpanded && more(r),
     );
   }
 
-  function more(r: InteractionReport): string {
+  function more(r: InteractionReport): HTMLElement {
     const x = r.explanation;
     // Only a render with real work gets a component list; a status pill updating does not.
     const main = r.commits.length ? heaviest(r.commits) : null;
     const before = main && carriesWork(main) ? main : null;
     const later = laterRender(r);
-    const legend = x.phases.flatMap((p, i) => [swatch(`p${i}`, p), ...(p.parts ?? []).map((part) => swatch('ph', part))]).join('');
-    return (
-      `<div class="more">` +
-      `<div class="legend">${legend}</div>` +
-      `<p>${esc(x.cause)}</p>` +
-      x.notes.map((n) => `<p class="note">${esc(n)}</p>`).join('') +
-      (before ? comps('Rendered before the paint', before) : '') +
-      (later ? comps('Rendered after the paint', later) : '') +
-      `<p class="cost">Measuring this cost ${costText(r.overheadMs)}.</p>` +
-      `</div>`
+    const legend = x.phases.flatMap((p, i) => [swatch(`p${i}`, p), ...(p.parts ?? []).map((part) => swatch('ph', part))]);
+    return h(
+      'div',
+      'more',
+      h('div', 'legend', ...legend),
+      h('p', '', x.cause),
+      ...x.notes.map((note) => h('p', 'note', note)),
+      ...(before ? comps('Rendered before the paint', before) : []),
+      ...(later ? comps('Rendered after the paint', later) : []),
+      h('p', 'cost', `Measuring this cost ${costText(r.overheadMs)}.`),
     );
   }
 
-  function comps(label: string, c: CommitSummary): string {
+  function comps(label: string, c: CommitSummary): HTMLElement[] {
     const rows = c.components.slice(0, 5);
-    if (!rows.length) return '';
+    if (!rows.length) return [];
     const maxV = Math.max(...rows.map((x) => x.self ?? x.count), 1);
-    return (
-      `<div class="h">${label} &middot; ${c.rendered} components</div>` +
-      rows
-        .map(
-          (x) =>
-            `<div class="comp"><b>${esc(x.name)}</b><span>${x.count} rendered${x.self != null ? ` &middot; ${x.self.toFixed(1)} ms` : ''}</span>` +
-            `<div class="tr"><div class="fl" data-width="${(((x.self ?? x.count) / maxV) * 100).toFixed(1)}"></div></div></div>`,
-        )
-        .join('')
-    );
+    return [
+      h('div', 'h', `${label}${DOT}${c.rendered} components`),
+      ...rows.map((x) =>
+        h(
+          'div',
+          'comp',
+          b(x.name),
+          h('span', '', `${x.count} rendered${x.self != null ? `${DOT}${x.self.toFixed(1)} ms` : ''}`),
+          h('div', 'tr', sized(h('div', 'fl'), ((x.self ?? x.count) / maxV) * 100)),
+        ),
+      ),
+    ];
   }
 
   function toggleRow(r: HTMLElement) {
@@ -436,41 +439,40 @@ function adoptStyles(root: ShadowRoot): void {
   root.prepend(style);
 }
 
-/** What `trustedTypes.createPolicy` returns, in the one method used here: TypeScript's DOM library does not declare Trusted Types yet. */
-interface HtmlPolicy {
-  createHTML(html: string): string;
-}
-/** The policy name to allow in a `trusted-types` directive. */
-const POLICY = 'react-inp-blame';
-/**
- * The policy, created once per page: a second copy of this chunk (a duplicated package, or a module in two
- * chunks) that asked for the same name again would be refused, and draw nothing.
- */
-const trusted = shared('trusted-types', () => ({ policy: undefined as HtmlPolicy | null | undefined }));
+/** What goes inside an element: a node, text, or nothing for a part that is left out. */
+type Child = Node | string | null | undefined | false;
 
 /**
- * Sets an element's markup, then its bar widths. Every string that reaches here was built in this file with
- * `esc()` around everything a report carries, so under Trusted Types it goes through a policy of this
- * library's own name that passes it on as it is; a page enforcing Trusted Types allows it by listing
- * `react-inp-blame` in its `trusted-types` directive. Widths are set through the element's style object
- * rather than a style attribute in the markup, which a style-src without 'unsafe-inline' blocks.
+ * An element with `attrs` (a string is its class) and `children` inside it, a string child as a text node.
+ * The badge and panel are built from elements and text rather than markup, so nothing a report carries is
+ * ever parsed as HTML and no Trusted Types policy is needed: the page's `trusted-types` directive, however
+ * strict, leaves them drawn. Bar widths are set through the style object (`sized`) rather than a style
+ * attribute, which a style-src without 'unsafe-inline' blocks.
  */
-function setHTML(el: HTMLElement, html: string): void {
-  if (trusted.policy === undefined) {
-    const tt = (globalThis as { trustedTypes?: { createPolicy(name: string, rules: HtmlPolicy): HtmlPolicy } }).trustedTypes;
-    try {
-      trusted.policy = tt ? tt.createPolicy(POLICY, { createHTML: (s) => s }) : null;
-    } catch {
-      // The page's trusted-types directive does not list this name. Where Trusted Types are enforced the
-      // assignment below then throws, and the overlay says so once rather than breaking the page.
-      trusted.policy = null;
-    }
+function h(tag: string, attrs: string | Record<string, string>, ...children: Child[]): HTMLElement {
+  const el = document.createElement(tag);
+  if (typeof attrs === 'string') {
+    if (attrs) el.className = attrs;
+  } else {
+    for (const name in attrs) el.setAttribute(name, attrs[name] as string);
   }
-  const { policy } = trusted;
-  el.innerHTML = (policy ? policy.createHTML(html) : html) as string;
-  el.querySelectorAll<HTMLElement>('[data-width]').forEach((bar) => {
-    bar.style.width = `${bar.dataset.width}%`;
-  });
+  fill(el, ...children);
+  return el;
+}
+
+/** Puts `children` in `el` in place of what it held, leaving out the parts that are nothing. */
+function fill(el: HTMLElement, ...children: Child[]): void {
+  el.replaceChildren(...children.filter((child): child is Node | string => !!child));
+}
+
+function b(text: string): HTMLElement {
+  return h('b', '', text);
+}
+
+/** `el` at `percent` of its parent's width. */
+function sized(el: HTMLElement, percent: number): HTMLElement {
+  el.style.width = `${percent.toFixed(1)}%`;
+  return el;
 }
 
 /**
@@ -478,22 +480,20 @@ function setHTML(el: HTMLElement, html: string): void {
  * hydration inside the working time is a band of its own without the bar adding up to any more
  * than the interaction.
  */
-function phaseBar(phases: readonly Phase[], total: number): string {
-  return phases
-    .map((p, i) => {
-      const parts = p.parts ?? [];
-      const rest = Math.max(0, p.ms - parts.reduce((a, x) => a + x.ms, 0));
-      return parts.map((part) => band('ph', part.label, part.ms, total)).join('') + band(`p${i}`, p.label, rest, total);
-    })
-    .join('');
+function phaseBar(phases: readonly Phase[], total: number): HTMLElement[] {
+  return phases.flatMap((p, i) => {
+    const parts = p.parts ?? [];
+    const rest = Math.max(0, p.ms - parts.reduce((a, x) => a + x.ms, 0));
+    return [...parts.map((part) => band('ph', part.label, part.ms, total)), band(`p${i}`, p.label, rest, total)];
+  });
 }
 
-function band(cls: string, label: string, ms: number, total: number): string {
-  return `<i class="${cls}" data-width="${((ms / total) * 100).toFixed(1)}" title="${esc(label)}: ${Math.round(ms)} ms"></i>`;
+function band(cls: string, label: string, ms: number, total: number): HTMLElement {
+  return sized(h('i', { class: cls, title: `${label}: ${Math.round(ms)} ms` }), (ms / total) * 100);
 }
 
-function swatch(cls: string, p: Phase): string {
-  return `<span title="${esc(p.hint)}"><i class="${cls}"></i>${esc(p.label)} ${Math.round(p.ms)} ms</span>`;
+function swatch(cls: string, p: Phase): HTMLElement {
+  return h('span', { title: p.hint }, h('i', cls), `${p.label} ${Math.round(p.ms)} ms`);
 }
 
 function where(c: CommitSummary): string {
@@ -504,44 +504,45 @@ function top(c: CommitSummary): string {
   return t ? `${t.name} ×${t.count}` : `${c.truncated ? 'at least ' : ''}${c.rendered} components`;
 }
 
-function blameLine(r: InteractionReport): string {
-  const b = r.explanation.blame;
+function blameLine(r: InteractionReport): Child[] {
+  const blame = r.explanation.blame;
   // An inferred blame is the likeliest reading of component counts and phase times, not a measurement.
   // The row says so in two words; the cause sentence under it says what would make it exact.
-  const line = blameText(b);
-  return b.confidence === 'inferred' && b.kind !== 'none' ? `most likely ${line}` : line;
+  const line = blameText(blame);
+  return blame.confidence === 'inferred' && blame.kind !== 'none' ? ['most likely ', ...line] : line;
 }
 
-function blameText(b: Blame): string {
-  const ms = b.ms != null ? ` &middot; ${Math.round(b.ms)} ms` : '';
-  switch (b.kind) {
+/** The row's line for a blame: text with the name it turns on in bold. */
+function blameText(blame: Blame): Child[] {
+  const { name, detail } = blame;
+  const ms = blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : '';
+  const named = name ? [DOT, b(name)] : [];
+  switch (blame.kind) {
     case 'render':
-      return `<b>${esc(b.name ?? 'the tree')}</b> re-rendered${b.detail ? ` &middot; ${esc(b.detail)}` : ''}${ms}`;
+      return [b(name ?? 'the tree'), ` re-rendered${detail ? `${DOT}${detail}` : ''}${ms}`];
     case 'handler': {
-      const where = b.detail ? ` in ${esc(b.detail)}` : '';
+      const where = detail ? ` in ${detail}` : '';
       // A production build of React records no render times, so there is no figure to put beside the
       // name: "the onClick handler in Layout".
-      return b.ms == null
-        ? `the ${b.name ? `<b>${esc(b.name)}</b> ` : ''}handler${where}`
-        : `<b>${esc(b.name ?? 'the handler')}</b>${where}${ms} in the handler`;
+      return blame.ms == null ? ['the ', name && b(name), name && ' ', `handler${where}`] : [b(name ?? 'the handler'), `${where}${ms} in the handler`];
     }
     // Only a hydration React finished inside the interaction takes the blame. HTML that was still
     // waiting is a sentence in front of whatever did take the time, which the cause line carries.
     case 'hydration':
-      return `waited for React to hydrate <b>${esc(b.name ?? 'the page')}</b>${ms}${b.detail ? ` &middot; ${esc(b.detail)}` : ''}`;
+      return ['waited for React to hydrate ', b(name ?? 'the page'), `${ms}${detail ? `${DOT}${detail}` : ''}`];
     // Nothing names the read that forced the layout: the browser gives a total per script and never
     // says which line caused it. The name is where it happened, the subtree or the script, and it is
     // null where several scripts shared the total; the row then says only what was measured.
     case 'layout':
-      return `browser recalculated layout${ms}${b.name ? ` in <b>${esc(b.name)}</b>` : ''}${b.detail ? ` &middot; ${esc(b.detail)}` : ''}`;
+      return [`browser recalculated layout${ms}`, name && ' in ', name && b(name), detail && `${DOT}${detail}`];
     case 'waiting':
-      return `main thread was busy${ms} before the handler could start${b.name ? ` &middot; <b>${esc(b.name)}</b>` : ''}`;
+      return [`main thread was busy${ms} before the handler could start`, ...named];
     case 'painting':
-      return `screen took${ms} to update${b.name ? ` &middot; <b>${esc(b.name)}</b>` : ''}`;
+      return [`screen took${ms} to update`, ...named];
     case 'script':
-      return `<b>${esc(b.name ?? 'a script')}</b> ran${ms}`;
+      return [b(name ?? 'a script'), ` ran${ms}`];
     default:
-      return 'nothing stood out; the time went to waiting and painting';
+      return ['nothing stood out; the time went to waiting and painting'];
   }
 }
 
@@ -559,10 +560,6 @@ function inSentence(title: string): string {
   return title.charAt(0).toLowerCase() + title.slice(1);
 }
 
-function tag(rating: keyof typeof RATING): string {
-  return `<span class="tag" data-rating="${rating}">${RATING[rating].label}</span>`;
-}
-
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] as string);
+function tag(rating: keyof typeof RATING): HTMLElement {
+  return h('span', { class: 'tag', 'data-rating': rating }, RATING[rating].label);
 }
