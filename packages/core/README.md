@@ -33,9 +33,10 @@ until the file has it:
 
     export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: true } })] });
 
-React Router in framework mode, TanStack Start and Astro write their own HTML, which this plugin
-never sees, so each has a setup of its own:
+React Router in framework mode, Remix, TanStack Start and Astro write their own HTML, which this
+plugin never sees on its own, so each has a setup of its own:
 [React Router](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router),
+[Remix](https://github.com/adityareddy-dev/react-inp-blame#install-with-remix),
 [TanStack Start](https://github.com/adityareddy-dev/react-inp-blame#install-with-tanstack-start),
 [Astro](https://github.com/adityareddy-dev/react-inp-blame#install-with-astro).
 
@@ -154,6 +155,21 @@ and is all that `runtime: false` leaves. They go beside the React plugin, not in
 `enabled` and `runtime` work as they do for Next.js, with `'development'` meaning the dev server and
 `'production'` meaning `vite build`, and `pages` picks the HTML pages that get the script.
 
+React Router in framework mode, Remix and TanStack Start write their own HTML, so no page reaches
+the plugin. For them, `entry` names a module of the app, by its path from the project root, that
+gets the install as its first import, in the browser's copy only. In a build the install is a
+chunk of its own that the module imports first, marked as having side effects, so it runs before
+the chunk that holds react-dom and survives a `"sideEffects": false` in the app's package.json.
+A build in which no module has that path fails.
+
+    // vite.config.ts, React Router or Remix; under TanStack Start, entry: 'src/client.tsx'
+    inpBlame({ enabled: true, runtime: { overlay: 'query' }, entry: 'app/root.tsx' })
+
+CI runs this on React Router 8.4, on React Router 7.18 with React 18.3, on Remix 2.17 and on
+TanStack Start 1.168, each under its dev server and a production build. The
+[repository README](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router)
+has each app's whole config.
+
 The plugin cannot fix a `manualChunks` rule sending all of `node_modules` to one vendor chunk. The
 rule puts this library in that chunk with react-dom, and the install script's import of the chunk
 can then evaluate react-dom before `install()` runs; nothing the plugin can reach decides that
@@ -174,14 +190,7 @@ order, which is what the plugin's own script relies on. `enabled` then decides o
 stamped: that entry installs in every run that loads it. A first import inside the app's own entry is
 not enough once a second entry shares react-dom with it. Keep react-inp-blame out of a `node_modules`
 vendor rule there too, because that entry imports the vendor chunk as the plugin's script would.
-None of this has been tried on a real backend yet. React Router in framework mode renders its own
-HTML too. There the install is an `install()` call in a module of the app's own that
-`app/entry.client.tsx` imports first, with the plugin kept for names: the
-[repository README](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router) has
-the three files, and CI runs them on React Router 8.4. On React 18 the import goes first in
-`app/root.tsx` instead, also in CI. TanStack Start takes the same setup in
-`src/client.tsx`, also in CI. Astro has an integration of its own, below. Remix has no setup
-yet: the plugin most likely installs nothing there either, and nothing says so. Not tried yet.
+None of this has been tried on a real backend yet. Astro has an integration of its own, below.
 
 Astro writes its own pages too, and imports one script in every island before it loads the island's
 component and renderer. `react-inp-blame/astro` puts `install()` there, so it runs before

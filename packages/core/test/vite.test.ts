@@ -27,7 +27,7 @@ function scriptCode(plugins: Plugin[]): string {
   const [tag] = tagsFor(plugins, '/index.html')!;
   const [, imported] = /^import '(.+)';$/.exec(tag.children)!;
   const runtime = plugins.find((p) => p.name === INSTALL)!;
-  return runtime.load(runtime.resolveId(imported));
+  return runtime.load(runtime.resolveId(imported).id);
 }
 
 test('by default the dev server gets the runtime and the displayName transform, and vite build gets nothing', () => {
@@ -197,7 +197,7 @@ test('an option these plugins do not have is refused, and an install() option is
     () => inpBlame({ overlay: true } as never),
     (error: unknown) =>
       error instanceof TypeError &&
-      error.message.includes("`overlay` is not one of this plugin's options, which are `enabled`, `runtime` and `pages`") &&
+      error.message.includes("`overlay` is not one of this plugin's options, which are `enabled`, `runtime`, `pages` and `entry`") &&
       error.message.includes('inpBlame({ runtime: { overlay: true } })'),
   );
   // The value is the caller's, whatever shape it has.
@@ -206,4 +206,76 @@ test('an option these plugins do not have is refused, and an install() option is
   assert.throws(() => inpBlame({ page: () => true } as never), (error: unknown) => error instanceof TypeError && !error.message.includes('install()'));
   // Refused even where the plugins would add nothing, so a typo cannot hide behind enabled: false.
   assert.throws(() => inpBlame({ enabled: false, overlay: true } as never), /not one of this plugin's options/);
+});
+
+/** The install plugin as a run of Vite at `root` sets it up: its config resolved and its build started. */
+function entryRuntime(command: 'serve' | 'build', options: Options, root = '/app') {
+  const runtime = pluginsFor(command, { enabled: true, ...options }).find((p) => p.name === INSTALL)!;
+  const emitted: unknown[] = [];
+  const errors: string[] = [];
+  const context = {
+    environment: { config: { consumer: 'client', build: {} } },
+    emitFile: (file: unknown) => emitted.push(file),
+    error: (message: string) => errors.push(message),
+  };
+  runtime.configResolved({ command, root, base: '/', build: {}, plugins: [] });
+  runtime.buildStart.call(context);
+  const transform = (code: string, id: string, ssr = false) => runtime.transform.call(context, code, id, { ssr });
+  const finish = () => runtime.generateBundle.call(context);
+  return { runtime, emitted, errors, transform, finish };
+}
+
+test('entry puts the install first in that module, on its first line, in the browser only', () => {
+  const { transform } = entryRuntime('serve', { entry: 'app/root.tsx' });
+  const code = 'import { Outlet } from "react-router";\nexport default function App() {}\n';
+  const out = transform(code, '/app/app/root.tsx?v=1');
+  assert.equal(out.code, `import '${INSTALL_MODULE}';${code}`);
+  assert.equal(out.code.split('\n').length, code.split('\n').length);
+  // Server rendering never runs it, and other modules are left alone.
+  assert.equal(transform(code, '/app/app/root.tsx', true), null);
+  assert.equal(transform(code, '/app/app/routes/home.tsx'), null);
+  // A leading ./ is the same path.
+  assert.ok(entryRuntime('serve', { entry: './app/root.tsx' }).transform(code, '/app/app/root.tsx'));
+});
+
+test('entry gives the install a chunk of its own, not an entry, and fails a build where the path matched nothing', () => {
+  const found = entryRuntime('build', { entry: 'app/root.tsx' });
+  // No emitted chunk: that would be a second entry, which TanStack Start refuses.
+  assert.deepEqual(found.emitted, []);
+  found.transform('export {}', '/app/app/root.tsx');
+  found.finish();
+  assert.deepEqual(found.errors, []);
+
+  // The install module gets the chunk, and the app's own manualChunks function decides the rest.
+  const theirs = (id: string) => (id.includes('node_modules/react/') ? 'react' : undefined);
+  const { manualChunks } = found.runtime.outputOptions.call({ warn: () => {} }, { manualChunks: theirs });
+  assert.equal(manualChunks(`\0${INSTALL_MODULE}`, {}), 'react-inp-blame-install');
+  assert.equal(manualChunks('/app/node_modules/react/index.js', {}), 'react');
+  assert.equal(manualChunks('/app/app/root.tsx', {}), undefined);
+  assert.equal(found.runtime.outputOptions.call({}, {}).manualChunks(`\0${INSTALL_MODULE}`, {}), 'react-inp-blame-install');
+  // An object cannot be added to, so it is left as it is, with a warning.
+  const warnings: string[] = [];
+  assert.equal(found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, { manualChunks: { vendor: ['react'] } }), null);
+  assert.match(warnings[0]!, /beside a manualChunks object/);
+  // Without entry the output is left alone.
+  assert.equal(entryRuntime('build', {}).runtime.outputOptions.call({}, {}), null);
+
+  const typo = entryRuntime('build', { entry: 'app/roots.tsx' });
+  typo.transform('export {}', '/app/app/root.tsx');
+  typo.finish();
+  assert.equal(typo.errors.length, 1);
+  assert.match(typo.errors[0]!, /entry is 'app\/roots\.tsx', and this build has no module at \/app\/app\/roots\.tsx/);
+
+  // With entry the HTML pages get no script: the module's import is the install.
+  const plugins = pluginsFor('serve', { entry: 'app/root.tsx' });
+  assert.equal(tagsFor(plugins, '/index.html'), undefined);
+});
+
+test('the install module is marked as having side effects, and entry is a path with the install in it', () => {
+  const runtime = pluginsFor('serve', { entry: 'app/root.tsx' }).find((p) => p.name === INSTALL)!;
+  // An app whose package.json says "sideEffects": false would otherwise lose it from the build.
+  assert.deepEqual(runtime.resolveId(INSTALL_MODULE), { id: `\0${INSTALL_MODULE}`, moduleSideEffects: true });
+  assert.throws(() => inpBlame({ entry: '' }), /entry is the path of a module from the project root/);
+  assert.throws(() => inpBlame({ entry: ['app/root.tsx'] as never }), /entry is the path of a module/);
+  assert.throws(() => inpBlame({ entry: 'app/root.tsx', runtime: false }), /runtime: false leaves the install out/);
 });

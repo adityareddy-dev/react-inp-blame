@@ -3,8 +3,8 @@ import { blamedRows, counter, hookState, open, showPanel } from './page'
 
 // The app as a user has it: TanStack Start's blank template with the README's TanStack Start setup, and
 // react-inp-blame installed from the packed tarball. TanStack Start writes the page itself, so nothing
-// goes through the Vite plugin's script: src/inp-blame.ts, first in src/client.tsx, is the install, and
-// it only works if it runs before react-dom does. The blame below is the check on that.
+// goes through the Vite plugin's script: its `entry` puts the install first in src/client.tsx, and it
+// only works if it runs before react-dom does. The blame below is the check on that.
 test('a click is blamed on SlowList', async ({ page }) => {
   const dev = test.info().project.name === 'dev'
   const { problems, loads } = await open(page)

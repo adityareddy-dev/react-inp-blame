@@ -3,8 +3,9 @@ import { blamedRows, counter, hookState, open, showPanel } from "./page";
 
 // The app as a user has it: create-react-router's template with the README's React Router setup, and
 // react-inp-blame installed from the packed tarball. React Router writes the page itself, so nothing
-// goes through the Vite plugin's script: app/inp-blame.ts, first in app/entry.client.tsx, is the
-// install, and it only works if it runs before react-dom does. The blame below is the check on that.
+// goes through the Vite plugin's script: its `entry` puts the install first in app/root.tsx, which React
+// Router loads before any other route and before the client entry, and it only works if it runs before
+// react-dom does. The blame below is the check on that.
 test("a click is blamed on SlowList", async ({ page }) => {
   const dev = test.info().project.name === "dev";
   const { problems, loads } = await open(page);

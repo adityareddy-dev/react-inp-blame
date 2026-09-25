@@ -3,9 +3,10 @@ import { blamedRows, counter, hookState, open, showPanel } from "./page";
 
 // React Router 7's template moved to React 18, with react-inp-blame installed from the packed tarball and a
 // route that imports react-dom. React Router writes the page itself, so nothing goes through the Vite
-// plugin's script: app/inp-blame.ts, first in app/root.tsx, is the install, and it only works if it runs
-// before react-dom does. React Router imports the root route's module before any other route's and before
-// the client entry. The blame below is the check on that.
+// plugin's script: its `entry` puts the install first in app/root.tsx, and it only works if it runs before
+// react-dom does. React Router imports the root route's module before any other route's and before the
+// client entry, and in a build the install is a chunk the root imports first. The blame below is the check
+// on that.
 test("a click is blamed on SlowList", async ({ page }) => {
   const dev = test.info().project.name === "dev";
   const { problems, loads } = await open(page);

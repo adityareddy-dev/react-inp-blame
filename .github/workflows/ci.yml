@@ -113,7 +113,8 @@ jobs:
 
   # The frameworks that write their own HTML, each an app from its own template with the README's setup
   # for it, installed and tested the same way. The Vite plugin's script never runs there, so the install is
-  # a module the client entry imports first, or in Astro the script every island imports before it hydrates.
+  # the first import of the module the plugin's `entry` names, or in Astro the script every island imports
+  # before it hydrates.
   # On the dev server a Fast Refresh preamble makes the hook, as plugin-react's does in the Vite app; a build
   # has none.
   framework-app:
@@ -128,6 +129,8 @@ jobs:
             name: create-react-router
           - fixture: react-router-7
             name: React Router 7 on React 18
+          - fixture: remix
+            name: create-remix
           - fixture: tanstack-start
             name: TanStack Start
           - fixture: astro

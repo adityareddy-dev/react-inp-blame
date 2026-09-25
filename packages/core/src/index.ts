@@ -228,7 +228,7 @@ function installNow(opts: InstallOptions): Api {
       warnOnce(
         'no-renderer',
         `React has rendered on this page, but no react-dom registered with the DevTools hook within ${RENDERER_CHECK_MS / 1000}s, so install() ran after react-dom loaded. ` +
-          'Install with react-inp-blame/vite, react-inp-blame/next or react-inp-blame/astro, ' +
+          'Install with react-inp-blame/vite (with `entry` where the framework writes its own HTML), react-inp-blame/next or react-inp-blame/astro, ' +
           "or make `import 'react-inp-blame/auto'` the first import of your entry module.",
       );
     }

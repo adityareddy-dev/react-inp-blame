@@ -11,9 +11,11 @@ const config = defineConfig({
   plugins: [
     tanstackStart(),
     viteReact(),
-    // Component names that survive the minifier. The install is src/inp-blame.ts, since TanStack Start
-    // writes its own HTML and the plugin's script has no page to go in.
-    inpBlame({ enabled: true, runtime: false }), // production builds too; the default is development only
+    inpBlame({
+      enabled: true,                 // production builds too; the default is development only
+      runtime: { overlay: 'query' }, // the badge only on request, such as ?inp-blame in the URL
+      entry: 'src/client.tsx',       // TanStack Start writes its own HTML, so the install goes first in the client entry
+    }),
   ],
 })
 

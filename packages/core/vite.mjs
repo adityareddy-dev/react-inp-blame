@@ -17,10 +17,15 @@ const INSTALL_MODULE = 'virtual:react-inp-blame/install';
 const RESOLVED_INSTALL_MODULE = `\0${INSTALL_MODULE}`;
 const COMPONENT_FILE = /\.[jt]sx$/;
 const ENABLED = ['development', 'production', true, false];
-const OPTION_KEYS = ['enabled', 'runtime', 'pages'];
+const OPTION_KEYS = ['enabled', 'runtime', 'pages', 'entry'];
 // install()'s own options, which belong under `runtime`. Listed so that `{ overlay: true }` at the top
 // level, which these plugins would otherwise ignore into silence, is named for what it is.
 const INSTALL_KEYS = ['overlay', 'threshold', 'labels', 'hook', 'sampleRate', 'walkBudget', 'inputWindow', 'devtoolsTrack', 'debugGlobal'];
+
+/** A module id as a path with forward slashes and no query, which is how `entry` is matched against it. */
+function fileOf(id) {
+  return id.split('?')[0].replaceAll('\\', '/');
+}
 
 /** The file name of the chunk holding the install call, or undefined when this build has none. */
 function installChunk(bundle) {
@@ -105,17 +110,21 @@ function checkOptionKeys(options) {
   const belongs = INSTALL_KEYS.includes(unknown)
     ? ` It is an option of install(), so it goes under \`runtime\`: inpBlame({ runtime: ${asWritten({ [unknown]: options[unknown] })} }).`
     : '';
-  throw new TypeError(`inpBlame: \`${unknown}\` is not one of this plugin's options, which are \`enabled\`, \`runtime\` and \`pages\`.${belongs}`);
+  throw new TypeError(`inpBlame: \`${unknown}\` is not one of this plugin's options, which are \`enabled\`, \`runtime\`, \`pages\` and \`entry\`.${belongs}`);
 }
 
 export function inpBlame(options = {}) {
   checkOptionKeys(options);
-  const { enabled = 'development', runtime = true, pages = () => true } = options;
+  const { enabled = 'development', runtime = true, pages = () => true, entry } = options;
   if (!ENABLED.includes(enabled)) {
     throw new TypeError(`inpBlame: enabled is 'development', 'production', true or false, not ${JSON.stringify(enabled)}.`);
   }
   if (typeof pages !== 'function') throw new TypeError('inpBlame: pages is a function of the page path.');
+  if (entry !== undefined && (typeof entry !== 'string' || entry === '')) {
+    throw new TypeError(`inpBlame: entry is the path of a module from the project root, such as 'app/root.tsx', not ${JSON.stringify(entry)}.`);
+  }
   const install = installOptions(runtime);
+  if (entry !== undefined && !install) throw new TypeError('inpBlame: entry says where the install goes, and runtime: false leaves the install out.');
   // Off means no plugins at all, so the build carries nothing from here.
   if (enabled === false) return [];
   // 'development' is the dev server; 'production' is `vite build`, whose output `vite preview` serves as built.
@@ -125,12 +134,23 @@ export function inpBlame(options = {}) {
   if (install) {
     // The build in progress, from configResolved: its `base`, and whether it is a build at all.
     let config = null;
+    // `entry` as the absolute path Vite gives the module, once the root is known.
+    let entryFile = null;
+    // Whether this client build has put the install first in `entry`, which a wrong path never does.
+    let entryImports = false;
     plugins.push({
       name: 'react-inp-blame:install',
       enforce: 'pre',
       apply,
+      /**
+       * Vite finds the dependencies to pre-bundle by reading the app's source before any plugin has
+       * transformed it, so it never sees the import `entry` gets. Found only once the page asks for it,
+       * the library would be bundled then, and the dev server would reload the page while it hydrates.
+       */
+      config: () => (entry !== undefined ? { optimizeDeps: { include: ['react-inp-blame'] } } : undefined),
       configResolved(resolved) {
         config = resolved;
+        if (entry !== undefined) entryFile = fileOf(`${String(resolved.root).replace(/[\\/]$/, '')}/${entry.replace(/^\.?\//, '')}`);
       },
       /**
        * Asks the bundler for the install call in a chunk of its own, which the page then loads as a
@@ -138,10 +158,50 @@ export function inpBlame(options = {}) {
        * to point a second script tag at.
        */
       buildStart() {
-        if (buildsPages(config, this.environment, pages)) this.emitFile({ type: 'chunk', id: INSTALL_MODULE, name: 'react-inp-blame-install' });
+        entryImports = false;
+        if (entry === undefined && buildsPages(config, this.environment, pages)) this.emitFile({ type: 'chunk', id: INSTALL_MODULE, name: 'react-inp-blame-install' });
       },
-      resolveId: (id) => (id === INSTALL_MODULE ? RESOLVED_INSTALL_MODULE : null),
+      /**
+       * With `entry`, the install gets a chunk of its own through `manualChunks`, which takes the module
+       * and everything it imports, and not the badge's chunk, which it loads with import(). Not as an
+       * emitted chunk: that would be a second entry, which some frameworks refuse (TanStack Start's
+       * manifest wants one). A manualChunks function the app already has decides every other module.
+       */
+      outputOptions(output) {
+        if (!entryFile) return null;
+        const theirs = output.manualChunks;
+        if (theirs !== undefined && typeof theirs !== 'function') {
+          this.warn('inpBlame: entry cannot give the install a chunk of its own beside a manualChunks object. Write manualChunks as a function, or the install may run after react-dom in a build.');
+          return null;
+        }
+        return {
+          ...output,
+          manualChunks: (id, meta) => (id === RESOLVED_INSTALL_MODULE ? 'react-inp-blame-install' : theirs?.(id, meta)),
+        };
+      },
+      // Side effects are what the module is for, whatever the app's package.json says of its own files.
+      resolveId: (id) => (id === INSTALL_MODULE ? { id: RESOLVED_INSTALL_MODULE, moduleSideEffects: true } : null),
       load: (id) => (id === RESOLVED_INSTALL_MODULE ? `import { install } from 'react-inp-blame';\ninstall(${JSON.stringify(install)});\n` : null),
+      /**
+       * `entry`, for a framework that writes its own HTML: the install becomes the module's first
+       * import, in the browser's copy of it only. On the dev server that is enough, since nothing is
+       * bundled. In a build the import points at the chunk outputOptions gives it, and a chunk that a
+       * module imports first is evaluated first, so the install runs before the shared chunk where
+       * react-dom lands, whatever else the module imports. The import goes on the module's first line,
+       * so every line after it keeps its number and no source map is needed.
+       */
+      transform(code, id, transformOptions) {
+        if (!entryFile || fileOf(id) !== entryFile) return null;
+        if (transformOptions?.ssr || this.environment?.config?.consumer === 'server') return null;
+        entryImports = true;
+        return { code: `import '${INSTALL_MODULE}';${code}`, map: null };
+      },
+      /** A path that matched nothing would leave the page without the install, and say nothing. */
+      generateBundle() {
+        if (entryFile && separateScript(config, this.environment) && !entryImports) {
+          this.error(`inpBlame: entry is '${entry}', and this build has no module at ${entryFile}. It is the path of a module of the app from the project root, such as 'app/root.tsx'.`);
+        }
+      },
       transformIndexHtml: {
         // Before Vite reads the page's scripts, so this one is served and bundled like theirs. On the
         // dev server that is the whole job: nothing is bundled, and module scripts run in document
@@ -151,7 +211,7 @@ export function inpBlame(options = {}) {
         // repeat it.
         order: 'pre',
         handler: (_html, { path }) =>
-          pages(path) && !buildsPages(config, null, pages)
+          entry === undefined && pages(path) && !buildsPages(config, null, pages)
             ? [{ tag: 'script', attrs: { type: 'module' }, children: `import '${INSTALL_MODULE}';`, injectTo: 'head-prepend' }]
             : undefined,
       },
