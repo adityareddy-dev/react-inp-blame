@@ -63,6 +63,12 @@ it changes when a field is removed or changes meaning, which a minor release may
   when it typed a character, which the browser marks with a keypress, into something that is not a button or
   a link, and only those rows collapse into one per field. Any other key reads `Key press on "Close"`. Enter
   in a text field still reads as typing, since a report does not keep which key it was.
+- **The README no longer says naming a handler gets it named in production.** A production build's minifier
+  renames `handleLogin` like any other function, so there a handler reads as its prop unless the build keeps
+  function names. The README says so, and that the names loader stamps components, not handlers.
+- **The README says which component libraries CI builds**: styled-components, @emotion/styled, lucide-react
+  and Radix's DropdownMenu used directly, the primitives shadcn/ui's Radix styles wrap. No job builds Base UI,
+  which shadcn/ui now starts a project on, or a shadcn project of either style.
 - **A component named like the import it renames is named.** shadcn writes every component this way,
   `import { Button as ButtonPrimitive } from '@base-ui/react/button'` and then `function Button`, and the
   displayName pass took both sides of the `as` for names the module imports, so it left `Button` unnamed and a
