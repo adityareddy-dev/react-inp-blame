@@ -1887,4 +1887,6 @@ test('a render whose walk stopped at its budget says "at least", names no compon
   const several = blameOf({ roots: ['Orders', 'Metrics'], hotPath: [], components });
   assert.equal(several.blame.name, null);
   assert.ok(several.cause.includes('inside the app'), several.cause);
+  // Nor the one root it reached, when the walk says the work may be beside it (an empty hot path).
+  assert.equal(blameOf({ roots: ['Orders'], hotPath: [], components }).blame.name, null);
 });

@@ -127,6 +127,20 @@ test('a production walk cut at its budget does not blame the subtree it happened
   assert.deepEqual([reachedOne.truncated, reachedOne.roots], [true, ['Orders']]);
   assert.deepEqual(reachedOne.hotPath, ['App']);
   assert.deepEqual(walkCommit(root(element('main', ...beforeSecond())) as any, 5000, 100, click, development).hotPath, []);
+  // A cut inside the first of two roots, the second never reached and half as big again: not the first,
+  // however many rows it had before the cut.
+  for (const first of [4998, 4999, 6000]) {
+    const twoRoots = (wrap: (...kids: Record<string, unknown>[]) => Record<string, unknown>) =>
+      walkCommit(root(wrap(rendered(Orders, ...rows(Order, first)), rendered(Metrics, ...rows(Metric, 9000)))) as any, 5000, 100, click, development);
+    assert.deepEqual(twoRoots((...kids) => passedThrough(App, ...kids)).hotPath, ['App'], `${first} rows first`);
+    assert.deepEqual(twoRoots((...kids) => element('main', ...kids)).hotPath, [], `${first} rows first, under main`);
+  }
+  // One list past the budget, with nothing rendered beside it (a footer that did not re-render): the list.
+  const footer = element('footer', text());
+  footer.alternate = { child: footer.child };
+  const oneList = walkCommit(root(passedThrough(App, rendered(Orders, ...rows(Order, 6000)), footer)) as any, 5000, 100, click, development);
+  assert.deepEqual(oneList.hotPath, ['Orders']);
+
   // Several roots and nothing cut: the heaviest, as ever.
   const uncut = walkCommit(roots() as any, 10_000, 100, click, development);
   assert.deepEqual(uncut.hotPath, ['Metrics']);

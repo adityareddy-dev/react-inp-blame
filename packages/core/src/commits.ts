@@ -35,9 +35,9 @@ export const readableName = (name: string): boolean => name.split('.').every((pa
  */
 export function leafName(c: CommitSummary): string | null {
   for (let i = c.hotPath.length - 1; i >= 0; i--) if (readableName(c.hotPath[i]!)) return c.hotPath[i]!;
-  // A walk cut short with no durations to go by leaves no hot path where its roots share no component, and
-  // its first root is only the one the walk reached first.
-  if (c.truncated && !c.hasDurations && c.roots.length > 1) return c.hotPath[c.hotPath.length - 1] || null;
+  // A walk cut short with no durations to go by leaves no hot path where the work could be in more than one
+  // subtree and nothing holds them all, and its first root is only the one the walk reached first.
+  if (c.truncated && !c.hasDurations) return c.hotPath[c.hotPath.length - 1] || null;
   // Not another root: the hot path starts at the heaviest, so any other root is a subtree beside the work.
   return c.hotPath[c.hotPath.length - 1] || c.roots[0] || null;
 }
