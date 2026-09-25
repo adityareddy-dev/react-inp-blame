@@ -83,7 +83,7 @@ test('a quiet interaction is held back, and published once a render it caused la
   render(later);
   assert.equal(published.length, 1);
   const [r] = published;
-  assert.equal(r?.schemaVersion, 2);
+  assert.equal(r?.schemaVersion, 3);
   assert.equal(r?.duration, 24);
   assert.deepEqual(r?.followUps, [{ ...later, joinedBy: 'exact' }]);
   assert.deepEqual(life.reports(), [r]);

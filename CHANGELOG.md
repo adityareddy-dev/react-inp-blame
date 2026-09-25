@@ -18,6 +18,22 @@ it changes when a field is removed or changes meaning, which a minor release may
   did. A page that listed `react-inp-blame` can drop it. The CSP spec now runs under `trusted-types 'none'` and
   checks that nothing reachable from the shared state is a policy.
 
+### Changed
+
+- **`schemaVersion` is 3, on the report and on the `react` field `attributeINP` adds.** Two fields kept their
+  names and changed what they hold while the version stayed at 2, which the rule at the top of this file says
+  it must not. Since 0.6.0, `target.component` and `target.owners` for a click on an icon inside a control name
+  the control's component, as `target.label` has since 0.3.0, where they named the icon's own. Since 0.7.0,
+  `hotPath` for a production walk cut at `walkBudget` is the chain into the one subtree the walk reached where
+  nothing unreached rendered beside it, otherwise the one component all its subtrees sit under, whether or not
+  it rendered itself, or empty where they sit under none; it used to be the chain into whichever subtree the
+  walk reached first. `react.hotPath` follows it. Code that reads either field should take 3 to mean them this
+  way, and know that reports from 0.6.0 to 0.11.0 carried the same meanings under 2. Three fields were added in
+  that time, which leaves the version alone: `pointerType` (0.6.0) and `reactStatus` (0.8.0) on the report, and
+  `react` on `stats()` (0.8.0). They are required in the types because the library always fills them; a report
+  object your own code builds, in a test fixture or a fake, needs them. Code that only passes the report along
+  needs no change.
+
 ### Fixed
 
 - **A page without React is no longer scanned at every interaction.** While no react-dom has registered with

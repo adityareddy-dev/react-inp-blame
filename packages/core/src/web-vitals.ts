@@ -18,7 +18,7 @@ import type { Blame, CommitSummary, InteractionReport, RenderedComponent } from 
  */
 
 /** The version of the `react` object `attributeINP` adds. It changes when a field is removed or changes meaning; a field added beside the others leaves it as it is. */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 /**
  * Components named in an owner path: the four **nearest** the element, so a deep tree loses the page
  * and the layout rather than the component that actually renders what was clicked.
