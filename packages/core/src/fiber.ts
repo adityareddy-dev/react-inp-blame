@@ -772,6 +772,8 @@ interface Agg {
   rendered: number;
   total: number;
   kids: Agg[];
+  /** The walk ran out of budget inside this subtree, so `rendered` and `kids` hold only what it reached first. */
+  cut: boolean;
 }
 
 /** A component's figures while the walk adds them up. */
@@ -870,7 +872,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       // path by name, so the hot path can say "the OrderSummary subtree".
       if (comp && kids.length) {
         const name = nameOf(f) || '(anonymous)';
-        return [{ name, performed: false, rendered: kids.reduce((a, k) => a + k.rendered, 0), total: f.actualDuration || 0, kids }];
+        return [{ name, performed: false, rendered: kids.reduce((a, k) => a + k.rendered, 0), total: f.actualDuration || 0, kids, cut: outOfBudget }];
       }
       return kids;
     }
@@ -899,7 +901,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     } else {
       byName.set(name, { name, count: 1, self, total });
     }
-    return [{ name, performed: true, rendered: 1 + kids.reduce((a, k) => a + k.rendered, 0), total, kids }];
+    return [{ name, performed: true, rendered: 1 + kids.reduce((a, k) => a + k.rendered, 0), total, kids, cut: outOfBudget }];
   }
 
   const top = visit(rootFiber, 0);
@@ -923,11 +925,21 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
 
   // Hot path: from the heaviest root, keep descending while one child carries most of
   // the work. Pass-through components inside a rendered subtree are named on the way.
+  //
+  // Without durations the path goes by how many components each subtree rendered, and a walk cut at its
+  // budget has counted the subtrees it reached first in full and the rest in part or not at all. Choosing
+  // among those would follow the walk's order, not the work, so the path stops at a subtree the cut was
+  // in, and where the cut left more than one root to choose from, it names the component they all sit
+  // under, or nothing. React's durations are totals for each subtree, walked or not, so they still choose.
+  const comparable = (a: Agg) => hasDurations || !a.cut;
   const hotPath: string[] = [];
-  if (performedRoots.length) {
+  if (performedRoots.length > 1 && !hasDurations && outOfBudget) {
+    const shared = sharedAncestor(top);
+    if (shared) hotPath.push(shared);
+  } else if (performedRoots.length) {
     let cur = performedRoots.reduce((a, b) => (metric(b) > metric(a) ? b : a));
     hotPath.push(cur.name);
-    for (let step = 0; cur.kids.length && step < HOT_PATH_STEPS; step++) {
+    for (let step = 0; cur.kids.length && comparable(cur) && step < HOT_PATH_STEPS; step++) {
       const next = cur.kids.reduce((a, b) => (metric(b) > metric(a) ? b : a));
       if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
       if (next.name !== cur.name) hotPath.push(next.name);
@@ -964,6 +976,21 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     priority: context.priority,
     didError: context.didError,
   };
+}
+
+/**
+ * The innermost component above every root of a walk, from the components the walk passed through without
+ * their rendering (App, a layout, a provider): followed down while there is exactly one, and never into a
+ * rendered one. Null when the roots share none.
+ */
+function sharedAncestor(top: Agg[]): string | null {
+  let name: string | null = null;
+  let list = top;
+  while (list.length === 1 && !list[0]!.performed) {
+    name = list[0]!.name;
+    list = list[0]!.kids;
+  }
+  return name;
 }
 
 /**

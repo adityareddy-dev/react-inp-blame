@@ -621,7 +621,7 @@ their first value, with a warning, until `dispose()`.
 | `labels` | `'auto'` | Where `target.label` comes from: see [Labels and personal data](#labels-and-personal-data) |
 | `hook` | `'auto'` | `'chain'` wraps an existing `__REACT_DEVTOOLS_GLOBAL_HOOK__` and never creates one; `'shim'` creates one unless one exists; `'auto'` chains or creates |
 | `sampleRate` | `1` | Share of page loads that install anything |
-| `walkBudget` | `5000` | Component fibers visited per commit |
+| `walkBudget` | `5000` | Component fibers visited per commit. A commit past it is reported as partial: its counts say "at least", and in a production build, which has only counts to go on, the blame names the component the cut-short subtree sits in rather than the subtree the walk reached first |
 | `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside an input's own dispatch are always walked. It also bounds `followUps`, whose window runs from the paint as a rule |
 | `devtoolsTrack` | `true` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track |
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |

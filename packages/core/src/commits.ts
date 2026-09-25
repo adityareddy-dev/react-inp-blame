@@ -35,6 +35,9 @@ export const readableName = (name: string): boolean => name.split('.').every((pa
  */
 export function leafName(c: CommitSummary): string | null {
   for (let i = c.hotPath.length - 1; i >= 0; i--) if (readableName(c.hotPath[i]!)) return c.hotPath[i]!;
+  // A walk cut short with no durations to go by leaves no hot path where its roots share no component, and
+  // its first root is only the one the walk reached first.
+  if (c.truncated && !c.hasDurations && c.roots.length > 1) return c.hotPath[c.hotPath.length - 1] || null;
   // Not another root: the hot path starts at the heaviest, so any other root is a subtree beside the work.
   return c.hotPath[c.hotPath.length - 1] || c.roots[0] || null;
 }
@@ -46,9 +49,10 @@ const STYLING_WRAPPER = /^styled\.|^Styled\(/;
  * What a commit was mostly made of: of the components a styling library did not make, the one that
  * rendered most (took longest, where React measured), or a readable one that carries at least half as much,
  * since a name the app wrote says more than a minifier's; the most-rendered of all when every one is a
- * styling library's.
+ * styling library's. Not said of a walk cut short, whose counts are of the part it reached first.
  */
 export function mostlyComponent(c: CommitSummary): CommitSummary['components'][number] | undefined {
+  if (c.truncated) return undefined;
   const own = c.components.filter((component) => !STYLING_WRAPPER.test(component.name));
   const first = own[0];
   if (!first) return c.components[0];

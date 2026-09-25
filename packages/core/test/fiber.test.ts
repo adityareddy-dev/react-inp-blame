@@ -81,6 +81,46 @@ test('only component fibers count against the walk budget, not the DOM and text 
   );
 });
 
+test('a production walk cut at its budget does not blame the subtree it happened to reach first', () => {
+  function Dashboard() {}
+  function Orders() {}
+  function Order() {}
+  function Metrics() {}
+  function Metric() {}
+  function App() {}
+  const rows = (component: () => void, n: number) => Array.from({ length: n }, () => rendered(component, element('li', text())));
+  // Orders renders 3,000 rows and comes first; Metrics renders 6,000 after it. With no durations the hot path
+  // goes by counts, and a walk stopped at 5,000 has all of Orders and a third of Metrics.
+  const dashboard = () => root(rendered(Dashboard, rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000))));
+  const whole = walkCommit(dashboard() as any, 10_000, 100, click, development);
+  assert.deepEqual(whole.hotPath, ['Dashboard', 'Metrics']);
+  const cut = walkCommit(dashboard() as any, 5000, 100, click, development);
+  assert.equal(cut.truncated, true);
+  assert.deepEqual(cut.hotPath, ['Dashboard']);
+
+  // The same tree cut inside its first subtree still says nothing it cannot know about the second.
+  assert.deepEqual(walkCommit(dashboard() as any, 1000, 100, click, development).hotPath, ['Dashboard']);
+
+  // With React's durations, which are totals for each subtree walked or not, the path still chooses.
+  const timed = dashboard();
+  const time = (f: Record<string, any>, ms: number) => Object.assign(f, { actualDuration: ms, mode: 0b10 });
+  time(timed, 90);
+  time(timed.child, 90);
+  time(timed.child.child, 30);
+  time(timed.child.child.sibling, 60);
+  assert.deepEqual(walkCommit(timed as any, 5000, 100, click, development).hotPath, ['Dashboard', 'Metrics']);
+
+  // Several roots, the walk cut in the first: named by the component they all sit under, not by the first.
+  const passedThrough = (component: () => void, ...children: Record<string, unknown>[]) => fiber(0, component, children, 0);
+  const roots = () => root(passedThrough(App, rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000))));
+  const several = walkCommit(roots() as any, 5000, 100, click, development);
+  assert.deepEqual(several.roots, ['Orders', 'Metrics']);
+  assert.deepEqual(several.hotPath, ['App']);
+  // And by nothing where they sit under no component.
+  const bare = walkCommit(root(element('main', rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000)))) as any, 5000, 100, click, development);
+  assert.deepEqual(bare.hotPath, []);
+});
+
 test("@emotion/styled's Insertion is not counted as a component, whatever the minifier named it", () => {
   function Row() {}
   function Insertion() {}
