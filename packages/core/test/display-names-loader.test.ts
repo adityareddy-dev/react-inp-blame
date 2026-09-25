@@ -238,6 +238,67 @@ test('a name the module imports is never stamped, whatever the file declares fur
   assert.deepEqual(names("import { Row as Card } from './row';\nfunction outer() {\nconst Card = () => null;\n}"), []);
 });
 
+test('the name before an `as` in an import is not bound here, so a component of that name is still named', () => {
+  // How every shadcn component is written: the primitive is imported under another name, and the
+  // file declares its own component under the primitive's.
+  assert.deepEqual(names('import { Button as ButtonPrimitive } from "x"\nfunction Button(){}\nexport { Button }'), ['Button']);
+  const shadcn = [
+    "import * as DialogPrimitive from '@radix-ui/react-dialog';\nfunction Dialog(props) { return null; }",
+    "import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';\nfunction Dialog(props) { return null; }",
+    "import Menu, { DropdownMenu as DropdownMenuPrimitive } from 'x';\nconst DropdownMenu = (props) => null;",
+    "import type { Dialog as DialogProps } from 'x';\nfunction Dialog(props) { return null; }",
+    "import { type Dialog as DialogProps, useState } from 'x';\nfunction Dialog(props) { return null; }",
+    "import {\n  Dialog as DialogPrimitive,\n  Title as TitlePrimitive,\n} from 'x';\nfunction Dialog(props) { return null; }",
+    // An `export … from` binds nothing in this module.
+    "export { Dialog as DialogRoot } from 'x';\nfunction Dialog(props) { return null; }",
+    "export * as Dialog from 'x';\nexport function DialogTitle(props) { return null; }",
+  ];
+  for (const code of shadcn) assert.deepEqual(names(code), [code.includes('DropdownMenu =') ? 'DropdownMenu' : code.includes('DialogTitle') ? 'DialogTitle' : 'Dialog'], code);
+  // The local side of each form is still an import, and a declaration of it inside a block is left alone.
+  for (const clause of ['{ Row as Card }', '* as Card', 'Card', 'Row, { Card }', 'Row, * as Card', 'type { Row as Card }', '{ type Row as Card }']) {
+    const code = `import ${clause} from './row';\nfunction outer() {\nfunction Card() {}\n}`;
+    assert.deepEqual(names(code), [], code);
+  }
+  // A nested declaration is left alone for being nested, whatever the imports say. The check on imports
+  // is what holds when the scan misreads a brace and takes a declaration for a top-level one, so the
+  // cases that pin it declare the imported name at the top level, as the scan would see it after one.
+  const clauses = [
+    '{ Row as Card }',
+    '* as Card',
+    'Card',
+    'Row, { Card }',
+    'Row, * as Card',
+    'Card, * as ns',
+    'x, { y as Card }',
+    'type Card',
+    'type * as Card',
+    'type { Row as Card }',
+    '{ type Row as Card }',
+    '{ default as Card }',
+    '{ Row /* the base */ as Card }',
+    '{\n  Row as Card, // the base\n  Slot,\n}',
+    '{\r\n  Row as Card,\r\n}',
+    // Names that are strings, which an import may give since ES2022.
+    `{ 'row-card' as Card }`,
+    '{ "Row" as Card, Slot }',
+  ];
+  for (const clause of clauses) {
+    const code = `import ${clause} from './row';\nfunction Card() {}`;
+    assert.deepEqual(names(code), [], code);
+  }
+  assert.deepEqual(names("import{Row as Card}from'./row';\nfunction Card() {}"), []);
+  // The other module's side of each of them is free, comments and line breaks and all.
+  for (const clause of ['{ Card /* the base */ as Row }', '{ Card as /* the base */ Row }', '{\n  Card as Row, // the base\n}', '{Card as Row}', `{ Card as Row, 'row-card' as Slot }`, 'x, { Card as Row }', 'type { Card as Row }']) {
+    const code = `import ${clause} from './row';\nfunction Card() {}`;
+    assert.deepEqual(names(code), ['Card'], code);
+  }
+  // A module with no names to import binds nothing, and the one after it is still read.
+  assert.deepEqual(names("import './styles.css'\nimport { Row as Card } from './row'\nfunction Card() {}\nfunction Row() {}"), ['Row']);
+  // And the Vite pass reads the same bindings: a default export named like an aliased import is hoisted.
+  const code = "import { Button as ButtonPrimitive } from 'x';\nexport default function Button() {}";
+  assert.equal(hoistDefaultExport(code), "import { Button as ButtonPrimitive } from 'x';\nfunction                Button() {}\nexport default Button;");
+});
+
 test('a byte order mark does not hide the first declaration in the file', () => {
   assert.deepEqual(names('﻿const Cart = () => null;'), ['Cart']);
   assert.deepEqual(names('﻿function Cart() {}\nconst Row = () => null;'), ['Cart', 'Row']);
