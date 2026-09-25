@@ -1,5 +1,5 @@
-import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
-import { controlOf, namedFrom } from './element.js';
+import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, namingFiber, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
+import { controlOf } from './element.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
@@ -261,12 +261,10 @@ function record(e: DispatchedInput): InputRecord {
   // Read now, before React's handlers run: once React commits the deletion of the element, React 18
   // and 19 clear its fiber's links and props, and the Event Timing entry arrives after that.
   const fiber = fiberFromNode(target);
-  // The control labels the click, and names it when the click was on an icon: an icon library's `Trash2`
-  // inside the button is not what anyone clicked. Found now, since a click that swaps the icon detaches it
-  // before the entry.
+  // The control labels the click, and for a click on an icon the components are read from what the icon
+  // belongs to: an icon library's `Trash2` inside the button is not what anyone clicked. Both found now,
+  // since a click that swaps the icon detaches it before the entry.
   const control = controlOf(target);
-  const named = namedFrom(target);
-  const namedFiber = (named !== target && fiberFromNode(named)) || fiber;
   const rec: InputRecord = {
     ts: e.timeStamp,
     type: e.type,
@@ -275,7 +273,7 @@ function record(e: DispatchedInput): InputRecord {
     pointerType: e.pointerType,
     target,
     control,
-    owners: Object.freeze(ownersOf(namedFiber)),
+    owners: Object.freeze(ownersOf(namingFiber(target))),
     handler: handlerOf(fiber, e.type, isKey ? e.code : null),
     work: { endedAt: e.timeStamp, ownEndedAt: e.timeStamp, unjoined: [] },
     // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting

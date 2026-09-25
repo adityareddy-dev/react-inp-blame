@@ -826,6 +826,12 @@ test("a click on an icon that the click swapped out is named by the button it wa
     const svgFiber: Record<string, unknown> = { tag: 5, elementType: 'svg', type: 'svg', memoizedProps: {}, return: iconFiber };
     const button = node('button', buttonFiber, null, { 'aria-label': 'Delete row' });
     const svg: Record<string, unknown> = node('svg', svgFiber, button);
+    // Linked down as well as up, as React links them: the names are read from above the icon's own components.
+    Object.assign(toolbarFiber, { child: deleteFiber, sibling: null });
+    Object.assign(deleteFiber, { child: buttonFiber, sibling: null });
+    Object.assign(buttonFiber, { child: iconFiber, sibling: null, stateNode: button });
+    Object.assign(iconFiber, { child: svgFiber, sibling: null });
+    Object.assign(svgFiber, { child: null, sibling: null, stateNode: svg });
     page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: svg });
     // The click swaps the icon: the svg leaves the page and React clears its fiber.
     svg.parentNode = null;

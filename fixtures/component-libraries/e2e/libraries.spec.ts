@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { clickOn, open, slowReport } from './page';
 
-// Four libraries whose components used to take the name a report gave the app's own. Every case runs on
-// the dev server and on a production build.
+// Libraries whose components used to take the name a report gave the app's own. Every case runs on the dev
+// server and on a production build.
 
 test('a list styled with styled-components is blamed on the component that renders it', async ({ page }) => {
   const problems = await open(page);
@@ -23,6 +23,44 @@ test('a list styled with @emotion/styled is blamed on the component that renders
   expect(r.explanation.blame.name).toBe('TagList');
   expect(r.explanation.blame.detail).toMatch(/^TagRow ×400\b/);
   expect(r.verdict).not.toMatch(/Styled\(|Insertion/);
+  expect(problems).toEqual([]);
+});
+
+test("a list styled with @emotion/react's css prop is blamed on the component that renders it", async ({ page }) => {
+  const problems = await open(page);
+  await page.getByTestId('renote').click();
+  const r = await slowReport(page);
+  expect(r.explanation.blame.kind).toBe('render');
+  expect(r.explanation.blame.name).toBe('NoteList');
+  expect(r.explanation.blame.detail).toMatch(/^NoteRow ×400\b/);
+  expect(r.verdict).not.toMatch(/Emotion|Styled\(|Insertion/);
+  // Notes, NoteList, 400 NoteRows and a css-prop wrapper around each of the 401 elements; no Insertion.
+  expect(r.commits.reduce((n, c) => n + c.rendered, 0)).toBe(803);
+  expect(problems).toEqual([]);
+});
+
+test("a click on a button a styling library labelled is named by the app's component, not the label", async ({ page }) => {
+  const problems = await open(page);
+  await page.getByTestId('buy').click();
+  const r = await slowReport(page);
+  expect(r.target?.component).toBe('BuyButton');
+  expect(r.target?.owners).not.toContain('ShopButtonRoot');
+  expect(problems).toEqual([]);
+});
+
+test("a click on a card's photo inside a link is named by the card, and an option's icon by the option", async ({ page }) => {
+  const problems = await open(page);
+  await clickOn(page, '[data-testid=photo]');
+  const card = await slowReport(page);
+  expect(card.target?.component).toBe('ProductCard');
+  expect(card.target?.owners.slice(0, 2)).toEqual(['ProductCard', 'ProductList']);
+  expect(card.target?.label).toBe('link "Kettle"');
+
+  await page.evaluate(() => window.__REACT_INP_BLAME__.clear());
+  await clickOn(page, '[data-testid=person] svg path');
+  const option = await slowReport(page);
+  expect(option.target?.component).toBe('PersonOption');
+  expect(option.target?.owners.slice(0, 2)).toEqual(['PersonOption', 'PeoplePicker']);
   expect(problems).toEqual([]);
 });
 

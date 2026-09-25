@@ -3,14 +3,9 @@ import styled from 'styled-components'
 import emotionStyled from '@emotion/styled'
 import { Check, Minus, Trash2 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-
-/** Keeps the main thread busy for `ms`, so each part of the page has a slow interaction to report. */
-function burn(ms: number) {
-  const end = performance.now() + ms
-  while (performance.now() < end) {
-    // busy
-  }
-}
+import { burn } from './burn'
+import { Notes } from './Notes'
+import { Shop } from './Shop'
 
 // styled-components names these `styled.ul` and `styled.li`, in development and production builds.
 const PriceTable = styled.ul`
@@ -170,6 +165,8 @@ export default function App() {
       <Row />
       <Prices />
       <Tags />
+      <Notes />
+      <Shop />
     </main>
   )
 }

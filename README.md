@@ -479,7 +479,7 @@ The component path goes into `attribution.interactionTarget`, where web-vitals o
 selector, so it shows up wherever that field is already collected and charted, with nothing to change
 downstream. A path names at most four components, the four nearest the element whose names a reader could
 search their code for (a minifier's `Xe` or a styling library's `styled.div` gives way to the next one out,
-unless the chain has nothing better), starting from the control around a clicked icon as reports do. So in a
+unless the chain has nothing better), starting for a clicked icon from what the icon belongs to, as reports do. So in a
 deep tree it starts below the page and the layout rather than ending short of the component that renders
 what was clicked. `generateTarget` returns `undefined` when the node has no React fiber or no named component
 above it, which is web-vitals' signal to fall back to its own selector, and it never throws.
@@ -678,10 +678,12 @@ put on its `onPointerDown`, not on an `onClick` that did nothing.
 code for: one React would accept as a component name (capitalised), that a minifier has not cut down to a
 letter or two, and whose every dotted part is the same, so a design system's `Primitive.button` gives way to
 the `TabsTrigger` above it. When the click landed on an icon, an `<svg>` or something in one, an `<img>` or a
-`<picture>`, inside a control, the chain starts from the control the label names (see
-[Labels and personal data](#labels-and-personal-data)), so a click on an icon library's `<svg>` inside a
-button names the component that renders the button, not the icon; anywhere else it starts from the element
-itself, so a card inside a link is named by the card. `target.owners` keeps the whole chain, innermost
+`<picture>`, the chain starts from what the icon belongs to in the tree React rendered: above every component
+that renders nothing but the icon (an icon library's `Trash2` and the `Icon` under it), at the control around
+it or at the first element or component that renders something beside it. So a click on an icon library's
+`<svg>` inside a button names the component that renders the button, not the icon, an icon beside a name in
+an option names the option's component, and a card's photo inside a link names the card. Anywhere else the
+chain starts from the element itself. `target.owners` keeps the whole chain, innermost
 first, whatever the names are, and where nothing in it passes, `component` is the innermost owner as it
 always was.
 
@@ -933,8 +935,16 @@ moved to React 18.
   name as it stands. That goes for `where`, for the component a render blame names and what it was "mostly"
   made of, and for `generateTarget`. A short capitalised name cannot be told from minifier output, so `Abc` is
   taken at face value either way. The full chains are on `target.owners` and each commit's `hotPath` and
-  `components`. The component @emotion/styled renders beside every styled element to insert its styles is
-  counted under that element's name when a development build names it `Insertion`.
+  `components`. A name with the `$1` that Vite's development server and Rolldown add to one that clashes
+  (`Dt$1`) is judged without it. The component emotion renders beside every element @emotion/styled or the
+  `css` prop styles, to insert its styles, is not counted.
+- **A styling library's wrapper is named the way the library names one it was given no label for**, whatever
+  label it has: MUI's `MuiButtonBaseRoot` reads `Styled(button)`, a styled-components wrapper its Babel or SWC
+  plugin named `Title` reads `styled.h1`, and the component @emotion/react's `css` prop wraps an element in
+  reads `Styled(li)`. So none of them is taken for a component the app wrote, in development or production.
+  A click on a MUI button is then named by the nearest readable component above the wrapper, which can be
+  MUI's own `ButtonBase` rather than the app's component around it: names alone cannot tell a library's
+  component from the app's.
 - The names loader stamps any capitalised top-level binding whose value is a function, written at the start of
   a line: `function Foo`, `const Foo = (props) => …`, `const Foo: React.FC = …`, `memo`, `forwardRef` and
   their generic forms, exported or not. Still minified: classes, anything indented inside another block,
