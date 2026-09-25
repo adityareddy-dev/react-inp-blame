@@ -90,12 +90,31 @@ async function clickBlind(page: Page, selector: string): Promise<void> {
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
-test('a click on a boundary that has not hydrated is blamed on the hydration it waited for', async ({ page }) => {
-  await page.goto('/hydration');
-  await page.waitForSelector('[data-test=panel-button]', { timeout: PANEL_TIMEOUT });
-  await clickBlind(page, '[data-test=panel-button]');
+/** Page loads before a test gives up on its click landing ahead of React's hydration of the panel. */
+const ATTEMPTS = 3;
 
-  const r = await reportAfter(page, null);
+/**
+ * Loads the page, clicks `selector` blind while the panel's boundary is still server-rendered HTML, and
+ * returns the click's report. The click has to land before React hydrates the boundary, and on a fast
+ * machine React can get there between the panel's HTML arriving and the hold starting. The panel's mount
+ * effect says when it hydrated, so a load where that was before the click tested nothing, and the page is
+ * loaded again.
+ */
+async function clickBeforeHydration(page: Page, selector: string): Promise<InteractionReport> {
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    await page.goto('/hydration');
+    await page.waitForSelector('[data-test=panel-button]', { timeout: PANEL_TIMEOUT });
+    await clickBlind(page, selector);
+    const report = await reportAfter(page, null);
+    const hydratedAt = await page.evaluate(() => window.__panelHydrated ?? null);
+    if (hydratedAt === null || hydratedAt >= report.start) return report;
+    await test.info().attach(`${run}: load ${attempt}, React hydrated the boundary before the click`, { body: report.verdict, contentType: 'text/plain' });
+  }
+  throw new Error(`React hydrated the boundary before the click on all ${ATTEMPTS} loads, so nothing was tested`);
+}
+
+test('a click on a boundary that has not hydrated is blamed on the hydration it waited for', async ({ page }) => {
+  const r = await clickBeforeHydration(page, '[data-test=panel-button]');
   await test.info().attach(`${run}: hydration verdict`, { body: r.verdict, contentType: 'text/plain' });
 
   expect(r.hydration, 'the click was not seen as landing on HTML waiting to hydrate').toBeTruthy();
@@ -130,15 +149,9 @@ test('a click on a boundary that has not hydrated is blamed on the hydration it 
 });
 
 test('a click beside a boundary that is still server-rendered HTML is not blamed on that boundary', async ({ page }) => {
-  await page.goto('/hydration');
-  await page.waitForSelector('[data-test=panel-button]', { timeout: PANEL_TIMEOUT });
-  // The panel's HTML is on the page and React has not hydrated it: its mount effect has not run. The
-  // hold below then keeps the main thread from it until after the click has been dispatched, so this
-  // click really does land beside a boundary that is still waiting rather than after it hydrated.
-  expect(await page.evaluate(() => window.__panelHydrated ?? null), 'the boundary hydrated before the click, so this run tested nothing').toBeNull();
-  await clickBlind(page, '[data-test=outside-button]');
-
-  const r = await reportAfter(page, null);
+  // The hold keeps the main thread from React until after the click has been dispatched, so this click
+  // lands beside a boundary that is still waiting rather than after it hydrated.
+  const r = await clickBeforeHydration(page, '[data-test=outside-button]');
   await test.info().attach(`${run}: click beside the boundary verdict`, { body: r.verdict, contentType: 'text/plain' });
 
   expect(r.hydration, 'a click outside the boundary was blamed on the boundary waiting to hydrate').toBeNull();
