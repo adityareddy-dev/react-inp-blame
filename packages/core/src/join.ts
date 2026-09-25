@@ -43,6 +43,16 @@ const RENDER_MIN_COMPONENTS_BESIDE_HANDLER = 50;
 // the working time comes to 2 ms a component at most, a few times what a component takes to render once in
 // a production build; past that the time has room in it for the handler, one unknown with a name.
 const RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER = 2;
+// Where React timed each component, a render's time is put on one component's own render, its time less
+// that of the components it rendered, from 25 ms: the line the handler is held to, since under that one
+// piece of the app's code does not make an interaction slow on its own. The component has to have rendered
+// once, and its own render has to be half of the commit's render time or more, the total the sentence
+// prints. Under half, most of the time is in the components under it, and naming the one would send the
+// reader after the smaller part. TanStack Table sorting 200,000 rows spent 257 of 277 ms in TableBody's own
+// render and 17 in the 636 components under it; told only "637 components", a reader memoises the rows
+// and gains nothing.
+const OWN_RENDER_MIN_MS = HANDLER_MIN_MS;
+const OWN_RENDER_MIN_SHARE = 0.5;
 // A Long Animation Frames script is named from 20 ms of it inside the interaction: the API lists
 // scripts from 5 ms, and one under 20 did not make its frame long by itself (a long frame is over 50 ms).
 const SCRIPT_MIN_MS = 20;
@@ -759,12 +769,24 @@ function leafOf(c: CommitSummary): string {
   return leafName(c) ?? 'the app';
 }
 
-/** "LineItem ×800", or the component count when no single component dominates. */
+/**
+ * The component whose own render, its time less the components it rendered, was most of a commit React
+ * timed: rendered once, beside others, from `OWN_RENDER_MIN_MS` and `OWN_RENDER_MIN_SHARE` of the commit's
+ * render time. Undefined where no one component was, and where the build timed no single component.
+ */
+function ownRender(c: CommitSummary): { readonly name: string; readonly self: number } | undefined {
+  const top = mostlyComponent(c);
+  if (c.rendered < 2 || top?.count !== 1 || top.self == null) return undefined;
+  return top.self >= OWN_RENDER_MIN_MS && top.self >= OWN_RENDER_MIN_SHARE * c.total ? { name: top.name, self: top.self } : undefined;
+}
+
+/** "LineItem ×800"; "TableBody's own render" where that was most of the time; else the component count. */
 function mostlyOf(c: CommitSummary): string | null {
   if (c.rendered === 1) return null;
   const top = mostlyComponent(c);
   if (top && top.count > 1) return `${top.name} ×${top.count}`;
-  return renderedCount(c);
+  const own = ownRender(c);
+  return own ? `${own.name}'s own render` : renderedCount(c);
 }
 
 /** "801 components"; "at least 5000 components" where the walk stopped before the end of the tree. */
@@ -772,7 +794,11 @@ function renderedCount(c: CommitSummary): string {
   return `${c.truncated ? 'at least ' : ''}${plural(c.rendered, 'component')}`;
 }
 
-/** "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "hydrating" for a hydration. */
+/**
+ * "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "re-rendering 637
+ * components inside TableBody, 257 ms of it in TableBody's own render rather than the components under it"
+ * where one component's own render was most of it (`ownRender`); "hydrating" for a hydration.
+ */
 function renderPhrase(c: CommitSummary): string {
   const verb = c.hydrated ? 'hydrating' : 're-rendering';
   const leaf = leafOf(c);
@@ -783,9 +809,13 @@ function renderPhrase(c: CommitSummary): string {
   if (c.rendered === 0) return 'committing without rendering a component';
   if (c.rendered === 1) return `${verb} ${leaf}`;
   let mostly = '';
+  const own = ownRender(c);
   if (top && top.count > 1) {
     const time = top.self != null ? `, ${ms(top.self)}` : '';
     mostly = top.name === leaf ? ` (${top.count} of them${time})` : `, mostly ${top.name} (${top.count} of them${time})`;
+  } else if (own) {
+    // Named even where it is the leaf: "in its own render" could be read as the render's own.
+    mostly = `, ${ms(own.self)} of it in ${own.name}'s own render rather than the components under it`;
   }
   return `${verb} ${renderedCount(c)} inside ${leaf}${mostly}`;
 }
@@ -1095,7 +1125,10 @@ function explain(r: InteractionReport): Explanation {
   if (sayEffects && rc) extras[extras.length - 1] += included(rc);
   // A figure that ends in the renders it holds takes a comma before the sentence goes on.
   const committedEnd = sayEffects && rc && included(rc) ? ',' : '';
-  const committed = extras.length === 2 ? `, ${extras[0]} and ${extras[1]}` : extras.length === 1 ? ` and ${extras[0]}` : acrossCommits ? ` and ${acrossCommits}` : '';
+  // A render phrase that ends on "rather than the components under it" takes a comma before its "and", or
+  // the committing reads as one more thing the time was not spent on.
+  const and = rc && ownRender(rc) ? ', and' : ' and';
+  const committed = extras.length === 2 ? `, ${extras[0]} and ${extras[1]}` : extras.length === 1 ? `${and} ${extras[0]}` : acrossCommits ? `${and} ${acrossCommits}` : '';
   // In a production build the effects are the only figure, and the totals are said, since there is no
   // render figure to set one commit's beside.
   const effectsFigure = committingMatters ? effects : 0;
@@ -1403,6 +1436,12 @@ function explain(r: InteractionReport): Explanation {
     // nobody measured it, and the sentence would be a guess dressed as a finding.
     const notTheStory = r.hydration.ms == null ? '' : ' That was not what took the time here.';
     notes.push(`It landed on server-rendered HTML that had not been hydrated yet, and React hydrated ${boundaryPhrase(r.hydration)} during it.${notTheStory}`);
+  }
+  // What the sentence put on one component's own render: the fix is in what that component computes, not
+  // in the components under it. Said of the render the blame names, where it is the advice worth having.
+  const ownBlamed = blame.kind === 'render' && rc ? ownRender(rc) : undefined;
+  if (ownBlamed) {
+    notes.push(`That much time in ${ownBlamed.name}'s own render usually means work it does while rendering, such as sorting, filtering or building data, which memoising the components under it does not speed up.`);
   }
   if (c) {
     // A hydration is not a re-render: it is the first render of that HTML on the client, and counting

@@ -354,9 +354,12 @@ export interface Blame {
    */
   readonly name: string | null;
   /**
-   * For a render or a hydration, what it was mostly made of ("LineItem ×800"); for a handler, its
-   * component, or null where the name is a listener the browser recorded rather than a React handler. For a 'layout', what that same commit was mostly made of, wherever `name` came from
-   * that commit, and null wherever `name` did not, since a script has no component counts.
+   * For a render or a hydration, what it was mostly made of: many of one component ("LineItem ×800"), one
+   * component's own render where React timed it at most of the render ("TableBody's own render"), else how
+   * many components rendered ("637 components"); null where it rendered one. For a handler, its component,
+   * or null where the name is a listener the browser recorded rather than a React handler. For a 'layout',
+   * what that same commit was mostly made of, wherever `name` came from that commit, and null wherever
+   * `name` did not, since a script has no component counts.
    */
   readonly detail: string | null;
   /** How much of the interaction it accounts for, in ms; null when the build records no durations. */

@@ -1665,6 +1665,94 @@ test('a render is named after its deepest readable component, and what it was mo
   assert.equal(minified.blame.detail, 'et ×113');
 });
 
+/**
+ * TanStack Table's virtualized rows example with 200,000 rows, sorted by a click on "Last Name", as a profiling
+ * build reported it: TableBody sorts the rows inside `table.getRowModel()`, which it calls while it renders, so
+ * 257 of the 277 ms are its own and the 636 components under it took about 17.
+ */
+const tableSort = (opts: Partial<CommitSummary> = {}) =>
+  commit(290, 0, {
+    rendered: 637,
+    total: 277,
+    roots: ['App'],
+    hotPath: ['App', 'TableBody'],
+    components: [
+      { name: 'TableBody', count: 1, self: 257.4, total: 274.7 },
+      { name: 'TableBodyRow', count: 31, self: 8.4, total: 0.6 },
+      { name: 're', count: 288, self: 4.9, total: 0.1 },
+      { name: 'cell', count: 279, self: 1, total: 0.1 },
+      { name: 'App', count: 1, self: 0.9, total: 277 },
+    ],
+    ...opts,
+  });
+
+test("a render that was mostly one component's own render says so, rather than sending the reader to the components under it", () => {
+  const r = report([entry('click', 0, 304, 2, 296)], [tableSort()], []).explanation;
+  assert.equal(r.cause, "React spent 277 ms re-rendering 637 components inside TableBody, 257 ms of it in TableBody's own render rather than the components under it.");
+  assert.deepEqual(r.blame, { kind: 'render', name: 'TableBody', detail: "TableBody's own render", ms: 277, confidence: 'measured' });
+  assert.deepEqual(r.notes, [
+    "That much time in TableBody's own render usually means work it does while rendering, such as sorting, filtering or building data, which memoising the components under it does not speed up.",
+  ]);
+
+  // Where that component is not the one the render is named after, it is still the one named.
+  const beside = report([entry('click', 0, 304, 2, 296)], [tableSort({ hotPath: ['App', 'Table'] })], []).explanation;
+  assert.match(beside.cause, /inside Table, 257 ms of it in TableBody's own render rather than the components under it\.$/);
+  assert.equal(beside.blame.detail, "TableBody's own render");
+
+  // A production build has no time for any one component, so there is nothing to say about one.
+  const production = report([entry('click', 0, 304, 2, 296)], [tableSort({ hasDurations: false, total: 0, components: tableSort().components.map((x) => ({ ...x, self: null, total: null })) })], []).explanation;
+  assert.equal(production.blame.detail, '637 components');
+  assert.match(production.cause, /^React was most likely re-rendering 637 components inside TableBody\. /);
+  assert.doesNotMatch(production.cause, /own render/);
+  assert.ok(!production.notes.some((n) => n.includes('own render')), production.notes.join(' | '));
+
+  // Under a screen update that outran the working time, the note that stands in for the render says it
+  // too, and keeps the committing figure apart from the components under it.
+  const screen = report([entry('click', 0, 425, 0, 210)], [tableSort({ at: 200, startedAt: 10, total: 120, components: [{ name: 'TableBody', count: 1, self: 100, total: 118 }, ...tableSort().components.slice(1)] })], []).explanation;
+  assert.equal(screen.blame.kind, 'painting');
+  assert.ok(
+    screen.notes.includes(
+      "React still spent 120 ms re-rendering 637 components inside TableBody, 100 ms of it in TableBody's own render rather than the components under it, and 70 ms committing it in the 210 ms of working time before that.",
+    ),
+    screen.notes.join(' | '),
+  );
+});
+
+test("a render whose time is in the components under it, or is small, puts none of it on one component's own render", () => {
+  const click = [entry('click', 0, 200, 3, 190)];
+  // The demo's context storm: OrderSummary renders once and cheaply, and the time is in its 800 line items.
+  const storm = commit(180, 0, {
+    rendered: 801,
+    total: 170,
+    roots: ['ContextStorm'],
+    hotPath: ['ContextStorm', 'OrderSummary'],
+    components: [
+      { name: 'LineItem', count: 800, self: 161, total: 0.4 },
+      { name: 'OrderSummary', count: 1, self: 3, total: 170 },
+    ],
+  });
+  const lineItems = report(click, [storm], []).explanation;
+  assert.equal(lineItems.cause, 'React spent 170 ms re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms).');
+  assert.equal(lineItems.blame.detail, 'LineItem ×800');
+  assert.deepEqual(lineItems.notes, []);
+
+  // A dashboard of 60 different widgets, each rendered once: the one rendered first costs the most of any,
+  // and still under half of the render.
+  const widgets = Array.from({ length: 11 }, (_, i) => ({ name: `Widget${i}`, count: 1, self: 10, total: 10 }));
+  const dashboard = commit(180, 0, { rendered: 60, total: 170, roots: ['Dashboard'], hotPath: ['Dashboard'], components: [{ name: 'Dashboard', count: 1, self: 40, total: 170 }, ...widgets] });
+  const spread = report(click, [dashboard], []).explanation;
+  assert.equal(spread.cause, 'React spent 170 ms re-rendering 60 components inside Dashboard.');
+  assert.equal(spread.blame.detail, '60 components');
+  assert.deepEqual(spread.notes, []);
+
+  // Two thirds of a 30 ms render is 20 ms, too little in one component to be worth sending anyone to it.
+  const small = commit(40, 0, { total: 30, components: [{ name: 'List', count: 1, self: 20, total: 30 }, { name: 'Row', count: 29, self: 10, total: 0.4 }] });
+  const quick = report([entry('click', 0, 64, 3, 40)], [small], []).explanation;
+  assert.equal(quick.cause, 'React spent 30 ms re-rendering 30 components inside List.');
+  assert.equal(quick.blame.detail, '30 components');
+  assert.deepEqual(quick.notes, []);
+});
+
 test("a click on an icon inside a button is named by the button's component, not the icon's", () => {
   // lucide-react builds every icon as a forwardRef with a displayName, so the icon is a component of its
   // own: `button > svg > path`, with Trash2 between the button and the svg.
