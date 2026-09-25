@@ -10,7 +10,7 @@ purpose. Click something and read what the badge blames.
 
     npm install react-inp-blame
 
-## Start with Next.js 15.3 or later
+## Start with Next.js 14.2 or later
 
 ```ts
 // next.config.ts
@@ -21,7 +21,7 @@ export default withInpBlame({ /* your config */ }, { runtime: { overlay: true } 
 ```
 
 On Next.js 15.3 to 16.2, add one line to `instrumentation-client.ts` as well. `withInpBlame` prints it
-until the file has it:
+until the file has it (14.2 to 15.2 need nothing more, and `next.config.mjs` there, since `.ts` came in 15):
 
 ```ts
 // instrumentation-client.ts
@@ -99,7 +99,7 @@ internal tree React keeps of your rendered components; the library reads it thro
 exposes for developer tools. A **soft navigation** is a route change the framework makes in the page,
 with no new document.
 
-## Install with Next.js 15.3 or later
+## Install with Next.js 14.2 or later
 
 `withInpBlame(nextConfig, options)`: your Next.js config first, this library's options second. Passing the
 options as the first argument throws, because Next.js has no `enabled` or `runtime` config key and would
@@ -149,9 +149,17 @@ package's ES-module types, so there `/next` also needs `skipLibCheck: true`, as 
 Before 16.0 a Turbopack rule takes no `condition`, so
 on 15.x the loader's rule keeps to the browser build and out of `node_modules` through builtin conditions
 instead, `experimental.turbo` rules and loaders carry over, and a rule of your own on `*.{tsx,jsx}` is
-left as it is, with a warning, since 15.x takes one rule there. Below 15.3 there is no `instrumentation-client`
-and nothing can load the library ahead of React: the wrapper warns and hands your config back as it was. CI runs
-the Next.js suites on 16.2.12, 15.5.26 and 15.3.9 with the line, under both bundlers.
+left as it is, with a warning, since 15.x takes one rule there.
+
+**Next.js 14.2 to 15.2** have no `instrumentation-client`, so the wrapper puts the install first in webpack's
+client entries (`main-app` for the App Router, `main` for the Pages Router), which webpack runs before the next
+module in them loads react-dom, and adds the loader to webpack alone, writing no `turbopack` key, which 14.2
+does not know. Under `next dev --turbo` no `webpack()` hook runs, so nothing installs: the wrapper says so. No
+line is needed there, and soft navigations are not announced, so reports carry the page's URL but no
+`startedNavigation`. Write the config as `next.config.mjs` on 14.2, which reads no `.ts`. Below 14.2 the wrapper
+warns and hands your config back as it was. CI runs the Next.js suites on 16.2.12, 15.5.26 and 15.3.9 with
+the line, under both bundlers, and an App Router app on 14.2.35 (`fixtures/next-14`), dev and production;
+15.2.9 was checked by hand the same way.
 
 **`enabled` defaults to `'development'`: a production build gets neither the runtime nor the component
 names unless you pass `enabled: true` or `enabled: 'production'`.**

@@ -378,8 +378,8 @@ test('run from a monorepo root, the project is found through the next.config tha
   }
 });
 
-test('a Next.js older than instrumentation-client gets its config back as it was, with a warning that names it', (t) => {
-  const old = projectWithNext('15.2.9');
+test('a Next.js older than 14.2 gets its config back as it was, with a warning that names it', (t) => {
+  const old = projectWithNext('14.1.4');
   const canary = projectWithNext('16.4.0-canary.31');
   t.after(() => {
     for (const dir of [old, canary]) fs.rmSync(dir, { recursive: true, force: true });
@@ -391,12 +391,65 @@ test('a Next.js older than instrumentation-client gets its config back as it was
   assert.equal(inProject(old, () => wrapped('development', project)), project);
   assert.equal(warn.mock.callCount(), 1);
   const message = String(warn.mock.calls[0].arguments[0]);
-  assert.ok(message.includes('15.2.9') && message.includes('15.3'), message);
+  assert.ok(message.includes('14.1.4') && message.includes('14.2'), message);
   // A prerelease of a later version passes every floor. A peer range would have refused it at install time.
   assert.deepEqual(added(inProject(canary, () => wrapped('development', {}))), EVERYTHING);
   // enabled: false adds nothing to the config, so there is nothing to warn about.
   forgetWarnings();
   assert.equal(inProject(old, () => wrapped('development', project, { enabled: false })), project);
   assert.equal(warn.mock.callCount(), 1);
+  forgetWarnings();
+});
+
+test('from 14.2 to 15.2 the install goes first in webpack\'s client entries, with the loader, no Turbopack key and no line to add', async (t) => {
+  const next14 = projectWithNext('14.2.35');
+  const next15 = projectWithNext('15.2.9');
+  t.after(() => {
+    for (const dir of [next14, next15]) fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const warn = t.mock.method(console, 'warn', () => {});
+  forgetWarnings();
+  for (const dir of [next14, next15]) {
+    const config = inProject(dir, () => wrapped('development', { reactStrictMode: true }, { runtime: { overlay: 'query' } }));
+    // 14.2 knows no top-level `turbopack` and warns about it; neither version builds with Turbopack.
+    assert.equal('turbopack' in config, false);
+    assert.equal('instrumentationClientInject' in config, false);
+    assert.deepEqual(clientSettings(config).install, { overlay: 'query' });
+    const client = { module: { rules: [] as unknown[] }, entry: async () => ({ 'main-app': ['./app-next.js'], main: { import: './main.js' }, 'pages/_app': ['./_app.js'] }) };
+    config.webpack(client, { isServer: false });
+    assert.equal(client.module.rules.length, 1);
+    const entries = await (client.entry as () => Promise<Record<string, any>>)();
+    assert.deepEqual(entries['main-app'], [CLIENT_MODULE, './app-next.js']);
+    assert.deepEqual(entries.main.import, [CLIENT_MODULE, './main.js']);
+    assert.deepEqual(entries['pages/_app'], ['./_app.js']);
+    // Asked again, as Next.js does as pages are added, the install is not put in twice.
+    const again = async () => ({ 'main-app': [CLIENT_MODULE, './app-next.js'] });
+    const twice = { module: { rules: [] as unknown[] }, entry: again };
+    config.webpack(twice, { isServer: false });
+    assert.deepEqual((await (twice.entry as () => Promise<Record<string, any>>)())['main-app'], [CLIENT_MODULE, './app-next.js']);
+    // The server build is left alone.
+    const server = { module: { rules: [] as unknown[] }, entry: 'server' };
+    config.webpack(server, { isServer: true });
+    assert.equal(server.entry, 'server');
+    // runtime: false keeps the loader and adds no install.
+    const namesOnly = inProject(dir, () => wrapped('development', {}, { runtime: false }));
+    const plain = { module: { rules: [] as unknown[] }, entry: 'as it was' };
+    namesOnly.webpack(plain, { isServer: false });
+    assert.equal(plain.entry, 'as it was');
+    assert.equal(plain.module.rules.length, 1);
+  }
+  // No line for instrumentation-client, which these versions do not have.
+  assert.equal(warn.mock.calls.filter((c) => String(c.arguments[0]).includes('instrumentation-client.ts')).length, 0);
+  // Under Turbopack nothing can install, and the wrapper says so once.
+  process.env.TURBOPACK = '1';
+  try {
+    inProject(next14, () => wrapped('development', {}));
+    inProject(next14, () => wrapped('development', {}));
+  } finally {
+    delete process.env.TURBOPACK;
+  }
+  const turbo = warn.mock.calls.filter((c) => String(c.arguments[0]).includes('Turbopack'));
+  assert.equal(turbo.length, 1);
+  assert.match(String(turbo[0]!.arguments[0]), /14\.2\.35.*next dev without --turbo/);
   forgetWarnings();
 });

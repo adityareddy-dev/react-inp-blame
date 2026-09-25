@@ -3,7 +3,8 @@
 //   Next.js imports on the client before instrumentation-client and before hydration. It installs the
 //   library ahead of react-dom, and hears App Router navigations through `onRouterTransitionStart`.
 //   From 15.3 to 16.2 the app's own instrumentation-client re-exports that module instead, and the
-//   wrapper prints the line to add until it does;
+//   wrapper prints the line to add until it does; from 14.2 to 15.2 the module goes first in webpack's
+//   client entries;
 // - the displayName loader, so component names survive the production minifier, under Turbopack (the
 //   Next 16 default, where a `webpack()` hook never runs) and under `next build --webpack` alike.
 //
@@ -26,6 +27,11 @@ const CLIENT_LINE = `export { onRouterTransitionStart } from '${CLIENT_MODULE}';
 // a semver range refuses it.
 // instrumentation-client, its onRouterTransitionStart, and the top-level `turbopack` key.
 const NEXT_CLIENT_FILE = { major: 15, minor: 3 };
+// The oldest Next.js the wrapper installs in. Before instrumentation-client it puts the install in front of
+// webpack's client entries instead, which Turbopack does not run, and navigations are not announced.
+const NEXT_ENTRY = { major: 14, minor: 2 };
+// webpack's client entries in Next.js before 15.3: the App Router's and the Pages Router's.
+const CLIENT_ENTRIES = ['main-app', 'main'];
 // `condition` on a Turbopack rule, which keeps the loader to the browser and out of node_modules. Before
 // it, the same is written as builtin conditions, and `experimental.turbo` still holds rules.
 const NEXT_RULE_CONDITION = { major: 16, minor: 0 };
@@ -161,6 +167,28 @@ function checkOptionKeys(options) {
 }
 
 /**
+ * webpack's `entry` with the install first in each client entry, as a function, which is how Next.js gives
+ * it (it adds pages as they are asked for, and calls it again). Entries are a module or a list of them, or
+ * an object whose `import` is; any other entry is left as it was.
+ */
+function installFirst(entry) {
+  return async () => {
+    const entries = typeof entry === 'function' ? await entry() : entry;
+    for (const name of CLIENT_ENTRIES) {
+      const value = entries[name];
+      if (typeof value === 'string' || Array.isArray(value)) {
+        const modules = [value].flat();
+        if (!modules.includes(CLIENT_MODULE)) entries[name] = [CLIENT_MODULE, ...modules];
+      } else if (value && (typeof value.import === 'string' || Array.isArray(value.import))) {
+        const modules = [value.import].flat();
+        if (!modules.includes(CLIENT_MODULE)) value.import = [CLIENT_MODULE, ...modules];
+      }
+    }
+    return entries;
+  };
+}
+
+/**
  * The loader's Turbopack rule: for the browser build, never for foreign code (node_modules). Before
  * 16.0 a rule has no `condition` and takes builtin conditions as keys instead, the first key that
  * matches deciding, so `foreign` comes first.
@@ -201,17 +229,22 @@ function wrap(nextConfig, options, dirs) {
   // Off means the config comes back as it went in, so the build carries nothing from here.
   if (!isEnabled(enabled, process.env.NODE_ENV)) return nextConfig;
   const found = projectNextVersion(dirs);
-  if (!atLeast(found, NEXT_CLIENT_FILE)) {
-    warnOnce(
-      'VERSION',
-      `Next.js ${found.version} has no instrumentation-client, which arrived in 15.3, so nothing can install the library ahead of React, and your config was left as it was. Upgrade Next.js to 15.3 or later.`,
-    );
+  if (!atLeast(found, NEXT_ENTRY)) {
+    warnOnce('VERSION', `Next.js ${found.version} is older than 14.2, the oldest this wrapper installs in, so your config was left as it was. Upgrade Next.js to 14.2 or later.`);
     return nextConfig;
+  }
+  // Before 15.3 there is no instrumentation-client, and the install goes in front of webpack's entries.
+  const byEntry = !atLeast(found, NEXT_CLIENT_FILE);
+  if (byEntry && install && process.env.TURBOPACK) {
+    warnOnce(
+      'TURBOPACK',
+      `Next.js ${found.version} has no instrumentation-client, and under Turbopack it runs no webpack() hook, so nothing installs the library. Run next dev without --turbo, or upgrade Next.js to 15.3 or later.`,
+    );
   }
   const clientLine = clientFileLoadsModule(dirs);
   // Printed before a function config is called, while Next.js is still importing the config file: an
   // environment change made then reaches the processes it starts, so they do not print it again.
-  if (install && !atLeast(found, NEXT_INJECT) && !clientLine) {
+  if (install && !byEntry && !atLeast(found, NEXT_INJECT) && !clientLine) {
     warnOnce(
       'CLIENT_LINE',
       `Next.js ${found.version} cannot load the library before React by itself, which needs instrumentationClientInject (16.3 and later). ` +
@@ -253,15 +286,20 @@ function wrap(nextConfig, options, dirs) {
         enforce: 'pre',
         use: [{ loader: LOADER }],
       });
+      // webpack runs a module when it is first required, so the install, first in the entry, runs before
+      // the entry's next module loads react-dom.
+      if (byEntry && install) config.entry = installFirst(config.entry);
     }
     return typeof nextConfig.webpack === 'function' ? nextConfig.webpack(config, context) : config;
   };
 
-  const withLoader = { ...nextConfig, turbopack: { ...(nextConfig.turbopack || {}), rules }, webpack };
+  // Before 15.3 Next.js has no top-level `turbopack` key and warns about it, and builds with webpack only.
+  const withLoader = byEntry ? { ...nextConfig, webpack } : { ...nextConfig, turbopack: { ...(nextConfig.turbopack || {}), rules }, webpack };
   if (!install) return withLoader;
   const withSettings = { ...withLoader, env: { ...nextConfig.env, [CLIENT_SETTINGS]: JSON.stringify({ install, basePath: nextConfig.basePath || '' }) } };
-  // Below 16.3 the line in instrumentation-client installs the library. Kept after an upgrade, it still
-  // does, and a second copy from instrumentationClientInject would hear every navigation twice.
+  // Below 16.3 the line in instrumentation-client installs the library (before 15.3, webpack's entries do).
+  // Kept after an upgrade, it still does, and a second copy from instrumentationClientInject would hear
+  // every navigation twice.
   if (!atLeast(found, NEXT_INJECT) || clientLine) return withSettings;
   return {
     ...withSettings,

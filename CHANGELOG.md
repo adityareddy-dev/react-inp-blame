@@ -6,6 +6,14 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **Next.js 14.2 to 15.2.** They have no `instrumentation-client`, so `withInpBlame` used to warn and install
+  nothing. It now puts the install first in webpack's client entries (`main-app`, `main`), which runs it before
+  react-dom loads, adds the name loader to webpack alone, and writes no `turbopack` key. Under `next dev
+  --turbo` nothing can install, and the wrapper says so; soft navigations are not announced there. CI runs a
+  14.2.35 App Router app (`fixtures/next-14`) in dev and production; 15.2.9 was checked by hand.
+
 ## [0.8.0] - 2026-09-25
 
 ### Fixed
