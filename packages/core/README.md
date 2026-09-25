@@ -142,14 +142,16 @@ stand for a Node that cannot `require()` an ES module, so in an app whose `packa
 are CommonJS. `nodenext` from 5.8 and `node20` from 5.9 pass. The same settings, in any app, find
 an error inside the `/next` types, which take `InstallOptions` from the package's ES-module types,
 so there `/next` also needs `skipLibCheck: true`, as `create-next-app` sets it. Below 15.3 there is
-no `instrumentation-client`: the wrapper warns and hands the config back as it was.
+no `instrumentation-client`: from 14.2 the wrapper puts the install first in webpack's client entries
+instead, and below 14.2 it warns and hands the config back as it was.
 
 On the App Router the client module also hears each navigation, meaning each route change the
 framework makes in the page with no new document: every report carries
 `navigationURL` and `navigationType`, a click that started a navigation names it in
-`startedNavigation`, and `inp()` starts over at each soft navigation. The Pages Router loads the injected
-module too (read in Next.js 16.3.5's source, not tested), so it gets attribution without the navigation
-join.
+`startedNavigation`, and `inp()` starts over at each soft navigation. The Pages Router gets attribution
+without the navigation join. On `next dev` from 15.3 its entry loads react-dom before
+`instrumentation-client` and the injected module, so there the wrapper also puts the install first in
+that entry, in webpack's `main` and, under Turbopack, through a loader on `next-dev-turbopack.js`.
 
 ## Vite
 

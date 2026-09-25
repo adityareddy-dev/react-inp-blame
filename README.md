@@ -173,9 +173,16 @@ module in them loads react-dom, and adds the loader to webpack alone, writing no
 does not know. Under `next dev --turbo` no `webpack()` hook runs, so nothing installs: the wrapper says so. No
 line is needed there, and soft navigations are not announced, so reports carry the page's URL but no
 `startedNavigation`. Write the config as `next.config.mjs` on 14.2, which reads no `.ts`. Below 14.2 the wrapper
-warns and hands your config back as it was. CI runs the Next.js suites on 16.2.12, 15.5.26 and 15.3.9 with
-the line, under both bundlers, and an App Router app on 14.2.35 (`fixtures/next-14`), dev and production;
-15.2.9 was checked by hand the same way.
+warns and hands your config back as it was. CI runs the Next.js suites on 16.3.5, 16.2.12, 15.5.26 and
+15.3.9 (with the line below 16.3), under both bundlers, and an app on 14.2.35 (`fixtures/next-14`), dev and
+production, each with an App Router page and a Pages Router page; 15.2.9 was checked by hand the same way.
+
+**The Pages Router on `next dev` from 15.3.** Its dev entry, `next-dev.js` under webpack and
+`next-dev-turbopack.js` under Turbopack, loads react-dom before `instrumentation-client` and before the
+injected module, where its production entry loads them first. So on `next dev` the wrapper also puts the
+install first in that entry: in webpack's `main`, and under Turbopack, which Next.js announces in the
+`TURBOPACK` environment variable before it reads the config, through a rule that runs a small loader of this
+package on `next-dev-turbopack.js` alone. Nothing in your setup changes, and a build gets neither.
 
 **`enabled` defaults to `'development'`: a production build gets neither the runtime nor the component
 names unless you pass `enabled: true` or `enabled: 'production'`.**
@@ -187,8 +194,8 @@ names unless you pass `enabled: true` or `enabled: 'production'`.**
 `runtime` defaults to `true`, which is [`install()`](#installoptions) with its defaults. It also takes the
 options for `install()`, inlined through `env` and so plain data, or `false` for the loader alone. On the
 App Router, reports follow soft navigations in `navigationURL` and `navigationType`, name the one a click
-started in `startedNavigation`, and the INP estimate starts over at each. The Pages Router loads the injected
-module too (read in Next.js 16.3.5's source, not tested), so it gets attribution without navigations.
+started in `startedNavigation`, and the INP estimate starts over at each. The Pages Router gets attribution
+without navigations: Next.js announces none there.
 
 ## Install with Vite
 
@@ -1106,7 +1113,27 @@ import of your entry module. Frameworks that write their own HTML need `entry`: 
 
 The same problem as [the one above](#late-install), found another way: 3 seconds after install, React is on the
 page but react-dom never talked to the library. Nothing React does on this page is read, so reports have no
-components. The fix is the same: install before react-dom loads. `stats().react` says `'installed-late'`.
+components, and `stats().react` says `'installed-late'`.
+
+If the library is not set up for your framework yet, the fix is the one above. If it is and this still shows,
+something on the page loads react-dom before the install runs. The known cases:
+
+- **Next.js 15.3 or later, Pages Router, `next dev`.** Next.js's dev entry for the Pages Router loads react-dom
+  before `instrumentation-client`, so the line there comes too late. The wrapper now puts the install ahead of
+  that entry under webpack and Turbopack; up to 0.11.0 it did not, so upgrade. With `runtime: false` and an
+  `install()` of your own in `instrumentation-client.ts`, your call still comes too late on that page: drop
+  `runtime: false` and pass your options as `runtime` instead. Production builds were never affected.
+- **Next.js before 15.3 under Turbopack.** Nothing can install there, and the wrapper
+  [says so](#next-turbopack) when `next dev` starts.
+- **Vite with a chunk rule of your own**, which can put react-dom in a chunk the install then imports. The plugin
+  [warns at build time](#vite-react-dom-first).
+- **A script of your own that runs first**, such as another entry or a `<script>` ahead of the app's that
+  imports react-dom. Make the install the first thing on the page, or put `import 'react-inp-blame/auto'` at
+  the top of that script.
+
+If none of these fits, open a
+[setup problem](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=setup-problem.yml) issue
+with the framework, its version and what `__REACT_INP_BLAME__.stats()` says.
 
 <a id="minified-names"></a>
 #### Most component names are one or two characters

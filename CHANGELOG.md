@@ -44,6 +44,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   check 3 s after install and the one at the first interaction after it; a page with no React by then is taken
   to have none, and `stats().react` stays `'waiting'` until a react-dom registers. A report still looks again
   after input while looks remain, so a look from just before React rendered does not leave it saying waiting.
+- **A Pages Router page on `next dev` is read from Next.js 15.3 on.** Next.js's dev entry for the Pages Router,
+  `next-dev.js` under webpack and `next-dev-turbopack.js` under Turbopack, loads react-dom before
+  `instrumentation-client` and before the module `instrumentationClientInject` adds, so on 15.3 to 16.3 the
+  install came too late even with the README's setup, every report said `installed-late` and none had a
+  component. Production builds load them the other way round and were fine. On `next dev` the wrapper now also
+  puts the install first in that entry: in webpack's `main`, as it already did below 15.3, and under Turbopack
+  through a rule whose loader adds it at the top of `next-dev-turbopack.js`. `apps/next-demo` has a Pages Router
+  page, checked in every Next.js suite CI runs, from 15.3.9 to 16.3.5 under both bundlers, and
+  `fixtures/next-14` has one beside its App Router page. The Troubleshooting entry for this warning now lists the
+  setups that still load react-dom first.
+
 - **A component named like the import it renames is named.** shadcn writes every component this way,
   `import { Button as ButtonPrimitive } from '@base-ui/react/button'` and then `function Button`, and the
   displayName pass took both sides of the `as` for names the module imports, so it left `Button` unnamed and a
