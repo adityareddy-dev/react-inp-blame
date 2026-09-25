@@ -388,7 +388,7 @@ that function has no name worth printing. An inline `onClick={() => ...}` theref
 `onClick`, and so does a handler the minifier renamed: name the function if you want the report to
 name it.
 
-Reports are frozen and carry `schemaVersion: 2`. When a late Event Timing entry, a long animation
+Reports are frozen and carry `schemaVersion: 3`. When a late Event Timing entry, a long animation
 frame or a later render joins one, the next revision arrives as a new object with `revision`
 bumped. `explanation.blame`, `rating`, the phases' milliseconds and the report's own numbers are
 data; `verdict` and the other sentences are display text. `navigationURL` and `navigationType` say

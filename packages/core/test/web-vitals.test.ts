@@ -204,7 +204,7 @@ test('the attribution keeps every field web-vitals measured and adds one of its 
   assert.equal(attribution.interactionTarget, 'OrderSummary > LineItem (button.primary)');
   assert.equal(attribution.processingDuration, 226);
   assert.equal(attribution.react?.interactionId, 7);
-  assert.equal(attribution.react?.schemaVersion, 2);
+  assert.equal(attribution.react?.schemaVersion, 3);
   assert.deepEqual(attribution.react?.hotPath, ['OrderSummary', 'LineItem']);
   assert.deepEqual(attribution.react?.blame, report.explanation.blame);
   assert.equal(attribution.react?.blame.confidence, 'measured');
