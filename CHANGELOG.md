@@ -6,6 +6,10 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Changed
+
+
+
 ## [0.12.0] - 2026-09-25
 
 0.4.0 to 0.11.0 were version numbers on `main` that never went to npm. 0.12.0 is the first release after 0.3.0,
