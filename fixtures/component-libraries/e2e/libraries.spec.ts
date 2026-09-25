@@ -110,3 +110,15 @@ test("a Radix menu that opens on pointerdown is put on its onPointerDown, not th
   expect(r.verdict).toMatch(/^\d+ ms click on button "Row actions"/);
   expect(problems).toEqual([]);
 });
+
+test("a Radix menu item whose onSelect is slow is put on the handler, not on the menu's re-render as it closes", async ({ page }) => {
+  const problems = await open(page);
+  await page.getByTestId('export').click();
+  await page.getByTestId('export-csv').click();
+  await expect(page.getByTestId('export')).toHaveText(/csv/);
+  const r = await slowReport(page);
+  // A development build times the render; a production build has only the count of the components the
+  // closing menu re-rendered, a tree of different ones at more of the working time than a tree accounts for.
+  expect(r.explanation.blame.kind).toBe('handler');
+  expect(problems).toEqual([]);
+});

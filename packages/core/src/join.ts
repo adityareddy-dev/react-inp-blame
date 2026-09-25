@@ -35,6 +35,14 @@ const RENDER_MIN_COMPONENTS = 10;
 // From 50 when a handler is named, since counts cannot weigh a render against a slow handler: the
 // demo's password field re-renders 2 components beside a handler that runs for 110 ms.
 const RENDER_MIN_COMPONENTS_BESIDE_HANDLER = 50;
+// Past that line the count has to explain the working time as well, in one of two ways. Fifty of one
+// component is a list, and a list costs its row times its length whatever the row costs: 150 SlowRow in
+// 160 ms, 250 Section in 2.5 s. Fifty different components rendered once each are a tree, whose cost is
+// the sum of as many unknowns, most of them small: Radix closing a menu re-renders 85 of them inside 209 ms
+// of working time, 200 of which the item's onSelect took. A tree beside a handler is the blame only while
+// the working time comes to 2 ms a component at most, a few times what a component takes to render once in
+// a production build; past that the time has room in it for the handler, one unknown with a name.
+const RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER = 2;
 // A Long Animation Frames script is named from 20 ms of it inside the interaction: the API lists
 // scripts from 5 ms, and one under 20 did not make its frame long by itself (a long frame is over 50 ms).
 const SCRIPT_MIN_MS = 20;
@@ -1032,12 +1040,17 @@ function explain(r: InteractionReport): Explanation {
   const outside = Math.max(0, r.processing - Math.max(reactWhileHandling, renderTotal + forcedWhileHandling));
   const outsideMatters = hasDurations && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
-  // click that re-rendered 10 components and took 260 ms was slow in its handler. With them, a commit
+  // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler
+  // its count has to explain the working time as well: a list of 50 of one component, or a tree at no
+  // more than 2 ms a component (RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER). With durations, a commit
   // that took as long as a handler would need to be blamed earns it too: a 3 ms render whose layout
   // effects ran for 300 ms is React's work, and taking that time off the handler has to leave it
   // somewhere. A few milliseconds of committing, which any development build spends, earn nothing.
   // Effects are timed in every build, so a production build's render earns it by them too.
-  const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : c.rendered >= (handlerName ? RENDER_MIN_COMPONENTS_BESIDE_HANDLER : RENDER_MIN_COMPONENTS)));
+  const countExplains = (x: CommitSummary) =>
+    x.rendered >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER &&
+    ((mostlyComponent(x)?.count ?? 0) >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER || r.processing <= RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * x.rendered);
+  const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : handlerName ? countExplains(c) : c.rendered >= RENDER_MIN_COMPONENTS));
   // The commit a render blame names is the one React spent longest on, committing and effects included,
   // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
   // no commit has a span this is the heaviest render, as everywhere else. Committing and effects only
@@ -1293,7 +1306,14 @@ function explain(r: InteractionReport): Explanation {
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     blame = { kind: 'render', name: leafName(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
   } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
-    const howLittle = c.rendered === 0 ? 'React rendered nothing' : `React re-rendered only ${plural(c.rendered, 'component')}`;
+    // Past the count that would have blamed the render, what kept it from the blame is said: no list
+    // among the components, and more of the working time than a tree accounts for.
+    const howLittle =
+      c.rendered === 0
+        ? 'React rendered nothing'
+        : c.rendered < RENDER_MIN_COMPONENTS_BESIDE_HANDLER
+          ? `React re-rendered only ${plural(c.rendered, 'component')}`
+          : `React re-rendered ${renderedCount(c)} inside ${leafOf(c)}, none of them ${RENDER_MIN_COMPONENTS_BESIDE_HANDLER} times over, and ${ms(r.processing)} is more than ${RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER} ms for each of them`;
     // The effects are measured in every build, so they come off what the handler is said to have taken.
     const took = effects >= 1 ? `about ${ms(r.processing - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
     const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';

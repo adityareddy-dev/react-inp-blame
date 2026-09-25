@@ -901,6 +901,44 @@ test('a render under 1 ms reads "under 1 ms", and a handler known only by its pr
   assert.equal(production.explanation.cause, 'The onClick handler most likely took the 97 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.');
 });
 
+test('in a production build a render beside a handler is blamed only where its count explains the working time', () => {
+  // Nothing times a render there, so the count is all that weighs it against the handler beside it. A click
+  // whose handlers ran for `processing` ms from 3 ms, painted 5 ms after them, with one commit at their end.
+  const blameOf = (processing: number, shape: Partial<CommitSummary>, handler = 'onClick') => {
+    const r = report([entry('click', 0, processing + 8, 3, 3 + processing)], [commit(processing, 0, shape)], [], loginClick(handler));
+    const { kind, name, confidence } = r.explanation.blame;
+    return `${kind} ${name} ${confidence}`;
+  };
+  const counted = (rendered: number, [name, count]: [string, number], hotPath: string[]): Partial<CommitSummary> => ({
+    hasDurations: false,
+    total: 0,
+    rendered,
+    roots: [hotPath[0]!],
+    hotPath,
+    components: [{ name, count, self: null, total: null }],
+  });
+  // A Radix DropdownMenu item whose onSelect ran for 200 ms: closing the menu re-renders 85 different
+  // components, four DropdownMenuItem among them, inside 209 ms of working time. Over 2 ms a component for
+  // a tree leaves the time to the handler.
+  const menu = counted(85, ['DropdownMenuItem', 4], ['ExportMenu', 'MenuPortalProvider']);
+  assert.equal(blameOf(209, menu), 'handler onClick inferred');
+  // 150 rows of a list in 160 ms is a millisecond each, which is what a row costs: the render's.
+  assert.equal(blameOf(157, counted(152, ['SlowRow', 150], ['ListPanel', 'SlowList'])), 'render SlowList inferred');
+  // A list is the render's however long it took: 250 sections rebuilt in 2.5 s.
+  assert.equal(blameOf(2500, counted(251, ['Section', 250], ['SlowRender'])), 'render SlowRender inferred');
+  // A tree of 90 different components in 120 ms is under 2 ms each, so the render is blamed; the same
+  // tree in 300 ms is not.
+  const page = counted(90, ['NavItem', 3], ['App', 'SettingsPage']);
+  assert.equal(blameOf(120, page), 'render SettingsPage inferred');
+  assert.equal(blameOf(300, page), 'handler onClick inferred');
+  // Under 50 components the handler was the blame already, whatever the time.
+  assert.equal(blameOf(209, counted(25, ['MenuItem', 2], ['ExportMenu', 'MenuPopup'])), 'handler onClick inferred');
+  // Where React timed the render, the times decide, on a coarse clock too: 19 ms of render beside 190 of handler.
+  const timed: Partial<CommitSummary> = { rendered: 85, total: 19, roots: ['ExportMenu'], hotPath: ['ExportMenu', 'MenuPortalProvider'], components: [{ name: 'DropdownMenuItem', count: 4, self: 4, total: 4 }] };
+  assert.equal(blameOf(209, timed, 'handleExportCsv'), 'handler handleExportCsv measured');
+  assert.equal(blameOf(209, { ...timed, coarseClock: true, components: [{ name: 'DropdownMenuItem', count: 4, self: null, total: null }] }, 'handleExportCsv'), 'handler handleExportCsv inferred');
+});
+
 test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {
   // A click at 1000 waited behind an analytics task that ran from 745 to 1045. Its own handler ran from
   // 1045 to 1065, rendering 2 components in 1 ms, and the screen updated at 1096.

@@ -33,6 +33,16 @@ it changes when a field is removed or changes meaning, which a minor release may
   `react` on `stats()` (0.8.0). They are required in the types because the library always fills them; a report
   object your own code builds, in a test fixture or a fake, needs them. Code that only passes the report along
   needs no change.
+- **A production build no longer blames a render for the slow handler beside it unless its count explains
+  the time.** Without durations, a render of 50 components or more beside a named handler took the blame on
+  its count alone, so a Radix menu item whose `onSelect` ran for 200 ms read as "re-rendering 85 components
+  inside MenuPortalProvider": closing the menu re-renders its own tree of components once each, which is
+  no 200 ms of work. Beside a handler, a render is now the blame only where the count is the kind that costs
+  time: at least 50 of one component (a list, 150 `SlowRow` in 160 ms), or a working time of at most 2 ms
+  for each component rendered (`RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER`). Past that the handler keeps
+  the blame, as inferred, and the sentence says why the render was passed over. Builds with durations, and
+  the coarse clock of Firefox and WebKit, went by time already and are unchanged. The component-libraries
+  fixture clicks a menu item with a slow `onSelect` in both builds.
 
 ### Fixed
 
