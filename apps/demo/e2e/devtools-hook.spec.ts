@@ -117,6 +117,8 @@ test('react-dom loaded before the library: stats(), the report, the badge and th
   expect(await page.evaluate(() => window.__REACT_INP_BLAME__.stats().react)).toBe('installed-late');
   expect(report.reactStatus).toBe('installed-late');
   expect(report.commits).toEqual([]);
+  // Nothing React did was seen, so the 150 ms is put on neither a handler nor a render: the setup is the cause.
+  expect(report.explanation.blame).toMatchObject({ kind: 'none', confidence: 'inferred' });
   expect(report.explanation.cause).not.toMatch(/didn't render anything/);
   expect(report.explanation.notes.join(' ')).toContain('install() ran after react-dom loaded');
   const badge = page.locator('#react-inp-blame .badge');

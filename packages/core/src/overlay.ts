@@ -515,6 +515,8 @@ function top(c: CommitSummary): string {
 
 function blameLine(r: InteractionReport): Child[] {
   const blame = r.explanation.blame;
+  // Nothing is blamed where React is not being read; the cause line under this says why.
+  if (blame.kind === 'none' && (r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable')) return ['nothing is blamed: React is not being read'];
   // An inferred blame is the likeliest reading of component counts and phase times, not a measurement.
   // The row says so in two words; the cause sentence under it says what would make it exact.
   const line = blameText(blame);

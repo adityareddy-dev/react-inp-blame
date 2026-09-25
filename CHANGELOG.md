@@ -52,6 +52,14 @@ it changes when a field is removed or changes meaning, which a minor release may
   which render only such a Slot, are now skipped the way an icon or a styling wrapper is, and the component
   before them is named. The library part that composed a handler is still the one named where the app's own
   component sits further up than the owners a report keeps.
+- **Where React is not being read, the verdict says so instead of guessing.** With `install()` run after
+  react-dom loaded, or with no react-dom to read, a report has no commits, and the ladder read the working
+  time as it would for an app that rendered nothing: a 200 ms click became its handler, or "waiting and
+  painting", said with confidence, with the real cause left to a note. The blame is now `none` and
+  `inferred`, and the cause says what React did was not seen and why, naming the script the browser
+  recorded across the time where there is one. A wait, a paint or a forced layout the browser measured
+  still outranks it, as before. The panel's blame line says nothing is blamed. `schemaVersion` stays at 2:
+  no field is removed and none changes meaning.
 
 ### Fixed
 
