@@ -1010,7 +1010,9 @@ moved to React 18.
   component from the app's.
 - The names loader stamps any capitalised top-level binding whose value is a function, written at the start of
   a line: `function Foo`, `const Foo = (props) => …`, `const Foo: React.FC = …`, `memo`, `forwardRef` and
-  their generic forms, exported or not. Still minified: classes, anything indented inside another block,
+  their generic forms, exported or not. In a Vite build the plugin first turns `export default function Foo` into
+  `function Foo` exported by name, so a framework that wraps a module's default export, as React Router does a
+  route's component, still leaves a `Foo` to stamp. Still minified: classes, anything indented inside another block,
   `export default () => …` with no name to stamp, a called function expression such as
   `const Foo = function () {…}()`, everything in a `"use server"` module, and a component built by a wrapper
   the loader does not know (`styled.div`, `observer(Row)`, an app's own `createIcon`). A name the module

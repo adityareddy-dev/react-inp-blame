@@ -8,6 +8,7 @@ import { inpBlame } from '../vite.mjs';
 const INSTALL = 'react-inp-blame:install';
 const SCRIPT = 'react-inp-blame:install-script';
 const NAMES = 'react-inp-blame:display-names';
+const DEFAULT_EXPORTS = 'react-inp-blame:default-exports';
 const ENTRY = 'react-inp-blame:entry';
 const LEFT_OUT = 'react-inp-blame:left-out';
 const INSTALL_MODULE = 'virtual:react-inp-blame/install';
@@ -74,10 +75,11 @@ test('a production build that leaves the library out by default says so once, an
 test("enabled: 'production' applies them to vite build only, true to both runs, and false adds no plugins", () => {
   const runs = (enabled: Options['enabled']) => [names(pluginsFor('serve', { enabled })), names(pluginsFor('build', { enabled }))];
   // The script that points at the built chunk is a build's alone; the dev server has nothing bundled.
-  assert.deepEqual(runs('production'), [[], [INSTALL, SCRIPT, NAMES]]);
+  // So is the pass that keeps a default export's name, which only a build loses.
+  assert.deepEqual(runs('production'), [[], [INSTALL, SCRIPT, NAMES, DEFAULT_EXPORTS]]);
   assert.deepEqual(runs(true), [
     [INSTALL, NAMES],
-    [INSTALL, SCRIPT, NAMES],
+    [INSTALL, SCRIPT, NAMES, DEFAULT_EXPORTS],
   ]);
   assert.deepEqual(inpBlame({ enabled: false }), []);
   assert.throws(() => inpBlame({ enabled: 'always' as never }), /enabled is 'development', 'production', true or false/);
@@ -221,11 +223,33 @@ test('pages picks the pages that get the runtime, and runtime: false keeps only 
 });
 
 test("the transform stamps displayName on the app's component files, and leaves node_modules and other files alone", () => {
-  const [transform] = pluginsFor('build', { enabled: true, runtime: false });
+  const transform = pluginsFor('build', { enabled: true, runtime: false }).find((p) => p.name === NAMES)!;
+  assert.equal(transform.enforce, 'post');
   const source = 'export function Cart() {\n  return null;\n}\n';
   assert.match(transform.transform(source, '/app/src/Cart.tsx?v=3').code, /Cart\.displayName = "Cart"/);
   assert.equal(transform.transform(source, '/app/node_modules/ui/Cart.jsx'), null);
   assert.equal(transform.transform(source, '/app/src/cart.ts'), null);
+});
+
+test("in a build, a component's `export default function` becomes a declaration exported by name before any other plugin reads the module", () => {
+  const hoist = pluginsFor('build', { enabled: true, runtime: false }).find((p) => p.name === DEFAULT_EXPORTS)!;
+  assert.equal(hoist.enforce, 'pre');
+  const source = 'export default function Home() {\n  return <main />;\n}\n';
+  const { code, map } = hoist.transform(source, '/app/app/routes/home.tsx?route-chunk=main');
+  // The words taken out leave spaces, so the name and all after it stay put and the source map still holds.
+  assert.equal(code, 'function                Home() {\n  return <main />;\n}\n\nexport default Home;');
+  assert.equal(map, null);
+  // React Router's plugin then wraps the binding, `withComponentProps(Home)`, and the pass after the JSX
+  // compiler names it as it names any function declaration.
+  const compiled = code.replace('export default Home;', 'export default withComponentProps(Home);');
+  const stamp = pluginsFor('build', { enabled: true, runtime: false }).find((p) => p.name === NAMES)!;
+  assert.match(stamp.transform(compiled, '/app/app/routes/home.tsx').code, /Home\.displayName = "Home"/);
+
+  assert.equal(hoist.transform('export function Home() {}\n', '/app/app/routes/home.tsx'), null);
+  assert.equal(hoist.transform(source, '/app/node_modules/ui/Home.jsx'), null);
+  assert.equal(hoist.transform(source, '/app/app/routes/home.ts'), null);
+  // The dev server keeps every function's name, so it is left as written there.
+  assert.deepEqual(names(pluginsFor('serve', { enabled: true, runtime: false })), [NAMES]);
 });
 
 test('an option these plugins do not have is refused, and an install() option is sent under runtime', () => {

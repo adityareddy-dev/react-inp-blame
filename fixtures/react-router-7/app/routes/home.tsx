@@ -25,6 +25,17 @@ export default function Home() {
       <button type="button" className="counter" onClick={() => flushSync(() => setCount((count) => count + 1))}>
         Count is {count}
       </button>
+      {/* The slow handler is this route's own, and a route module's default export is the component the
+          click names. React Router wraps that export in a component of its own. */}
+      <button
+        type="button"
+        onClick={() => {
+          const end = performance.now() + 150;
+          while (performance.now() < end) {}
+        }}
+      >
+        Save
+      </button>
       <SlowList count={count} />
     </>
   );

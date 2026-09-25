@@ -6,9 +6,13 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const { stamp } = createRequire(import.meta.url)('../display-names-loader.cjs') as {
+const loader = createRequire(import.meta.url)('../display-names-loader.cjs') as {
   stamp(code: string): string;
+  [key: symbol]: (code: string) => string;
 };
+const { stamp } = loader;
+/** The pass the Vite plugin runs before any other plugin, which the loader keeps under a symbol rather than a name. */
+const hoistDefaultExport = loader[Symbol.for('react-inp-blame.hoistDefaultExport')]!;
 
 /**
  * The components the loader names in a module, read off the lines `stamp` adds after it, in their order.
@@ -254,4 +258,47 @@ test('the scan is linear: a file of one long identifier and a file of thousands 
   for (let i = 0; i < 5000; i++) many += `export const Icon${i} = (props: P) => <svg {...props}><path d="M0 0h24v24H0z" /></svg>;\n`;
   budget('5,000 components in one file', many, 2000);
   assert.equal(names(many).length, 5000);
+});
+
+test("a component's `export default function` becomes a declaration exported by name, its name where it was", () => {
+  const code = "import { useState } from 'react';\n\nexport default function Home() {\n  return <main />;\n}\n";
+  const hoisted = hoistDefaultExport(code);
+  assert.equal(hoisted, "import { useState } from 'react';\n\nfunction                Home() {\n  return <main />;\n}\n\nexport default Home;");
+  // Same lines, and each character from the name on in the same column: the source map the plugin leaves
+  // alone stays true.
+  assert.equal(hoisted.indexOf('Home()'), code.indexOf('Home()'));
+  assert.equal(hoisted.slice(hoisted.indexOf('Home()'), code.length), code.slice(code.indexOf('Home()')));
+  // `stamp` names it, and so it does once a wrapping plugin has made the export `withComponentProps(Home)`,
+  // where a wrapped function expression has no binding left to name.
+  assert.deepEqual(names(hoisted), ['Home']);
+  assert.deepEqual(names(hoisted.replace('export default Home;', 'export default withComponentProps(Home);')), ['Home']);
+  assert.deepEqual(names(code.replace('export default function Home', 'export default withComponentProps(function Home').replace(/\}\n$/, '});\n')), []);
+
+  // The generic form, line breaks among the words taken out, and a byte order mark in front.
+  assert.equal(hoistDefaultExport('export default function List<T>(props: T) {}'), 'function                List<T>(props: T) {}\nexport default List;');
+  assert.equal(hoistDefaultExport('export default\nfunction Home() {}'), '\nfunction Home() {}\nexport default Home;');
+  assert.equal(hoistDefaultExport('export default\r\nfunction Home() {}'), '\r\nfunction Home() {}\nexport default Home;');
+  assert.equal(hoistDefaultExport('export default function\nHome() {}'), '\nfunction Home() {}\nexport default Home;');
+  assert.equal(hoistDefaultExport('\uFEFFexport default function Home() {}'), '\uFEFFfunction                Home() {}\nexport default Home;');
+});
+
+test('a default export `stamp` would not name is left as written', () => {
+  const kept = [
+    'export default function home() {}',
+    'export function Home() {}',
+    'export default () => null;',
+    'export default memo(function Home() {});',
+    'export default async function Home() {}',
+    'export default class Home extends Component {}',
+    // Assigned to elsewhere, declared twice (an overload), or named already.
+    'export default function Home() {}\nHome = wrap(Home);',
+    'export default function Home(a: string): void;\nexport default function Home(a) {}',
+    'export default function Home() {}\nHome.displayName = "Start";',
+    // Not at the top level, not code, or in a module of endpoints.
+    'declare module "x" {\nexport default function Home(): void;\n}',
+    'const sample = `\nexport default function Home() {}\n`;',
+    '// export default function Home() {}',
+    '"use server";\nexport default function Home() {}',
+  ];
+  for (const code of kept) assert.equal(hoistDefaultExport(code), code, code);
 });
