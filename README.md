@@ -26,11 +26,27 @@ export default withInpBlame(nextConfig, { runtime: { overlay: true } });
 ```
 
 On Next.js 15.3 to 16.2, add one line to `instrumentation-client.ts` as well. `withInpBlame` prints it
-until the file has it (14.2 to 15.2 need nothing more, and 14.2 a `next.config.mjs`, since `.ts` came in 15):
+until the file has it (14.2 to 15.2 need nothing more):
 
 ```ts
 // instrumentation-client.ts
 export { onRouterTransitionStart } from 'react-inp-blame/next-client';
+```
+
+Next.js 14.2 reads no `next.config.ts`, since that came in 15, so there the same setup goes in
+`next.config.mjs`, as plain JavaScript:
+
+```js
+// next.config.mjs
+import { withInpBlame } from 'react-inp-blame/next';
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  /* config options here */
+};
+
+// Your config first, this library's options second. They are not Next.js config keys.
+export default withInpBlame(nextConfig, { runtime: { overlay: true } });
 ```
 
 ## Start with Vite
