@@ -17,8 +17,11 @@ it changes when a field is removed or changes meaning, which a minor release may
 - A build where the chunk holding the install call imports a chunk that connects react-dom to React's
   DevTools hook as it loads gets a warning naming both: react-dom connects before `install()` there, and the
   build looks fine otherwise. That chunk is one that imports `react-dom/client`, or with React 17 or 18
-  `react-dom` itself (a component library's portal in a vendor chunk is enough). Seen on Vite 8 with a
-  `codeSplitting` vendor group and React 18, and with `@vitejs/plugin-legacy` and a vendor rule.
+  `react-dom` itself (a component library's portal in a vendor chunk is enough), or on Vite 5, whose bundler
+  leaves react-dom's body in place, the chunk that holds react-dom. Seen on Vite 8 with a `codeSplitting`
+  vendor group and React 18, on Vite 5.4 with a `manualChunks` object, and with `@vitejs/plugin-legacy` and a
+  vendor rule, where the fix is to keep react-dom out of the rule, since the install stays in the page's own
+  script there.
 
 ### Changed
 

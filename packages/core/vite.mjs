@@ -159,23 +159,26 @@ function connectsReactDom(id) {
 }
 
 /**
- * Whether a module connects react-dom as its chunk is evaluated. react-dom is CommonJS, and both bundlers
+ * Whether a module connects react-dom as its chunk is evaluated. react-dom is CommonJS, and Vite 6 and later
  * wrap its body in a function that runs at the first require of it: Rollup's commonjs plugin puts that call
  * in a `?commonjs-es-import` module of its own beside the ES module that imports react-dom, and Rolldown in
- * the importing ES module itself, which `inputFormat` tells from a CommonJS one. The chunk holding the body
- * runs nothing until then, so it is not the chunk to ask about. What a bundler does not say is never
- * warned about, rather than a build that works warned about.
+ * the importing ES module itself, which `inputFormat` tells from a CommonJS one. The chunk holding a wrapped
+ * body runs nothing until then, so it is not the chunk to ask about. Vite 5's commonjs plugin wraps only a
+ * module that needs it and leaves react-dom's body in place (`isCommonJS` is `true` there, and
+ * 'withRequireFunction' for a wrapped one), so there the chunk holding it runs it. What a bundler does not
+ * say is never warned about, rather than a build that works warned about.
  */
 function runsReactDom(id, getModuleInfo) {
   if (id.endsWith('?commonjs-es-import')) return connectsReactDom(id);
-  if (fileOf(id).includes(REACT_DOM)) return false;
   const info = getModuleInfo?.(id);
+  if (fileOf(id).includes(REACT_DOM)) return info?.meta?.commonjs?.isCommonJS === true && connectsReactDom(id);
   return info?.inputFormat === 'es' && (info.importedIds ?? []).some(connectsReactDom);
 }
 
 /**
  * The chunk that a chunk of the bundle imports, directly or through other chunks, and that runs react-dom
- * when it is evaluated, which is before the importing chunk's own code runs; null when there is none.
+ * when it is evaluated, which is before the importing chunk's own code runs, with the module in it that does;
+ * null when there is none. A module the bundler left no code of (listed, but tree-shaken away) runs nothing.
  */
 function importsReactDom(bundle, file, getModuleInfo) {
   const seen = new Set();
@@ -186,11 +189,19 @@ function importsReactDom(bundle, file, getModuleInfo) {
     seen.add(next);
     const chunk = bundle[next];
     if (chunk?.type !== 'chunk') continue;
-    const modules = chunk.moduleIds ?? Object.keys(chunk.modules ?? {});
-    if (modules.some((id) => runsReactDom(id, getModuleInfo))) return next;
+    const modules = (chunk.moduleIds ?? Object.keys(chunk.modules ?? {})).filter((id) => chunk.modules?.[id]?.renderedLength !== 0);
+    const module = modules.find((id) => runsReactDom(id, getModuleInfo));
+    if (module) return { chunk: next, module };
     pending.push(...(chunk.imports ?? []));
   }
   return null;
+}
+
+/** A module id as a warning shows it: from its package on, without the bundler's prefix and query. */
+function shortId(id) {
+  const file = fileOf(id).replace(/^\0/, '');
+  const at = file.lastIndexOf('/node_modules/');
+  return at < 0 ? file : file.slice(at + '/node_modules/'.length);
 }
 
 /**
@@ -433,7 +444,10 @@ export function inpBlame(options = {}) {
           const runner = importsReactDom(bundle, file, this.getModuleInfo?.bind(this));
           if (runner) {
             warnedReactDom.add(environmentOf(this));
-            this.warn(`inpBlame: ${file}, which holds the install call, imports ${runner}, which connects react-dom to React's DevTools hook as it loads, so react-dom connects before install() and nothing is read. A manualChunks or codeSplitting rule most likely put react-inp-blame in that chunk: keep it out of the rule.`);
+            this.warn(
+              `inpBlame: ${file}, which holds the install call, imports ${runner.chunk}, where ${shortId(runner.module)} connects react-dom to React's DevTools hook as the chunk loads, so react-dom connects before install() and nothing is read. ` +
+                `A manualChunks or codeSplitting rule most likely put them together: keep react-inp-blame out of the rule, and where the install is in the page's own script (@vitejs/plugin-legacy), keep react-dom out of it too.`,
+            );
             return;
           }
         }

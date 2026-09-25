@@ -496,7 +496,7 @@ test("a build where the install's chunk imports a chunk that runs react-dom as i
   // Rollup: the commonjs plugin's `?commonjs-es-import` module is where react-dom's body is required.
   build(['/app/node_modules/react-dom/cjs/react-dom.production.min.js', '\0/app/node_modules/react-dom/client.js?commonjs-es-import']);
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0]!, /assets\/react-inp-blame-install\.js, which holds the install call, imports assets\/vendor\.js, which connects react-dom to React's DevTools hook as it loads/);
+  assert.match(warnings[0]!, /assets\/react-inp-blame-install\.js, which holds the install call, imports assets\/vendor\.js, where react-dom\/client\.js connects react-dom to React's DevTools hook as the chunk loads/);
 
   // Rolldown: an ES module that imports react-dom requires it at its top level.
   modules['/app/node_modules/router/dist/index.mjs'] = { inputFormat: 'es', importedIds: ['/app/node_modules/react-dom/client.js'] };
@@ -535,6 +535,23 @@ test("a build where the install's chunk imports a chunk that runs react-dom as i
   build(['\0/app/node_modules/react-dom/server.browser.js?commonjs-es-import']);
   assert.equal(warnings.length, 4, warnings.slice(4).join('\n'));
 
+  // Vite 5's commonjs plugin leaves react-dom's body unwrapped, so the chunk holding it runs it; a wrapped
+  // one (Vite 6 and later) is 'withRequireFunction' and runs nothing until it is required.
+  modules['/app/node_modules/react-dom/client.js'] = { importedIds: [], meta: { commonjs: { isCommonJS: true } } } as never;
+  build(['/app/node_modules/react-dom/client.js', '/app/node_modules/react-dom/cjs/react-dom.production.min.js']);
+  assert.equal(warnings.length, 5);
+  modules['/app/node_modules/react-dom/client.js'] = { importedIds: [], meta: { commonjs: { isCommonJS: 'withRequireFunction' } } } as never;
+  build(['/app/node_modules/react-dom/client.js']);
+  assert.equal(warnings.length, 5);
+  // A module the bundler kept no code of runs nothing: a manualChunks object can list a package no page uses.
+  runtime.buildStart.call(context);
+  runtime.generateBundle.call(context, {}, {
+    'assets/react-inp-blame-install.js': install,
+    'assets/lib.js': chunk('assets/lib.js', ['/app/node_modules/react-inp-blame/dist/index.js'], ['assets/vendor.js']),
+    'assets/vendor.js': chunk('assets/vendor.js', ['\0/app/node_modules/react-dom/client.js?commonjs-es-import'], [], { modules: { '\0/app/node_modules/react-dom/client.js?commonjs-es-import': { renderedLength: 0 } } }),
+  });
+  assert.equal(warnings.length, 5);
+
   // @vitejs/plugin-legacy keeps the install in the page's own script, and writes the chunks twice.
   const page = chunk('assets/index.js', [`\0${INSTALL_MODULE}`, '/app/src/main.tsx'], ['assets/lib.js'], { name: 'index', facadeModuleId: '/app/index.html' });
   runtime.buildStart.call(context);
@@ -545,10 +562,11 @@ test("a build where the install's chunk imports a chunk that runs react-dom as i
   };
   runtime.generateBundle.call(context, {}, bundle);
   runtime.generateBundle.call(context, {}, bundle);
-  assert.equal(warnings.length, 5);
-  assert.match(warnings[4]!, /assets\/index\.js, which holds the install call, imports assets\/vendor\.js/);
+  assert.equal(warnings.length, 6);
+  assert.match(warnings[5]!, /assets\/index\.js, which holds the install call, imports assets\/vendor\.js/);
+  assert.match(warnings[5]!, /keep react-dom out of it too/);
 
   // The entry path's chunk is found by its name.
   build(['\0/app/node_modules/react-dom/client.js?commonjs-es-import'], chunk('assets/x.js', [], ['assets/lib.js'], { name: 'react-inp-blame-install' }));
-  assert.equal(warnings.length, 6);
+  assert.equal(warnings.length, 7);
 });

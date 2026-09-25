@@ -175,10 +175,10 @@ has each app's whole config.
 A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put this library
 in that chunk with react-dom, so the install script ran after react-dom. When `manualChunks` is a
 function the plugin now takes the library out into a chunk of its own; CI builds that on Vite 7.3
-with React 18.3. A `manualChunks` object, a Vite 8 `codeSplitting` group and a build with
-`@vitejs/plugin-legacy` are left as they are, so keep react-inp-blame out of those rules. A build
-whose install chunk imports a chunk that connects react-dom to React's DevTools hook as it loads gets
-a warning naming both.
+with React 18.3. A `manualChunks` object and a Vite 8 `codeSplitting` group are left as they are, so
+keep react-inp-blame out of those rules; with `@vitejs/plugin-legacy`, keep react-dom out of a vendor
+rule as well. A build whose install chunk imports a chunk that connects react-dom to React's DevTools
+hook as it loads gets a warning naming both and the module that does it.
 
 A build with no HTML page, as under Laravel, Rails, Django or any backend that writes the page from
 `manifest.json`, gives the plugin nowhere to put its script, so it installs nothing, on the dev
