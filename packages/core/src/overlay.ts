@@ -92,7 +92,7 @@ const CSS = `
 .tag { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: 10px; vertical-align: 4px; color: #0b0d11; }
 .x { flex: none; background: none; border: 0; color: #9aa0ad; font: inherit; font-size: 18px; line-height: 1; cursor: pointer; padding: 3px 7px; border-radius: 6px; }
 .x:hover { color: #fff; background: rgba(255,255,255,.08); }
-@media (pointer: coarse), (max-width: 480px) { .x { padding: 9px 12px; font-size: 20px; } .row { padding: 14px 16px; } }
+@media (pointer: coarse), (max-width: 480px) { .x { min-width: 40px; min-height: 40px; padding: 9px 12px; font-size: 20px; } .row { padding: 14px 16px; } }
 .row { padding: 11px 16px 12px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; }
 .row:hover { background: rgba(255,255,255,.035); }
 .r1 { display: flex; align-items: center; gap: 8px; }
