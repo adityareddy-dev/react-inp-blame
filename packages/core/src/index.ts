@@ -25,10 +25,18 @@ const DEFAULT_THRESHOLD = 40;
 const DEFAULT_WALK_BUDGET = 5000;
 /** How often the page is looked at for React's marks while no react-dom has registered, at most. */
 const REACT_LOOK_MS = 1000;
+/**
+ * How many times reports and stats() may look at the page for React's marks, in all. Each look reads up to
+ * RENDERED_SCAN_LIMIT elements, and a page whose islands are all another framework's would otherwise pay
+ * for one at every interaction for as long as it is open. Once this many looks have found no React the page
+ * is taken to have none, and the status stays 'waiting' until a react-dom registers. The check
+ * RENDERER_CHECK_MS after install and the one at the first interaction after it look regardless.
+ */
+const REACT_LOOKS = 5;
 /** How long react-dom has to register with the hook before the page is told install() ran too late. */
 const RENDERER_CHECK_MS = 3000;
-// How many elements the check above reads at most. React marks every element it renders, so a page with
-// React on it shows one early, and a page without pays for this many reads once.
+// How many elements a look reads at most. React marks every element it renders, so a page with React on it
+// shows one early, and a page without pays for this many reads at most REACT_LOOKS times, plus the two checks.
 const RENDERED_SCAN_LIMIT = 10000;
 // NodeFilter.SHOW_ELEMENT, written out so the check needs no NodeFilter global.
 const SHOW_ELEMENT = 1;
@@ -178,15 +186,18 @@ function installNow(opts: InstallOptions): Api {
   // Where reports happened: the document's own navigation, then each soft navigation a router
   // announces and each restore from the back/forward cache, oldest first.
   const navigations: PageNavigation[] = [documentNavigation()];
-  // Whether React has rendered on the page: sticky once seen, and looked for at most once a second while
-  // no react-dom has registered, since each look reads the page's elements. Input the page has seen since
-  // the last look makes the next one due, so a report never goes by a look from before React rendered.
+  // Whether React has rendered on the page: sticky once seen, and looked for at most once a second and at
+  // most REACT_LOOKS times while no react-dom has registered, since each look reads the page's elements.
+  // Input the page has seen since the last look makes the next one due, so while looks remain a report never
+  // goes by a look from before React rendered. The renderer check below looks whenever it runs.
   let sawReact = false;
   let lookedForReact = -Infinity;
   let reactLookDue = false;
+  let looksLeft = REACT_LOOKS;
   const reactRenderedHere = (force = false): boolean => {
     const now = performance.now();
-    if (!sawReact && (force || reactLookDue || now - lookedForReact >= REACT_LOOK_MS)) {
+    if (!sawReact && (force || (looksLeft > 0 && (reactLookDue || now - lookedForReact >= REACT_LOOK_MS)))) {
+      if (!force) looksLeft--;
       lookedForReact = now;
       reactLookDue = false;
       sawReact = reactRendered();
