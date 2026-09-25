@@ -878,27 +878,7 @@ site, paging a calendar forward one month (5 ms of working time, 82 of the scree
 85) came back `painting` and `measured` because its commit touched two. Two interactions of the same
 shape, one offered as a guess and the other as a measurement. They now read the same.
 
-**How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
-it in `join.ts`: the handler is blamed from 25 ms of working time outside React's own time (the
-larger of two figures: each render's start to its commit's end, where the build keeps the start, and
-the render durations plus the forced layout), and only when that is a quarter of the working time
-(in a production build committing the demo's 1441-row list takes a fifth of it outside React's
-durations); a render from 5 ms with durations, or from 10 components by counts
-and 50 beside a named handler; forced layout from 50 ms, or 25 ms without render durations, and half the
-window it was counted across, and never over a longer wait before the handlers,
-with one script having to hold nine tenths of a window's forced layout before its name is used for
-all of it; a Long Animation
-Frames script from 20 ms; waiting, painting and
-working time known only by counts from 50 ms, the length of a long task. The hot path follows a
-child carrying 60% of its parent's work (`fiber.ts`). `explanation.blame.confidence` says what the
-call rests on. It is `'measured'` when the blame follows from timings of the interaction itself:
-React's durations for commits joined by their exact input stamp and walked in full, the browser's
-own phases, a script's Long Animation Frames entry. It is `'inferred'` when the blame is the
-likeliest reading of weaker evidence: render counts (production builds, coarse clocks), a commit
-that only overlapped the interaction, a walk cut short, or no Long Animation Frames to rule other
-scripts out. `verdict`, `cause`, `notes`, `headline` and `where` are display text that may be
-reworded in any version; `blame`, `rating`, the phases' milliseconds and the report's own fields
-are the data, and the demo's specs assert on those.
+
 
 
 
