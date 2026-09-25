@@ -744,7 +744,11 @@ interface InteractionReport {
 
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when that
 function has no name worth printing. An inline `onClick={() => ...}` therefore reads as `onClick`, and so
-does a handler the minifier renamed: name the function if you want the report to name it. Under React
+does a handler the minifier renamed. Naming the function helps on the dev server only: a production build's
+minifier renames `handleLogin` like any other function, so there it reads as `onClick` whatever you called
+it, unless the build keeps function names (terser's `keep_fnames`, esbuild's `keepNames`), which costs bundle
+size. The names loader stamps components, not handlers. In production, `target.component` and the prop are
+what say where to look. Under React
 Compiler, a handler declared as `const handleLogin = () => ...` becomes an alias of a temporary named `t0`
 and is named by its prop, while a `function handleLogin()` keeps its name; a handler Radix composed is named
 by its prop too, since every one it wraps is called `handleEvent`. When a click's events ran handlers of
@@ -968,6 +972,11 @@ that rendered slowly, on the dev server with a Fast Refresh edit included and in
 more check the same click, with no Fast Refresh edit, in the apps `npx create-react-router`, TanStack
 Start's CLI and `npm create astro` make, each with its setup above, and a fifth in React Router 7's app
 moved to React 18.
+
+For component libraries, CI builds the Vite app with styled-components, @emotion/styled, lucide-react and
+Radix's DropdownMenu, on the dev server and in production. That covers the Radix primitives shadcn/ui's Radix
+styles wrap, used directly rather than through shadcn's generated files. shadcn/ui now starts a project on
+Base UI, and no job builds Base UI or a shadcn project of either style.
 
 ## Known limits
 

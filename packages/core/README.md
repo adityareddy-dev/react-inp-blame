@@ -401,8 +401,10 @@ and so can `blame.name`, which for a script can be its URL, or the page's for an
 
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when
 that function has no name worth printing. An inline `onClick={() => ...}` therefore reads as
-`onClick`, and so does a handler the minifier renamed: name the function if you want the report to
-name it.
+`onClick`, and so does a handler the minifier renamed. Naming the function helps on the dev server
+only: a production build's minifier renames `handleLogin` too, so there it reads as `onClick`
+unless the build keeps function names (terser's `keep_fnames`, esbuild's `keepNames`).
+`target.component` and the prop still say where to look.
 
 Reports are frozen and carry `schemaVersion: 3`. When a late Event Timing entry, a long animation
 frame or a later render joins one, the next revision arrives as a new object with `revision`
