@@ -1983,6 +1983,43 @@ test('a build whose component names look minified says so in the report and once
   });
 });
 
+test('stats().react says whether React can be seen, and a report built while it cannot says React\'s work is unknown', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    // No React on the page yet, as on an Astro page before its islands hydrate.
+    const app: Record<string, unknown> = {};
+    Object.defineProperty(globalThis, 'document', { value: documentOf([{}, app]), configurable: true, writable: true });
+    const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
+    const existing = existingHook();
+    // `hook: 'chain'` with no hook on the page reads nothing.
+    assert.equal(api.stats().react, 'unreadable');
+    api.dispose();
+
+    page.window[HOOK] = existing;
+    const chained = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
+    assert.equal(chained.stats().react, 'waiting');
+    // React renders into the page, but its react-dom loaded before install() and never registered.
+    app.__reactContainer$late = {};
+    clock.now = 5000;
+    assert.equal(chained.stats().react, 'installed-late');
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 5000, target: null });
+    page.paint([click(7, 5000, 200)]);
+    await nextTask();
+    const r = chained.last();
+    assert.ok(r);
+    assert.equal(r.reactStatus, 'installed-late');
+    assert.doesNotMatch(r.explanation.cause, /didn't render anything/);
+    assert.match(r.explanation.cause, /What React did is unknown/);
+    assert.notEqual(r.explanation.blame.confidence, 'measured');
+    assert.ok(r.explanation.notes.some((n) => n.includes('install() ran after react-dom loaded')), r.explanation.notes.join('\n'));
+    // Once a react-dom registers, it is read.
+    existing.inject(reactDom('19.3.0'));
+    assert.equal(chained.stats().react, 'reading');
+    chained.dispose();
+  });
+});
+
 test("the pointer an input came from is kept at dispatch, and a mouse's pointerdown alone reads as a click", async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {

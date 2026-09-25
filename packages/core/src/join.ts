@@ -5,7 +5,7 @@ import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
-import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InteractionReport, Phase, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
+import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InteractionReport, Phase, ReactStatus, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
 
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
 // they agree to the timer's resolution; 1 ms covers the coarsening.
@@ -346,6 +346,7 @@ export function buildReport(
   labels: LabelSource = 'attributes',
   navigations: readonly PageNavigation[] = [],
   inputWindow = DEFAULT_INPUT_WINDOW,
+  reactStatus: ReactStatus = 'reading',
 ): ReportData {
   const longest = entries.reduce((a, e) => (e.duration > a.duration ? e : a));
   const group = paintGroupOf(entries, longest);
@@ -427,6 +428,7 @@ export function buildReport(
     schemaVersion: 2,
     interactionId: longest.interactionId,
     type: named.name,
+    reactStatus,
     pointerType: inputs.find((i) => i.type === named.name && near(i.ts, named.startTime))?.pointerType || null,
     start,
     end,
@@ -523,10 +525,11 @@ export function refreshReport(
   labels: LabelSource = 'attributes',
   navigations: readonly PageNavigation[] = [],
   inputWindow = DEFAULT_INPUT_WINDOW,
+  reactStatus: ReactStatus = r.reactStatus,
 ): ReportData {
   // Time already spent building the report stays counted; the walks are recounted for the commits it now holds.
   const building = r.overheadMs - walked(r.commits) - walked(r.followUps);
-  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations, inputWindow);
+  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations, inputWindow, reactStatus);
   return { ...fresh, revision: r.revision + 1, overheadMs: fresh.overheadMs + building };
 }
 
@@ -872,16 +875,22 @@ function explain(r: InteractionReport): Explanation {
   // renders belonged to. Saying it rendered nothing would be false, and nothing said about what React
   // did here is a measurement.
   const unjoined = r.unjoinedCommits > 0;
-  const renderedNothing = unjoined
-    ? `React rendered during it, but ${plural(r.unjoinedCommits, 'commit')} could not be tied to this ${kind}`
-    : `React didn't render anything`;
+  // No react-dom is read (it registered before install(), or cannot be read), so an empty `commits` says
+  // nothing about what React did, and nothing said about React's work here is a measurement.
+  const blind = r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable';
+  const unsure = unjoined || blind;
+  const renderedNothing = blind
+    ? `What React did is unknown (no react-dom on this page is being read)`
+    : unjoined
+      ? `React rendered during it, but ${plural(r.unjoinedCommits, 'commit')} could not be tied to this ${kind}`
+      : `React didn't render anything`;
   /**
    * How sure a sentence about React's work can be. A commit that could not be tied to the interaction
    * is missing evidence, so nothing said about what React did here is a measurement, however good the
    * commits that did join are. The phases (waiting, painting) are the browser's numbers and keep
    * their own confidence.
    */
-  const measuredFrom = (...cs: readonly CommitSummary[]): Blame['confidence'] => (!unjoined && cs.every(measuredCommit) ? 'measured' : 'inferred');
+  const measuredFrom = (...cs: readonly CommitSummary[]): Blame['confidence'] => (!unsure && cs.every(measuredCommit) ? 'measured' : 'inferred');
   // A build that records no render durations is the one reason for an inference with a remedy worth
   // naming in the sentence. The others (a clock too coarse to time single components, a walk cut at
   // its budget, a commit joined by its timing rather than its input) each already have a note below.
@@ -1314,7 +1323,7 @@ function explain(r: InteractionReport): Explanation {
   } else if (anyScript) {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the
     // interaction is exactly what stops this from being a finding.
-    const confidence = unjoined ? 'inferred' : 'measured';
+    const confidence = unsure ? 'inferred' : 'measured';
     const small = c ? `React's render was small (${renderPhrase(c)})` : renderedNothing;
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(anyScript.ms) < Math.round(anyScript.script.duration) ? ' of it' : '';
@@ -1327,7 +1336,7 @@ function explain(r: InteractionReport): Explanation {
       : `${renderedNothing} and no long task was recorded, so the time went to waiting and painting.`;
     // Nothing is named, so there is nothing to hedge; the confidence says whether the absence of a
     // long task was itself observed or merely assumed.
-    blame = { kind: 'none', name: null, detail: null, ms: null, confidence: unjoined ? 'inferred' : 'measured' };
+    blame = { kind: 'none', name: null, detail: null, ms: null, confidence: unsure ? 'inferred' : 'measured' };
   } else {
     // Without Long Animation Frames there is no record to say no long task ran.
     cause = c
@@ -1347,6 +1356,13 @@ function explain(r: InteractionReport): Explanation {
     notes.push(
       `React committed ${plural(r.unjoinedCommits, 'time')} while this ${kind} was being handled that could not be tied to it, so what it rendered is left out of this report. That happens when the commit landed more than ${ms(joinWindow() ?? DEFAULT_INPUT_WINDOW)} after the last commit inside the ${kind}'s own dispatch, or after the ${kind} itself where React committed nothing inside it, with no way to tell it from an unrelated update.`,
     );
+  }
+  if (r.reactStatus === 'installed-late') {
+    notes.push(
+      "React has rendered on this page, but no react-dom registered with this library's DevTools hook: install() ran after react-dom loaded, so nothing React did is in this report. Install ahead of the app: react-inp-blame/vite, react-inp-blame/next or react-inp-blame/astro, or `import 'react-inp-blame/auto'` as the first import of the entry module.",
+    );
+  } else if (r.reactStatus === 'unreadable') {
+    notes.push("No react-dom on this page can be read (stats().unsupportedReason says why), so nothing React did is in this report.");
   }
   if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
   if (r.hydration?.kind === 'waited' && blame.kind !== 'hydration') {

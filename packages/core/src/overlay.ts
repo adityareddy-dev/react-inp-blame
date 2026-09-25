@@ -2,7 +2,7 @@ import { heaviest, leafName, mostlyComponent } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
-import type { Blame, CommitSummary, InteractionReport, OverlayOptions, Phase } from './types.js';
+import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 
 /**
  * The on-page badge and panel. Plain DOM inside a shadow root: no React, so it renders even
@@ -14,6 +14,44 @@ interface Source {
   inp(): InpEstimate | null;
   onInteraction(fn: (r: InteractionReport) => void): () => void;
   clear(): void;
+  stats(): Stats;
+  debug: { hook(): HookInfo };
+}
+
+/** Something that keeps the library from seeing part of what happens, with the one-line fix. */
+interface Status {
+  /** The badge's `data-status`. */
+  key: 'unsupported-browser' | 'installed-late' | 'unreadable' | 'locked-out' | 'no-frames';
+  /** 'warn' marks the badge; 'info' only says so in the panel. */
+  level: 'warn' | 'info';
+  text: string;
+}
+
+/** What the badge and panel say about how much the library can see, most serious first; null when all is well. */
+function statusOf(source: Source): Status | null {
+  const stats = source.stats();
+  if (stats.mode === 'unsupported' && stats.unsupportedReason?.kind === 'browser') {
+    return { key: 'unsupported-browser', level: 'warn', text: 'This browser does not report INP: it has no Event Timing interactionId. Chrome and Edge 96, Firefox 144 and Safari 26.2 or later do.' };
+  }
+  if (stats.react === 'installed-late') {
+    return {
+      key: 'installed-late',
+      level: 'warn',
+      text: "React is not being read: install() ran after react-dom loaded. Install ahead of the app with react-inp-blame/vite, /next or /astro, or import 'react-inp-blame/auto' first in the entry module.",
+    };
+  }
+  if (stats.react === 'unreadable') {
+    const why = stats.unsupportedReason?.message ?? 'no React DevTools hook is in use on this page';
+    return { key: 'unreadable', level: 'warn', text: `React is not being read: ${why}.`.replace(/\.\.$/, '.') };
+  }
+  if (source.debug.hook().devtoolsLockedOut) {
+    return { key: 'locked-out', level: 'warn', text: "The DevTools hook was replaced after React registered, so the tool that replaced it does not see this React. Load that tool before react-inp-blame, or install with hook: 'chain'." };
+  }
+  const types = typeof PerformanceObserver !== 'undefined' ? PerformanceObserver.supportedEntryTypes : undefined;
+  if (types && !types.includes('long-animation-frame')) {
+    return { key: 'no-frames', level: 'info', text: 'This browser does not report long animation frames, so scripts and forced layouts outside React are not named.' };
+  }
+  return null;
 }
 
 export interface OverlayHandle {
@@ -81,6 +119,9 @@ const CSS = `
 .comp .fl { height: 100%; background: #818cf8; border-radius: 2px; }
 .cost { color: #6f7582; font-size: 11px; margin-top: 8px; }
 .empty { padding: 26px 16px; color: #9aa0ad; text-align: center; }
+.status { padding: 10px 16px; font-size: 11.5px; border-bottom: 1px solid rgba(255,255,255,.08); color: #c3c7d1; }
+.status.warn { background: rgba(251,191,36,.1); color: #fde68a; }
+.mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #fbbf24; color: #111318; font-size: 11px; font-weight: 800; margin-left: 2px; }
 .foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px 10px; color: #6f7582; font-size: 10.5px; }
 .foot button { background: none; border: 0; color: #9aa0ad; font: inherit; cursor: pointer; padding: 0; }
 .foot button:hover { color: #fff; }
@@ -116,13 +157,19 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     // The page's INP the way web-vitals estimates it, from every interaction seen, not just
     // the reported ones.
     const inp = source.inp();
-    if (!inp) {
+    const status = statusOf(source);
+    badge.dataset.status = status?.key ?? 'ok';
+    const mark = status?.level === 'warn' ? `<span class="mark" title="${esc(status.text)}">!</span>` : '';
+    if (status?.key === 'unsupported-browser') {
       badge.dataset.rating = 'none';
-      badge.innerHTML = `<i class="dot"></i>INP <span class="n">&mdash;</span>`;
+      badge.innerHTML = `<i class="dot"></i>INP <span class="n">not measured</span>`;
+    } else if (!inp) {
+      badge.dataset.rating = 'none';
+      badge.innerHTML = `<i class="dot"></i>INP <span class="n">&mdash;</span>${mark}`;
     } else {
       const R = RATING[inp.rating];
       badge.dataset.rating = inp.rating;
-      badge.innerHTML = `<i class="dot" style="background:${R.color}"></i>INP <span class="ms">${Math.round(inp.value)} ms</span>`;
+      badge.innerHTML = `<i class="dot" style="background:${R.color}"></i>INP <span class="ms">${Math.round(inp.value)} ms</span>${mark}`;
     }
     if (panel.hidden) return;
     // The panel is rebuilt below, so the control that has the focus is given it back afterwards.
@@ -134,6 +181,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       : `<div><div class="big">&mdash;<small>ms</small></div><div class="sub">Interaction to Next Paint. Nothing slow yet.</div></div>`;
     panel.innerHTML =
       `<div class="head">${head}<button class="x" type="button" aria-label="Close">&times;</button></div>` +
+      (status ? `<div class="status ${status.level}" data-status="${status.key}">${esc(status.text)}</div>` : '') +
       (groups.length ? groups.map(row).join('') : `<div class="empty">Click or type. Anything slow shows up here, with the component to blame.</div>`) +
       `<div class="foot"><span>react-inp-blame &middot; measuring cost ${costText(cost)} per interaction</span><button class="clear" type="button">Clear</button></div>`;
     if (focused) panel.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });

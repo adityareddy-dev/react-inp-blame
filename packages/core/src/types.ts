@@ -146,7 +146,18 @@ export interface Stats {
   reportTotalMs: number;
   /** Time spent inside install() calls since the page loaded or dispose() ran, ms. The badge and panel load afterwards and are not part of it. */
   installMs: number;
+  /** Whether this library can see what React does on the page: see `ReactStatus`. */
+  react: ReactStatus;
 }
+
+/**
+ * Whether this library can see what React does on the page. 'reading': a react-dom registered with the hook
+ * and its commits are read. 'waiting': no react-dom has registered and React has not rendered on the page,
+ * as on an Astro page before its islands hydrate. 'installed-late': React has rendered on the page and no
+ * react-dom registered, because install() ran after react-dom loaded, so nothing React does is seen.
+ * 'unreadable': a hook is not in use, or no react-dom that registered can be read (`unsupportedReason`).
+ */
+export type ReactStatus = 'reading' | 'waiting' | 'installed-late' | 'unreadable';
 
 /** What made a page 'unsupported': the kind, as data, and the sentence the console warning gave. */
 export interface UnsupportedReason {
@@ -428,6 +439,12 @@ export interface InteractionReport {
   readonly interactionId: number;
   /** The event the headline is named after: the best-known one in the headline entry's paint group. */
   readonly type: string;
+  /**
+   * Whether this library could see what React did when the report was built (`Stats.react`). Under
+   * 'installed-late' and 'unreadable', `commits` is empty whatever React did, and the explanation says
+   * React's work is unknown rather than that it rendered nothing.
+   */
+  readonly reactStatus: ReactStatus;
   /**
    * The pointer `type`'s event came from, 'mouse', 'pen' or 'touch', as the library saw it dispatched;
    * null for a key, for a click a key made, and when the library did not see the event.

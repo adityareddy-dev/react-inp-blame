@@ -1,6 +1,6 @@
 import { MINIFIED_NAMES_NOTE, namesLookMinified } from './commits.js';
 import { createTimeline } from './devtools.js';
-import { checkHookReplaced, clearCommits, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, noteResize, recentInputs, recordedCommits, uninstallHook } from './hook.js';
+import { checkHookReplaced, clearCommits, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, noteResize, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
 import type { LabelSource } from './join.js';
@@ -10,7 +10,7 @@ import { observeEventTiming, observeFrames, supportsInteractions, supportsLongAn
 import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
 import { incompatibleCopy } from './session.js';
-import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, RendererInfo } from './types.js';
+import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, ReactStatus, RendererInfo } from './types.js';
 import { warnOnce } from './warn.js';
 
 export type * from './types.js';
@@ -25,6 +25,8 @@ const DEFAULT_THRESHOLD = 40;
 const SETUP_URL = 'https://github.com/adityareddy-dev/react-inp-blame#install-with-vite';
 /** `walkBudget` by default: over three times the 1441 components of the demo's largest commit, and still a bound on a runaway tree inside React's commit. */
 const DEFAULT_WALK_BUDGET = 5000;
+/** How often the page is looked at for React's marks while no react-dom has registered, at most. */
+const REACT_LOOK_MS = 1000;
 /** How long react-dom has to register with the hook before the page is told install() ran too late. */
 const RENDERER_CHECK_MS = 3000;
 // How many elements the check above reads at most. React marks every element it renders, so a page with
@@ -97,8 +99,11 @@ function installNow(opts: InstallOptions): Api {
   if (!supportsInteractions()) {
     const message = 'this browser has no Event Timing interactionId (Chrome 96, Firefox 144, Safari 26.2), so nothing was installed.';
     warnOnce('unsupported-browser', message);
-    // Exposed anyway, so stats() on the page says why nothing is reported.
-    return expose(inertApi('unsupported', { unsupportedReason: { kind: 'browser', message }, installMs: installTime }), opts.debugGlobal);
+    // Exposed anyway, so stats() on the page says why nothing is reported. A badge that was asked for says
+    // it too, rather than leaving someone looking for one that never comes.
+    const api = inertApi('unsupported', { unsupportedReason: { kind: 'browser', message }, installMs: installTime, dispose: hideOverlay });
+    if (overlayWanted(opts.overlay) && !page.overlay) showOverlay(api, typeof opts.overlay === 'object' ? opts.overlay : {});
+    return expose(api, opts.debugGlobal);
   }
   if (!(Math.random() < (opts.sampleRate ?? 1))) {
     const name = debugGlobalName(opts.debugGlobal);
@@ -175,6 +180,25 @@ function installNow(opts: InstallOptions): Api {
   // Where reports happened: the document's own navigation, then each soft navigation a router
   // announces and each restore from the back/forward cache, oldest first.
   const navigations: PageNavigation[] = [documentNavigation()];
+  // Whether React has rendered on the page: sticky once seen, and looked for at most once a second while
+  // no react-dom has registered, since each look reads the page's elements.
+  let sawReact = false;
+  let lookedForReact = -Infinity;
+  const reactRenderedHere = (force = false): boolean => {
+    const now = performance.now();
+    if (!sawReact && (force || now - lookedForReact >= REACT_LOOK_MS)) {
+      lookedForReact = now;
+      sawReact = reactRendered();
+    }
+    return sawReact;
+  };
+  const reactStatus = (): ReactStatus => {
+    if (readingReactDom()) return 'reading';
+    const { mode } = hookStats();
+    if (mode !== 'shim' && mode !== 'chained') return 'unreadable';
+    return reactRenderedHere() ? 'installed-late' : 'waiting';
+  };
+
   const lifecycle = createLifecycle({
     threshold: settings.threshold,
     inputWindow: settings.inputWindow,
@@ -184,6 +208,7 @@ function installNow(opts: InstallOptions): Api {
     frames,
     interactionCount: 'interactionCount' in performance ? () => (performance as Performance & InteractionCounting).interactionCount : null,
     labels,
+    reactStatus,
     now: () => performance.now(),
     publish: (r) => {
       if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', `${MINIFIED_NAMES_NOTE} See ${SETUP_URL}`);
@@ -233,7 +258,8 @@ function installNow(opts: InstallOptions): Api {
     checkHookReplaced();
     const { mode } = hookStats();
     const unregistered = (mode === 'shim' || mode === 'chained') && !knownRenderers().some((r) => r.rendererPackageName === 'react-dom');
-    const rendered = unregistered && reactRendered();
+    // Looked at whenever the check runs, however recently a report looked.
+    const rendered = unregistered && reactRenderedHere(true);
     rendererCheck = unregistered && !rendered && rendererCheck === 'waiting' ? 'again' : 'done';
     if (rendered) {
       warnOnce(
@@ -261,7 +287,7 @@ function installNow(opts: InstallOptions): Api {
       clearCommits();
     },
     onInteraction,
-    stats: () => ({ ...hookStats(), reportTotalMs: lifecycle.spentMs() + drawMs, installMs: page.installMs }),
+    stats: () => ({ ...hookStats(), reportTotalMs: lifecycle.spentMs() + drawMs, installMs: page.installMs, react: reactStatus() }),
     debug: {
       commits: () => recordedCommits().slice(),
       hook: hookInfo,
@@ -291,8 +317,7 @@ function installNow(opts: InstallOptions): Api {
   const applyOverlay = (option: InstallOptions['overlay']) => {
     if (option === undefined) return;
     hideOverlay();
-    const wanted = option === true || (option === 'query' && overlayRequested()) || (!!option && typeof option === 'object');
-    if (wanted) showOverlay(api, typeof option === 'object' ? option : {});
+    if (overlayWanted(option)) showOverlay(api, typeof option === 'object' ? option : {});
   };
   page.installed = {
     api,
@@ -317,8 +342,8 @@ function installNow(opts: InstallOptions): Api {
 export function mountOverlay(opts: OverlayOptions = {}): Promise<OverlayHandle | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
   const api = install();
-  // Nothing was installed in a browser without Event Timing, or on a page the sample left out.
-  if (!page.installed) return Promise.resolve(null);
+  // A browser without Event Timing gets the badge that says so; a page the sample left out gets none.
+  if (!page.installed && api.stats().unsupportedReason?.kind !== 'browser') return Promise.resolve(null);
   return page.overlay ?? showOverlay(api, opts);
 }
 
@@ -353,6 +378,11 @@ function showOverlay(api: Api, opts: OverlayOptions): Promise<OverlayHandle | nu
     });
   page.overlay = shown;
   return shown;
+}
+
+/** Whether the `overlay` option asks for the badge on this page. */
+function overlayWanted(option: InstallOptions['overlay']): boolean {
+  return option === true || (option === 'query' && overlayRequested()) || (!!option && typeof option === 'object');
 }
 
 function hideOverlay(): void {

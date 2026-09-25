@@ -26,6 +26,16 @@ it changes when a field is removed or changes meaning, which a minor release may
   Where a report's commits hold at least five different names and four in five of them are one or two
   characters long, it gets a note naming the setups that keep names, and the console says so once, with a
   link. The blame is unchanged.
+- **`stats().react`, the badge and the panel say when the library cannot see React.** When install() ran
+  after react-dom loaded, the only sign was one console warning 3 s after load: reports then said "React
+  didn't render anything", and a script blame could read as measured. `stats().react` is now `'reading'`,
+  `'waiting'` (React has not rendered on the page yet, as before an Astro island hydrates), `'installed-late'`
+  or `'unreadable'`, and each report carries it as `reactStatus`. While React cannot be seen, a report says
+  what React did is unknown, never calls a blame measured, and carries a note with the fix. The badge gets a
+  `data-status` and a warning mark, and the panel a line saying what is wrong and what to do: installed
+  late, a disabled or replaced DevTools hook, a react-dom that cannot be read, or, as a note, a browser
+  without Long Animation Frames. On a browser without Event Timing's `interactionId`, a badge that was asked
+  for now shows "INP not measured" and a panel naming the browsers that report it, where it showed nothing.
 
 ## [0.7.0] - 2026-09-25
 

@@ -1,5 +1,5 @@
 // The page behind e2e/devtools-hook.spec.ts: React DevTools' own global hook and the Fast Refresh
-// runtime, each loaded before or after react-inp-blame in the order `?order=` lists, then React
+// runtime (and react-dom itself, as `react`), each loaded before or after react-inp-blame in the order `?order=` lists, then React
 // rendering the cascading-effect scenario. The imports are dynamic so that order holds and react-dom
 // evaluates last, the way it does behind the browser extension or a dev server's refresh preamble.
 import './styles.css';
@@ -16,7 +16,12 @@ for (const step of order) {
     window.__refreshRuntime = refresh;
   } else if (step === 'library') {
     const { install } = await import('react-inp-blame');
-    install({ debugGlobal: true, devtoolsTrack: false });
+    // `?badge` shows the badge and panel, for what they say when React cannot be read.
+    install({ debugGlobal: true, devtoolsTrack: false, overlay: new URLSearchParams(location.search).has('badge') });
+  } else if (step === 'react') {
+    // react-dom loaded before the library, as when install() is not the first thing an app loads: it
+    // looks for the hook once, as it loads, and finds none.
+    await import('react-dom/client');
   }
 }
 
