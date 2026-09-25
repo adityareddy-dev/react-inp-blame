@@ -281,6 +281,7 @@ test('entry gives the install a chunk of its own, not an entry, and fails a buil
   const warnings: string[] = [];
   assert.equal(found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, { manualChunks: { vendor: ['react'] } }), null);
   assert.match(warnings[0]!, /already sorts modules into chunks another way \(a manualChunks object/);
+  assert.match(warnings[0]!, / See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#vite-manual-chunks$/);
   // Without entry the output is left alone, and so is one that cannot be split, which would fail the build.
   assert.equal(entryRuntime('build', {}).runtime.outputOptions.call({}, {}), null);
   for (const output of [{ inlineDynamicImports: true }, { preserveModules: true }, { codeSplitting: false }, { format: 'iife' }, { format: 'umd' }]) {

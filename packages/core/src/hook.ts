@@ -649,7 +649,7 @@ function problem(kind: Problem['kind'], reason: string): Problem {
 
 /** Says once that a react-dom's commits cannot be read. Other renderers are not walked anyway, and are not warned about. */
 function admit(renderer: Renderer): void {
-  if (renderer.isReactDom && renderer.problem) warnOnce(renderer.problem.message, renderer.problem.message);
+  if (renderer.isReactDom && renderer.problem) warnOnce(renderer.problem.message, renderer.problem.message, renderer.problem.kind);
 }
 
 /** A React this library does not know is not guessed at: that renderer's commits are not read from here on. */
@@ -799,7 +799,7 @@ function checkFirstCommit(renderer: Renderer, root: FiberRoot): void {
   // A root's first commit replaces the empty fiber createRoot made. A rendered tree behind the
   // first commit seen here means the root rendered before install(), and those commits were missed.
   if (root.current.alternate?.child) {
-    warnOnce('late-install', "install() ran after a React root had already rendered, so its earlier commits were missed. Install ahead of the app with react-inp-blame/vite (with `entry` where the framework writes its own HTML), react-inp-blame/next or react-inp-blame/astro, or make `import 'react-inp-blame/auto'` the first import of your entry module.");
+    warnOnce('late-install', "install() ran after a React root had already rendered, so its earlier commits were missed. Install with the Vite, Next.js or Astro plugin, or make `import 'react-inp-blame/auto'` the first import of your entry module.");
   }
 }
 

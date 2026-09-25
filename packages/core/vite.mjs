@@ -403,7 +403,7 @@ export function inpBlame(options = {}) {
         if (!separateScript(config, this.environment)) return null;
         const groups = output.advancedChunks ?? (typeof output.codeSplitting === 'object' ? output.codeSplitting : undefined);
         if ((theirs !== undefined && typeof theirs !== 'function') || groups !== undefined) {
-          this.warn('inpBlame: entry gives the install a chunk of its own through a manualChunks function, and this build already sorts modules into chunks another way (a manualChunks object, or Rolldown chunk groups). Write it as a manualChunks function, or the install may run after react-dom in a build.');
+          this.warn(`inpBlame: entry gives the install a chunk of its own through a manualChunks function, and this build already sorts modules into chunks another way (a manualChunks object, or Rolldown chunk groups). Write it as a manualChunks function, or the install may run after react-dom in a build. See ${README}vite-manual-chunks`);
           return null;
         }
         // One walk per build: every module id is asked, and the install's graph is the same for all of them.
@@ -420,7 +420,7 @@ export function inpBlame(options = {}) {
             } else if (!warnedGraph) {
               // Rollup and Rolldown both hand it over; a bundler that did not would leave the library to the app's rules.
               warnedGraph = true;
-              warn('inpBlame: this bundler gives manualChunks no getModuleInfo, so only the install call gets a chunk of its own, and the library goes wherever your manualChunks or the bundler puts it. Keep react-inp-blame out of a vendor rule.');
+              warn(`inpBlame: this bundler gives manualChunks no getModuleInfo, so only the install call gets a chunk of its own, and the library goes wherever your manualChunks or the bundler puts it. Keep react-inp-blame out of a vendor rule. See ${README}vite-module-info`);
             }
             return theirs?.(id, meta);
           },
@@ -446,7 +446,7 @@ export function inpBlame(options = {}) {
             warnedReactDom.add(environmentOf(this));
             this.warn(
               `inpBlame: ${file}, which holds the install call, imports ${runner.chunk}, where ${shortId(runner.module)} connects react-dom to React's DevTools hook as the chunk loads, so react-dom connects before install() and nothing is read. ` +
-                `A manualChunks or codeSplitting rule most likely put them together: keep react-inp-blame out of the rule, and where the install is in the page's own script (@vitejs/plugin-legacy), keep react-dom out of it too.`,
+                `A manualChunks or codeSplitting rule most likely put them together: keep react-inp-blame out of the rule, and where the install is in the page's own script (@vitejs/plugin-legacy), keep react-dom out of it too. See ${README}vite-react-dom-first`,
             );
             return;
           }

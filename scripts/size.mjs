@@ -2,7 +2,7 @@
 //
 //   npm run build && node scripts/size.mjs            # print the sizes
 //   node scripts/size.mjs --write                     # and write them into the READMEs' tables
-//   node scripts/size.mjs --check                     # fail when a table is stale or a size is over budget
+//   node scripts/size.mjs --check                     # fail when a table is not what --write writes, or a size is over budget
 //
 // The table is in README.md and in packages/core/README.md, the one npm shows, between the same markers.
 //
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import zlib from 'node:zlib';
 import { rolldown } from 'rolldown';
-import { formatTable, parseTable, problems, replaceTable } from './size-table.mjs';
+import { formatTable, problems, replaceTable } from './size-table.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'packages/core/dist');
@@ -100,18 +100,20 @@ async function main() {
   if (!fs.existsSync(path.join(dist, 'auto.js'))) throw new Error('packages/core/dist has no auto.js: run npm run build first');
   const rolldownVersion = JSON.parse(fs.readFileSync(path.join(root, 'node_modules/rolldown/package.json'), 'utf8')).version;
   const rows = await measure();
-  const table = formatTable(rows, `rolldown ${rolldownVersion}`);
+  const tool = `rolldown ${rolldownVersion}`;
+  const table = formatTable(rows, tool);
   console.log(table);
   const budget = JSON.parse(fs.readFileSync(path.join(root, 'scripts/size-budget.json'), 'utf8'));
   const found = [];
   for (const file of READMES) {
     const name = path.relative(root, file);
-    const readme = fs.readFileSync(file, 'utf8');
+    let readme = fs.readFileSync(file, 'utf8');
     if (values.write) {
-      fs.writeFileSync(file, replaceTable(readme, table));
+      readme = replaceTable(readme, table);
+      fs.writeFileSync(file, readme);
       console.log(`\n${name} updated.`);
     }
-    if (values.check) found.push(...problems(parseTable(readme), rows, budget).map((p) => `${name}: ${p}`));
+    if (values.check) found.push(...problems(readme, rows, budget, tool).map((p) => `${name}: ${p}`));
   }
   if (found.length) {
     console.error(`\n${[...new Set(found)].join('\n')}\n\nRun \`npm run build && node scripts/size.mjs --write\` and commit both READMEs, or look at what made the bundle grow.`);

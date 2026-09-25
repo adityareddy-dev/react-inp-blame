@@ -22,6 +22,8 @@ const CLIENT_MODULE = 'react-inp-blame/next-client';
 const CLIENT_SETTINGS = 'REACT_INP_BLAME_NEXT';
 // The line that installs the library from the app's instrumentation-client where Next.js cannot add it.
 const CLIENT_LINE = `export { onRouterTransitionStart } from '${CLIENT_MODULE}';`;
+// The README, where each warning below has a section of its own under Troubleshooting.
+const HELP = 'https://github.com/adityareddy-dev/react-inp-blame#';
 // Where each thing this wrapper writes arrived in Next.js. Checked here rather than as a peer range, so
 // that installing the package never fails resolution: a prerelease of a later version passes these and
 // a semver range refuses it.
@@ -123,11 +125,11 @@ function clientFileSource(dir) {
 // Next.js reads its config more than once, and in the worker processes it starts as well, which inherit
 // the environment as it was when the config file was imported. A warning marked then prints once per
 // `next dev` or `next build`; one from inside a function config, marked later, can print once per process.
-function warnOnce(key, message) {
+function warnOnce(key, message, anchor) {
   const mark = `REACT_INP_BLAME_WARNED_${key}`;
   if (process.env[mark]) return;
   process.env[mark] = '1';
-  console.warn(`withInpBlame: ${message}`);
+  console.warn(`withInpBlame: ${message}${/\s$/.test(message) ? '' : ' '}See ${HELP}${anchor}`);
 }
 
 /** An object literal as it would be written in a config file, so an error can quote the caller's own values. */
@@ -234,7 +236,7 @@ function wrap(nextConfig, options, dirs) {
   if (!isEnabled(enabled, process.env.NODE_ENV)) return nextConfig;
   const found = projectNextVersion(dirs);
   if (!atLeast(found, NEXT_ENTRY)) {
-    warnOnce('VERSION', `Next.js ${found.version} is older than 14.2, the oldest this wrapper installs in, so your config was left as it was. Upgrade Next.js to 14.2 or later.`);
+    warnOnce('VERSION', `Next.js ${found.version} is older than 14.2, the oldest this wrapper installs in, so your config was left as it was. Upgrade Next.js to 14.2 or later.`, 'next-too-old');
     return nextConfig;
   }
   // Before 15.3 there is no instrumentation-client, and the install goes in front of webpack's entries.
@@ -243,6 +245,7 @@ function wrap(nextConfig, options, dirs) {
     warnOnce(
       'TURBOPACK',
       `Next.js ${found.version} has no instrumentation-client, and under Turbopack it runs no webpack() hook, so nothing installs the library. Run next dev without --turbo, or upgrade Next.js to 15.3 or later.`,
+      'next-turbopack',
     );
   }
   const clientLine = clientFileLoadsModule(dirs);
@@ -252,7 +255,8 @@ function wrap(nextConfig, options, dirs) {
     warnOnce(
       'CLIENT_LINE',
       `Next.js ${found.version} cannot load the library before React by itself, which needs instrumentationClientInject (16.3 and later). ` +
-        `Add this line to instrumentation-client.ts, beside next.config or in src/, and it installs with the options given here:\n\n  ${CLIENT_LINE}\n`,
+        `Add this line to instrumentation-client.ts, beside next.config or in src/, and it installs with the options given here:\n\n  ${CLIENT_LINE}\n\n`,
+      'next-client-line',
     );
   }
   // A config written as a function of the phase, the other form Next.js documents. It is called at
@@ -278,6 +282,7 @@ function wrap(nextConfig, options, dirs) {
     warnOnce(
       'RULE',
       `Next.js ${found.version} takes one Turbopack rule for '${GLOB}', and your config has one, so under Turbopack the loader that keeps component names through the production minifier was left out. webpack builds still get it.`,
+      'next-turbopack-rule',
     );
   }
   const rules = { ...existing, [GLOB]: rule };

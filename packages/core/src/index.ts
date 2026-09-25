@@ -21,8 +21,6 @@ export type { OverlayHandle } from './overlay.js';
 const DEBUG_GLOBAL = '__REACT_INP_BLAME__';
 /** `threshold` by default: web-vitals' default `durationThreshold`, two and a half frames at 60 Hz. */
 const DEFAULT_THRESHOLD = 40;
-/** Where the README says how each build keeps component names. */
-const SETUP_URL = 'https://github.com/adityareddy-dev/react-inp-blame#install-with-vite';
 /** `walkBudget` by default: over three times the 1441 components of the demo's largest commit, and still a bound on a runaway tree inside React's commit. */
 const DEFAULT_WALK_BUDGET = 5000;
 /** How often the page is looked at for React's marks while no react-dom has registered, at most. */
@@ -214,7 +212,7 @@ function installNow(opts: InstallOptions): Api {
     reactStatus,
     now: () => performance.now(),
     publish: (r) => {
-      if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', `${MINIFIED_NAMES_CONSOLE} See ${SETUP_URL}`);
+      if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', MINIFIED_NAMES_CONSOLE);
       drawWhenIdle(r);
       undelivered.push(r);
       delivery ??= setTimeout(deliver, 0);
@@ -268,8 +266,7 @@ function installNow(opts: InstallOptions): Api {
       warnOnce(
         'no-renderer',
         'React has rendered on this page, but no react-dom has registered with the DevTools hook, so install() ran after react-dom loaded. ' +
-          'Install with react-inp-blame/vite (with `entry` where the framework writes its own HTML), react-inp-blame/next or react-inp-blame/astro, ' +
-          "or make `import 'react-inp-blame/auto'` the first import of your entry module.",
+          "Install with the Vite, Next.js or Astro plugin, or make `import 'react-inp-blame/auto'` the first import of your entry module.",
       );
       // The badge says so too, now rather than at the next report.
       page.overlay?.then((handle) => handle?.refresh());

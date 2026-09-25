@@ -45,27 +45,37 @@ export function replaceTable(readme, table) {
   return readme.slice(0, start) + table + readme.slice(end + END.length);
 }
 
-// More than 0.1 KB apart, as the tenths the table holds compare: 59.1 and 59.0 are not.
-const off = (a, b) => Math.abs(Math.round(a * 10) - Math.round(b * 10)) > 1;
+/** The table between the markers in `readme`, markers included, as written; null without them. */
+export function writtenTable(readme) {
+  const start = readme.indexOf(START);
+  const end = readme.indexOf(END);
+  return start < 0 || end < start ? null : readme.slice(start, end + END.length);
+}
 
 /**
- * What is wrong with the README's table against what was measured, and against the budget: a row missing
- * or off by more than 0.1 KB, or a gzipped size over its budget. Empty when all is well.
+ * What is wrong with the README's table against what was measured, and against the budget. The table has to
+ * be exactly what `--write` would put there, so a row a tenth of a kilobyte off is stale too, and so is a
+ * heading that names another bundler version. A gzipped size over its budget is a problem of its own.
+ * `tool` is the bundler and its version, as `formatTable` takes it. Empty when all is well.
  */
-export function problems(readmeRows, measured, budget) {
-  const out = [];
+export function problems(readme, measured, budget, tool) {
+  const readmeRows = parseTable(readme);
   if (!readmeRows) return ['README.md has no size table between the markers'];
+  const stale = [];
+  const over = [];
   for (const row of measured) {
     const written = readmeRows.find((r) => r.label === row.label);
     const minified = Number(kb(row.minified));
     const gzip = Number(kb(row.gzip));
-    if (!written) out.push(`README.md has no row for ${row.label}`);
-    else if (off(written.minified, minified) || off(written.gzip, gzip)) {
-      out.push(`${row.label}: README.md says ${written.minified} / ${written.gzip} KB, the build is ${minified} / ${gzip} KB`);
+    if (!written) stale.push(`README.md has no row for ${row.label}`);
+    else if (written.minified !== minified || written.gzip !== gzip) {
+      stale.push(`${row.label}: README.md says ${written.minified} / ${written.gzip} KB, the build is ${minified} / ${gzip} KB`);
     }
     const limit = budget[row.key];
-    if (limit !== undefined && gzip > limit) out.push(`${row.label}: ${gzip} KB gzipped is over its budget of ${limit} KB`);
+    if (limit !== undefined && gzip > limit) over.push(`${row.label}: ${gzip} KB gzipped is over its budget of ${limit} KB`);
   }
-  if (readmeRows.length !== measured.length) out.push(`README.md's table has ${readmeRows.length} rows, the script measures ${measured.length}`);
-  return out;
+  if (readmeRows.length !== measured.length) stale.push(`README.md's table has ${readmeRows.length} rows, the script measures ${measured.length}`);
+  // Every row matches and the table still differs: the heading, or how it is laid out.
+  if (!stale.length && writtenTable(readme) !== formatTable(measured, tool)) stale.push("README.md's table is not what --write writes: its heading or its layout differs");
+  return [...stale, ...over];
 }
