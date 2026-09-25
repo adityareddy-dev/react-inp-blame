@@ -44,6 +44,12 @@ it changes when a field is removed or changes meaning, which a minor release may
   check 3 s after install and the one at the first interaction after it; a page with no React by then is taken
   to have none, and `stats().react` stays `'waiting'` until a react-dom registers. A report still looks again
   after input while looks remain, so a look from just before React rendered does not leave it saying waiting.
+- **A component named like the import it renames is named.** shadcn writes every component this way,
+  `import { Button as ButtonPrimitive } from '@base-ui/react/button'` and then `function Button`, and the
+  displayName pass took both sides of the `as` for names the module imports, so it left `Button` unnamed and a
+  production report put its clicks on the component above it. Only the local name, the one after `as`, now
+  counts as imported. An import whose names are strings, `{ 'row-card' as Card }`, and one written with no
+  spaces, `import{Card}from'./card'`, are read too.
 
 ## [0.11.0] - 2026-09-25
 
