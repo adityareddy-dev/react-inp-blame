@@ -1,6 +1,6 @@
 {
   "name": "react-inp-blame",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "INP (Interaction to Next Paint) attribution for React: which component made an interaction slow, from Event Timing and Long Animation Frames joined to the fiber tree, with tracks in Chrome's Performance panel.",
   "license": "MIT",
   "author": "Aditya Reddy <adityareddy.dev@gmail.com>",
