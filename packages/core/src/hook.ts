@@ -49,6 +49,11 @@ interface Renderer {
   experimental: boolean;
   /** Its React major, 0 outside the versions read. */
   major: number;
+  /**
+   * React passes the Scheduler priority of the lanes a commit rendered, which tells continuous-event work
+   * apart: React 19.1 and later. 19.0 and 18 pass the priority of the moment the commit is made.
+   */
+  lanePriority: boolean;
   /** `profileModeBit` for its React major. */
   profileMode: number;
   /** Why its commits cannot be read (a React outside 17 to 19, a root of another shape, a walk that threw), or null. */
@@ -243,8 +248,9 @@ export const INPUT_TYPES = ['pointerdown', 'pointerup', 'click', 'keydown', 'key
 const DERIVED_TYPES = ['input', 'beforeinput', 'change', 'submit', 'keypress'];
 // Events that are never an interaction's work: the page resized or scrolled, or the pointer moved over it.
 // A commit React makes while one of them is being dispatched, outside any input's task, is that event's:
-// a resize hook (React treats `resize` as discrete and renders inside it), a handler under React 17,
-// which renders inside every event, or a flushSync in a scroll listener.
+// a handler under React 17, which renders inside every event, or a flushSync in a scroll listener. React 18
+// and 19 render what a `resize` or a hover sets in a task of their own, which `noteResize` and the priority
+// below tell apart.
 const AMBIENT_TYPES = [
   'resize',
   'scroll',
@@ -263,9 +269,9 @@ const AMBIENT_TYPES = [
   'mouseleave',
   'touchmove',
 ];
-// The Scheduler priority React 19 passes with a commit of continuous-event work: a hover, a scroll, a
-// wheel or a drag, rendered in a task of its own after the event. React 19 derives it from the lanes it
-// rendered; React 18 passes the priority of the moment it commits, which in that task is normal.
+// The Scheduler priority React 19.1 and later pass with a commit of continuous-event work: a hover, a
+// scroll, a wheel or a drag, rendered in a task of its own after the event. They derive it from the lanes
+// they rendered; React 18 and 19.0 pass the priority of the moment they commit, which in that task is normal.
 const USER_BLOCKING_PRIORITY = 2;
 const RING_SIZE = 8;
 // Times of commits that could not be joined to one input, kept per input. A page that commits in a
@@ -617,6 +623,7 @@ function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer 
     isReactDom: info.rendererPackageName === 'react-dom',
     experimental: version?.experimental ?? false,
     major: supported ? version.major : 0,
+    lanePriority: supported && (version.major > 19 || (version.major === 19 && version.minor >= 1)),
     profileMode: supported ? profileModeBit(version.major) : 0,
     problem: null,
     checked: false,
@@ -728,15 +735,18 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
  * input: a resize, scroll or hover being dispatched as React committed (`inAmbientEvent`), the page's
  * width changing since the input (`noteResize`), or, where React says so, continuous-event work. React 18
  * and 19 render a hover's, a scroll's or a wheel's update in a task of its own, where there is no event
- * to read, and React 19 commits it with user-blocking priority, which nothing an input causes is given:
- * an input's own updates are immediate, and what its effects, timers and transitions set off is normal
- * or lower. Production builds pass no priority, React 18 passes the commit's moment's (normal, in that
- * task) and React 17 its own numbers, so there only the first two apply (README, Known limits).
+ * to read, and React 19.1 and later commit it with user-blocking priority. An input's own updates are
+ * immediate, and what its effects, timers and transitions set off is normal or lower, but a touch sets off
+ * hover events of its own (pointerover and pointerenter, then the compatibility mouseover and mouseenter),
+ * whose updates get that same priority. A finger hovers over nothing, so after a touch the priority says
+ * nothing about whose the work is, and neither does it inside the input's own task. Production builds pass
+ * no priority, React 18 and 19.0 pass the commit's moment's (normal, in that task) and React 17 its own
+ * numbers, so there only the first two apply (README, Known limits).
  */
 function notTheInputs(input: InputRecord, renderer: Renderer, priority: number | undefined): boolean {
   if (state.inTask === null && inAmbientEvent()) return true;
   if (state.resizedAt !== undefined && state.resizedAt > input.ts) return true;
-  return priority === USER_BLOCKING_PRIORITY && renderer.major >= 19;
+  return priority === USER_BLOCKING_PRIORITY && renderer.lanePriority && state.inTask === null && input.pointerType !== 'touch';
 }
 
 function awaitingEffectsOf(root: FiberRoot): AwaitingEffects[] {

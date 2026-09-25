@@ -1,11 +1,13 @@
-// Creates apps/demo-react192, demo-react191, demo-react18, demo-react182 and demo-react17: copies of
+// Creates apps/demo-react192, demo-react191, demo-react190, demo-react18, demo-react182 and demo-react17: copies of
 // the demo pinned to older React versions, so the same Playwright suite runs against each. npm nests
 // the conflicting react/react-dom under the variant's own node_modules. 19.2 is there because it is
-// about half of react-dom's downloads, more than the 19.3 the demo itself runs.
+// about half of react-dom's downloads, more than the 19.3 the demo itself runs, and 19.0 because it hands
+// the DevTools hook the priority of the moment it commits, as 18 does, where 19.1 and later hand it the
+// priority of the work.
 //
 //   node scripts/react-matrix.mjs        # (re)create the variants
 //   npm install                          # picks up the new workspaces
-//   npm run test -w apps/demo-react192   # or demo-react191, demo-react18, demo-react182, demo-react17
+//   npm run test -w apps/demo-react192   # or demo-react191, demo-react190, demo-react18, demo-react182, demo-react17
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +19,7 @@ const demo = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'))
 const variants = [
   { name: 'demo-react192', react: '19.2.8', port: 5189, legacy: false, label: 'react192' },
   { name: 'demo-react191', react: '19.1.9', port: 5191, legacy: false, label: 'react191' },
+  { name: 'demo-react190', react: '19.0.0', port: 5212, legacy: false, label: 'react190' },
   { name: 'demo-react18', react: '18.3.1', port: 5187, legacy: false, label: 'react18' },
   { name: 'demo-react182', react: '18.2.0', port: 5193, legacy: false, label: 'react182' },
   { name: 'demo-react17', react: '17.0.2', port: 5195, legacy: true, label: 'react17' },

@@ -173,22 +173,24 @@ jobs:
         run: npm test
       - name: Vite demo, production build
         run: npm run test:prod
-      - name: Vite demo on React 19.2.8, 19.1.9, 18.3.1, 18.2.0 and 17.0.2
+      - name: Vite demo on React 19.2.8, 19.1.9, 19.0.0, 18.3.1, 18.2.0 and 17.0.2
         run: |
           node scripts/react-matrix.mjs
           npm install
           npm test -w apps/demo-react192
           npm test -w apps/demo-react191
+          npm test -w apps/demo-react190
           npm test -w apps/demo-react18
           npm test -w apps/demo-react182
           npm test -w apps/demo-react17
       # Production too, because that is where the bundler decides what evaluates before the app's entry
       # body, and where React 17 registered with no hook at all until the Vite plugin gave the install
       # call a script of its own ahead of the page's. About half a minute each.
-      - name: Vite demo on React 19.2.8, 19.1.9, 18.3.1, 18.2.0 and 17.0.2, production builds
+      - name: Vite demo on React 19.2.8, 19.1.9, 19.0.0, 18.3.1, 18.2.0 and 17.0.2, production builds
         run: |
           npm run test:prod -w apps/demo-react192
           npm run test:prod -w apps/demo-react191
+          npm run test:prod -w apps/demo-react190
           npm run test:prod -w apps/demo-react18
           npm run test:prod -w apps/demo-react182
           npm run test:prod -w apps/demo-react17

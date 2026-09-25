@@ -18,7 +18,7 @@ test('a render past the walk budget is not blamed on the subtree the walk reache
   const r = (await handle.jsonValue()) as InteractionReport;
   await test.info().attach('verdict', { body: r.verdict, contentType: 'text/plain' });
   expect(r.commits.some((c) => c.truncated)).toBe(true);
-  if (r.explanation.blame.kind !== 'render') return;
+  expect(r.explanation.blame.kind).toBe('render');
   // Development builds have React's durations, which cover every subtree whether the walk reached it or not.
   if (prod) expect(r.explanation.blame.name).toBe('Budget');
   else expect(r.explanation.blame.name).toBe('Metrics');

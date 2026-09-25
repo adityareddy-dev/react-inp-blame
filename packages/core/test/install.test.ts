@@ -1670,7 +1670,8 @@ test("a render a media query hook makes when the window crosses a breakpoint is 
 });
 
 test('a render inside a resize, scroll or hover event is not the last click\'s, and neither is one a window focus causes', async (t) => {
-  for (const [type, target] of [['resize', null], ['scroll', FIELD], ['wheel', FIELD], ['pointerover', FIELD], ['mouseleave', FIELD], ['visibilitychange', FIELD]] as const) {
+  const ambient = ['scroll', 'scrollend', 'wheel', 'visibilitychange', 'pointermove', 'pointerover', 'pointerout', 'pointerenter', 'pointerleave', 'mousemove', 'mouseover', 'mouseout', 'mouseenter', 'mouseleave', 'touchmove'];
+  for (const [type, target] of [['resize', null] as const, ...ambient.map((type) => [type, FIELD] as const)]) {
     const r = await clickThen(t, (page, commit) => {
       page.window.event = { isTrusted: true, type, timeStamp: 1400, target };
       commit(1450, 1);
@@ -1678,12 +1679,14 @@ test('a render inside a resize, scroll or hover event is not the last click\'s, 
     });
     assert.deepEqual(r, { followUps: [], walked: [1003], unjoined: 0 }, type);
   }
-  const focused = await clickThen(t, (page, commit) => {
-    page.window.event = { isTrusted: true, type: 'focus', timeStamp: 1400, target: page.window };
-    commit(1450, 1);
-    delete page.window.event;
-  });
-  assert.deepEqual(focused.followUps, []);
+  for (const type of ['focus', 'blur']) {
+    const focused = await clickThen(t, (page, commit) => {
+      page.window.event = { isTrusted: true, type, timeStamp: 1400, target: page.window };
+      commit(1450, 1);
+      delete page.window.event;
+    });
+    assert.deepEqual(focused.followUps, [], type);
+  }
   // An element taking focus is not the window, and its render still joins.
   const field = await clickThen(t, (page, commit) => {
     page.window.event = { isTrusted: true, type: 'focus', timeStamp: 1400, target: FIELD };
@@ -1748,9 +1751,48 @@ test("React 19's user-blocking priority marks a hover's or a scroll's render, ou
   // Production builds pass no priority, and the render joins as before.
   const production = await clickThen(t, (_page, commit) => commit(1400, null));
   assert.deepEqual(production.followUps, [1400]);
-  // React 18 passes the priority of the moment it commits, not of what it rendered, so it says nothing here.
-  const react18 = await clickThen(t, (_page, commit) => commit(1400, 2), '18.3.1');
-  assert.deepEqual(react18.followUps, [1400]);
+  // React 18 and 19.0 pass the priority of the moment they commit, not of what they rendered, so they say
+  // nothing here.
+  for (const version of ['18.3.1', '19.0.0']) {
+    const moment = await clickThen(t, (_page, commit) => commit(1400, 2), version);
+    assert.deepEqual(moment.followUps, [1400], version);
+  }
+  assert.deepEqual((await clickThen(t, (_page, commit) => commit(1400, 2), '19.1.0')).followUps, []);
+});
+
+test("a tap's own hover render, committed at user-blocking priority, is the tap's", async (t) => {
+  // A touch fires pointerover and pointerenter of its own, and React 19 renders their updates in a task of
+  // its own at user-blocking priority, before or after the tap's task has ended.
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('pointerup', { isTrusted: true, type: 'pointerup', timeStamp: 1000, target: null, pointerType: 'touch' });
+    clock.now = 1140;
+    commitAgain(root, 30);
+    existing.onCommitFiberRoot(id, root, 2, false);
+    assert.deepEqual(api.debug.commits().map((c) => c.inputType), ['pointerup']);
+    // Or after it: a finger hovers over nothing, so behind a touch the priority is the tap's hover events'.
+    await nextTask();
+    clock.now = 1300;
+    commitAgain(root, 30);
+    existing.onCommitFiberRoot(id, root, 2, false);
+    assert.equal(api.debug.commits().length, 2);
+    // Behind a mouse click, once its task is over, the same priority is a hover's of its own.
+    clock.now = 2000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 2000, target: null, pointerType: 'mouse' });
+    await nextTask();
+    clock.now = 2400;
+    commitAgain(root, 30);
+    existing.onCommitFiberRoot(id, root, 2, false);
+    assert.equal(api.debug.commits().length, 2);
+    api.dispose();
+  });
 });
 
 test('a submit fired in its click\'s own task is the click\'s work however long the click\'s handler ran first', async (t) => {

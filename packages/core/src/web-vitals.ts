@@ -76,7 +76,7 @@ export interface ReactAttribution {
   readonly blame: Blame;
   /** The React handler prop that ran, or the function behind it when its name survived minification. */
   readonly handler: string | null;
-  /** The chain carrying most of the rendering, outermost first. */
+  /** The chain carrying most of the rendering, outermost first; shorter or empty for a walk cut short, as `CommitSummary.hotPath` says. */
   readonly hotPath: readonly string[];
   /** The heaviest commit's components, at most 5. */
   readonly components: readonly RenderedComponent[];
