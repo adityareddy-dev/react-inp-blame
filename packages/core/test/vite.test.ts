@@ -5,6 +5,7 @@ import { inpBlame } from '../vite.mjs';
 const INSTALL = 'react-inp-blame:install';
 const SCRIPT = 'react-inp-blame:install-script';
 const NAMES = 'react-inp-blame:display-names';
+const ENTRY = 'react-inp-blame:entry';
 const INSTALL_MODULE = 'virtual:react-inp-blame/install';
 
 type Options = Parameters<typeof inpBlame>[0];
@@ -210,7 +211,9 @@ test('an option these plugins do not have is refused, and an install() option is
 
 /** The install plugin as a run of Vite at `root` sets it up: its config resolved and its build started. */
 function entryRuntime(command: 'serve' | 'build', options: Options, root = '/app') {
-  const runtime = pluginsFor(command, { enabled: true, ...options }).find((p) => p.name === INSTALL)!;
+  const plugins = pluginsFor(command, { enabled: true, ...options });
+  const runtime = plugins.find((p) => p.name === INSTALL)!;
+  const entryPlugin = plugins.find((p) => p.name === ENTRY);
   const emitted: unknown[] = [];
   const errors: string[] = [];
   const context = {
@@ -220,13 +223,16 @@ function entryRuntime(command: 'serve' | 'build', options: Options, root = '/app
   };
   runtime.configResolved({ command, root, base: '/', build: {}, plugins: [] });
   runtime.buildStart.call(context);
-  const transform = (code: string, id: string, ssr = false) => runtime.transform.call(context, code, id, { ssr });
+  const transform = (code: string, id: string, ssr = false) => entryPlugin!.transform.call(context, code, id, { ssr });
   const finish = () => runtime.generateBundle.call(context);
-  return { runtime, emitted, errors, transform, finish };
+  return { runtime, entryPlugin, emitted, errors, transform, finish };
 }
 
 test('entry puts the install first in that module, on its first line, in the browser only', () => {
-  const { transform } = entryRuntime('serve', { entry: 'app/root.tsx' });
+  const { transform, entryPlugin } = entryRuntime('serve', { entry: 'app/root.tsx' });
+  // After the JSX is compiled, so the compiler's own import of react/jsx-runtime cannot come above it.
+  assert.equal(entryPlugin!.enforce, 'post');
+  assert.equal(entryRuntime('serve', {}).entryPlugin, undefined);
   const code = 'import { Outlet } from "react-router";\nexport default function App() {}\n';
   const out = transform(code, '/app/app/root.tsx?v=1');
   assert.equal(out.code, `import '${INSTALL_MODULE}';${code}`);
@@ -234,8 +240,12 @@ test('entry puts the install first in that module, on its first line, in the bro
   // Server rendering never runs it, and other modules are left alone.
   assert.equal(transform(code, '/app/app/root.tsx', true), null);
   assert.equal(transform(code, '/app/app/routes/home.tsx'), null);
-  // A leading ./ is the same path.
+  // A leading ./ is the same path, and an absolute path is taken as it is.
   assert.ok(entryRuntime('serve', { entry: './app/root.tsx' }).transform(code, '/app/app/root.tsx'));
+  assert.ok(entryRuntime('serve', { entry: '/app/app/root.tsx' }).transform(code, '/app/app/root.tsx'));
+  assert.ok(entryRuntime('serve', { entry: 'C:\\site\\app\\root.tsx' }, 'C:/site').transform(code, 'C:/site/app/root.tsx'));
+  // A directive prologue stays first, on the same line.
+  assert.equal(transform("'use client';\nexport {}", '/app/app/root.tsx').code, `'use client';import '${INSTALL_MODULE}';\nexport {}`);
 });
 
 test('entry gives the install a chunk of its own, not an entry, and fails a build where the path matched nothing', () => {
@@ -257,8 +267,11 @@ test('entry gives the install a chunk of its own, not an entry, and fails a buil
   const warnings: string[] = [];
   assert.equal(found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, { manualChunks: { vendor: ['react'] } }), null);
   assert.match(warnings[0]!, /beside a manualChunks object/);
-  // Without entry the output is left alone.
+  // Without entry the output is left alone, and so is one that cannot be split, which would fail the build.
   assert.equal(entryRuntime('build', {}).runtime.outputOptions.call({}, {}), null);
+  for (const output of [{ inlineDynamicImports: true }, { preserveModules: true }, { codeSplitting: false }, { format: 'iife' }, { format: 'umd' }]) {
+    assert.equal(found.runtime.outputOptions.call({}, output), null, JSON.stringify(output));
+  }
 
   const typo = entryRuntime('build', { entry: 'app/roots.tsx' });
   typo.transform('export {}', '/app/app/root.tsx');
@@ -269,6 +282,19 @@ test('entry gives the install a chunk of its own, not an entry, and fails a buil
   // With entry the HTML pages get no script: the module's import is the install.
   const plugins = pluginsFor('serve', { entry: 'app/root.tsx' });
   assert.equal(tagsFor(plugins, '/index.html'), undefined);
+});
+
+test('entry leaves a server build alone: no chunk, no import, no error', () => {
+  const plugins = pluginsFor('build', { enabled: true, entry: 'app/root.tsx' });
+  const runtime = plugins.find((p) => p.name === INSTALL)!;
+  const errors: string[] = [];
+  const context = { environment: { name: 'ssr', config: { consumer: 'server', build: { ssr: true } } }, error: (m: string) => errors.push(m), warn: () => {} };
+  runtime.configResolved({ command: 'build', root: '/app', base: '/', build: { ssr: true }, plugins: [] });
+  runtime.buildStart.call(context);
+  assert.equal(runtime.outputOptions.call(context, {}), null);
+  assert.equal(plugins.find((p) => p.name === ENTRY)!.transform.call(context, 'export {}', '/app/app/root.tsx', { ssr: true }), null);
+  runtime.generateBundle.call(context);
+  assert.deepEqual(errors, []);
 });
 
 test('the install module is marked as having side effects, and entry is a path with the install in it', () => {
