@@ -975,11 +975,16 @@ moved to React 18.
   input arrived is left out of the report, and one that lands past the window is dropped; a dropped commit
   that ran while the interaction's own handlers were still running is counted as `unjoinedCommits`, which
   makes everything the report says about React's work `'inferred'`. A commit outside those handlers, a clock
-  ticking elsewhere on the page, is not counted against the interaction at all. The input ring is the whole of
-  that evidence, so an update with no user input behind it, a timer, a message arriving or a viewport resize
-  still reads as a follow-up render of whatever interaction came last. Narrowing a window to a phone width
-  and re-rendering a media-query hook is the case that has been seen: 441 components were reported as a
-  second render of the click before it, a second after that click had painted.
+  ticking elsewhere on the page, is not counted against the interaction at all. Some commits are plainly
+  something else's and are left out the same way: one React makes while a resize, a scroll, a wheel, a hover
+  or a media query's `change` is being dispatched (a `useMediaQuery` hook, and under React 17 any handler of
+  those events), one after the window changed width since the input (a resize hook that waits for a timer;
+  a change of height alone, a phone's keyboard opening, does not count), and, under React 19 in development
+  and profiling builds, one React commits with the priority it gives a hover's or a scroll's update. Under
+  React 18, and React 19 in production, a hover or a scroll renders in a task of its own with nothing to say
+  whose it is, so within the window it still reads as a follow-up render of whatever interaction came last,
+  as does an update with no user input behind it at all, a timer or a message arriving. A click whose own
+  follow-up lands after the window was resized loses it, the rule a newer input already follows.
 - **The window runs from the last commit inside the dispatch, not from the end of the dispatch**, which the
   library cannot see. A handler that works for two seconds and commits nothing leaves the window running from
   the input, so a transition it starts afterwards can fall outside it. That render is then dropped and counted

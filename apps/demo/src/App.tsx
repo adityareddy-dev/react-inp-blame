@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Ambient } from './Ambient';
 import { Lab, labScenarios } from './Lab';
 import { SignInDemo } from './signin/SignInDemo';
 
@@ -16,6 +17,7 @@ function useHash(): string {
 export function App() {
   const hash = useHash();
   const key = hash.replace(/^lab\/?/, '');
+  if (hash === 'ambient') return <Ambient />;
   if (hash.startsWith('lab') || key in labScenarios) return <Lab scenario={key || 'context-storm'} />;
   return <SignInDemo />;
 }

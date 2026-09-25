@@ -40,10 +40,12 @@ for (const v of variants) {
     scripts: {
       dev: `${env} vite --port ${v.port} --strictPort`,
       // attribution covers what each React version reports; input-delay covers the join on Event.timeStamp,
-      // which is the one that has to hold on a legacy root. The rest of the demo's specs are about the
-      // browser and the bundler rather than the React version, and run on 19 only.
-      test: `${env} playwright test attribution input-delay`,
-      'test:prod': `${env} INP_MODE=prod INP_PORT=${v.port + 1} playwright test attribution input-delay`,
+      // which is the one that has to hold on a legacy root; ambient covers the renders that are not an
+      // input's, which React 17 makes inside the event and React 18 and 19 in a task of their own. The rest
+      // of the demo's specs are about the browser and the bundler rather than the React version, and run
+      // on 19 only.
+      test: `${env} playwright test attribution input-delay ambient`,
+      'test:prod': `${env} INP_MODE=prod INP_PORT=${v.port + 1} playwright test attribution input-delay ambient`,
     },
     dependencies: { react: v.react, 'react-dom': v.react, 'react-inp-blame': '*' },
     devDependencies: { ...devDependency('@playwright/test'), ...devDependency('vite') },
