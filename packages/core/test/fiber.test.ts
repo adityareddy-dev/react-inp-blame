@@ -111,6 +111,33 @@ test("@emotion/styled's Insertion is not counted as a component, whatever the mi
   assert.deepEqual(plain.components.map((c) => c.name).sort(), ['Insertion', 'Row']);
 });
 
+test("a styling library's wrapper is named the way the library names an unlabelled one, whatever label it was given", () => {
+  function Row() {}
+  function Insertion() {}
+  function Card() {}
+  const forwardRef = (extra: Record<string, unknown>) => ({ $$typeof: Symbol.for('react.forward_ref'), render: () => null, ...extra });
+  const names = (tree: Record<string, unknown>) => walkCommit(root(tree) as any, 100, 100, click, development).components.map((c) => c.name).sort();
+  // MUI labels each root it styles with @emotion/styled, so in development it reads as a component anybody wrote.
+  const muiRoot = forwardRef({ displayName: 'MuiButtonBaseRoot', __emotion_base: 'button' });
+  assert.deepEqual(names(rendered(Row, fiber(11, muiRoot, [rendered(Insertion), element('button', text())], 1))), ['Row', 'Styled(button)']);
+  // styled-components' Babel and SWC plugins give each one the name of the variable it was assigned to.
+  const priceRow = forwardRef({ displayName: 'PriceList__Item', styledComponentId: 'sc-a1', target: 'li' });
+  const styledCard = forwardRef({ displayName: 'Tile', styledComponentId: 'sc-b2', target: Card });
+  assert.deepEqual(names(rendered(Row, fiber(11, priceRow, [element('li', text())], 1), fiber(11, styledCard, [rendered(Card)], 1))), ['Card', 'Row', 'Styled(Card)', 'styled.li']);
+  // @emotion/react's css prop renders a component of its own around the element, and its Insertion beside it.
+  const cssProp = (type: unknown) => {
+    const wrapper = fiber(11, forwardRef({ displayName: 'EmotionCssPropInternal' }), [rendered(Insertion), typeof type === 'string' ? element(type, text()) : rendered(type as () => void)], 1);
+    wrapper.memoizedProps = { __EMOTION_TYPE_PLEASE_DO_NOT_USE__: type, css: {} };
+    return wrapper;
+  };
+  assert.deepEqual(names(rendered(Row, cssProp('li'), cssProp('li'))), ['Row', 'Styled(li)']);
+  assert.equal(walkCommit(root(rendered(Row, cssProp('li'), cssProp(Card))) as any, 100, 100, click, development).rendered, 4);
+  // Named that way in the owners a target reads too.
+  const inside = element('li', text());
+  rendered(Row, fiber(11, priceRow, [inside], 1));
+  assert.deepEqual(ownersOf(inside as any), ['styled.li', 'Row']);
+});
+
 test('a tree deeper than the walk follows is cut off there, without overflowing the stack', () => {
   function Runaway() {}
   function Footer() {}

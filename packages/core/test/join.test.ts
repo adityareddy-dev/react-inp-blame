@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { mostlyComponent } from '../src/commits.ts';
 import type { InputRecord } from '../src/hook.ts';
 import { attachLaterRender, buildReport, isLaterRender, refreshReport, sealReport, type LabelSource } from '../src/join.ts';
 import type { PageNavigation } from '../src/navigation.ts';
@@ -1544,6 +1545,16 @@ test('a render is named after its deepest readable component, and what it was mo
   const timed = blameOf({ hasDurations: true, total: 60, roots: ['Xe'], hotPath: ['Xe'], components: [{ name: 'Nu', count: 5, self: 40, total: 40 }, { name: 'Panel', count: 50, self: 12, total: 12 }] });
   assert.equal(timed.blame.detail, 'Nu ×5');
 
+  // A profiling build that measured every component at 0 ms still has the counts to go by.
+  const quick = commit(4, 0, { total: 0, rendered: 122, roots: ['Xe'], hotPath: ['Xe'], components: [{ name: 'Nu', count: 120, self: 0, total: 0 }, { name: 'Panel', count: 2, self: 0, total: 0 }] });
+  assert.equal(mostlyComponent(quick)?.name, 'Nu');
+
+  // Vite's development server and Rolldown add a `$1` to a name that clashes with another, which leaves a
+  // minifier's `Dt` looking like a word.
+  const deduped = blameOf({ roots: ['PeoplePicker'], hotPath: ['PeoplePicker', 'Dt$1'], components: [{ name: 'Dt$1', count: 30, self: null, total: null }] });
+  assert.equal(deduped.blame.name, 'PeoplePicker');
+  assert.equal(blameOf({ roots: ['App'], hotPath: ['App', 'Button$1'], components: [] }).blame.name, 'Button$1');
+
   // With nothing readable anywhere the names are kept as they stand, rather than one being invented.
   const minified = blameOf({ roots: ['Xe'], hotPath: ['Xe', '$'], components: [{ name: 'et', count: 113, self: null, total: null }] });
   assert.equal(minified.blame.name, '$');
@@ -1567,6 +1578,12 @@ test("a click on an icon inside a button is named by the button's component, not
   const path = Object.assign(element('path', []), { __reactFiber$k1: pathFiber });
   const svg = Object.assign(element('svg', [path]), { __reactFiber$k1: svgFiber });
   const button = Object.assign(element('button', [svg], { 'aria-label': 'Delete row' }), { __reactFiber$k1: buttonFiber });
+  children(toolbar, deleteButton);
+  children(deleteButton, buttonFiber);
+  children(buttonFiber, trash2);
+  children(trash2, svgFiber);
+  children(svgFiber, pathFiber);
+  Object.assign(buttonFiber, { stateNode: button });
 
   const live = report([entry('click', 0, 120, 3, 100, { target: path })], [], []);
   assert.equal(live.target?.component, 'DeleteButton');
@@ -1585,6 +1602,107 @@ test("a click on an icon inside a button is named by the button's component, not
   assert.equal(gone.target?.label, 'button "Delete row"');
   assert.equal(gone.target?.component, 'DeleteButton');
   assert.equal(gone.target?.selector, 'path');
+});
+
+/** Links a fiber to its children, as React does: the first as `child`, each to the next as `sibling`. */
+function children(parent: Record<string, unknown>, ...kids: Record<string, unknown>[]): void {
+  parent.child = kids[0] ?? null;
+  kids.forEach((kid, i) => {
+    kid.return = parent;
+    kid.sibling = kids[i + 1] ?? null;
+  });
+}
+
+test('what an icon belongs to is read from the fiber tree: a card\'s photo is the card, an option\'s icon the option, a button\'s the button', () => {
+  const fiberOf = (tag: number, type: unknown, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: null, child: null, sibling: null, alternate: null }) as Record<string, unknown>;
+  const component = (name: string) => fiberOf(0, Object.defineProperty(function () {}, 'name', { value: name }));
+  const icon = (name: string) => fiberOf(11, { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: name });
+  /** A host fiber and its element, each pointing at the other. */
+  const host = (tag: string, attributes: Record<string, string> = {}, kids: Record<string, unknown>[] = []) => {
+    const el = element(tag, kids.map((k) => k.el as Record<string, unknown>), attributes);
+    const fiber = fiberOf(5, tag, attributes);
+    fiber.stateNode = el;
+    el.__reactFiber$k1 = fiber;
+    return { el, fiber };
+  };
+  const ownersFor = (target: Record<string, unknown>) => report([entry('click', 0, 120, 3, 100, { target })], [], []).target?.owners;
+
+  // <a> in ProductList around ProductCard, which renders a photo, a title and Stars, three svg stars.
+  const img = host('img');
+  const title = host('span');
+  const stars = [0, 1, 2].map(() => {
+    const polygon = host('polygon');
+    const star = host('svg', {}, [polygon]);
+    children(star.fiber, polygon.fiber);
+    return star;
+  });
+  const starsFiber = component('Stars');
+  children(starsFiber, ...stars.map((star) => star.fiber));
+  const card = host('div', {}, [img, title, ...stars]);
+  children(card.fiber, img.fiber, title.fiber, starsFiber);
+  const productCard = component('ProductCard');
+  children(productCard, card.fiber);
+  const link = host('a', { href: '/kettle', 'aria-label': 'Kettle' }, [card]);
+  children(link.fiber, productCard);
+  const list = component('ProductList');
+  children(list, link.fiber);
+  assert.deepEqual(ownersFor(img.el), ['ProductCard', 'ProductList']);
+  assert.deepEqual(ownersFor(stars[1]!.el), ['Stars', 'ProductCard', 'ProductList']);
+  assert.deepEqual(ownersFor(title.el), ['ProductCard', 'ProductList']);
+
+  // <li role="option"> around PersonOption, which renders UserIcon beside the person's name.
+  const person = host('svg');
+  const userIcon = icon('UserIcon');
+  children(userIcon, person.fiber);
+  const name = host('span');
+  const option = component('PersonOption');
+  children(option, userIcon, name.fiber);
+  const li = host('li', { role: 'option' }, [person, name]);
+  children(li.fiber, option);
+  const picker = component('PeoplePicker');
+  children(picker, li.fiber);
+  assert.deepEqual(ownersFor(person.el), ['PersonOption', 'PeoplePicker']);
+
+  // A trash icon beside its label, and an avatar beside a name inside a link: the icon and the Avatar that
+  // renders nothing but its picture are what the control holds, not what was clicked.
+  const trash = host('svg');
+  const trash2 = icon('Trash2');
+  children(trash2, trash.fiber);
+  const label = host('span');
+  const button = host('button', {}, [trash, label]);
+  children(button.fiber, trash2, label.fiber);
+  const deleteButton = component('DeleteButton');
+  children(deleteButton, button.fiber);
+  assert.deepEqual(ownersFor(trash.el), ['DeleteButton']);
+  const photo = host('img');
+  const avatar = component('Avatar');
+  children(avatar, photo.fiber);
+  const userName = host('span');
+  const userLink = host('a', { href: '/ada' }, [photo, userName]);
+  children(userLink.fiber, avatar, userName.fiber);
+  const userLinkComponent = component('UserLink');
+  children(userLinkComponent, userLink.fiber);
+  assert.deepEqual(ownersFor(photo.el), ['UserLink']);
+});
+
+test("Enter's work in the keypress entry is named by the form's onSubmit, from the key its keydown recorded", () => {
+  // Enter in a field: the keydown's handlers take 2 ms and the keypress's 120, the time the form's submit
+  // handler took. An Event Timing entry says no key; only the keydown's record does.
+  function submitOrder() {}
+  function OrderForm() {}
+  const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null });
+  const form = fiberOf(0, OrderForm, null);
+  const formEl = fiberOf(5, 'form', form, { onSubmit: submitOrder });
+  const field = fiberOf(5, 'input', formEl, { type: 'text', name: 'qty' });
+  const target = Object.assign(element('input', [], { name: 'qty' }), { __reactFiber$k1: field });
+  const press = [entry('keydown', 0, 140, 1, 3, { target }), entry('keypress', 0, 140, 3, 123, { target })];
+  const ring = [input(0, 'keydown', { target: target as unknown as Node, press: 'Enter', owners: ['OrderForm'] })];
+  assert.equal(report(press, [], [], ring).target?.handler, 'submitOrder');
+  // Any other key submits nothing, so nothing is named for the keypress's work.
+  const other = [input(0, 'keydown', { target: target as unknown as Node, press: 'KeyA', owners: ['OrderForm'] })];
+  assert.equal(report(press, [], [], other).target?.handler, null);
 });
 
 test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {

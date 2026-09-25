@@ -1,6 +1,6 @@
 import { heaviest, leafName, mostlyComponent, readableName } from './commits.js';
-import { controlAround, elementOf, namedFrom, selector } from './element.js';
-import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
+import { controlAround, elementOf, selector } from './element.js';
+import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
@@ -367,10 +367,9 @@ export function buildReport(
   let owners: readonly string[] = [];
   let handler: string | null = null;
   if (fiber) {
-    // Named by the control around an icon, as at dispatch; the handler is still looked for from the node
-    // itself, which is where a handler on the icon would be.
-    const named = namedFrom(live);
-    owners = ownersOf((named !== live && named && fiberFromNode(named)) || fiber);
+    // Named from what a clicked icon belongs to, as at dispatch; the handler is still looked for from the
+    // node itself, which is where a handler on the icon would be.
+    owners = ownersOf(namingFiber(live));
     for (const e of byWork(sorted)) {
       // An Event Timing entry does not say which key was pressed; the ring entry for the same event
       // does, and which key it was decides whether the press could have submitted a form.

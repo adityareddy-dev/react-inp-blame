@@ -1,3 +1,4 @@
+import { iconAround, isControl } from './element.js';
 import type { InputStamp } from './hook.js';
 import type { CommitSummary, HydrationBoundary, RenderedComponent } from './types.js';
 
@@ -5,6 +6,7 @@ import type { CommitSummary, HydrationBoundary, RenderedComponent } from './type
 const FunctionComponent = 0;
 const ClassComponent = 1;
 const HostRoot = 3;
+const HostComponent = 5;
 const ForwardRef = 11;
 const SuspenseComponent = 13;
 const MemoComponent = 14;
@@ -413,17 +415,47 @@ function typeName(t: unknown): string | null {
  * cannot rename.
  */
 function nameOf(f: Fiber): string | null {
+  // Read once: every fiber the walk names comes through here.
+  const type = f.elementType;
   const wrapper = f.return !== null && f.return.tag === MemoComponent ? componentName(f.return) : null;
-  return wrapper || componentName(f);
+  return stylingName(f, type) || wrapper || typeName(type) || typeName(f.type);
+}
+
+// The prop @emotion/react's jsx gives the component it renders for an element with a `css` prop, holding
+// the element's own type. A string key, so a minifier leaves it as it is.
+const EMOTION_CSS_PROP_TYPE = '__EMOTION_TYPE_PLEASE_DO_NOT_USE__';
+
+/**
+ * The name a styling library's wrapper goes by, whatever label it was given: `Styled(button)` for one that
+ * @emotion/styled or @emotion/react's `css` prop made, `styled.li` or `Styled(Card)` for styled-components,
+ * as each names its own when it has no label. MUI labels every root it styles (`MuiButtonBaseRoot`) in
+ * development, which would otherwise read as a component the app wrote. Told by the fiber rather than the
+ * name, a wrapper reads the same in development and production. Null for any other fiber.
+ */
+function stylingName(f: Fiber, elementType: unknown): string | null {
+  const t = elementType as { __emotion_base?: unknown; styledComponentId?: unknown; target?: unknown } | null;
+  if (t !== null && typeof t === 'object') {
+    if ('__emotion_base' in t) return `Styled(${baseName(t.__emotion_base)})`;
+    if (typeof t.styledComponentId === 'string') return typeof t.target === 'string' ? `styled.${t.target}` : `Styled(${baseName(t.target)})`;
+  }
+  const cssProp = isComponent(f) ? f.memoizedProps?.[EMOTION_CSS_PROP_TYPE] : undefined;
+  return cssProp === undefined ? null : `Styled(${baseName(cssProp)})`;
+}
+
+/** The tag or component a styling wrapper wraps, by name. */
+function baseName(base: unknown): string {
+  return typeof base === 'string' ? base : (typeName(base) ?? 'Component');
 }
 
 /**
- * @emotion/styled's `Insertion`: the component it renders first, beside the element it styles, to insert
- * the styles. It is the library's, and a minifier renames it, so it is told by its place, not its name.
+ * emotion's `Insertion`: the component @emotion/styled and @emotion/react's `css` prop render first, beside
+ * the element they style, to insert the styles. It is the library's, and a minifier renames it, so it is
+ * told by its place, not its name.
  */
 function emotionInsertion(f: Fiber): boolean {
   const styled = f.return;
-  return styled !== null && styled.child === f && f.sibling !== null && isEmotionStyled(styled.elementType);
+  if (styled === null || f.sibling === null || (styled.child !== f && styled.child !== f.alternate)) return false;
+  return isEmotionStyled(styled.elementType) || (isComponent(styled) && styled.memoizedProps?.[EMOTION_CSS_PROP_TYPE] !== undefined);
 }
 
 /** A component @emotion/styled made: it carries the tag or component it wraps as `__emotion_base`. */
@@ -436,6 +468,46 @@ function isEmotionStyled(t: unknown): boolean {
  * `Insertion` not at all, since it is not a component the app wrote.
  */
 const countsAsComponent = (f: Fiber) => f.tag !== MemoComponent && isComponent(f) && !emotionInsertion(f);
+
+// How many fibers above an icon are climbed looking for what it belongs to.
+const ICON_CLIMB = 16;
+
+/**
+ * The fiber a report reads the components that name an interaction from. For a click on an icon, the icon
+ * library's components are not what anyone clicked: from the icon's own fiber this climbs through every
+ * fiber that renders nothing but it (lucide's `Icon`, then `Trash2`, then a `<span>` around them), and stops
+ * at a control (the `<button>` they are in) or at the first fiber that renders something beside them. A
+ * `DeleteButton`'s trash icon is then named by `DeleteButton`, an option's person icon by the option's
+ * component, and a card's photo or its row of stars by the card or the stars, as the fiber tree has them.
+ * Anything that is not an icon is named from its own fiber.
+ */
+export function namingFiber(node: Node | null): Fiber | null {
+  const icon = node && iconAround(node);
+  const start = icon && fiberFromNode(icon);
+  if (!start) return fiberFromNode(node);
+  let f = start;
+  for (let i = 0; i < ICON_CLIMB && !isControlHost(f); i++) {
+    const parent = f.return;
+    const only = parent && onlyChild(parent);
+    if (!only || (only !== f && only !== f.alternate)) break;
+    f = parent;
+  }
+  // A component at the top of the climb renders nothing but the icon, so it is the icon's own: the one it
+  // sits in names the click.
+  return isComponent(f) ? (f.return ?? f) : f;
+}
+
+/** A parent's one child, emotion's `Insertion` beside it aside; null when it has none or several. */
+function onlyChild(parent: Fiber): Fiber | null {
+  let child = parent.child;
+  if (child && emotionInsertion(child)) child = child.sibling;
+  return child && child.sibling === null ? child : null;
+}
+
+function isControlHost(f: Fiber): boolean {
+  const el = f.stateNode as Element | null | undefined;
+  return f.tag === HostComponent && !!el && typeof el.getAttribute === 'function' && isControl(el);
+}
 
 /**
  * The components enclosing a fiber, nearest first. They follow the tree React rendered the fiber in,

@@ -40,7 +40,9 @@ export async function slowReport(page: Page): Promise<InteractionReport> {
  * which element is under the pointer. Playwright's own click refuses an SVG `<path>`.
  */
 export async function clickOn(page: Page, selector: string): Promise<void> {
-  const box = await page.locator(selector).first().boundingBox();
+  const target = page.locator(selector).first();
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
   if (!box) throw new Error(`${selector} is not on the screen`);
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }

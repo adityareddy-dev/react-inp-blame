@@ -23,7 +23,10 @@ function score(c: CommitSummary): number {
  * (styled-components and emotion).
  */
 const READABLE_NAME = /^[A-Z][A-Za-z0-9_$]{2,}$/;
-export const readableName = (name: string): boolean => name.split('.').every((part) => READABLE_NAME.test(part));
+// The suffix Vite's development server and Rolldown add to a name that clashes with another in the same
+// scope: `Dt$1` is a minifier's `Dt`, and is judged as `Dt`.
+const DEDUPE_SUFFIX = /\$\d+$/;
+export const readableName = (name: string): boolean => name.split('.').every((part) => READABLE_NAME.test(part.replace(DEDUPE_SUFFIX, '')));
 
 /**
  * The component a commit is named after: the deepest readable name on its hot path, else the end of its
@@ -51,6 +54,9 @@ export function mostlyComponent(c: CommitSummary): CommitSummary['components'][n
   if (!first) return c.components[0];
   const readable = own.find((component) => readableName(component.name));
   if (!readable || readable === first) return first;
-  const weight = (component: CommitSummary['components'][number]) => component.self ?? component.count;
+  // By time where React measured it, unless it measured none on the most-rendered (a render quicker than its
+  // clock), where every weight is 0 and the counts still say something.
+  const bySelf = first.self != null && readable.self != null && first.self > 0;
+  const weight = (component: CommitSummary['components'][number]) => (bySelf ? component.self! : component.count);
   return weight(readable) >= weight(first) / 2 ? readable : first;
 }

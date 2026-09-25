@@ -37,15 +37,20 @@ export function selector(node: Node): string | null {
  * The control a click landed inside, or the element itself when there is none close by. A click on an
  * icon button lands on the icon: the `line` or `path` of an svg, a `span`, an `img`. That is the
  * event's target and what the selector says, and it names nothing anyone would recognise, so the label
- * is the button's (and for an icon, the component a report names it by: see `namedFrom`). The selector
+ * is the button's (an icon's components are read by `namingFiber` in fiber.ts). The selector
  * stays the element the browser reported.
  */
 export function controlAround(el: Element): Element {
   let at: Element | null = el;
   for (let up = 0; at && up <= CONTROL_ANCESTORS; up++, at = at.parentElement) {
-    if (CONTROL_TAGS.includes(at.tagName.toLowerCase()) || CONTROL_ROLES.includes(at.getAttribute('role') ?? '')) return at;
+    if (isControl(at)) return at;
   }
   return el;
+}
+
+/** A button, a link, a form control or an element with a control's role. */
+export function isControl(el: Element): boolean {
+  return CONTROL_TAGS.includes(el.tagName.toLowerCase()) || CONTROL_ROLES.includes(el.getAttribute('role') ?? '');
 }
 
 /** The control around a node, which labels it; the node itself when it is not in an element. */
@@ -54,19 +59,17 @@ export function controlOf(node: Node | null): Node | null {
   return el ? controlAround(el) : node;
 }
 
-// What an icon is drawn with. A click inside one is a click on the control around it.
+// What an icon is drawn with.
 const ICON_TAGS = ['svg', 'img', 'picture'];
 
 /**
- * Where the components a report names a click by are read from: the control around an icon that was
- * clicked, since an icon library's `Trash2` inside the button is not what anyone clicked, and otherwise the
- * node itself, so a card inside a link or a row inside an option is still named by the card or the row.
+ * The icon a node is part of: the `<svg>` around a `path` a click landed on, or an `<img>` or `<picture>`,
+ * up to a few levels up; null for anything else. Whether it names the click is decided from the fiber tree
+ * (`namingFiber`), since an `<img>` can as well be a card's photo as a button's icon.
  */
-export function namedFrom(node: Node | null): Node | null {
-  const el = node && elementOf(node);
-  if (!el) return node;
-  for (let at: Element | null = el, up = 0; at && up <= CONTROL_ANCESTORS; up++, at = at.parentElement) {
-    if (ICON_TAGS.includes(at.tagName.toLowerCase())) return controlAround(el);
+export function iconAround(node: Node): Element | null {
+  for (let at = elementOf(node), up = 0; at && up <= CONTROL_ANCESTORS; up++, at = at.parentElement) {
+    if (ICON_TAGS.includes(at.tagName.toLowerCase())) return at;
   }
-  return node;
+  return null;
 }
