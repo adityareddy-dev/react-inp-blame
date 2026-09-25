@@ -1851,3 +1851,21 @@ test('a click inside a link or an option is named by the component it landed in;
   // The label is still the link's.
   assert.equal(r.target?.label, 'link "Kettle"');
 });
+
+test('a render whose walk stopped at its budget says "at least", names no component it was "mostly" made of, and no root it reached first', () => {
+  const ring = [input(0, 'click', { target: element('button', [text('Refresh')]) as unknown as Node, owners: ['Toolbar'], handler: 'onClick' })];
+  const blameOf = (opts: Partial<CommitSummary>) =>
+    report([entry('click', 0, 400, 3, 390)], [commit(200, 0, { hasDurations: false, total: 0, rendered: 5000, truncated: true, ...opts })], [], ring).explanation;
+  const components = [
+    { name: 'Order', count: 3000, self: null, total: null },
+    { name: 'Metric', count: 1998, self: null, total: null },
+  ];
+  const one = blameOf({ roots: ['Dashboard'], hotPath: ['Dashboard'], components });
+  assert.deepEqual(one.blame, { kind: 'render', name: 'Dashboard', detail: 'at least 5000 components', ms: one.blame.ms, confidence: 'inferred' });
+  assert.ok(one.cause.includes('re-rendering at least 5000 components inside Dashboard.'), one.cause);
+  assert.doesNotMatch(one.cause, /mostly/);
+  // Several roots under no shared component: not the first root the walk reached.
+  const several = blameOf({ roots: ['Orders', 'Metrics'], hotPath: [], components });
+  assert.equal(several.blame.name, null);
+  assert.ok(several.cause.includes('inside the app'), several.cause);
+});

@@ -739,7 +739,12 @@ function mostlyOf(c: CommitSummary): string | null {
   if (c.rendered === 1) return null;
   const top = mostlyComponent(c);
   if (top && top.count > 1) return `${top.name} ×${top.count}`;
-  return plural(c.rendered, 'component');
+  return renderedCount(c);
+}
+
+/** "801 components"; "at least 5000 components" where the walk stopped before the end of the tree. */
+function renderedCount(c: CommitSummary): string {
+  return `${c.truncated ? 'at least ' : ''}${plural(c.rendered, 'component')}`;
 }
 
 /** "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "hydrating" for a hydration. */
@@ -757,7 +762,7 @@ function renderPhrase(c: CommitSummary): string {
     const time = top.self != null ? `, ${ms(top.self)}` : '';
     mostly = top.name === leaf ? ` (${top.count} of them${time})` : `, mostly ${top.name} (${top.count} of them${time})`;
   }
-  return `${verb} ${plural(c.rendered, 'component')} inside ${leaf}${mostly}`;
+  return `${verb} ${renderedCount(c)} inside ${leaf}${mostly}`;
 }
 
 /**
@@ -1263,7 +1268,7 @@ function explain(r: InteractionReport): Explanation {
     if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
-    blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
+    blame = { kind: 'render', name: leafName(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
   } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
     const howLittle = c.rendered === 0 ? 'React rendered nothing' : `React re-rendered only ${plural(c.rendered, 'component')}`;
     // The effects are measured in every build, so they come off what the handler is said to have taken.

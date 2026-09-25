@@ -1,4 +1,4 @@
-import { heaviest, leafName } from './commits.js';
+import { heaviest, leafName, mostlyComponent } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
@@ -375,8 +375,8 @@ function where(c: CommitSummary): string {
   return leafName(c) ?? 'the tree';
 }
 function top(c: CommitSummary): string {
-  const t = c.components[0];
-  return t ? `${t.name} ×${t.count}` : `${c.rendered} components`;
+  const t = mostlyComponent(c);
+  return t ? `${t.name} ×${t.count}` : `${c.truncated ? 'at least ' : ''}${c.rendered} components`;
 }
 
 function blameLine(r: InteractionReport): string {
