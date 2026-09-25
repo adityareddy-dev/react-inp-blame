@@ -71,6 +71,13 @@ test("names a reader could not search their code for make way for the next owner
   assert.equal(generateTarget(asNode(minified)), 'Qe > Styled(div) > Xe (button.x)');
 });
 
+test("an icon inside a button is placed by the button, as reports name it", () => {
+  // The icon component (lucide's Trash2) sits between the button and the svg that was clicked.
+  const button = element('button', { classes: ['delete'], fiber: owners('Toolbar', 'DeleteButton') });
+  const icon = element('svg', { classes: ['lucide'], fiber: owners('Toolbar', 'DeleteButton', 'Trash2'), parentNode: button });
+  assert.equal(generateTarget(asNode(icon)), 'Toolbar > DeleteButton (svg.lucide)');
+});
+
 test('a node with no fiber of its own is placed by the nearest element that has one', () => {
   // React puts a fiber on every element it renders, so in a page this is the text inside the button.
   const tile = element('button', { classes: ['tile'], fiber: owners('ProfilePage', 'PhotoTile') });

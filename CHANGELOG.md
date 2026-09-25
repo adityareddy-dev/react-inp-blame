@@ -15,6 +15,13 @@ it changes when a field is removed or changes meaning, which a minor release may
   on `styled.section`, "mostly Styled(span) ×800"; it is now blamed on the component that renders it, mostly
   the row component. Where nothing readable is there, the names stand as before. `blame.name`,
   `blame.detail` and `generateTarget`'s string change value for those cases and keep their meaning.
+- **A click on an icon inside a button is put on the button's component.** Event Timing names the element
+  the pointer landed on, often an icon library's `<svg>` or `<path>`, and `target.component` and `owners`
+  were read from there: `Trash2` from lucide-react rather than the `DeleteButton` around it. They are now
+  read from the control the label already names (the nearest button, link, input or element with a control
+  role, up to five levels up), and so is `generateTarget`'s string. When the icon was swapped by the render
+  (a minus for a check), the label and the names still come from the button. `target.selector` and
+  `target.handler` still describe the element that was hit.
 
 ## [0.5.0] - 2026-09-25
 

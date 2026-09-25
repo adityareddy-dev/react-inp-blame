@@ -669,8 +669,11 @@ does a handler the minifier renamed: name the function if you want the report to
 `target.component` is the nearest component enclosing the element whose name a reader could search their own
 code for: one React would accept as a component name (capitalised), that a minifier has not cut down to a
 letter or two, and whose every dotted part is the same, so a design system's `Primitive.button` gives way to
-the `TabsTrigger` above it. `target.owners` keeps the whole chain, innermost first, whatever the names are,
-and where nothing in it passes, `component` is the innermost owner as it always was.
+the `TabsTrigger` above it. When the click landed inside a control, it starts from the control the label names
+(see [Labels and personal data](#labels-and-personal-data)), so a click on an icon library's `<svg>` inside a
+button names the component that renders the button, not the icon. `target.owners` keeps the whole chain,
+innermost first, whatever the names are, and where nothing in it passes, `component` is the innermost owner
+as it always was.
 
 `duration` is the longest single Event Timing entry, as web-vitals measures it; `holdMs` is how much longer
 the span from press to release ran. Reports are frozen: a late entry, frame or render that joins one reaches
