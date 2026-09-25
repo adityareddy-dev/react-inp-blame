@@ -468,7 +468,9 @@ import { inpBlame } from 'react-inp-blame/astro';
 export default defineConfig({
   integrations: [
     react(),
-    inpBlame({ runtime: { overlay: true } }), // the badge on every page of the dev server
+    inpBlame({
+      runtime: { overlay: true }, // the badge on every page of the dev server
+    }),
   ],
 });
 ```

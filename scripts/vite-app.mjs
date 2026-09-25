@@ -128,9 +128,24 @@ const normalized = (text) =>
   text
     .replace(/\r\n/g, '\n')
     .split('\n')
-    .map((line) => line.trimEnd())
+    // Comments lined up in a column are the same code with the spaces before them changed.
+    .map((line) => line.trimEnd().replace(/(\S)\s+\/\/ /, '$1 // '))
     .join('\n')
     .trimEnd();
+
+/**
+ * The README's block as the README says to keep it in production: `enabled: true`, with the overlay only on
+ * request. CI builds the framework apps for production too, so their config is this form of the block.
+ */
+function forProduction(block) {
+  return block.replace(/^(\s*)runtime: \{ overlay: true \},.*$/m, (_, indent) => {
+    const quote = block.includes('"react-inp-blame/') ? '"' : "'";
+    return (
+      `${indent}enabled: true, // production builds too; the default is development only\n` +
+      `${indent}runtime: { overlay: ${quote}query${quote} }, // the badge only on request, such as ?inp-blame in the URL`
+    );
+  });
+}
 
 /** Runs a command with its output shown as it comes, and fails if it exits with anything but 0. */
 function run(what, command, args, options) {
@@ -173,8 +188,9 @@ function guards(name) {
   );
   for (const file of files) {
     const code = fs.readFileSync(path.join(fixture, file), 'utf8');
+    const block = readmeBlock(readme, file);
     assert.ok(
-      normalized(code) === normalized(readmeBlock(readme, file)),
+      normalized(code) === normalized(block) || normalized(code) === normalized(forProduction(block)),
       `fixtures/${name}/${file} is not the ${file} block under "${readme}" in README.md. Copy the README block into the fixture, so the fixture tests what users paste.`,
     );
   }
