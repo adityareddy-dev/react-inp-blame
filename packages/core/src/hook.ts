@@ -97,6 +97,11 @@ export interface InputRecord extends InputStamp {
    */
   readonly control?: Node | null;
   /**
+   * The report's label for the control, read at dispatch: a click on "Count is 0" that renders "Count
+   * is 1" is labelled by what was clicked. Absent on records made elsewhere and before install().
+   */
+  readonly label?: string | null;
+  /**
    * The components enclosing the target at dispatch (the control, for a click on an icon inside one), nearest first. Read before React's handlers run:
    * once React commits the deletion of an element, React 18 and 19 clear its fiber's links and props, so
    * a clicked row that deleted itself is still named after what it was.
@@ -149,6 +154,8 @@ export interface HookOptions {
   walkBudget: number;
   inputWindow: number;
   onSummary: (c: CommitSummary) => void;
+  /** Names the control an input landed on, at dispatch (see `InputRecord.label`). */
+  label?: (control: Node) => string | null;
 }
 
 /**
@@ -311,6 +318,7 @@ function record(e: DispatchedInput): InputRecord {
     pointerType: e.pointerType,
     target,
     control,
+    label: control && state.options?.label?.(control),
     owners: Object.freeze(ownersOf(namingFiber(target))),
     handler: handlerOf(fiber, e.type, isKey ? e.code : null),
     work: { endedAt: e.timeStamp, ownEndedAt: e.timeStamp, unjoined: [] },

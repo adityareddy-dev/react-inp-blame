@@ -3,7 +3,7 @@ import { createTimeline } from './devtools.js';
 import { checkHookReplaced, clearCommits, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, noteResize, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
-import type { LabelSource } from './join.js';
+import { labelOf, type LabelSource } from './join.js';
 import { createLifecycle } from './lifecycle.js';
 import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
 import { observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
@@ -241,7 +241,7 @@ function installNow(opts: InstallOptions): Api {
     navigated({ url, type: 'soft-navigation', start: at, router: { type, input: input && { inputTs: input.ts, gestureTs: input.gestureTs } } });
   });
 
-  installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit });
+  installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit, label: (control) => labelOf(control, labels()) });
   for (const t of INPUT_TYPES) window.addEventListener(t, noteInput, { capture: true, passive: true });
   window.addEventListener('resize', noteResize, { capture: true, passive: true });
   window.addEventListener('pageshow', onPageShow, { capture: true });

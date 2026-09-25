@@ -9,6 +9,8 @@ export interface WithInpBlameOptions {
    * production build carries nothing from it, except on Next.js 15.3 to 16.2, where the line in
    * instrumentation-client brings the client module into every build, unused where it is left out. Next
    * sets NODE_ENV before it reads the config, which is how the two are told apart.
+   * Left at the default, `next build` says in one line that it left the library out; write
+   * 'development' yourself to keep it out without the line.
    */
   enabled?: 'development' | 'production' | boolean;
   /**

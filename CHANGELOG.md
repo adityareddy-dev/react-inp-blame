@@ -8,6 +8,37 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Added
 
+- **A production build says when it left the library out.** With `enabled` left at its default,
+  `'development'`, `vite build`, `next build` and `astro build` printed nothing, and `vite preview`, `next start`
+  and `astro preview` showed no badge, which looked like the library failing. Each now prints one line saying
+  it left the library out and how to include it, with a link to a new Troubleshooting entry. It is said once
+  per build, not for a server build, not on the dev server, and not when the app wrote `enabled` itself.
+
+### Changed
+
+- **The React Router, Remix, TanStack Start and Astro setups show the badge on the dev server.** Their
+  snippets set `enabled: true` with `overlay: 'query'`, so the dev server showed nothing until the URL had
+  `?inp-blame`, and the README did not say so. They now use `overlay: true` and the default `enabled`, as the
+  Next.js and Vite ones do, and say how to keep the library in production with the badge on request.
+- **The Next.js snippet has the shape `create-next-app` writes**: a typed `nextConfig`, passed to
+  `withInpBlame`.
+- **The README says what you see first.** The badge reads `INP —` from the start, a click of 40 ms or more gets
+  a row, a 150 ms one still reads Good, `vite preview` and `next start` show no badge by default, and
+  `__REACT_INP_BLAME__.last()` gives the whole report.
+
+### Fixed
+
+- **A label is what the element said when it was clicked.** It was read when the Event Timing entry arrived,
+  after the paint, so a click on a button reading "Count is 0" was labelled "Count is 1". The capture listener
+  now reads it as the input is dispatched. Where the entry's target is another node, it is read as before.
+- **The panel's row reads naturally without a time.** Under a production build of React a handler's blame has no
+  figure, and the row read "most likely onClick in Layout in the handler". It now reads "most likely the
+  onClick handler in Layout".
+
+## [0.10.0] - 2026-09-25
+
+### Added
+
 - **Every warning links to what to do about it.** Each warning the library prints in the browser, and each
   one `withInpBlame` and the Vite plugin print at build time, now ends with a link to its own entry in the
   README's new Troubleshooting section, which says what it means and how to fix it. A unit test reads the
@@ -639,7 +670,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.6.0...v0.7.0

@@ -517,8 +517,14 @@ function blameText(b: Blame): string {
   switch (b.kind) {
     case 'render':
       return `<b>${esc(b.name ?? 'the tree')}</b> re-rendered${b.detail ? ` &middot; ${esc(b.detail)}` : ''}${ms}`;
-    case 'handler':
-      return `<b>${esc(b.name ?? 'the handler')}</b>${b.detail ? ` in ${esc(b.detail)}` : ''}${ms} in the handler`;
+    case 'handler': {
+      const where = b.detail ? ` in ${esc(b.detail)}` : '';
+      // A production build of React records no render times, so there is no figure to put beside the
+      // name: "the onClick handler in Layout".
+      return b.ms == null
+        ? `the ${b.name ? `<b>${esc(b.name)}</b> ` : ''}handler${where}`
+        : `<b>${esc(b.name ?? 'the handler')}</b>${where}${ms} in the handler`;
+    }
     // Only a hydration React finished inside the interaction takes the blame. HTML that was still
     // waiting is a sentence in front of whatever did take the time, which the cause line carries.
     case 'hydration':
