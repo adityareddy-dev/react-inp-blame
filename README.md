@@ -596,10 +596,10 @@ root is an open one on `#react-inp-blame`, but a test that wants the reports sho
 constructed one adopted by the shadow root, which `style-src` does not govern, and their colours and bar
 widths are set through classes and the style object rather than `style` attributes. Safari before 16.4 has
 no constructed stylesheets and gets a `<style>` element instead, which needs `'unsafe-inline'` in
-`style-src` there. A page that enforces Trusted Types (`require-trusted-types-for 'script'`) lists
-`react-inp-blame` in its `trusted-types` directive, the policy the panel's markup goes through; where it does
-not, the console says so once and the badge is not drawn, but the runtime still installs and measures, so
-reports come through `onInteraction` and the Performance panel track. On Vite, `html.cspNonce` puts the
+`style-src` there. A page that enforces Trusted Types (`require-trusted-types-for 'script'`) with a
+`trusted-types` directive lists `react-inp-blame` in it, the policy the panel's markup goes through; where it
+does not, the console says so once and the badge stays an empty pill, but the runtime still installs and
+measures, so reports come through `onInteraction` and the Performance panel track. On Vite, `html.cspNonce` puts the
 nonce on the plugin's script in development and in a build, and the badge's chunk loads through that
 script's import, so a nonce-based `script-src` needs nothing more.
 
