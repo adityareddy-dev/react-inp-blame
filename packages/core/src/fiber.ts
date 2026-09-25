@@ -494,7 +494,9 @@ export function namingFiber(node: Node | null): Fiber | null {
   if (!start) return fiberFromNode(node);
   let f = start;
   const handled = handlesInput(start);
-  for (let i = 0; i < ICON_CLIMB && !isControlHost(f) && (handled || !handlesInput(f)); i++) {
+  // An icon with a handler is climbed through the components that handed it down even where it is a control
+  // itself: `<Trash2 role="button" onClick>` is the writer's too.
+  for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {
     const parent = f.return;
     const only = parent && onlyChild(parent);
     if (!only || (only !== f && only !== f.alternate)) break;

@@ -1743,6 +1743,14 @@ test('what an icon belongs to is read from the fiber tree: a card\'s photo is th
   children(row.fiber, alone.writer, host('span').fiber);
   children(component('Rows'), row.fiber);
   assert.deepEqual(ownersFor(alone.svg.el), ['RemoveRow', 'Rows']);
+  // The same where the icon is a control of its own: `<Trash2 role="button" onClick>`.
+  const asButton = trashWith({});
+  asButton.svg.el.getAttribute = (name: string) => (name === 'role' ? 'button' : null);
+  children(asButton.writer, asButton.trash);
+  const buttonRow = host('div', {}, [asButton.svg, host('span')]);
+  children(buttonRow.fiber, asButton.writer, host('span').fiber);
+  children(component('Rows'), buttonRow.fiber);
+  assert.deepEqual(ownersFor(asButton.svg.el), ['RemoveRow', 'Rows']);
 });
 
 test("Enter's work in the keypress entry is named by the form's onSubmit, from the key its keydown recorded", () => {
