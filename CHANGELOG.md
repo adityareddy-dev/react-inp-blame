@@ -6,6 +6,12 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-25
+
+0.4.0 to 0.11.0 were version numbers on `main` that never went to npm. 0.12.0 is the first release after 0.3.0,
+and has everything in their entries below as well as its own. Coming from 0.3.0, read the `schemaVersion` entry
+under Changed first.
+
 ### Security
 
 - **The badge and panel need no Trusted Types policy, and leave none for other scripts to use.** Since 0.9.0
@@ -818,15 +824,16 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.11.0...HEAD
-[0.11.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.10.0...v0.11.0
-[0.10.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.9.0...v0.10.0
-[0.9.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.8.0...v0.9.0
-[0.8.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.7.0...v0.8.0
-[0.7.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.6.0...v0.7.0
-[0.6.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.3.0...v0.4.0
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.3.0...v0.12.0
+[0.11.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/215a9f2...0c8d148
+[0.10.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/ab94834...215a9f2
+[0.9.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/5c15a1d...ab94834
+[0.8.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/006cc27...5c15a1d
+[0.7.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/f39b212...006cc27
+[0.6.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/0f12c43...f39b212
+[0.5.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/97b2e4a...0f12c43
+[0.4.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.3.0...97b2e4a
 [0.3.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.1.0...v0.1.1
