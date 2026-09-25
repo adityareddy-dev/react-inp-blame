@@ -955,6 +955,31 @@ test('in a production build a render beside a handler is blamed only where its c
   assert.equal(blameOf(209, { ...timed, coarseClock: true, components: [{ name: 'DropdownMenuItem', count: 4, self: null, total: null }] }, 'handleExportCsv'), 'handler handleExportCsv inferred');
 });
 
+test('where React is not being read, the verdict says the setup is the cause rather than guessing at the working time', () => {
+  // Next.js's dev server loaded react-dom before install(): React rendered on the page and nothing it did
+  // is in the report. A click whose handlers ran from 2 to 202 ms, with the browser's record of the listener.
+  const click = [entry('click', 0, 208, 2, 202)];
+  const listener = [frame(0, 208, [script('BUTTON.onclick', 2, 200)])];
+  const ring = loginClick('handleSave');
+  const late = report(click, [], listener, ring, 'attributes', [], undefined, 'installed-late');
+  // The script holds the handler and whatever React rendered inside it, so neither is named as the blame.
+  assert.deepEqual(late.explanation.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
+  assert.match(late.explanation.cause, /What React did is unknown/);
+  assert.doesNotMatch(late.explanation.cause, /most likely/);
+  // The same click with no long task on record read as waiting and painting; it is the setup here too.
+  const quiet = report(click, [], [], ring, 'attributes', [], undefined, 'installed-late');
+  assert.deepEqual(quiet.explanation.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
+  assert.match(quiet.explanation.cause, /What React did is unknown/);
+  // A page whose react-dom cannot be read is as blind.
+  assert.equal(report(click, [], listener, ring, 'attributes', [], undefined, 'unreadable').explanation.blame.kind, 'none');
+  // What the browser measured on its own still stands: a wait behind another task, or the screen update.
+  const waited = report([entry('click', 1000, 400, 1380, 1385)], [], [frame(900, 490, [script('TimerHandler:setTimeout', 905, 470)])], loginClick('handleSave', 1000), 'attributes', [], undefined, 'installed-late');
+  assert.equal(waited.explanation.blame.kind, 'waiting');
+  assert.equal(report([entry('click', 0, 400, 3, 10)], [], [], ring, 'attributes', [], undefined, 'installed-late').explanation.blame.kind, 'painting');
+  // With React read, the same click and record is the handler's script, as before.
+  assert.deepEqual(report(click, [], listener, ring).explanation.blame, { kind: 'script', name: 'handleSave', detail: 'SignInPage', ms: 200, confidence: 'measured' });
+});
+
 test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {
   // A click at 1000 waited behind an analytics task that ran from 745 to 1045. Its own handler ran from
   // 1045 to 1065, rendering 2 components in 1 ms, and the screen updated at 1096.

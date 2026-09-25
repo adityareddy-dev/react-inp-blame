@@ -885,14 +885,11 @@ function explain(r: InteractionReport): Explanation {
   // did here is a measurement.
   const unjoined = r.unjoinedCommits > 0;
   // No react-dom is read (it registered before install(), or cannot be read), so an empty `commits` says
-  // nothing about what React did, and nothing said about React's work here is a measurement.
+  // nothing about what React did, and nothing said about React's work here is a measurement. The ladder
+  // has a rung for it, in place of the guesses at the working time below the browser's own measurements.
   const blind = r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable';
   const unsure = unjoined || blind;
-  const renderedNothing = blind
-    ? `What React did is unknown (no react-dom on this page is being read)`
-    : unjoined
-      ? `React rendered during it, but ${plural(r.unjoinedCommits, 'commit')} could not be tied to this ${kind}`
-      : `React didn't render anything`;
+  const renderedNothing = unjoined ? `React rendered during it, but ${plural(r.unjoinedCommits, 'commit')} could not be tied to this ${kind}` : `React didn't render anything`;
   /**
    * How sure a sentence about React's work can be. A commit that could not be tied to the interaction
    * is missing evidence, so nothing said about what React did here is a measurement, however good the
@@ -1341,6 +1338,18 @@ function explain(r: InteractionReport): Explanation {
     // be refused for the screen update and then fall past it.
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`;
     blame = { kind: 'painting', name: lateScript ? scriptBlameName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
+  } else if (blind) {
+    // No react-dom is read, so what React rendered for this input, if anything, is unknown, and with it
+    // the split of the working time: a handler and the render its state update sets off run in one
+    // script, the listener's, which is all the browser records. Naming the handler for that script read
+    // as a finding and put a 326 ms render on handleShowList; with no long task on record the time went
+    // to "waiting and painting". The setup is the cause worth saying, and nothing is blamed until it is
+    // fixed. The browser's own measurements above, a wait or the screen update, still stand.
+    const why = r.reactStatus === 'installed-late' ? 'install() ran after react-dom loaded' : 'no react-dom on this page is being read';
+    const recorded = longestPart(whileHandling);
+    const held = recorded ? ` The browser recorded ${aScript(recorded.script)} running for ${ms(recorded.ms)} of it, which holds React's render as well as the handler.` : '';
+    cause = `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen, and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
+    blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   } else if (anyScript) {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the
     // interaction is exactly what stops this from being a finding.
