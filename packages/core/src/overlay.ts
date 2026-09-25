@@ -3,6 +3,7 @@ import type { InpEstimate } from './inp.js';
 import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
+import { warnOnce } from './warn.js';
 
 /**
  * The on-page badge and panel. Plain DOM inside a shadow root: no React, so it renders even
@@ -68,6 +69,11 @@ const RATING = {
   poor: { label: 'Poor', color: '#ef4444' },
 } as const;
 const IDLE = '#6b7280';
+// Each rating's colour, as a custom property the dot, the time and the tag read. Set by class rather than
+// by a style attribute, which a Content Security Policy without 'unsafe-inline' in style-src blocks.
+const RATING_CSS = Object.entries(RATING)
+  .map(([key, R]) => `[data-rating="${key}"] { --rating: ${R.color}; }`)
+  .join('\n');
 const CORNER = { 'bottom-right': 'br', 'bottom-left': 'bl', 'top-right': 'tr', 'top-left': 'tl' } as const;
 const STORE = 'react-inp-blame:overlay';
 
@@ -80,7 +86,7 @@ const CSS = `
 .wrap.tr { right: 16px; top: 16px; } .wrap.tl { left: 16px; top: 16px; }
 .badge { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 10px; border-radius: 999px; background: rgba(17,19,24,.94); color: #fff; border: 1px solid rgba(255,255,255,.12); box-shadow: 0 8px 24px rgba(0,0,0,.28); cursor: pointer; font: inherit; font-weight: 600; letter-spacing: .01em; user-select: none; }
 .badge:hover { background: rgba(28,31,38,.97); }
-.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: ${IDLE}; box-shadow: 0 0 0 3px rgba(255,255,255,.07); flex: none; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--rating, ${IDLE}); box-shadow: 0 0 0 3px rgba(255,255,255,.07); flex: none; }
 .ms { font-variant-numeric: tabular-nums; }
 .badge .n { color: #9aa0ad; font-weight: 500; }
 .panel { position: absolute; width: min(372px, calc(100vw - 32px)); max-height: min(72vh, 660px); max-height: min(72dvh, 660px); overflow: auto; border-radius: 14px; background: rgba(17,19,24,.97); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 50px rgba(0,0,0,.42); backdrop-filter: blur(14px); }
@@ -90,7 +96,7 @@ const CSS = `
 .big { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; }
 .big small { font-size: 12px; font-weight: 500; color: #9aa0ad; margin-left: 4px; }
 .sub { color: #9aa0ad; margin-top: 7px; font-size: 11.5px; }
-.tag { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: 10px; vertical-align: 4px; color: #0b0d11; }
+.tag { display: inline-block; background: var(--rating); font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: 10px; vertical-align: 4px; color: #0b0d11; }
 .x { flex: none; background: none; border: 0; color: #9aa0ad; font: inherit; font-size: 18px; line-height: 1; cursor: pointer; padding: 3px 7px; border-radius: 6px; }
 .x:hover { color: #fff; background: rgba(255,255,255,.08); }
 .row { padding: 11px 16px 12px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; }
@@ -99,7 +105,7 @@ const CSS = `
 .r1 { display: flex; align-items: center; gap: 8px; }
 .r1 .dot { width: 8px; height: 8px; box-shadow: none; }
 .r1 .t { flex: 1; font-weight: 600; font-size: 12.5px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.r1 .ms { font-weight: 700; font-size: 13px; }
+.r1 .ms { font-weight: 700; font-size: 13px; color: var(--rating); }
 .meta { color: #9aa0ad; margin: 3px 0 0 16px; font-size: 11px; }
 .blame { color: #c3c7d1; margin: 4px 0 0 16px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .blame b { color: #fff; font-weight: 600; }
@@ -126,6 +132,7 @@ const CSS = `
 .foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px 10px; color: #6f7582; font-size: 10.5px; }
 .foot button { background: none; border: 0; color: #9aa0ad; font: inherit; cursor: pointer; padding: 0; }
 .foot button:hover { color: #fff; }
+${RATING_CSS}
 `;
 
 export function createOverlay(source: Source, opts: OverlayOptions = {}): OverlayHandle {
@@ -133,8 +140,6 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   const host = document.createElement('div');
   host.id = OVERLAY_ID;
   const root = host.attachShadow({ mode: 'open' });
-  const style = document.createElement('style');
-  style.textContent = CSS;
   const wrap = document.createElement('div');
   wrap.className = `wrap ${CORNER[opts.position ?? 'bottom-right']}`;
   const badge = document.createElement('button');
@@ -145,13 +150,24 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   panel.className = 'panel';
   panel.hidden = true;
   wrap.append(panel, badge);
-  root.append(style, wrap);
+  root.append(wrap);
+  adoptStyles(root);
 
   const expanded = new Set<number>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
+  // Drawn from timers and event listeners, so a draw the page refuses (markup under Trusted Types the
+  // page has not allowed this library's policy for) is said once in the console rather than thrown.
   function render() {
+    try {
+      draw();
+    } catch (error) {
+      warnOnce('overlay-draw', `the badge and panel could not be drawn (${String(error)}). A page that enforces Trusted Types allows them by listing ${POLICY} in its trusted-types directive.`);
+    }
+  }
+
+  function draw() {
     timer = null;
     if (disposed) return;
     const all = source.reports();
@@ -163,14 +179,13 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const mark = status?.level === 'warn' ? `<span class="mark" title="${esc(status.text)}">!</span>` : '';
     if (status?.key === 'unsupported-browser') {
       badge.dataset.rating = 'none';
-      badge.innerHTML = `<i class="dot"></i>INP <span class="n">not measured</span>`;
+      setHTML(badge, `<i class="dot"></i>INP <span class="n">not measured</span>`);
     } else if (!inp) {
       badge.dataset.rating = 'none';
-      badge.innerHTML = `<i class="dot"></i>INP <span class="n">&mdash;</span>${mark}`;
+      setHTML(badge, `<i class="dot"></i>INP <span class="n">&mdash;</span>${mark}`);
     } else {
-      const R = RATING[inp.rating];
       badge.dataset.rating = inp.rating;
-      badge.innerHTML = `<i class="dot" style="background:${R.color}"></i>INP <span class="ms">${Math.round(inp.value)} ms</span>${mark}`;
+      setHTML(badge, `<i class="dot"></i>INP <span class="ms">${Math.round(inp.value)} ms</span>${mark}`);
     }
     if (panel.hidden) return;
     // The panel is rebuilt below, so the control that has the focus is given it back afterwards.
@@ -180,11 +195,13 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const head = inp
       ? `<div><div class="big">${Math.round(inp.value)}<small>ms</small>${tag(inp.rating)}</div><div class="sub">Page INP so far${inp.report ? `, from ${esc(inSentence(titleFor(inp.report)))}` : ''} &middot; ${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}</div></div>`
       : `<div><div class="big">&mdash;<small>ms</small></div><div class="sub">Interaction to Next Paint. Nothing slow yet.</div></div>`;
-    panel.innerHTML =
+    setHTML(
+      panel,
       `<div class="head">${head}<button class="x" type="button" aria-label="Close">&times;</button></div>` +
-      (status ? `<div class="status ${status.level}" data-status="${status.key}">${esc(status.text)}</div>` : '') +
-      (groups.length ? groups.map(row).join('') : `<div class="empty">Click or type. Anything slow shows up here, with the component to blame.</div>`) +
-      `<div class="foot"><span>react-inp-blame &middot; measuring cost ${costText(cost)} per interaction</span><button class="clear" type="button">Clear</button></div>`;
+        (status ? `<div class="status ${status.level}" data-status="${status.key}">${esc(status.text)}</div>` : '') +
+        (groups.length ? groups.map(row).join('') : `<div class="empty">Click or type. Anything slow shows up here, with the component to blame.</div>`) +
+        `<div class="foot"><span>react-inp-blame &middot; measuring cost ${costText(cost)} per interaction</span><button class="clear" type="button">Clear</button></div>`,
+    );
     if (focused) panel.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });
   }
 
@@ -205,7 +222,6 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
 
   function row(g: Group): string {
     const r = slowest(g.reports);
-    const R = RATING[r.explanation.rating];
     const title = titleFor(r);
     const total = Math.max(r.duration, 1);
     const bar = phaseBar(r.explanation.phases, total);
@@ -216,7 +232,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     return (
       `<div class="row" data-id="${r.interactionId}">` +
       `<div class="toggle" role="button" tabindex="0" aria-expanded="${isExpanded}">` +
-      `<div class="r1"><i class="dot" style="background:${R.color}"></i><span class="t">${esc(title)}</span><span class="ms" style="color:${R.color}">${Math.round(r.duration)} ms</span></div>` +
+      `<div class="r1" data-rating="${r.explanation.rating}"><i class="dot"></i><span class="t">${esc(title)}</span><span class="ms">${Math.round(r.duration)} ms</span></div>` +
       meta +
       `<div class="blame">${blameLine(r)}</div>` +
       (later ? `<div class="blame later">then <b>${esc(where(later))}</b> re-rendered after the paint &middot; ${esc(top(later))}${later.hasDurations ? ` &middot; ${Math.round(later.total)} ms` : ''}</div>` : '') +
@@ -256,7 +272,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
         .map(
           (x) =>
             `<div class="comp"><b>${esc(x.name)}</b><span>${x.count} rendered${x.self != null ? ` &middot; ${x.self.toFixed(1)} ms` : ''}</span>` +
-            `<div class="tr"><div class="fl" style="width:${(((x.self ?? x.count) / maxV) * 100).toFixed(1)}%"></div></div></div>`,
+            `<div class="tr"><div class="fl" data-width="${(((x.self ?? x.count) / maxV) * 100).toFixed(1)}"></div></div></div>`,
         )
         .join('')
     );
@@ -399,6 +415,59 @@ function costText(ms: number): string {
 }
 
 /**
+ * Styles the shadow root with a constructed stylesheet, which a Content Security Policy's style-src does not
+ * govern, so the badge and panel are styled under a policy of nonces and hashes. A browser without
+ * constructed stylesheets in shadow roots (Safari before 16.4) gets a `<style>` element, as before.
+ */
+function adoptStyles(root: ShadowRoot): void {
+  try {
+    if (typeof CSSStyleSheet === 'function' && 'replaceSync' in CSSStyleSheet.prototype && 'adoptedStyleSheets' in root) {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(CSS);
+      root.adoptedStyleSheets = [sheet];
+      return;
+    }
+  } catch {
+    // A browser that has the names but refuses the sheet gets the element below.
+  }
+  const style = document.createElement('style');
+  style.textContent = CSS;
+  root.prepend(style);
+}
+
+/** What `trustedTypes.createPolicy` returns, in the one method used here: TypeScript's DOM library does not declare Trusted Types yet. */
+interface HtmlPolicy {
+  createHTML(html: string): string;
+}
+/** The policy name to allow in a `trusted-types` directive. */
+const POLICY = 'react-inp-blame';
+let policy: HtmlPolicy | null | undefined;
+
+/**
+ * Sets an element's markup, then its bar widths. Every string that reaches here was built in this file with
+ * `esc()` around everything a report carries, so under Trusted Types it goes through a policy of this
+ * library's own name that passes it on as it is; a page enforcing Trusted Types allows it by listing
+ * `react-inp-blame` in its `trusted-types` directive. Widths are set through the element's style object
+ * rather than a style attribute in the markup, which a style-src without 'unsafe-inline' blocks.
+ */
+function setHTML(el: HTMLElement, html: string): void {
+  if (policy === undefined) {
+    const tt = (globalThis as { trustedTypes?: { createPolicy(name: string, rules: HtmlPolicy): HtmlPolicy } }).trustedTypes;
+    try {
+      policy = tt ? tt.createPolicy(POLICY, { createHTML: (s) => s }) : null;
+    } catch {
+      // The page's trusted-types directive does not list this name. Where Trusted Types are enforced the
+      // assignment below then throws, and the overlay says so once rather than breaking the page.
+      policy = null;
+    }
+  }
+  el.innerHTML = (policy ? policy.createHTML(html) : html) as string;
+  el.querySelectorAll<HTMLElement>('[data-width]').forEach((bar) => {
+    bar.style.width = `${bar.dataset.width}%`;
+  });
+}
+
+/**
  * The phase bar. A phase with named parts draws them first, then what is left of it, so the
  * hydration inside the working time is a band of its own without the bar adding up to any more
  * than the interaction.
@@ -414,7 +483,7 @@ function phaseBar(phases: readonly Phase[], total: number): string {
 }
 
 function band(cls: string, label: string, ms: number, total: number): string {
-  return `<i class="${cls}" style="width:${((ms / total) * 100).toFixed(1)}%" title="${esc(label)}: ${Math.round(ms)} ms"></i>`;
+  return `<i class="${cls}" data-width="${((ms / total) * 100).toFixed(1)}" title="${esc(label)}: ${Math.round(ms)} ms"></i>`;
 }
 
 function swatch(cls: string, p: Phase): string {
@@ -479,8 +548,7 @@ function inSentence(title: string): string {
 }
 
 function tag(rating: keyof typeof RATING): string {
-  const R = RATING[rating];
-  return `<span class="tag" style="background:${R.color}">${R.label}</span>`;
+  return `<span class="tag" data-rating="${rating}">${RATING[rating].label}</span>`;
 }
 
 function esc(s: string): string {

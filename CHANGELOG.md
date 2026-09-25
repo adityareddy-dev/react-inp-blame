@@ -15,6 +15,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   --turbo` nothing can install, and the wrapper says so; soft navigations are not announced there. CI runs a
   14.2.35 App Router app (`fixtures/next-14`) in dev and production; 15.2.9 was checked by hand.
 
+### Changed
+
+- **The badge and panel work under a strict Content Security Policy.** They styled their shadow root with a
+  `<style>` element and set colours and bar widths in `style` attributes, so a `style-src` of nonces or hashes
+  left an unstyled button at the foot of the page, and under Trusted Types the overlay was not shown at all.
+  The stylesheet is now a constructed one, which `style-src` does not govern, colours come from classes and
+  widths are set through the style object; under Trusted Types the markup goes through a policy named
+  `react-inp-blame`, which the page lists in `trusted-types`. Where it does not, the console says so once and
+  the reports still come. Safari before 16.4 still gets a `<style>` element. CI runs the demo under such a
+  policy in Chromium (`apps/demo/e2e/csp.spec.ts`).
+
 ## [0.8.0] - 2026-09-25
 
 ### Fixed
