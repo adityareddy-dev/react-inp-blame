@@ -200,11 +200,14 @@ this library in that chunk with react-dom, so the install script's import of the
 `install()` (seen on Vite 5.4.21, 6.4.3 and 7.3.6 with React 17, and on 7.3.6 with React 18). When
 `manualChunks` is a function the plugin now takes the library out of it into a chunk of its own, and your
 function keeps deciding every other module. CI builds that on Vite 7.3 with React 18.3 and a rule sending all
-of `node_modules` to `vendor`. A `manualChunks` object, a Vite 8 `codeSplitting` group and a build with
-`@vitejs/plugin-legacy` are left as they are, so there, keep react-inp-blame out of the rule. The build warns,
-naming both chunks, when the install's chunk imports one that connects react-dom to React's DevTools hook as
-it loads: one that imports `react-dom/client`, or with React 17 or 18 `react-dom` itself, such as a
-component library's portal in the same vendor chunk. A chunk that only holds react-dom is fine, since
+of `node_modules` to `vendor`. A `manualChunks` object and a Vite 8 `codeSplitting` group are left as they
+are, so there, keep react-inp-blame out of the rule. With `@vitejs/plugin-legacy` the install stays in the
+page's own script, and a vendor rule that takes react-dom breaks it whatever it does with the library, so
+keep react-dom out of that rule too (`!id.includes('/react-dom/')`). The build warns, naming both chunks and
+the module, when the install's chunk imports one that connects react-dom to React's DevTools hook as it
+loads: one that imports `react-dom/client`, or with React 17 or 18 `react-dom` itself, such as a component
+library's portal in the same vendor chunk, or on Vite 5, whose bundler leaves react-dom's body where it is,
+the chunk that holds react-dom. On Vite 6 and later a chunk that only holds react-dom is fine, since
 react-dom runs where it is first imported.
 
 **No HTML page in the build** (Laravel, Rails, Django, or any backend that writes the page from
