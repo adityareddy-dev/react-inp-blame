@@ -270,19 +270,22 @@ module imports is evaluated before the module's own body, so an install written 
 the shared chunk that holds react-dom whenever the root route imports anything that reaches react-dom. And an
 app whose `package.json` says `"sideEffects": false`, as Remix's template does, loses an import with no names
 from the build altogether. With `entry` the install is a chunk of its own, marked as having side effects, and
-the import is added after the JSX is compiled, so that it is the module's first import rather than the one the
-compiler adds for `react/jsx-runtime`. Rollup, which builds for Vite 7 and before, evaluates a module's chunk
+the import is added after the JSX is compiled, so that in the module it comes before the one the compiler adds
+for `react/jsx-runtime`. Rollup, which builds for Vite 7 and before, evaluates a module's chunk
 imports in the order the module has them, so there the install runs before react-dom in all three cases.
 Rolldown, which builds for Vite 8, orders a chunk's imports itself. The apps CI builds on Vite 8 come out right,
 React Router 7 on React 18 among them, but that is Rolldown's doing rather than a promise, so check
 `stats().mode` and `debug.hook().renderers` in a built page once. On React 19 it matters less: only
-`react-dom/client` connects to the hook, and only the client entry imports it. A server build, and an output
-that cannot be split into chunks (one that inlines its dynamic imports, keeps every module as its own file, or
-is an `iife` or `umd` script), gets neither the import nor the chunk. A build in which no module has that path
-fails, rather than shipping without the install. The chunk comes from `manualChunks`, and a
-`manualChunks` function of your own keeps deciding every other module; an object cannot be added to, so the
-plugin warns and leaves it be, and the install may then run late in a build. `entry` needs the runtime, so it
-cannot go with `runtime: false`.
+`react-dom/client` connects to the hook, and only the client entry imports it. A server build gets neither
+the import nor the chunk. An output that cannot be split into chunks (one that inlines its dynamic imports,
+keeps every module as its own file, or is an `iife` or `umd` script) keeps the import but gets no chunk of its
+own, so there the install runs wherever the bundler puts it. A build in which no module has that path fails,
+rather than shipping without the install. The chunk comes from `manualChunks`: the install and everything it
+imports always go in it, so a rule of your own that sends `node_modules` to a vendor chunk cannot put the
+library beside react-dom, and your `manualChunks` function keeps deciding every other module. A
+`manualChunks` object, or Rolldown's own chunk groups, cannot be added to, so the plugin warns and leaves them
+be, and the install may then run late in a build. `entry` needs the runtime, so it cannot go with
+`runtime: false`.
 
 CI builds this from `npx create-react-router@8.4.0` (React Router 8.4, Vite 8.3, React 19.3), and from
 `npx create-react-router@7.18.4` moved to React 18.3 with a route that calls `flushSync` from react-dom, and
