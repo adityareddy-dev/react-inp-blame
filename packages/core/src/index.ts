@@ -24,6 +24,27 @@ const DEFAULT_THRESHOLD = 40;
 const DEFAULT_WALK_BUDGET = 5000;
 /** How long react-dom has to register with the hook before the page is told install() ran too late. */
 const RENDERER_CHECK_MS = 3000;
+// How many elements the check above reads at most. React marks every element it renders, so a page with
+// React on it shows one early, and a page without pays for this many reads once.
+const RENDERED_SCAN_LIMIT = 10000;
+// NodeFilter.SHOW_ELEMENT, written out so the check needs no NodeFilter global.
+const SHOW_ELEMENT = 1;
+
+/**
+ * Whether react-dom has rendered into this document: the key it puts on a root's container, the document
+ * itself when it hydrates the whole page, or on each element it renders. Only read when no react-dom has
+ * registered, so a page that installed in time never pays for it.
+ */
+function reactRendered(): boolean {
+  if (typeof document.createTreeWalker !== 'function') return false;
+  const marked = (node: Node) => Object.keys(node).some((key) => key.startsWith('__reactContainer$') || key.startsWith('__reactFiber$'));
+  if (marked(document)) return true;
+  const walker = document.createTreeWalker(document.documentElement, SHOW_ELEMENT);
+  for (let node: Node | null = walker.currentNode, read = 0; node && read < RENDERED_SCAN_LIMIT; node = walker.nextNode(), read++) {
+    if (marked(node)) return true;
+  }
+  return false;
+}
 
 /** The options only a first install() can set; a later call that changes one is warned about. */
 type Settings = Required<Pick<InstallOptions, 'threshold' | 'devtoolsTrack' | 'walkBudget' | 'inputWindow' | 'debugGlobal' | 'hook' | 'sampleRate' | 'labels'>>;
@@ -197,14 +218,18 @@ function installNow(opts: InstallOptions): Api {
     lifecycle.onEntries(batch);
   });
 
+  // React on the page with no react-dom registered means install() ran after react-dom loaded. Without
+  // React on the page nothing is said: a host may load it later by design, as Astro does for an island
+  // hydrated once it scrolls into view, or never, on a page whose islands are another framework's.
   const rendererCheck = setTimeout(() => {
     checkHookReplaced();
     const { mode } = hookStats();
-    if ((mode === 'shim' || mode === 'chained') && !knownRenderers().some((r) => r.rendererPackageName === 'react-dom')) {
+    if ((mode === 'shim' || mode === 'chained') && !knownRenderers().some((r) => r.rendererPackageName === 'react-dom') && reactRendered()) {
       warnOnce(
         'no-renderer',
-        `no react-dom registered with the DevTools hook within ${RENDERER_CHECK_MS / 1000}s. install() has to run before react-dom loads: ` +
-          "install with react-inp-blame/vite or react-inp-blame/next, or make `import 'react-inp-blame/auto'` the first import of your entry module.",
+        `React has rendered on this page, but no react-dom registered with the DevTools hook within ${RENDERER_CHECK_MS / 1000}s, so install() ran after react-dom loaded. ` +
+          'Install with react-inp-blame/vite, react-inp-blame/next or react-inp-blame/astro, ' +
+          "or make `import 'react-inp-blame/auto'` the first import of your entry module.",
       );
     }
   }, RENDERER_CHECK_MS);

@@ -206,6 +206,43 @@ test('a browser without Event Timing interactionId gets nothing installed, one w
   assert.deepEqual(await Promise.all(overlays), [null, null]);
 });
 
+/** A document whose elements, in document order, are `elements`, walked the way the renderer check walks it. */
+function documentOf(elements: object[], own: object = {}) {
+  return Object.assign(own, {
+    documentElement: elements[0],
+    createTreeWalker: () => {
+      let at = 0;
+      return { currentNode: elements[0], nextNode: () => elements[++at] ?? null };
+    },
+  });
+}
+
+test('React rendered with no react-dom registered is warned about after 3 s, and a page with no React on it yet is not', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pages = [
+    // An Astro page whose only island hydrates once it scrolls into view, or whose islands are all Vue.
+    documentOf([{}, {}, {}]),
+    // react-dom rendered an element, and never told the hook.
+    documentOf([{}, {}, { __reactFiber$x1y2: {} }]),
+    // react-dom hydrated the whole document.
+    documentOf([{}], { __reactContainer$x1y2: {} }),
+  ];
+  const warned = [];
+  for (const page of pages) {
+    await inBrowser(() => {
+      Object.defineProperty(globalThis, 'document', { value: page, configurable: true, writable: true });
+      const api = install();
+      const before = warn.mock.callCount();
+      t.mock.timers.tick(3000);
+      warned.push(warn.mock.calls.slice(before).some((call) => /React has rendered on this page/.test(String(call.arguments[0]))));
+      api.dispose();
+    });
+    session?.slots.warnings?.clear();
+  }
+  assert.deepEqual(warned, [false, true, true]);
+});
+
 test("hook: 'auto' creates a hook when there is none, and it does not claim to be React DevTools", async () => {
   await inBrowser((page) => {
     const api = install();

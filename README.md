@@ -394,12 +394,17 @@ export default defineConfig({
 `'development'` meaning `astro dev` and `'production'` meaning `astro build`. It has no `pages`: every page's
 islands go through the same script. List it after `react()`, as above, which is the order CI runs: on the dev
 server `react()` puts its Fast Refresh preamble in the same script, and the library then chains onto the hook
-the preamble makes. The install runs when the page's first island starts to hydrate, so on a page whose
-islands are all `client:idle` or `client:visible`, a click before then lands on HTML React has not taken over,
-and the library is not there yet to see it. A page with no island loads no React, and no library. CI builds this
-from Astro's minimal template (`npm create astro@5.2.4 -- --template minimal`, then `npx astro add react`:
-Astro 7.3, Vite 8.3, React 19.3) with two islands, one `client:load` and one `client:idle`, and checks that a
-click is blamed on the component that rendered slowly under `astro dev` and on `astro preview` of the build.
+the preamble makes. The install runs as soon as the page's first island has been parsed, whatever its
+`client:` directive, so it is in place before any island hydrates, and a page with no island loads neither
+React nor the library. React itself may load much later, when a `client:visible` island scrolls into view, or
+never, on a page whose islands are all another framework's; the library warns that it was installed too late
+only where React has rendered without registering with it. The order holds for islands: a `<script>` of your
+own in an `.astro` file that imports react-dom is outside it. CI builds this from Astro's minimal template
+(`npm create astro@5.2.4 -- --template minimal`, then `npx astro add react`: Astro 7.3, Vite 8.3, React 19.3)
+with a page of two islands, one `client:load` and one `client:idle`, and a page whose one island is
+`client:visible` below the fold. It checks that a click is blamed on the component that rendered slowly, and
+that the second page gets no warning before or after its island hydrates, under `astro dev` and on
+`astro preview` of the build.
 
 ## With web-vitals
 
