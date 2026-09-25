@@ -765,7 +765,9 @@ function leafOf(c: CommitSummary): string {
  */
 function ownRender(c: CommitSummary): { readonly name: string; readonly self: number } | undefined {
   const top = mostlyComponent(c);
-  if (c.rendered < 2 || top?.count !== 1 || top.self == null) return undefined;
+  // A root outside ProfileMode with a `<Profiler>` under it is timed only below the Profiler, so the commit's
+  // total can come to less than one component's own time, and "of it" would claim more than the whole.
+  if (c.rendered < 2 || top?.count !== 1 || top.self == null || top.self > c.total) return undefined;
   return top.self >= OWN_RENDER_MIN_MS && top.self >= OWN_RENDER_MIN_SHARE * c.total ? { name: top.name, self: top.self } : undefined;
 }
 
@@ -785,8 +787,8 @@ function renderedCount(c: CommitSummary): string {
 
 /**
  * "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "re-rendering 637
- * components inside TableBody, 257 ms of it in TableBody's own render rather than the components under it"
- * where one component's own render was most of it (`ownRender`); "hydrating" for a hydration.
+ * components inside TableBody, 257 ms of it in TableBody's own render" where one component's own render was
+ * most of it (`ownRender`); "hydrating" for a hydration.
  */
 function renderPhrase(c: CommitSummary): string {
   const verb = c.hydrated ? 'hydrating' : 're-rendering';
@@ -804,7 +806,7 @@ function renderPhrase(c: CommitSummary): string {
     mostly = top.name === leaf ? ` (${top.count} of them${time})` : `, mostly ${top.name} (${top.count} of them${time})`;
   } else if (own) {
     // Named even where it is the leaf: "in its own render" could be read as the render's own.
-    mostly = `, ${ms(own.self)} of it in ${own.name}'s own render rather than the components under it`;
+    mostly = `, ${ms(own.self)} of it in ${own.name}'s own render`;
   }
   return `${verb} ${renderedCount(c)} inside ${leaf}${mostly}`;
 }
@@ -1114,10 +1116,7 @@ function explain(r: InteractionReport): Explanation {
   if (sayEffects && rc) extras[extras.length - 1] += included(rc);
   // A figure that ends in the renders it holds takes a comma before the sentence goes on.
   const committedEnd = sayEffects && rc && included(rc) ? ',' : '';
-  // A render phrase that ends on "rather than the components under it" takes a comma before its "and", or
-  // the committing reads as one more thing the time was not spent on.
-  const and = rc && ownRender(rc) ? ', and' : ' and';
-  const committed = extras.length === 2 ? `, ${extras[0]} and ${extras[1]}` : extras.length === 1 ? `${and} ${extras[0]}` : acrossCommits ? `${and} ${acrossCommits}` : '';
+  const committed = extras.length === 2 ? `, ${extras[0]} and ${extras[1]}` : extras.length === 1 ? ` and ${extras[0]}` : acrossCommits ? ` and ${acrossCommits}` : '';
   // In a production build the effects are the only figure, and the totals are said, since there is no
   // render figure to set one commit's beside.
   const effectsFigure = committingMatters ? effects : 0;
@@ -1430,7 +1429,7 @@ function explain(r: InteractionReport): Explanation {
   // in the components under it. Said of the render the blame names, where it is the advice worth having.
   const ownBlamed = blame.kind === 'render' && rc ? ownRender(rc) : undefined;
   if (ownBlamed) {
-    notes.push(`That much time in ${ownBlamed.name}'s own render usually means work it does while rendering, such as sorting, filtering or building data, which memoising the components under it does not speed up.`);
+    notes.push(`Time in ${ownBlamed.name}'s own render is usually work it does as it renders, like a sort or a filter, which memoising the components under it does not speed up.`);
   }
   if (c) {
     // A hydration is not a re-render: it is the first render of that HTML on the client, and counting
