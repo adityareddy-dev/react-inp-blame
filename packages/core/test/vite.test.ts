@@ -273,7 +273,7 @@ test('entry gives the install a chunk of its own, not an entry, and fails a buil
   // An object cannot be added to, so it is left as it is, with a warning.
   const warnings: string[] = [];
   assert.equal(found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, { manualChunks: { vendor: ['react'] } }), null);
-  assert.match(warnings[0]!, /a manualChunks object/);
+  assert.match(warnings[0]!, /already sorts modules into chunks another way \(a manualChunks object/);
   // Without entry the output is left alone, and so is one that cannot be split, which would fail the build.
   assert.equal(entryRuntime('build', {}).runtime.outputOptions.call({}, {}), null);
   for (const output of [{ inlineDynamicImports: true }, { preserveModules: true }, { codeSplitting: false }, { format: 'iife' }, { format: 'umd' }]) {
@@ -328,10 +328,27 @@ test("the install's chunk takes everything the install imports, whatever the app
 });
 
 test('a wrong entry path fails every browser build, one written as a single iife script too', () => {
-  const found = entryRuntime('build', { entry: 'app/roots.tsx' });
-  found.runtime.configResolved({ command: 'build', root: '/app', base: '/', build: { rollupOptions: { output: { format: 'iife' } } }, plugins: [] });
-  found.finish();
-  assert.equal(found.errors.length, 1);
+  const runtime = pluginsFor('build', { enabled: true, entry: 'app/roots.tsx' }).find((p) => p.name === INSTALL)!;
+  // The iife output where both Vite 5 (the stored config) and Vite 6 and later (the environment) keep it.
+  const build = { rollupOptions: { output: { format: 'iife' } } };
+  const errors: string[] = [];
+  const context = { environment: { name: 'client', config: { consumer: 'client', build } }, error: (m: string) => errors.push(m), emitFile: () => {} };
+  runtime.configResolved({ command: 'build', root: '/app', base: '/', build, plugins: [] });
+  runtime.buildStart.call(context);
+  runtime.generateBundle.call(context);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0]!, /no module at \/app\/app\/roots\.tsx/);
+});
+
+test('a bundler that gives manualChunks no getModuleInfo gets a warning, once, and the install still its chunk', () => {
+  const found = entryRuntime('build', { entry: 'app/root.tsx' });
+  const warnings: string[] = [];
+  const { manualChunks } = found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, {});
+  assert.equal(manualChunks(`\0${INSTALL_MODULE}`, {}), 'react-inp-blame-install');
+  manualChunks('/app/node_modules/react-inp-blame/dist/index.js', {});
+  manualChunks('/app/node_modules/react-dom/index.js', {});
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /gives manualChunks no getModuleInfo/);
 });
 
 test('entry leaves a server build alone: no chunk, no import, no error', () => {

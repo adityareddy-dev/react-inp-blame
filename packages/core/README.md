@@ -172,11 +172,11 @@ TanStack Start 1.168, each under its dev server and a production build. The
 [repository README](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router)
 has each app's whole config.
 
-The plugin cannot fix a `manualChunks` rule sending all of `node_modules` to one vendor chunk. The
-rule puts this library in that chunk with react-dom, and the install script's import of the chunk
-can then evaluate react-dom before `install()` runs; nothing the plugin can reach decides that
-order. Keep react-inp-blame out of the rule, or give it a chunk of its own, whatever the Vite
-version. A rule sending only react and react-dom to `vendor` is fine. Seen failing on Vite 5.4.21,
+The page script cannot fix a `manualChunks` rule sending all of `node_modules` to one vendor
+chunk. The rule puts this library in that chunk with react-dom, and the install script's import of
+the chunk can then evaluate react-dom before `install()` runs; nothing the plugin can reach decides
+that order. Keep react-inp-blame out of the rule, or give it a chunk of its own, whatever the Vite
+version. (`entry`, below, is different: it keeps the library in the install's own chunk.) A rule sending only react and react-dom to `vendor` is fine. Seen failing on Vite 5.4.21,
 6.4.3 and 7.3.6, built with React 17 and a default import of react-dom. On 8.3.0 the same build
 came out right, but that was the bundler's doing.
 
