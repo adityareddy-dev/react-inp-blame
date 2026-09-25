@@ -70,6 +70,9 @@ says what to include. The report as JSON matters most: add `debugGlobal: true` t
 the slow interaction. It carries the page's URL and the label of the element you clicked, so read it
 through before you paste it.
 
+Each warning the library prints ends with a link to its entry under
+[Troubleshooting](https://github.com/adityareddy-dev/react-inp-blame#troubleshooting) in the repository.
+
 # Reference
 
 No dependencies. React 17 to 19 (react-dom). Browsers with Event Timing's `interactionId`
@@ -444,7 +447,7 @@ current:
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 62.9 KB | 22.4 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 62.7 KB | 22.4 KB |
 | The badge and panel, a chunk loaded by `import()` only when shown | 15.7 KB | 5.9 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 24.2 KB | 9.0 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |

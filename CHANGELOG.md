@@ -6,6 +6,24 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **Every warning links to what to do about it.** Each warning the library prints in the browser, and each
+  one `withInpBlame` and the Vite plugin print at build time, now ends with a link to its own entry in the
+  README's new Troubleshooting section, which says what it means and how to fix it. A unit test reads the
+  anchors out of the source and fails when one is missing from the README.
+- **The issue forms ask for more.** The wrong or missing blame form asks what you clicked, what the report
+  blamed and what you think is slow as three questions. The setup problem form asks for the framework and the
+  full warning text, and links Troubleshooting first.
+- `profiler` is among the package's npm keywords.
+
+### Changed
+
+- **The two "installed too late" warnings are shorter.** They name the Vite, Next.js and Astro setups and
+  `/auto` in one line, and the README entry they link to has the rest.
+- **The size check wants the README's table exactly as `--write` writes it.** It let a row a tenth of a
+  kilobyte off pass, so a table could go stale by 0.1 KB at a time. The budget check is unchanged.
+
 ## [0.9.0] - 2026-09-25
 
 ### Added

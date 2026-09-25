@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Troubleshooting
+    url: https://github.com/adityareddy-dev/react-inp-blame#troubleshooting
+    about: What each console warning means and what to do about it.
   - name: Question, or an idea for the library
     url: https://github.com/adityareddy-dev/react-inp-blame/discussions
     about: Ask in Discussions. Anything that is not a bug in the library belongs there.

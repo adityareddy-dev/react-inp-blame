@@ -1978,7 +1978,7 @@ test('a build whose component names look minified says so in the report and once
     for (const r of api.reports()) assert.ok(r.explanation.notes.some((n) => n.startsWith('Most component names here are one or two characters')), r.explanation.notes.join('\n'));
     const said = warn.mock.calls.filter((c) => /Most component names in this page's reports/.test(String(c.arguments[0])));
     assert.equal(said.length, 1);
-    assert.match(String(said[0]!.arguments[0]), /#install-with-vite$/);
+    assert.match(String(said[0]!.arguments[0]), / See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#minified-names$/);
     api.dispose();
   });
 });

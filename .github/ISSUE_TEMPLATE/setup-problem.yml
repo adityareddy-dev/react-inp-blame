@@ -5,6 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
+        If the console printed a warning, it ends with a link to its entry under
+        [Troubleshooting](https://github.com/adityareddy-dev/react-inp-blame#troubleshooting). Read that first.
+
         Two quick checks first. `stats()` says whether the library installed at all and why not:
         turn on `debugGlobal: true` and read `__REACT_INP_BLAME__.stats()`. And with Next.js,
         the options are the **second** argument, `withInpBlame(nextConfig, { runtime: { overlay: true } })`.
@@ -15,19 +18,34 @@ body:
       description: The steps from a fresh install, and where it stopped.
     validations:
       required: true
+  - type: dropdown
+    id: framework
+    attributes:
+      label: Framework
+      options:
+        - Next.js
+        - Vite
+        - React Router
+        - Remix
+        - TanStack Start
+        - Astro
+        - webpack or Rspack, with react-inp-blame/auto
+        - Something else
+    validations:
+      required: true
   - type: textarea
     id: config
     attributes:
-      label: Your next.config or vite.config
-      description: The whole file, or the part that calls `withInpBlame` or `inpBlame`.
+      label: Your next.config, vite.config or astro.config
+      description: The whole file, or the part that calls `withInpBlame` or `inpBlame`. For `/auto`, your entry module's first lines.
       render: ts
     validations:
       required: true
   - type: textarea
     id: output
     attributes:
-      label: The error, or what stats() says
-      description: The build output, the console warnings, or `__REACT_INP_BLAME__.stats()`.
+      label: The warning or error, or what stats() says
+      description: The full text of the console warning or build error, or `__REACT_INP_BLAME__.stats()`.
       render: shell
     validations:
       required: true

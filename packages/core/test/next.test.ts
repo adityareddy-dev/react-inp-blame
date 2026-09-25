@@ -392,6 +392,7 @@ test('a Next.js older than 14.2 gets its config back as it was, with a warning t
   assert.equal(warn.mock.callCount(), 1);
   const message = String(warn.mock.calls[0].arguments[0]);
   assert.ok(message.includes('14.1.4') && message.includes('14.2'), message);
+  assert.ok(message.endsWith(' See https://github.com/adityareddy-dev/react-inp-blame#next-too-old'), message);
   // A prerelease of a later version passes every floor. A peer range would have refused it at install time.
   assert.deepEqual(added(inProject(canary, () => wrapped('development', {}))), EVERYTHING);
   // enabled: false adds nothing to the config, so there is nothing to warn about.

@@ -10,11 +10,25 @@ body:
         in the console right after the slow interaction. `reports()` gives the last 50.
         Reports carry the URL of the page and the label of the element you clicked, so read
         them through before pasting.
-  - type: textarea
-    id: expected
+  - type: input
+    id: clicked
     attributes:
-      label: What you expected, and what you got
-      description: Which component or handler you believe was slow, and what the report said instead. Say "no report at all" if nothing appeared.
+      label: What you clicked
+      description: The element and the page, for example "the Save button on /settings". Or the key you pressed.
+    validations:
+      required: true
+  - type: textarea
+    id: blamed
+    attributes:
+      label: What it blamed
+      description: The component or handler the report named, and its sentence. Say "no report at all" if nothing appeared.
+    validations:
+      required: true
+  - type: textarea
+    id: slow
+    attributes:
+      label: What you think is slow
+      description: The component, handler or work you believe took the time, and why you think so.
     validations:
       required: true
   - type: textarea
@@ -29,7 +43,7 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: react-inp-blame, react and react-dom, and Next.js or Vite.
+      description: react-inp-blame, react and react-dom, and the framework and bundler.
       placeholder: react-inp-blame 0.2.0, react 19.3.0, react-dom 19.3.0, next 16.3.5
     validations:
       required: true
@@ -41,6 +55,7 @@ body:
         - Next.js, Turbopack
         - Next.js, webpack
         - Vite
+        - Vite, with React Router, Remix, TanStack Start or Astro
         - Another bundler, with react-inp-blame/auto
         - Something else
     validations:
