@@ -158,8 +158,10 @@ and is all that `runtime: false` leaves. They go beside the React plugin, not in
 React Router in framework mode, Remix and TanStack Start write their own HTML, so no page reaches
 the plugin. For them, `entry` names a module of the app, by its path from the project root, that
 gets the install as its first import, in the browser's copy only. In a build the install is a
-chunk of its own that the module imports first, marked as having side effects, so it runs before
-the chunk that holds react-dom and survives a `"sideEffects": false` in the app's package.json.
+chunk of its own, marked as having side effects, so it survives a `"sideEffects": false` in the
+app's package.json. Under Rollup (Vite 7 and before) the module's first chunk import is evaluated
+first, so the install runs before the chunk that holds react-dom; Rolldown (Vite 8) orders a
+chunk's imports itself, and the apps CI builds with it come out right, which is not a promise.
 A build in which no module has that path fails.
 
     // vite.config.ts, React Router or Remix; under TanStack Start, entry: 'src/client.tsx'

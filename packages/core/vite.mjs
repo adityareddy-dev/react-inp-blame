@@ -27,6 +27,25 @@ function fileOf(id) {
   return id.split('?')[0].replaceAll('\\', '/');
 }
 
+/** `entry` as the absolute path Vite gives the module: as it is when absolute, else from the project root. */
+function entryPath(root, entry) {
+  const written = entry.replaceAll('\\', '/');
+  if (written.startsWith('/') || /^[A-Za-z]:\//.test(written)) return fileOf(written);
+  return fileOf(`${String(root).replaceAll('\\', '/').replace(/\/$/, '')}/${written.replace(/^\.\//, '')}`);
+}
+
+/**
+ * Whether one output of a build can hold a chunk of its own. An output that inlines its dynamic
+ * imports, keeps every module as its own file, or is one script by format cannot take `manualChunks`:
+ * Rollup and Rolldown both refuse the build outright.
+ */
+function splittable(output) {
+  return !output.inlineDynamicImports && !output.preserveModules && output.codeSplitting !== false && output.format !== 'iife' && output.format !== 'umd';
+}
+
+// A directive prologue, such as "use client", has to stay first in its module to mean anything.
+const DIRECTIVES = /^(?:\s*(?:'[^'\n]*'|"[^"\n]*");?)+/;
+
 /** The file name of the chunk holding the install call, or undefined when this build has none. */
 function installChunk(bundle) {
   return Object.keys(bundle).find((file) => bundle[file].type === 'chunk' && bundle[file].facadeModuleId === RESOLVED_INSTALL_MODULE);
@@ -136,8 +155,11 @@ export function inpBlame(options = {}) {
     let config = null;
     // `entry` as the absolute path Vite gives the module, once the root is known.
     let entryFile = null;
-    // Whether this client build has put the install first in `entry`, which a wrong path never does.
-    let entryImports = false;
+    // The builds, by environment, that have put the install first in `entry`, which a wrong path never does.
+    const entryImports = new Set();
+    // Whether this build is the browser's, with chunks of its own: the one `entry` gives a chunk to.
+    let entryChunk = false;
+    const environmentOf = (context) => context.environment?.name ?? 'client';
     plugins.push({
       name: 'react-inp-blame:install',
       enforce: 'pre',
@@ -150,7 +172,7 @@ export function inpBlame(options = {}) {
       config: () => (entry !== undefined ? { optimizeDeps: { include: ['react-inp-blame'] } } : undefined),
       configResolved(resolved) {
         config = resolved;
-        if (entry !== undefined) entryFile = fileOf(`${String(resolved.root).replace(/[\\/]$/, '')}/${entry.replace(/^\.?\//, '')}`);
+        if (entry !== undefined) entryFile = entryPath(resolved.root, entry);
       },
       /**
        * Asks the bundler for the install call in a chunk of its own, which the page then loads as a
@@ -158,7 +180,8 @@ export function inpBlame(options = {}) {
        * to point a second script tag at.
        */
       buildStart() {
-        entryImports = false;
+        entryImports.delete(environmentOf(this));
+        entryChunk = entryFile !== null && separateScript(config, this.environment);
         if (entry === undefined && buildsPages(config, this.environment, pages)) this.emitFile({ type: 'chunk', id: INSTALL_MODULE, name: 'react-inp-blame-install' });
       },
       /**
@@ -168,7 +191,8 @@ export function inpBlame(options = {}) {
        * manifest wants one). A manualChunks function the app already has decides every other module.
        */
       outputOptions(output) {
-        if (!entryFile) return null;
+        // A server build never runs the install, and some outputs cannot be split at all.
+        if (!entryChunk || !splittable(output)) return null;
         const theirs = output.manualChunks;
         if (theirs !== undefined && typeof theirs !== 'function') {
           this.warn('inpBlame: entry cannot give the install a chunk of its own beside a manualChunks object. Write manualChunks as a function, or the install may run after react-dom in a build.');
@@ -182,23 +206,9 @@ export function inpBlame(options = {}) {
       // Side effects are what the module is for, whatever the app's package.json says of its own files.
       resolveId: (id) => (id === INSTALL_MODULE ? { id: RESOLVED_INSTALL_MODULE, moduleSideEffects: true } : null),
       load: (id) => (id === RESOLVED_INSTALL_MODULE ? `import { install } from 'react-inp-blame';\ninstall(${JSON.stringify(install)});\n` : null),
-      /**
-       * `entry`, for a framework that writes its own HTML: the install becomes the module's first
-       * import, in the browser's copy of it only. On the dev server that is enough, since nothing is
-       * bundled. In a build the import points at the chunk outputOptions gives it, and a chunk that a
-       * module imports first is evaluated first, so the install runs before the shared chunk where
-       * react-dom lands, whatever else the module imports. The import goes on the module's first line,
-       * so every line after it keeps its number and no source map is needed.
-       */
-      transform(code, id, transformOptions) {
-        if (!entryFile || fileOf(id) !== entryFile) return null;
-        if (transformOptions?.ssr || this.environment?.config?.consumer === 'server') return null;
-        entryImports = true;
-        return { code: `import '${INSTALL_MODULE}';${code}`, map: null };
-      },
       /** A path that matched nothing would leave the page without the install, and say nothing. */
       generateBundle() {
-        if (entryFile && separateScript(config, this.environment) && !entryImports) {
+        if (entryFile && separateScript(config, this.environment) && !entryImports.has(environmentOf(this))) {
           this.error(`inpBlame: entry is '${entry}', and this build has no module at ${entryFile}. It is the path of a module of the app from the project root, such as 'app/root.tsx'.`);
         }
       },
@@ -216,6 +226,31 @@ export function inpBlame(options = {}) {
             : undefined,
       },
     });
+    /**
+     * `entry`, for a framework that writes its own HTML: the install becomes the first import of that
+     * module, in the browser's copy of it only. A plugin of its own, and a late one, so the import is
+     * added after the JSX has been compiled: the compiler puts its own import of react/jsx-runtime at
+     * the top, and above the install that one would bring react, and often react-dom in the same chunk,
+     * in first. Still ahead of Vite's import analysis, which resolves the import. On the dev server that
+     * is enough, since nothing is bundled. In a build the import points at the chunk outputOptions gives
+     * the install, and Rollup (Vite 7 and before) evaluates a module's chunk imports in the order the
+     * module has them. Rolldown (Vite 8) orders them itself. The import goes on the first line, after
+     * any directive prologue, so every line keeps its number and no source map is needed.
+     */
+    if (entry !== undefined) {
+      plugins.push({
+        name: 'react-inp-blame:entry',
+        enforce: 'post',
+        apply,
+        transform(code, id, transformOptions) {
+          if (!entryFile || fileOf(id) !== entryFile) return null;
+          if (transformOptions?.ssr || this.environment?.config?.consumer === 'server') return null;
+          entryImports.add(environmentOf(this));
+          const directives = DIRECTIVES.exec(code)?.[0] ?? '';
+          return { code: `${directives}import '${INSTALL_MODULE}';${code.slice(directives.length)}`, map: null };
+        },
+      });
+    }
     /**
      * The production half. An import cannot be made to win here: Vite folds a page's module scripts
      * into one entry module, and a chunk that entry imports is evaluated before the entry's own body,
@@ -237,7 +272,7 @@ export function inpBlame(options = {}) {
         // After the bundle exists, so the chunk this points at has its final name.
         order: 'post',
         handler: (_html, { path, bundle }) => {
-          const file = pages(path) && bundle && installChunk(bundle);
+          const file = entry === undefined && pages(path) && bundle && installChunk(bundle);
           return file ? [{ tag: 'script', attrs: { type: 'module', crossorigin: true, src: assetUrl(config, path, file) }, injectTo: 'head-prepend' }] : undefined;
         },
       },

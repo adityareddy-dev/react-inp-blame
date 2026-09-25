@@ -16,14 +16,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   the packed tarball, under `astro dev` and on `astro preview` of a production build: a page with two
   islands, and one whose only island hydrates when it scrolls into view.
 - **`entry`, a Vite plugin option for frameworks that write their own HTML, and a setup for Remix.**
-  `inpBlame({ entry: 'app/root.tsx' })` puts the install first in that module, in the browser's copy only,
-  and in a build gives it a chunk of its own that the module imports first, marked as having side effects.
+  `inpBlame({ entry: 'app/root.tsx' })` puts the install first in that module, in the browser's copy only
+  and after the JSX is compiled, and in a build gives it a chunk of its own, marked as having side effects.
+  Under Rollup (Vite 7 and before) that chunk is evaluated before the others the module imports; Rolldown
+  (Vite 8) orders them itself, and the apps CI builds with it come out right.
   It is the whole setup for React Router, Remix and TanStack Start (`entry: 'src/client.tsx'`), and the
   READMEs now give it in place of a module of your own imported first, which still works where it did. It
   also covers what that could not: in Remix's template the root route's chunk loads react-dom before its
   own body, and `"sideEffects": false` drops an import with no names from the build, so on Remix 2 an
   install written in `app/root.tsx` worked on the dev server and never ran in a production build. A build
-  in which no module has the path fails. On the dev server the plugin asks Vite to pre-bundle
+  in which no module has the path fails, and a server build or an output that cannot be split into chunks
+  gets neither the import nor the chunk. On the dev server the plugin asks Vite to pre-bundle
   react-inp-blame, which it cannot find in the source by itself, so the first visit does not reload the
   page while it hydrates. CI runs Remix 2.17 from `npx create-remix@2.17.5`, on React 18.3, beside the
   React Router 8, React Router 7 on React 18 and TanStack Start apps, all on `entry` now.

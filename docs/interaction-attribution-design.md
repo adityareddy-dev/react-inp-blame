@@ -1593,7 +1593,12 @@ build as well as on the dev server.
   chunk still imported the shared chunk holding react-dom before running its own body, the install inlined
   there included. `entry` prepends an import of the plugin's install module to the named module in the
   browser's build only, resolves that module with `moduleSideEffects: true`, and emits it as a chunk of its
-  own, so the root's chunk imports it before the shared one (Remix 2.17.5, Vite 6.4.3). React Router and
+  own, so the root's chunk imports it before the shared one (Remix 2.17.5, Vite 6.4.3). The import is
+  added by a plugin of its own that runs after the JSX is compiled: added before, it sat under the
+  compiler's `react/jsx-runtime` import, and with a route importing a `Link` from `@remix-run/react`,
+  react and react-dom share one chunk and the build blamed nothing again. Rolldown (Vite 8) orders a
+  chunk's imports by its own rule rather than the module's, so there the order is not guaranteed; the
+  apps CI builds with it pass, React Router 7 on React 18 among them. React Router and
   TanStack Start moved to it too, and CI runs all four apps on it. The dev server's dependency scan reads
   the source before plugins transform it, so the plugin adds react-inp-blame to `optimizeDeps.include`;
   without that the first visit found it late and reloaded the page while it hydrated. React Native is out of scope: only react-dom commits are
