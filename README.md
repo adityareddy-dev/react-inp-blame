@@ -910,8 +910,8 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 62.8 KB | 22.4 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 14.8 KB | 5.8 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 63.6 KB | 22.6 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 15.2 KB | 5.9 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 24.2 KB | 9.0 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
 <!-- size:end -->
