@@ -243,6 +243,29 @@ test('React rendered with no react-dom registered is warned about after 3 s, and
   assert.deepEqual(warned, [false, true, true]);
 });
 
+test('a page with no React on it 3 s after install is looked at once more, at its first interaction', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const late = /React has rendered on this page/;
+  await inBrowser((page) => {
+    const widget: Record<string, unknown> = {};
+    Object.defineProperty(globalThis, 'document', { value: documentOf([{}, widget]), configurable: true, writable: true });
+    const api = install();
+    t.mock.timers.tick(3000);
+    if (warn.mock.calls.some((call) => late.test(String(call.arguments[0])))) api.dispose();
+    assert.equal(warn.mock.calls.filter((call) => late.test(String(call.arguments[0]))).length, 0);
+    // A react-dom that loaded before the install creates its root after the check, and the page is clicked.
+    widget.__reactContainer$x1y2 = {};
+    try {
+      page.paint([click(7, 3100, 20)]);
+      page.paint([click(8, 3200, 20)]);
+      assert.equal(warn.mock.calls.filter((call) => late.test(String(call.arguments[0]))).length, 1);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test("hook: 'auto' creates a hook when there is none, and it does not claim to be React DevTools", async () => {
   await inBrowser((page) => {
     const api = install();
