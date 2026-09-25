@@ -125,6 +125,17 @@ test('react-dom loaded before the library: stats(), the report, the badge and th
   await expect(page.locator('#react-inp-blame .panel .status')).toContainText('install() ran after react-dom loaded');
 });
 
+test('react-dom loaded before the library: the badge says so once the check after load finds React, before any click', async ({ page }) => {
+  // React renders half a second after the badge is drawn, which says nothing is wrong then.
+  await page.goto('/devtools-hook.html?order=react,library&badge&renderAfter=500');
+  const badge = page.locator('#react-inp-blame .badge');
+  await expect(badge).toHaveAttribute('data-status', 'ok');
+  await page.waitForSelector('[data-test=trigger]');
+  // The check runs 3 s after install; nothing is clicked.
+  await expect(badge).toHaveAttribute('data-status', 'installed-late', { timeout: 6_000 });
+  await expect(badge.locator('.mark')).toHaveCount(1);
+});
+
 test('the badge says nothing is wrong where React is read', async ({ page }) => {
   await page.goto('/devtools-hook.html?order=library&badge');
   await page.waitForSelector('[data-test=trigger]');

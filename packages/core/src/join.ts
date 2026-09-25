@@ -1362,7 +1362,9 @@ function explain(r: InteractionReport): Explanation {
       "React has rendered on this page, but no react-dom registered with this library's DevTools hook: install() ran after react-dom loaded, so nothing React did is in this report. Install ahead of the app: react-inp-blame/vite, react-inp-blame/next or react-inp-blame/astro, or `import 'react-inp-blame/auto'` as the first import of the entry module.",
     );
   } else if (r.reactStatus === 'unreadable') {
-    notes.push("No react-dom on this page can be read (stats().unsupportedReason says why), so nothing React did is in this report.");
+    notes.push(
+      "No react-dom on this page is being read, so nothing React did is in this report: either no React DevTools hook is in use (hook: 'chain' found none to wrap), or the react-dom that registered cannot be read, which stats().unsupportedReason then says.",
+    );
   }
   if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
   if (r.hydration?.kind === 'waited' && blame.kind !== 'hydration') {

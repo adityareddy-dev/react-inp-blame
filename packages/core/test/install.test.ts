@@ -1975,8 +1975,8 @@ test('a build whose component names look minified says so in the report and once
       await nextTask();
     }
     assert.equal(api.reports().length, 2);
-    for (const r of api.reports()) assert.ok(r.explanation.notes.some((n) => n.startsWith('Most component names here look minified')), r.explanation.notes.join('\n'));
-    const said = warn.mock.calls.filter((c) => /look minified/.test(String(c.arguments[0])));
+    for (const r of api.reports()) assert.ok(r.explanation.notes.some((n) => n.startsWith('Most component names here are one or two characters')), r.explanation.notes.join('\n'));
+    const said = warn.mock.calls.filter((c) => /Most component names in this page's reports/.test(String(c.arguments[0])));
     assert.equal(said.length, 1);
     assert.match(String(said[0]!.arguments[0]), /#install-with-vite$/);
     api.dispose();
@@ -1992,8 +1992,16 @@ test('stats().react says whether React can be seen, and a report built while it 
     Object.defineProperty(globalThis, 'document', { value: documentOf([{}, app]), configurable: true, writable: true });
     const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
     const existing = existingHook();
-    // `hook: 'chain'` with no hook on the page reads nothing.
+    // `hook: 'chain'` with no hook on the page reads nothing, and a report says why without pointing at a
+    // reason stats() does not have.
     assert.equal(api.stats().react, 'unreadable');
+    assert.equal(api.stats().unsupportedReason, null);
+    clock.now = 500;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 500, target: null });
+    page.paint([click(3, 500, 200)]);
+    await nextTask();
+    const note = api.last()?.explanation.notes.find((n) => n.startsWith('No react-dom on this page is being read'));
+    assert.ok(note?.includes("hook: 'chain' found none to wrap"), api.last()?.explanation.notes.join('\n'));
     api.dispose();
 
     page.window[HOOK] = existing;

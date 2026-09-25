@@ -14,9 +14,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   on a touch screen or a screen under 480 px wide the close button and the rows are larger to tap. CI opens
   it on a 360 px phone (Playwright's Galaxy S8) as well as the Pixel 7 and the iPhone 15.
 - **The README's bundle sizes are measured, and checked in CI.** The table said 39.0 KB minified and
-  14.4 KB gzipped for `react-inp-blame/auto`, figures from 0.1.1; the entry had grown to 59.0 and 21.2 KB. The
-  table now comes from `scripts/size.mjs`, which builds each bundle with the repo's rolldown, and CI's unit
-  job fails when the table is out of date or a gzipped size passes its budget in `scripts/size-budget.json`.
+  14.4 KB gzipped for `react-inp-blame/auto`, figures from 0.1.0, about a third under what the entry had grown
+  to. The table, in the repository's README and in the package's own, now comes from `scripts/size.mjs`, which
+  builds each bundle with the repo's rolldown, and CI's unit job fails when either is out of date or a gzipped
+  size passes its budget in `scripts/size-budget.json`.
 
 ### Added
 
@@ -24,15 +25,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   name, and only the Vite plugin, the Next.js wrapper and the loader stamp them, so under `react-inp-blame/auto`
   in a webpack, Rspack, Parcel or Rsbuild build a blame read "inside e, mostly Xe" with nothing to say why.
   Where a report's commits hold at least five different names and four in five of them are one or two
-  characters long, it gets a note naming the setups that keep names, and the console says so once, with a
-  link. The blame is unchanged.
+  characters long, and none of the names its renders started or led with is readable, it gets a note saying
+  which setups keep an app's own names and that a dependency's are kept only where it sets `displayName`,
+  and the console says so once, with a link. The blame is unchanged.
 - **`stats().react`, the badge and the panel say when the library cannot see React.** When install() ran
   after react-dom loaded, the only sign was one console warning 3 s after load: reports then said "React
   didn't render anything", and a script blame could read as measured. `stats().react` is now `'reading'`,
   `'waiting'` (React has not rendered on the page yet, as before an Astro island hydrates), `'installed-late'`
   or `'unreadable'`, and each report carries it as `reactStatus`. While React cannot be seen, a report says
   what React did is unknown, never calls a blame measured, and carries a note with the fix. The badge gets a
-  `data-status` and a warning mark, and the panel a line saying what is wrong and what to do: installed
+  `data-status` and a warning mark, as soon as the check 3 s after load finds React, and the panel a line
+  saying what is wrong and what to do: installed
   late, a disabled or replaced DevTools hook, a react-dom that cannot be read, or, as a note, a browser
   without Long Animation Frames. On a browser without Event Timing's `interactionId`, a badge that was asked
   for now shows "INP not measured" and a panel naming the browsers that report it, where it showed nothing.

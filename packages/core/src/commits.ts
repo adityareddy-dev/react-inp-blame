@@ -79,6 +79,10 @@ const MINIFIED_NAMES_MIN = 5;
 export function namesLookMinified(commits: readonly CommitSummary[]): boolean {
   const names = new Set<string>();
   for (const c of commits) {
+    // A readable name where the render started or led is the app's own, stamped: the short ones around it
+    // are a dependency's, which nothing in the app's build can name, and the setups the note gives would
+    // change nothing.
+    if (c.roots.some(readableName) || c.hotPath.some(readableName)) return false;
     for (const x of c.components) names.add(x.name);
     for (const n of c.hotPath) names.add(n);
     for (const n of c.roots) names.add(n);
@@ -90,6 +94,9 @@ export function namesLookMinified(commits: readonly CommitSummary[]): boolean {
   return short >= 0.8 * names.size;
 }
 
-/** What a report says, and the console once, when `namesLookMinified`. */
-export const MINIFIED_NAMES_NOTE =
-  "Most component names here look minified, because nothing in this build stamps displayName on the app's components: react-inp-blame/vite, withInpBlame for Next.js or react-inp-blame/display-names-loader for webpack keeps them.";
+const MINIFIED_NAMES_WHY =
+  "are one or two characters, which is what a minifier leaves on a component without a displayName. The app's own components keep their names under react-inp-blame/vite, withInpBlame for Next.js or react-inp-blame/display-names-loader for webpack; a dependency's keep theirs only where it sets displayName itself.";
+/** What a report says when `namesLookMinified`. */
+export const MINIFIED_NAMES_NOTE = `Most component names here ${MINIFIED_NAMES_WHY}`;
+/** What the console says, once, when a report's names look minified. */
+export const MINIFIED_NAMES_CONSOLE = `Most component names in this page's reports ${MINIFIED_NAMES_WHY}`;

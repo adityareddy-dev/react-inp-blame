@@ -1894,11 +1894,20 @@ test('a render whose walk stopped at its budget says "at least", names no compon
 test('names that look minified get a note, and readable or styled names mixed with a few short ones do not', () => {
   const noteOf = (names: string[]) =>
     report([entry('click', 0, 120, 3, 100)], [commit(50, 0, { hasDurations: false, total: 0, rendered: 40, roots: [names[0]!], hotPath: [names[0]!], components: names.map((name) => ({ name, count: 8, self: null, total: null })) })], [], [])
-      .explanation.notes.some((n) => n.startsWith('Most component names here look minified'));
+      .explanation.notes.some((n) => n.startsWith('Most component names here are one or two characters'));
   assert.equal(noteOf(['e', 'Xe', 'Tt', 'nc', '$']), true);
   assert.equal(noteOf(['e', 'Xe', 'Tt', 'nc', 'OrderList']), true);
   assert.equal(noteOf(['OrderList', 'Row', 'Td', 'Li', 'Cell']), false);
   assert.equal(noteOf(['styled.div', 'Styled(li)', 'Row', 'List', 'Item']), false);
   // Too few names to say anything about the build.
   assert.equal(noteOf(['e', 'Xe', 'Tt']), false);
+  assert.equal(noteOf(['e', 'Xe', 'Tt', 'nc']), false);
+  assert.equal(noteOf(['e', 'Xe', 'Tt', 'nc', '(anonymous)']), false);
+  // Four in five is the line, and three characters is not short.
+  assert.equal(noteOf(['e', 'Xe', 'Tt', 'Abc', 'Row']), false);
+  assert.equal(noteOf(['e', 'Xe', 'Tt', 'abc', 'def']), false);
+  // A build that stamps the app's own names, where the render ran through a dependency the minifier renamed:
+  // the app's Vendor is where it started, so the note, which prescribes what the build already has, is not said.
+  const vendor = commit(50, 0, { hasDurations: false, total: 0, rendered: 40, roots: ['Vendor'], hotPath: ['Vendor'], components: ['le', 'ue', 'de', 'fe', 'ge', 'he', 'me', 'pe'].map((name) => ({ name, count: 4, self: null, total: null })) });
+  assert.equal(report([entry('click', 0, 120, 3, 100)], [vendor], [], []).explanation.notes.some((n) => n.startsWith('Most component names')), false);
 });

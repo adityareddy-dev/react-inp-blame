@@ -25,6 +25,9 @@ for (const step of order) {
   }
 }
 
+// `?renderAfter=` holds React's first render back that many ms, so the badge is drawn before React is on the page.
+const renderAfter = Number(new URLSearchParams(location.search).get('renderAfter') ?? 0);
+if (renderAfter > 0) await new Promise((resolve) => setTimeout(resolve, renderAfter));
 const [{ createRoot }, { CascadingEffect }] = await Promise.all([import('react-dom/client'), import('./scenarios/CascadingEffect')]);
 const root = createRoot(document.getElementById('root')!);
 root.render(<CascadingEffect />);

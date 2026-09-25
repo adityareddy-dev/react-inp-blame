@@ -1,8 +1,10 @@
 // What the library costs a page to download, measured on packages/core/dist, and the README's table of it.
 //
 //   npm run build && node scripts/size.mjs            # print the sizes
-//   node scripts/size.mjs --write                     # and write them into README.md's table
-//   node scripts/size.mjs --check                     # fail when the table is stale or a size is over budget
+//   node scripts/size.mjs --write                     # and write them into the READMEs' tables
+//   node scripts/size.mjs --check                     # fail when a table is stale or a size is over budget
+//
+// The table is in README.md and in packages/core/README.md, the one npm shows, between the same markers.
 //
 // Each bundle is built with the rolldown the repo has, for the browser, as minified ESM, and gzipped at
 // zlib's default level. The budgets, in gzipped kilobytes, are in scripts/size-budget.json.
@@ -16,7 +18,7 @@ import { formatTable, parseTable, problems, replaceTable } from './size-table.mj
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'packages/core/dist');
-const README = path.join(root, 'README.md');
+const READMES = [path.join(root, 'README.md'), path.join(root, 'packages/core/README.md')];
 const BEFORE = '\0size:before-react-dom';
 // What has to run before react-dom loads: the DevTools hook and what it calls as React registers and
 // commits. Every export is kept, so this is the most of it a page can get.
@@ -100,18 +102,20 @@ async function main() {
   const rows = await measure();
   const table = formatTable(rows, `rolldown ${rolldownVersion}`);
   console.log(table);
-  const readme = fs.readFileSync(README, 'utf8');
-  if (values.write) {
-    fs.writeFileSync(README, replaceTable(readme, table));
-    console.log('\nREADME.md updated.');
-  }
-  if (values.check) {
-    const budget = JSON.parse(fs.readFileSync(path.join(root, 'scripts/size-budget.json'), 'utf8'));
-    const found = problems(parseTable(readme), rows, budget);
-    if (found.length) {
-      console.error(`\n${found.join('\n')}\n\nRun \`npm run build && node scripts/size.mjs --write\` and commit README.md, or look at what made the bundle grow.`);
-      process.exitCode = 1;
+  const budget = JSON.parse(fs.readFileSync(path.join(root, 'scripts/size-budget.json'), 'utf8'));
+  const found = [];
+  for (const file of READMES) {
+    const name = path.relative(root, file);
+    const readme = fs.readFileSync(file, 'utf8');
+    if (values.write) {
+      fs.writeFileSync(file, replaceTable(readme, table));
+      console.log(`\n${name} updated.`);
     }
+    if (values.check) found.push(...problems(parseTable(readme), rows, budget).map((p) => `${name}: ${p}`));
+  }
+  if (found.length) {
+    console.error(`\n${[...new Set(found)].join('\n')}\n\nRun \`npm run build && node scripts/size.mjs --write\` and commit both READMEs, or look at what made the bundle grow.`);
+    process.exitCode = 1;
   }
 }
 

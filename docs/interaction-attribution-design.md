@@ -227,9 +227,9 @@ listener check above and the walk a `tag` comparison per fiber; neither has been
 sizes below have.
 
 **Size.** Since 0.8.0 `scripts/size.mjs` measures the bundles on every CI run, with the same settings as
-below, and keeps the README's table current: `/auto` was 59.0 KB minified and 21.2 KB gzipped then, the
-badge and panel 12.8 / 4.8 and the part before react-dom 22.2 / 8.4, so the figures below, which the
-README carried until then, understated the entry by about a third. They were measured 2026-09-15 with the
+below, and keeps the READMEs' tables current: on 3bc78de, where the script came in, `/auto` was 59.0 KB
+minified and 21.2 KB gzipped, the badge and panel 12.8 / 4.8 and the part before react-dom 22.2 / 8.4, so
+the figures below, which the README carried until then, understated the entry by about a third. They were measured 2026-09-15 with the
 rolldown 1.2.8 in the repo's `node_modules` (`platform: 'browser'`, minified ESM, every export of `hook`,
 `fiber` and `observe` kept for the last row, gzip at zlib's default level), by a script that was not in the
 repo, first on 0.1.0 and on 7917366 with the same figures, then again after the review fixes:
