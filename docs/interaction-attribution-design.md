@@ -1545,6 +1545,11 @@ rule, or give it its own chunk, and the row passes, which is what the narrower `
 row above it does. The dev server output is byte for byte what it was before this change on all four
 versions, with no warnings.
 
+Since 0.5.0 the plugin does that itself for a `manualChunks` function: the library gets a chunk of its
+own and the function decides every other module, so the "no" row passes on Rollup too
+(`fixtures/vite-vendor-chunk` builds it in CI). A `manualChunks` object is left as it is, and a build
+where react-dom still connects before the install gets a warning naming the module that connects it.
+
 The demo and its React variants install with the plugin, and every variant runs in CI as a production
 build as well as on the dev server.
 
