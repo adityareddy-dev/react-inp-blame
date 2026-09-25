@@ -18,6 +18,15 @@ export interface InpBlameOptions {
   runtime?: boolean | InstallOptions;
   /** Which HTML pages get the runtime's script, by their path from the root, such as '/index.html'. Default every page. */
   pages?: (path: string) => boolean;
+  /**
+   * For a framework that writes its own HTML, where no page goes through Vite: the module of the app,
+   * by its path from the project root, that gets the install as its first import, such as
+   * 'app/root.tsx' under React Router and Remix, or 'src/client.tsx' under TanStack Start. In a build
+   * the install gets a chunk of its own that the module imports first, so it runs before react-dom
+   * whatever else the module imports, and an app whose package.json says `"sideEffects": false` keeps
+   * it. A build in which no module has that path fails. Needs the runtime.
+   */
+  entry?: string;
 }
 
 /**

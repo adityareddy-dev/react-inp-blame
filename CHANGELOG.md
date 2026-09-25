@@ -15,8 +15,20 @@ it changes when a field is removed or changes meaning, which a minor release may
   as the Vite plugin does. CI runs it in Astro's minimal template (Astro 7.3, React 19.3), installed from
   the packed tarball, under `astro dev` and on `astro preview` of a production build: a page with two
   islands, and one whose only island hydrates when it scrolls into view.
-- The READMEs' Vite quick start says that React Router, TanStack Start and Astro need their own setup, and
-  links to it.
+- **`entry`, a Vite plugin option for frameworks that write their own HTML, and a setup for Remix.**
+  `inpBlame({ entry: 'app/root.tsx' })` puts the install first in that module, in the browser's copy only,
+  and in a build gives it a chunk of its own that the module imports first, marked as having side effects.
+  It is the whole setup for React Router, Remix and TanStack Start (`entry: 'src/client.tsx'`), and the
+  READMEs now give it in place of a module of your own imported first, which still works where it did. It
+  also covers what that could not: in Remix's template the root route's chunk loads react-dom before its
+  own body, and `"sideEffects": false` drops an import with no names from the build, so on Remix 2 an
+  install written in `app/root.tsx` worked on the dev server and never ran in a production build. A build
+  in which no module has the path fails. On the dev server the plugin asks Vite to pre-bundle
+  react-inp-blame, which it cannot find in the source by itself, so the first visit does not reload the
+  page while it hydrates. CI runs Remix 2.17 from `npx create-remix@2.17.5`, on React 18.3, beside the
+  React Router 8, React Router 7 on React 18 and TanStack Start apps, all on `entry` now.
+- The READMEs' Vite quick start says that React Router, Remix, TanStack Start and Astro need their own
+  setup, and links to it.
 - **A setup for React Router in framework mode and for TanStack Start.** Both write their own HTML, so the
   Vite plugin's script never ran there and the library never installed. The README's new sections put
   `install()` in a module of the app's own that the client entry (`app/entry.client.tsx`, `src/client.tsx`)

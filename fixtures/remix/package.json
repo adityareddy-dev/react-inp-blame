@@ -1,0 +1,38 @@
+{
+  "name": "remix-fixture",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "description": "What `npx create-remix@2.17.5` makes (templates/remix at the remix@2.17.5 tag, without its ESLint setup), with the README's Remix setup and one slow component. Run by scripts/vite-app.mjs --fixture remix from a temp copy.",
+  "scripts": {
+    "build": "remix vite:build",
+    "dev": "remix vite:dev",
+    "start": "remix-serve ./build/server/index.js",
+    "typecheck": "tsc",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@remix-run/node": "^2.17.5",
+    "@remix-run/react": "^2.17.5",
+    "@remix-run/serve": "^2.17.5",
+    "isbot": "^4.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-inp-blame": "^0.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@remix-run/dev": "^2.17.5",
+    "@types/react": "^18.2.20",
+    "@types/react-dom": "^18.2.7",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.1.6",
+    "vite": "^6.0.0",
+    "vite-tsconfig-paths": "^4.2.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,5 +1,3 @@
-// app/root.tsx, the template's with one import added first
-import "./inp-blame";
 import {
   isRouteErrorResponse,
   Links,

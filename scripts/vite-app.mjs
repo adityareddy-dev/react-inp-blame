@@ -8,7 +8,7 @@
 //   node scripts/vite-app.mjs                          # pack packages/core, then install and test
 //   node scripts/vite-app.mjs --tarball <path>         # a tarball that already exists
 //   node scripts/vite-app.mjs --fresh                  # no lockfile: every dependency as npm resolves it today
-//   node scripts/vite-app.mjs --fixture react-router   # the React Router app, or tanstack-start or astro
+//   node scripts/vite-app.mjs --fixture react-router   # the React Router app, or tanstack-start, remix or astro
 //   node scripts/vite-app.mjs -- --project=dev         # anything after -- goes to Playwright
 //
 // The copy is what makes it the user's install. Inside the repo the app could resolve react-inp-blame
@@ -41,27 +41,34 @@ const FIXTURES = {
   },
   'react-router': {
     readme: '## Install with React Router',
-    files: ['vite.config.ts', 'app/inp-blame.ts', 'app/entry.client.tsx'],
+    files: ['vite.config.ts'],
     reported: ['react-router', '@react-router/dev', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     // The template's own check, route types first. Its tsconfig takes in every file, the specs included.
     typecheck: (app) => npm('run typecheck', app),
   },
   // React Router 7 on React 18, where the main react-dom module connects to the DevTools hook as it loads
-  // and a route module can load it before the client entry does, so the install is first in app/root.tsx.
-  // The README gives that in a sentence rather than a block, so there is no file to hold to it.
+  // and a route module can load it before the client entry does. The README's config holds there too.
   'react-router-7': {
     readme: '## Install with React Router',
-    files: [],
+    files: ['vite.config.ts'],
     reported: ['react-router', '@react-router/dev', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     typecheck: (app) => npm('run typecheck', app),
   },
   'tanstack-start': {
     readme: '## Install with TanStack Start',
-    files: ['vite.config.ts', 'src/inp-blame.ts', 'src/client.tsx'],
+    files: ['vite.config.ts', 'src/client.tsx'],
     reported: ['@tanstack/react-start', '@tanstack/react-router', 'vite', '@vitejs/plugin-react', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     // The template has no check of its own. Its tsconfig takes in every file, the specs and the route tree
     // the build generates included.
     typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
+  },
+  // Remix 2, on the React 18 its template brings. @remix-run/react imports react-router-dom, which imports
+  // react-dom, so the root route loads react-dom before the client entry does.
+  remix: {
+    readme: '## Install with Remix',
+    files: ['vite.config.ts'],
+    reported: ['@remix-run/react', '@remix-run/dev', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => npm('run typecheck', app),
   },
   astro: {
     readme: '## Install with Astro',

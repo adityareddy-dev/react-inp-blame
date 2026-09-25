@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { blamedRows, counter, hookState, open, showPanel } from "./page";
 
-// React Router 7's template moved to React 18, with react-inp-blame installed from the packed tarball and a
-// route that imports react-dom. React Router writes the page itself, so nothing goes through the Vite
-// plugin's script: its `entry` puts the install first in app/root.tsx, and it only works if it runs before
-// react-dom does. React Router imports the root route's module before any other route's and before the
-// client entry, and in a build the install is a chunk the root imports first. The blame below is the check
-// on that.
+// The app as a user has it: create-remix's template, on the React 18 it brings, with the README's Remix
+// setup and react-inp-blame installed from the packed tarball. Remix writes the page itself, so nothing goes
+// through the Vite plugin's script: its `entry` puts the install first in app/root.tsx. The root route
+// imports @remix-run/react, which imports react-router-dom and so react-dom, and on React 18 react-dom
+// connects to the DevTools hook as it loads. The install has to run before that, and in a build it can only
+// do so from a chunk of its own, which the template's `"sideEffects": false` must not shake out. The blame
+// below is the check on that.
 test("a click is blamed on SlowList", async ({ page }) => {
   const dev = test.info().project.name === "dev";
   const { problems, loads } = await open(page);

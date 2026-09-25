@@ -1558,10 +1558,11 @@ build as well as on the dev server.
 - **Real applications have been run by hand, not in CI**: Excalidraw, two TanStack Table examples, the
   shadcn/ui documentation site and Twenty, from 2026-09-20. What they turned up is in the sections
   above and in the changelog. Nothing has run on Next.js's own bench apps.
-- **Frameworks that render their own HTML have no setup yet**, apart from React Router, TanStack Start and
-  Astro: Remix, for one. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
-  builds, and theirs never go through it, so the library most likely never installs there, and nothing
-  says so. None of them has been tried, and neither has the READMEs' setup for a build with no HTML page.
+- **Frameworks that render their own HTML need a setup of their own**, and have one only under React
+  Router, Remix, TanStack Start and Astro. The Vite plugin adds its install script only to the HTML pages
+  Vite itself serves and builds, and theirs never go through it, so the library installs nothing there
+  unless the plugin's `entry` names a module, and nothing says so. The READMEs' setup for a build with no
+  HTML page has not been tried.
   React Router and TanStack Start got a setup on 2026-09-23: `install()` in a module of the app's own that
   the client entry imports first. That is early enough under React Router because its `<Scripts>` imports
   the route modules statically and then the client entry with `import()`, and the route modules reach only
@@ -1583,7 +1584,19 @@ build as well as on the dev server.
   `<astro-island>` awaits `import()` of that script before it imports its component and its renderer, and
   `@astrojs/react`'s renderer is the only module that imports `react-dom/client` (read in astro 7.3.5's
   `runtime/server/astro-island.js` and @astrojs/react 7.0.0's `client.js`). The same job runs it in
-  Astro's minimal template with two islands. React Native is out of scope: only react-dom commits are
+  Astro's minimal template with two islands. The same day the Vite plugin got `entry`, after Remix 2 showed
+  that a module of the app's own is not enough. Its root route imports `@remix-run/react`, which imports
+  `react-router-dom` and so `react-dom`, which on React 18 connects to the hook as it loads. Written first
+  in the client entry, the install came too late on the dev server and in a build. Written first in
+  `app/root.tsx`, it held on the dev server, but a build left it out, since the template's
+  `"sideEffects": false` lets Rollup drop an import with no names, and with that fixed the root route's
+  chunk still imported the shared chunk holding react-dom before running its own body, the install inlined
+  there included. `entry` prepends an import of the plugin's install module to the named module in the
+  browser's build only, resolves that module with `moduleSideEffects: true`, and emits it as a chunk of its
+  own, so the root's chunk imports it before the shared one (Remix 2.17.5, Vite 6.4.3). React Router and
+  TanStack Start moved to it too, and CI runs all four apps on it. The dev server's dependency scan reads
+  the source before plugins transform it, so the plugin adds react-inp-blame to `optimizeDeps.include`;
+  without that the first visit found it late and reloaded the page while it hydrated. React Native is out of scope: only react-dom commits are
   walked.
 
 ## Next steps

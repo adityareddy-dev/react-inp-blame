@@ -39,9 +39,9 @@ import { inpBlame } from 'react-inp-blame/vite';
 export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: true } })] });
 ```
 
-React Router in framework mode, TanStack Start and Astro write their own HTML, which this plugin never
-sees, so each has a setup of its own: [React Router](#install-with-react-router),
-[TanStack Start](#install-with-tanstack-start), [Astro](#install-with-astro).
+React Router in framework mode, Remix, TanStack Start and Astro write their own HTML, which this plugin
+never sees on its own, so each has a setup of its own: [React Router](#install-with-react-router),
+[Remix](#install-with-remix), [TanStack Start](#install-with-tanstack-start), [Astro](#install-with-astro).
 
 **What you will see.** Reload, then click something slow. A small dark badge appears in the corner,
 bottom-right by default, with the page's INP so far in milliseconds: green at 200 or under, amber up to
@@ -192,6 +192,8 @@ and a script tag of its own), and the `displayName` transform, which is all that
 it beside your React plugin, not instead of it.
 `enabled` defaults to `'development'` here too (the dev server; `'production'` is `vite build`, `true` both,
 `false` adds no plugins), `runtime` is as for Next.js, and `pages(path)` picks the pages that get the script.
+`entry`, a module's path from the project root, is for a framework that writes its own HTML: that module gets
+the install as its first import instead, as the React Router, Remix and TanStack Start setups below show.
 
 **A `manualChunks` vendor rule.** A rule sending all of `node_modules` to one vendor chunk puts this library
 in that chunk with react-dom, and the install script's import of the chunk can then evaluate react-dom before
@@ -233,34 +235,9 @@ shared chunk, though not the vendor rule, as above. Anywhere else, check `stats(
 
 ## Install with React Router
 
-In framework mode React Router writes the page itself, so the Vite plugin's script never reaches it. The
-install goes in a module of your own that the client entry imports before anything else. If the app has no
-`app/entry.client.tsx` yet, `npx react-router reveal entry.client` writes React Router's default one.
-
-```ts
-// app/inp-blame.ts, imported first in app/entry.client.tsx so it runs before react-dom loads
-import { install } from "react-inp-blame";
-
-// Every build. For the dev server alone, wrap the call in `if (import.meta.env.DEV)`.
-install({ overlay: "query" }); // the badge only on request, such as ?inp-blame in the URL
-```
-
-```tsx
-// app/entry.client.tsx, React Router's own (`npx react-router reveal entry.client`) with one import added
-import "./inp-blame";
-import { startTransition, StrictMode } from "react";
-import { hydrateRoot } from "react-dom/client";
-import { HydratedRouter } from "react-router/dom";
-
-startTransition(() => {
-  hydrateRoot(
-    document,
-    <StrictMode>
-      <HydratedRouter />
-    </StrictMode>,
-  );
-});
-```
+In framework mode React Router writes the page itself, so the Vite plugin has no HTML page to put its script
+in. Give it `entry` instead: the module that gets the install as its first import. `app/root.tsx` is the one
+to name, because React Router loads the root route before any other route and before its client entry.
 
 ```ts
 // vite.config.ts
@@ -273,9 +250,11 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     reactRouter(),
-    // Component names that survive the minifier. The install is app/inp-blame.ts, since React Router
-    // writes its own HTML and the plugin's script has no page to go in.
-    inpBlame({ enabled: true, runtime: false }), // production builds too; the default is development only
+    inpBlame({
+      enabled: true,                 // production builds too; the default is development only
+      runtime: { overlay: "query" }, // the badge only on request, such as ?inp-blame in the URL
+      entry: "app/root.tsx",         // React Router writes its own HTML, so the install goes first in the root route
+    }),
   ],
   resolve: {
     tsconfigPaths: true,
@@ -283,44 +262,80 @@ export default defineConfig({
 });
 ```
 
-The call needs a module of its own because the entry's body comes too late: by the time it runs, every
-static import has run, react-dom's included. First among the entry's imports is early enough. React Router
-loads each route's module before the entry, and a route may well import react-dom, as a dialog's portal
-does. On React 19 that does no harm: `react-dom` itself never connects to React's DevTools hook, only
-`react-dom/client` does, and only the entry imports that. React Router 8 needs React 19.2.7 or later. The
-plugin with `runtime: false` is there for the names, so they survive the production minifier. CI builds
-this from `npx create-react-router@8.4.0` (React Router 8.4, Vite 8.3, React 19.3) and checks that a click
-is blamed on the component that rendered slowly, under `react-router dev` and on a production build served
-by `react-router-serve`. On React Router 7 with React 19 the first two files should hold as they are (not
-run), and in `vite.config.ts` only the `inpBlame` line is the library's; `resolve.tsconfigPaths` is the
-template's, and needs Vite 8.
+That is the whole setup: the plugin adds the import to the browser's copy of the module (never the server's),
+and nothing in your own files changes. An import you write yourself first in the root route, or in the client
+entry, is not the same thing. On React 18, `react-dom` connects to React's DevTools hook as it loads, and a
+route, or a library a route uses, can load it before the client entry does. In a production build, a chunk a
+module imports is evaluated before the module's own body, so an install written in the root route runs after
+the shared chunk that holds react-dom whenever the root route imports anything that reaches react-dom. And an
+app whose `package.json` says `"sideEffects": false`, as Remix's template does, loses an import with no names
+from the build altogether. With `entry` the install is a chunk of its own that the module imports first, marked
+as having side effects, so it runs before react-dom in all three cases. A build in which no module has that
+path fails, rather than shipping without the install. The chunk comes from `manualChunks`, and a
+`manualChunks` function of your own keeps deciding every other module; an object cannot be added to, so the
+plugin warns and leaves it be, and the install may then run late in a build. `entry` needs the runtime, so it
+cannot go with `runtime: false`.
 
-On React 18, put `import "./inp-blame";` first in `app/root.tsx` instead of the entry. React 18's
-`react-dom` connects to the hook as it loads, so the entry is too late as soon as a route, or a library a
-route uses, imports react-dom. The library then blames nothing, and in a browser without React DevTools it
-warns after 3 s that it was installed too late. With the React DevTools extension installed it can look
-fine, since react-dom connects to the extension's hook and the library finds it there. React Router imports the root route's
-module before any other route's and before the entry, so the root's first import runs before any of them.
-CI runs that on React Router 7.18 with React 18.3 and a route that calls `flushSync` from react-dom, on the
-dev server and a production build. The same app with the install in the entry had nothing blamed on either.
+CI builds this from `npx create-react-router@8.4.0` (React Router 8.4, Vite 8.3, React 19.3), and from
+`npx create-react-router@7.18.4` moved to React 18.3 with a route that calls `flushSync` from react-dom, and
+checks that a click is blamed on the component that rendered slowly, under `react-router dev` and on a
+production build served by `react-router-serve`. React Router 8 needs React 19.2.7 or later. In
+`vite.config.ts` only the `inpBlame` lines are the library's; `resolve.tsconfigPaths` is the template's, and
+needs Vite 8.
+
+## Install with Remix
+
+Remix 2 writes its own HTML too, and takes the same `entry`. On the React 18 its template brings, the root
+route is where it has to go: `@remix-run/react` imports `react-router-dom`, which imports `react-dom`.
+
+```ts
+// vite.config.ts
+import { vitePlugin as remix } from "@remix-run/dev";
+import { defineConfig } from "vite";
+import tsconfigPaths from "vite-tsconfig-paths";
+import { inpBlame } from "react-inp-blame/vite";
+
+declare module "@remix-run/node" {
+  interface Future {
+    v3_singleFetch: true;
+  }
+}
+
+export default defineConfig({
+  plugins: [
+    remix({
+      future: {
+        v3_fetcherPersist: true,
+        v3_relativeSplatPath: true,
+        v3_throwAbortReason: true,
+        v3_singleFetch: true,
+        v3_lazyRouteDiscovery: true,
+      },
+    }),
+    tsconfigPaths(),
+    inpBlame({
+      enabled: true,                 // production builds too; the default is development only
+      runtime: { overlay: "query" }, // the badge only on request, such as ?inp-blame in the URL
+      entry: "app/root.tsx",         // Remix writes its own HTML, so the install goes first in the root route
+    }),
+  ],
+});
+```
+
+Without `entry`, both ways of writing the install yourself fail in Remix's template: in the client entry it is
+too late for the root route's react-dom, and first in `app/root.tsx` it works on the dev server but is dropped
+from a production build, where `"sideEffects": false` shakes it out, and where the root route's chunk would
+run react-dom first anyway. CI builds this from `npx create-remix@2.17.5` (Remix 2.17, Vite 6.4, React 18.3)
+and checks the same click under `remix vite:dev` and on a production build served by `remix-serve`.
 
 ## Install with TanStack Start
 
-TanStack Start writes its own HTML too, and takes the same setup as React Router. Its client entry is
-`src/client.tsx` once the file exists, and TanStack Start's own default is the code below without the first
-import.
-
-```ts
-// src/inp-blame.ts, imported first in src/client.tsx so it runs before react-dom loads
-import { install } from 'react-inp-blame'
-
-// Every build. For the dev server alone, wrap the call in `if (import.meta.env.DEV)`.
-install({ overlay: 'query' }) // the badge only on request, such as ?inp-blame in the URL
-```
+TanStack Start writes its own HTML too. Its `entry` is the client entry, `src/client.tsx`, which you create
+if the app has none yet: TanStack Start's own default is the code below. That entry imports `react-dom/client`
+before it imports the router, so it, not a route, is where the install goes first.
 
 ```tsx
-// src/client.tsx, TanStack Start's default client entry with one import added
-import './inp-blame'
+// src/client.tsx, TanStack Start's default client entry
 import { StrictMode, startTransition } from 'react'
 import { hydrateRoot } from 'react-dom/client'
 import { StartClient } from '@tanstack/react-start/client'
@@ -349,20 +364,19 @@ const config = defineConfig({
   plugins: [
     tanstackStart(),
     viteReact(),
-    // Component names that survive the minifier. The install is src/inp-blame.ts, since TanStack Start
-    // writes its own HTML and the plugin's script has no page to go in.
-    inpBlame({ enabled: true, runtime: false }), // production builds too; the default is development only
+    inpBlame({
+      enabled: true,                 // production builds too; the default is development only
+      runtime: { overlay: 'query' }, // the badge only on request, such as ?inp-blame in the URL
+      entry: 'src/client.tsx',       // TanStack Start writes its own HTML, so the install goes first in the client entry
+    }),
   ],
 })
 
 export default config
 ```
 
-A build starts from that entry, and the dev server imports it right after the Fast Refresh preamble, so its
-first import runs before anything reaches react-dom: `@tanstack/react-router` loads react-dom only for
-server rendering. CI builds this from `npx @tanstack/cli@0.71.0 create --framework React --blank`
-(TanStack Start 1.168, Vite 8.3, React 19.3) and checks the same click under `vite dev` and on
-`vite preview` of the production build.
+CI builds this from `npx @tanstack/cli@0.71.0 create --framework React --blank` (TanStack Start 1.168, Vite
+8.3, React 19.3) and checks the same click under `vite dev` and on `vite preview` of the production build.
 
 ## Install with Astro
 
@@ -830,12 +844,11 @@ moved to React 18.
 
 ## Known limits
 
-- **Frameworks that render their own HTML have no setup yet**, beyond React Router's, TanStack Start's and
-  Astro's above: Remix, for one. The Vite plugin adds its install script only to the HTML pages Vite itself
-  serves and builds, and theirs never go through it, so the library most likely never installs there, and
-  nothing says so. An import first in the client entry, as the React Router and TanStack Start setups do,
-  may be enough where nothing else loads react-dom before it. Not tried yet. React Native is out of scope:
-  only react-dom commits are walked.
+- **Frameworks that render their own HTML need a setup of their own**, and only React Router's, Remix's,
+  TanStack Start's and Astro's above have been tried. The Vite plugin adds its install script only to the
+  HTML pages Vite itself serves and builds, so without `entry` it installs nothing on another framework's
+  pages, and nothing says so. On a Vite-based one, `entry` naming the first of the app's modules the browser
+  runs may be enough. React Native is out of scope: only react-dom commits are walked.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.
