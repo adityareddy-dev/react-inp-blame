@@ -18,6 +18,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   did. A page that listed `react-inp-blame` can drop it. The CSP spec now runs under `trusted-types 'none'` and
   checks that nothing reachable from the shared state is a policy.
 
+### Fixed
+
+- **A page without React is no longer scanned at every interaction.** While no react-dom has registered with
+  the hook, a report looks at the page for React's marks, up to 10,000 elements, to tell a late install from a
+  page that has not loaded React yet, and since 0.8.0 every report after input looked again, for as long as the
+  page was open. An Astro page whose islands are all Svelte or Vue, where the integration installs on every
+  page, paid for that at every click. Reports and `stats()` now look at most five times in all, besides the
+  check 3 s after install and the one at the first interaction after it; a page with no React by then is taken
+  to have none, and `stats().react` stays `'waiting'` until a react-dom registers. A report still looks again
+  after input while looks remain, so a look from just before React rendered does not leave it saying waiting.
+
 ## [0.11.0] - 2026-09-25
 
 ### Added
