@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { mock, test } from 'node:test';
 import { inpBlame } from '../vite.mjs';
 
@@ -385,8 +387,14 @@ test('an entry naming a file that does not exist fails the dev server and the bu
       const runtime = pluginsFor(command, { enabled: true, entry: 'app/roots.tsx' }).find((p) => p.name === INSTALL)!;
       assert.throws(() => runtime.configResolved(resolved({ command })), /entry is 'app\/roots\.tsx', and there is no file at \/app\/app\/roots\.tsx/);
     }
+    // `vite preview` serves a build as it is. Vite says so only to the config hook, in its second argument.
     const preview = pluginsFor('serve', { enabled: true, entry: 'app/roots.tsx' }).find((p) => p.name === INSTALL)!;
-    assert.doesNotThrow(() => preview.configResolved(resolved({ command: 'serve', isPreview: true })));
+    preview.config({}, { command: 'serve', mode: 'production', isPreview: true });
+    assert.doesNotThrow(() => preview.configResolved(resolved({ command: 'serve' })));
+    // The dev server's config hook says it is not one.
+    const dev = pluginsFor('serve', { enabled: true, entry: 'app/roots.tsx' }).find((p) => p.name === INSTALL)!;
+    dev.config({}, { command: 'serve', mode: 'development', isPreview: false });
+    assert.throws(() => dev.configResolved(resolved({ command: 'serve' })), /no file at/);
   } finally {
     exists.mock.mockImplementation(() => true);
   }
@@ -395,38 +403,49 @@ test('an entry naming a file that does not exist fails the dev server and the bu
 test('without entry, a framework that writes its own HTML and a build of scripts only are told what to do, once', () => {
   const warnings: string[] = [];
   const logger = { warn: (message: string) => warnings.push(message) };
-  const configure = (config: Record<string, any>, options: Options = {}) => {
+  const configure = (config: Record<string, any>, options: Options = {}, env: Record<string, unknown> = { command: 'serve', mode: 'development' }) => {
     const runtime = pluginsFor('serve', { enabled: true, ...options }).find((p) => p.name === INSTALL);
+    runtime?.config({}, env);
     runtime?.configResolved(resolved({ command: 'serve', logger, ...config }));
   };
   const plugins = (...names: string[]) => names.map((name) => ({ name }));
-  configure({ plugins: plugins('vite:esbuild', 'react-router') });
-  configure({ plugins: plugins('remix', 'remix-hmr') });
-  configure({ plugins: plugins('tanstack-start-core:config') });
-  configure({ plugins: plugins('astro:build', '@astrojs/react') });
-  configure({ build: { rollupOptions: { input: ['resources/js/app.tsx', 'resources/css/app.css'] } } });
-  assert.equal(warnings.length, 5);
-  assert.match(warnings[0]!, /^\[react-inp-blame\] React Router writes its own HTML.*Add entry: 'app\/root\.tsx' to inpBlame\(\).*#install-with-react-router$/);
-  assert.match(warnings[1]!, /Remix writes its own HTML.*entry: 'app\/root\.tsx'.*#install-with-remix$/);
-  assert.match(warnings[2]!, /TanStack Start writes its own HTML.*entry: 'src\/client\.tsx'.*#install-with-tanstack-start$/);
-  assert.match(warnings[3]!, /Astro writes its own pages.*'react-inp-blame\/astro'.*#install-with-astro$/);
-  assert.match(warnings[4]!, /no HTML page, only scripts.*entry: '<the script every page loads first>'/);
-  // Once per process: a framework that resolves a second config through the same plugins says nothing new.
-  configure({ plugins: plugins('react-router') });
-  // And nothing where the install has somewhere to go, or was set up another way, or is not wanted.
+  // First, while nothing has been said in this process, nothing where the install has somewhere to go,
+  // was set up another way, or is not wanted. Each message is said once per process, so these come
+  // before the ones that are said.
   configure({ plugins: plugins('react-router') }, { entry: 'app/root.tsx' });
   configure({ plugins: plugins('react-router') }, { runtime: false });
   configure({});
   configure({ build: { rollupOptions: {} } });
+  configure({ build: { rollupOptions: { input: { main: 'index.html', about: 'about.html' } } } });
   configure({ build: { lib: { entry: 'src/index.ts' }, rollupOptions: { input: 'src/index.ts' } } });
   configure({ build: { ssr: true, rollupOptions: { input: 'src/server.ts' } } });
-  configure({ plugins: plugins('remix'), isPreview: true });
+  configure({ plugins: plugins('remix') }, {}, { command: 'serve', mode: 'production', isPreview: true });
+  // Plugins whose names only start like a framework's.
+  configure({ plugins: plugins('react-router-devtools', 'remix-hmr', 'astronaut', { name: undefined } as never) });
+  const vitest = process.env.VITEST;
   process.env.VITEST = 'true';
   try {
     configure({ plugins: plugins('tanstack-start-core:dev-server'), build: { rollupOptions: { input: 'src/other.ts' } } });
   } finally {
-    delete process.env.VITEST;
+    if (vitest === undefined) delete process.env.VITEST;
+    else process.env.VITEST = vitest;
   }
+  assert.deepEqual(warnings, []);
+
+  configure({ plugins: plugins('vite:esbuild', 'react-router') });
+  configure({ plugins: plugins('remix', 'remix-hmr') });
+  configure({ plugins: plugins('tanstack-start-core:config') });
+  configure({ plugins: plugins('astro', '@astrojs/react') });
+  configure({ build: { rolldownOptions: { input: { app: 'resources/js/app.tsx', style: 'resources/css/app.css' } } } });
+  assert.equal(warnings.length, 5);
+  assert.match(warnings[0]!, /^\[react-inp-blame\] React Router writes its own HTML.*Add entry: 'app\/root\.tsx' to inpBlame\(\).*#install-with-react-router$/);
+  assert.match(warnings[1]!, /Remix writes its own HTML.*entry: 'app\/root\.tsx'.*#install-with-remix$/);
+  assert.match(warnings[2]!, /TanStack Start writes its own HTML.*Create src\/client\.tsx as the README shows and add entry: 'src\/client\.tsx'.*#install-with-tanstack-start$/);
+  assert.match(warnings[3]!, /Astro writes its own pages.*'react-inp-blame\/astro'.*#install-with-astro$/);
+  assert.match(warnings[4]!, /no HTML page, only scripts.*entry: '<the script every page loads first>'/);
+  // Once per process: a framework that resolves a second config through the same plugins says nothing new.
+  configure({ plugins: plugins('react-router') });
+  configure({ plugins: plugins('astro:build') });
   assert.equal(warnings.length, 5, warnings.slice(5).join('\n'));
 });
 
@@ -450,24 +469,86 @@ test("on an HTML page, an app's own manualChunks cannot put the library in its v
   assert.equal(manualChunks('/app/src/main.tsx', meta), undefined);
 });
 
-test('a build whose install chunk imports react-dom, however the chunks came out, gets a warning naming the chunk', () => {
+test("a build where the install's chunk imports a chunk that runs react-dom as it loads gets a warning, once, and one that only holds react-dom does not", () => {
   const runtime = pluginsFor('build', { enabled: true }).find((p) => p.name === INSTALL)!;
   runtime.configResolved(resolved());
   const warnings: string[] = [];
-  const context = { environment: { name: 'client', config: { consumer: 'client', build: resolved().build } }, warn: (w: string) => warnings.push(w), error: (m: string) => assert.fail(m) };
+  // What Rolldown says of each module: an ES module or a CommonJS one, and what it imports.
+  const modules: Record<string, { inputFormat?: string; importedIds: string[] }> = {};
+  const context = {
+    environment: { name: 'client', config: { consumer: 'client', build: resolved().build } },
+    warn: (w: string) => warnings.push(w),
+    error: (m: string) => assert.fail(m),
+    emitFile: () => 'ref',
+    getModuleInfo: (id: string) => modules[id] ?? null,
+  };
   const chunk = (fileName: string, moduleIds: string[], imports: string[], extra: Record<string, unknown> = {}) => ({ type: 'chunk', fileName, moduleIds, imports, ...extra });
-  const bundle: Record<string, unknown> = {
-    'assets/react-inp-blame-install.js': chunk('assets/react-inp-blame-install.js', [`\0${INSTALL_MODULE}`], ['assets/lib.js'], { facadeModuleId: `\0${INSTALL_MODULE}` }),
+  const install = chunk('assets/react-inp-blame-install.js', [`\0${INSTALL_MODULE}`], ['assets/lib.js'], { facadeModuleId: `\0${INSTALL_MODULE}` });
+  const build = (vendor: string[], first: Record<string, unknown> = install) => {
+    runtime.buildStart.call(context);
+    runtime.generateBundle.call(context, {}, {
+      [first.fileName as string]: first,
+      'assets/lib.js': chunk('assets/lib.js', ['/app/node_modules/react-inp-blame/dist/index.js'], ['assets/vendor.js']),
+      'assets/vendor.js': chunk('assets/vendor.js', vendor, []),
+    });
+  };
+
+  // Rollup: the commonjs plugin's `?commonjs-es-import` module is where react-dom's body is required.
+  build(['/app/node_modules/react-dom/cjs/react-dom.production.min.js', '\0/app/node_modules/react-dom/client.js?commonjs-es-import']);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /assets\/react-inp-blame-install\.js, which holds the install call, imports assets\/vendor\.js, which connects react-dom to React's DevTools hook as it loads/);
+
+  // Rolldown: an ES module that imports react-dom requires it at its top level.
+  modules['/app/node_modules/router/dist/index.mjs'] = { inputFormat: 'es', importedIds: ['/app/node_modules/react-dom/client.js'] };
+  build(['/app/node_modules/router/dist/index.mjs', '/app/node_modules/react-dom/client.js']);
+  assert.equal(warnings.length, 2);
+
+  // `react-dom` itself connects up to React 18 and not from React 19, where only react-dom/client does
+  // (Radix's portal imports `react-dom`), so which it is comes from the installed package.
+  const installed = fs.mkdtempSync(path.join(os.tmpdir(), 'react-dom-major-'));
+  const reactDom = (major: number) => {
+    const folder = path.join(installed, String(major), 'node_modules', 'react-dom');
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ name: 'react-dom', version: `${major}.3.1` }));
+    return path.join(folder, 'index.js').replaceAll('\\', '/');
+  };
+  try {
+    modules['/app/node_modules/portal/dist/index.mjs'] = { inputFormat: 'es', importedIds: [reactDom(19)] };
+    build(['/app/node_modules/portal/dist/index.mjs']);
+    build([`\0${reactDom(19)}?commonjs-es-import`]);
+    assert.equal(warnings.length, 2, warnings.slice(2).join('\n'));
+    modules['/app/node_modules/portal/dist/index.mjs'] = { inputFormat: 'es', importedIds: [reactDom(18)] };
+    build(['/app/node_modules/portal/dist/index.mjs']);
+    build([`\0${reactDom(17)}?commonjs-es-import`]);
+    assert.equal(warnings.length, 4);
+  } finally {
+    fs.rmSync(installed, { recursive: true, force: true });
+  }
+
+  // Holding react-dom's body runs nothing: the page's own chunk requires it, after the install. Neither
+  // does a CommonJS module that requires react-dom, a module a bundler says nothing about, or react-dom's
+  // server renderer.
+  modules['/app/node_modules/legacy-lib/index.js'] = { inputFormat: 'cjs', importedIds: ['/app/node_modules/react-dom/client.js'] };
+  modules['/app/node_modules/other-lib/index.js'] = { importedIds: ['/app/node_modules/react-dom/client.js'] };
+  build(['/app/node_modules/react-dom/cjs/react-dom.production.min.js', '/app/node_modules/react-dom/client.js', '\0/app/node_modules/react-dom/client.js?commonjs-module']);
+  build(['/app/node_modules/legacy-lib/index.js', '/app/node_modules/other-lib/index.js', 'C:\\app\\node_modules\\react-dom\\client.js']);
+  build(['\0/app/node_modules/react-dom/server.browser.js?commonjs-es-import']);
+  assert.equal(warnings.length, 4, warnings.slice(4).join('\n'));
+
+  // @vitejs/plugin-legacy keeps the install in the page's own script, and writes the chunks twice.
+  const page = chunk('assets/index.js', [`\0${INSTALL_MODULE}`, '/app/src/main.tsx'], ['assets/lib.js'], { name: 'index', facadeModuleId: '/app/index.html' });
+  runtime.buildStart.call(context);
+  const bundle = {
+    'assets/index.js': page,
     'assets/lib.js': chunk('assets/lib.js', ['/app/node_modules/react-inp-blame/dist/index.js'], ['assets/vendor.js']),
-    'assets/vendor.js': chunk('assets/vendor.js', ['/app/node_modules/react-dom/cjs/react-dom.production.js'], []),
+    'assets/vendor.js': chunk('assets/vendor.js', ['\0/app/node_modules/react-dom/client.js?commonjs-es-import'], []),
   };
   runtime.generateBundle.call(context, {}, bundle);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0]!, /the install chunk assets\/react-inp-blame-install\.js imports assets\/vendor\.js, which holds react-dom/);
-  // The entry path's chunk is found by its name, and a clean graph says nothing.
-  (bundle['assets/lib.js'] as { imports: string[] }).imports = [];
   runtime.generateBundle.call(context, {}, bundle);
-  runtime.generateBundle.call(context, {}, { 'assets/x.js': chunk('assets/x.js', [], ['assets/v.js'], { name: 'react-inp-blame-install' }), 'assets/v.js': chunk('assets/v.js', ['C:\\app\\node_modules\\react-dom\\index.js'], []) });
-  assert.equal(warnings.length, 2);
-  assert.match(warnings[1]!, /assets\/x\.js imports assets\/v\.js/);
+  assert.equal(warnings.length, 5);
+  assert.match(warnings[4]!, /assets\/index\.js, which holds the install call, imports assets\/vendor\.js/);
+
+  // The entry path's chunk is found by its name.
+  build(['\0/app/node_modules/react-dom/client.js?commonjs-es-import'], chunk('assets/x.js', [], ['assets/lib.js'], { name: 'react-inp-blame-install' }));
+  assert.equal(warnings.length, 6);
 });

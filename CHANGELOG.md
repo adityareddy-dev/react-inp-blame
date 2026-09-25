@@ -11,10 +11,14 @@ it changes when a field is removed or changes meaning, which a minor release may
 - **The Vite plugin says when nothing will install.** Its install script only reaches HTML pages Vite
   serves or builds, so in React Router, Remix, TanStack Start and Astro, and in a build whose inputs are all
   scripts (Laravel, Rails, Django), the plugin with the runtime on and no `entry` installed nothing and said
-  nothing. It now warns once, when the dev server starts and when the app builds, naming the fix: the
-  `entry` for that framework, the Astro integration, or `entry` for the first script. Not under Vitest.
-- A build whose install chunk imports the chunk holding react-dom, however the chunks came out, gets a
-  warning naming both: react-dom runs before `install()` there, and the build looks fine otherwise.
+  nothing. It now warns once, when the dev server starts and, where the plugin is on for builds, when the
+  app builds, naming the fix: the `entry` for that framework, the Astro integration, or `entry` for the
+  first script. Not under Vitest or `vite preview`.
+- A build where the chunk holding the install call imports a chunk that connects react-dom to React's
+  DevTools hook as it loads gets a warning naming both: react-dom connects before `install()` there, and the
+  build looks fine otherwise. That chunk is one that imports `react-dom/client`, or with React 17 or 18
+  `react-dom` itself (a component library's portal in a vendor chunk is enough). Seen on Vite 8 with a
+  `codeSplitting` vendor group and React 18, and with `@vitejs/plugin-legacy` and a vendor rule.
 
 ### Changed
 
