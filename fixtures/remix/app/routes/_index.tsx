@@ -1,4 +1,5 @@
 import type { MetaFunction } from "@remix-run/node";
+import { Link } from "@remix-run/react";
 import { useEffect, useState } from "react";
 import { SlowList } from "~/slow-list";
 
@@ -59,6 +60,9 @@ export default function Index() {
         </div>
       </div>
       <main className="p-6">
+        {/* A route that imports @remix-run/react, as nearly every Remix route does, puts react and react-dom
+            in one shared chunk, which the root route's chunk imports ahead of its own body. */}
+        <Link to="/">Home</Link>
         <button
           type="button"
           className="counter"

@@ -269,9 +269,17 @@ route, or a library a route uses, can load it before the client entry does. In a
 module imports is evaluated before the module's own body, so an install written in the root route runs after
 the shared chunk that holds react-dom whenever the root route imports anything that reaches react-dom. And an
 app whose `package.json` says `"sideEffects": false`, as Remix's template does, loses an import with no names
-from the build altogether. With `entry` the install is a chunk of its own that the module imports first, marked
-as having side effects, so it runs before react-dom in all three cases. A build in which no module has that
-path fails, rather than shipping without the install. The chunk comes from `manualChunks`, and a
+from the build altogether. With `entry` the install is a chunk of its own, marked as having side effects, and
+the import is added after the JSX is compiled, so that it is the module's first import rather than the one the
+compiler adds for `react/jsx-runtime`. Rollup, which builds for Vite 7 and before, evaluates a module's chunk
+imports in the order the module has them, so there the install runs before react-dom in all three cases.
+Rolldown, which builds for Vite 8, orders a chunk's imports itself. The apps CI builds on Vite 8 come out right,
+React Router 7 on React 18 among them, but that is Rolldown's doing rather than a promise, so check
+`stats().mode` and `debug.hook().renderers` in a built page once. On React 19 it matters less: only
+`react-dom/client` connects to the hook, and only the client entry imports it. A server build, and an output
+that cannot be split into chunks (one that inlines its dynamic imports, keeps every module as its own file, or
+is an `iife` or `umd` script), gets neither the import nor the chunk. A build in which no module has that path
+fails, rather than shipping without the install. The chunk comes from `manualChunks`, and a
 `manualChunks` function of your own keeps deciding every other module; an object cannot be added to, so the
 plugin warns and leaves it be, and the install may then run late in a build. `entry` needs the runtime, so it
 cannot go with `runtime: false`.
@@ -325,8 +333,10 @@ export default defineConfig({
 Without `entry`, both ways of writing the install yourself fail in Remix's template: in the client entry it is
 too late for the root route's react-dom, and first in `app/root.tsx` it works on the dev server but is dropped
 from a production build, where `"sideEffects": false` shakes it out, and where the root route's chunk would
-run react-dom first anyway. CI builds this from `npx create-remix@2.17.5` (Remix 2.17, Vite 6.4, React 18.3)
-and checks the same click under `remix vite:dev` and on a production build served by `remix-serve`.
+run react-dom first anyway. Remix 2 builds with Vite 5 or 6, so with `entry` the order holds there. CI builds
+this from `npx create-remix@2.17.5` (Remix 2.17, Vite 6.4, React 18.3), with a route that imports a `Link` from
+`@remix-run/react`, which puts react and react-dom in one shared chunk, and checks the same click under
+`remix vite:dev` and on a production build served by `remix-serve`.
 
 ## Install with TanStack Start
 

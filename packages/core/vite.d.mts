@@ -22,9 +22,11 @@ export interface InpBlameOptions {
    * For a framework that writes its own HTML, where no page goes through Vite: the module of the app,
    * by its path from the project root, that gets the install as its first import, such as
    * 'app/root.tsx' under React Router and Remix, or 'src/client.tsx' under TanStack Start. In a build
-   * the install gets a chunk of its own that the module imports first, so it runs before react-dom
-   * whatever else the module imports, and an app whose package.json says `"sideEffects": false` keeps
-   * it. A build in which no module has that path fails. Needs the runtime.
+   * the install gets a chunk of its own, the module's first import, and an app whose package.json says
+   * `"sideEffects": false` keeps it. Rollup (Vite 7 and before) evaluates that chunk before the others
+   * the module imports, react-dom's included; Rolldown (Vite 8) orders them itself. A server build and
+   * an output that cannot be split get neither. A build in which no module has that path fails. Needs
+   * the runtime.
    */
   entry?: string;
 }
