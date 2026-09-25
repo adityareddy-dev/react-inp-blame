@@ -203,6 +203,16 @@ test("a styling library's wrapper is named the way the library names an unlabell
   assert.deepEqual(ownersOf(inside as any), ['styled.li', 'Row']);
 });
 
+test('the owners a target reads are the eight innermost components, nearest first', () => {
+  // As the README says of `target.owners`: a chain deeper than eight keeps its innermost eight.
+  const levels = Array.from({ length: 12 }, (_, i) => Object.defineProperty(function () {}, 'name', { value: `Level${i + 1}` }) as () => void);
+  const inside = element('li', text());
+  let node = inside;
+  for (const level of [...levels].reverse()) node = rendered(level, node);
+  root(node);
+  assert.deepEqual(ownersOf(inside as any), ['Level12', 'Level11', 'Level10', 'Level9', 'Level8', 'Level7', 'Level6', 'Level5']);
+});
+
 test('a tree deeper than the walk follows is cut off there, without overflowing the stack', () => {
   function Runaway() {}
   function Footer() {}
