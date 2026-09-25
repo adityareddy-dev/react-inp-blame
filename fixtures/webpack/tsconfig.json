@@ -1,0 +1,20 @@
+{
+  // The app, the specs and playwright.config.ts: babel-loader strips types without checking them, so
+  // scripts/vite-app.mjs checks them with this after the build.
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["src", "e2e", "playwright.config.ts"]
+}
