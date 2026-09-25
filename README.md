@@ -211,11 +211,18 @@ this library in that chunk with react-dom, so the install script's import of the
 `install()` (seen on Vite 5.4.21, 6.4.3 and 7.3.6 with React 17, and on 7.3.6 with React 18). When
 `manualChunks` is a function the plugin now takes the library out of it into a chunk of its own, and your
 function keeps deciding every other module. CI builds that on Vite 7.3 with React 18.3 and a rule sending all
-of `node_modules` to `vendor`. A `manualChunks` object and a Vite 8 `codeSplitting` group are left as they
-are, so there, keep react-inp-blame out of the rule. With `@vitejs/plugin-legacy` the install stays in the
-page's own script, and a vendor rule that takes react-dom breaks it whatever it does with the library, so
-keep react-dom out of that rule too (`!id.includes('/react-dom/')`). The build warns, naming both chunks and
-the module, when the install's chunk imports one that connects react-dom to React's DevTools hook as it
+of `node_modules` to `vendor`. Vite 8's `build.rolldownOptions.output.codeSplitting.groups` (or the older
+`advancedChunks.groups`) get the same: the plugin adds a group of its own ahead of yours, with a priority above
+all of them, that takes the library, so a `{ name: 'vendor', test: /node_modules/ }` group keeps react-dom and
+the rest. CI builds that on Vite 8.3 with React 18.3 and Radix's Portal, which imports react-dom, in the vendor
+group; React 17 was checked by hand. A `manualChunks` object is left as it is, so there, keep
+react-inp-blame out of the rule. With `@vitejs/plugin-legacy` the install stays in the page's own script, and
+a vendor rule that takes react-dom, or a library that imports it, breaks it whatever it does with the
+library, so keep react-dom out of that rule too (`!id.includes('/react-dom/')`, or on Vite 8 a group of its
+own, `{ name: 'react-dom', test: /node_modules[\\/]react-dom[\\/]/, priority: 1 }`, ahead of the vendor
+group, with the libraries that import it kept out of the vendor group as well, checked by hand on Vite 8.3
+with plugin-legacy 8.2). The build warns, naming both
+chunks and the module, when the install's chunk imports one that connects react-dom to React's DevTools hook as it
 loads: one that imports `react-dom/client`, or with React 17 or 18 `react-dom` itself, such as a component
 library's portal in the same vendor chunk, or on Vite 5, whose bundler leaves react-dom's body where it is,
 the chunk that holds react-dom. On Vite 6 and later a chunk that only holds react-dom is fine, since
@@ -307,10 +314,11 @@ keeps every module as its own file, or is an `iife` or `umd` script) keeps the i
 own, so there the install runs wherever the bundler puts it. A build in which no module has that path fails,
 rather than shipping without the install. The chunk comes from `manualChunks`: the install and everything it
 imports always go in it, so a rule of your own that sends `node_modules` to a vendor chunk cannot put the
-library beside react-dom, and your `manualChunks` function keeps deciding every other module. Under Rollup
-that keeps the install first; under Rolldown the module can still import the vendor chunk before it. A
-`manualChunks` object, or Rolldown's own chunk groups, cannot be added to, so the plugin warns and leaves them
-be, and the install may then run late in a build. `entry` needs the runtime, so it cannot go with
+library beside react-dom, and your `manualChunks` function keeps deciding every other module. Under Rolldown
+with `codeSplitting` or `advancedChunks` groups, the chunk comes from a group the plugin puts ahead of yours
+instead, with the same effect. Under Rollup that keeps the install first; under Rolldown the module can still
+import the vendor chunk before it. A `manualChunks` object cannot be added to, so the plugin warns and leaves
+it be, and the install may then run late in a build. `entry` needs the runtime, so it cannot go with
 `runtime: false`.
 
 CI builds this from `npx create-react-router@8.4.0` (React Router 8.4, Vite 8.3, React 19.3), and from
@@ -1191,14 +1199,15 @@ or [scripts only](#install-with-vite).
 
 A `manualChunks` or `codeSplitting` rule put react-dom where it loads before the install, so nothing is read in
 that build. Keep `react-inp-blame` out of the rule, usually a `node_modules` vendor rule. With
-@vitejs/plugin-legacy, keep react-dom out of the page's own script too.
+@vitejs/plugin-legacy, keep react-dom and every library that imports it, such as Radix's Portal, out of the
+vendor rule too: see [a vendor chunk](#install-with-vite) for a config that works.
 
 <a id="vite-manual-chunks"></a>
 #### entry needs a manualChunks function
 
 With `entry`, the plugin gives the install its own chunk through a `manualChunks` function. Your build sorts
-chunks another way, a `manualChunks` object or Rolldown chunk groups, so it could not. Write your rule as a
-`manualChunks` function.
+chunks with a `manualChunks` object, so it could not. Write your rule as a `manualChunks` function. Rolldown's
+chunk groups (`codeSplitting` or `advancedChunks`, Vite 8) need nothing: the plugin adds a group of its own.
 
 <a id="vite-module-info"></a>
 #### The bundler gives manualChunks no getModuleInfo

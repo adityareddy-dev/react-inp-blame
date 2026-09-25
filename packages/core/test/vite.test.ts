@@ -280,7 +280,7 @@ test('entry gives the install a chunk of its own, not an entry, and fails a buil
   // An object cannot be added to, so it is left as it is, with a warning.
   const warnings: string[] = [];
   assert.equal(found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, { manualChunks: { vendor: ['react'] } }), null);
-  assert.match(warnings[0]!, /already sorts modules into chunks another way \(a manualChunks object/);
+  assert.match(warnings[0]!, /already sorts modules into chunks with a manualChunks object/);
   assert.match(warnings[0]!, / See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#vite-manual-chunks$/);
   // Without entry the output is left alone, and so is one that cannot be split, which would fail the build.
   assert.equal(entryRuntime('build', {}).runtime.outputOptions.call({}, {}), null);
@@ -327,12 +327,69 @@ test("the install's chunk takes everything the install imports, whatever the app
   // The badge, which the install loads with import(), and react-dom stay where the app puts them.
   assert.equal(manualChunks(overlay, meta), 'vendor');
   assert.equal(manualChunks('/app/node_modules/react-dom/index.js', meta), 'vendor');
-  // Rolldown's own chunk groups cannot be added to either, so they get the warning a manualChunks object does.
-  for (const output of [{ advancedChunks: { groups: [] } }, { codeSplitting: { groups: [] } }]) {
-    const warnings: string[] = [];
-    assert.equal(found.runtime.outputOptions.call({ warn: (w: string) => warnings.push(w) }, output), null);
-    assert.match(warnings[0]!, /Rolldown chunk groups/);
+});
+
+/** What Rolldown makes of chunk groups: each module goes to the first group, by priority and then by place, whose `test` takes it. */
+function groupOf(groups: Record<string, any>[], id: string): string | undefined {
+  const ordered = groups.map((group, index) => ({ group, index })).sort((a, b) => (b.group.priority ?? 0) - (a.group.priority ?? 0) || a.index - b.index);
+  const taking = ordered.find(({ group }) => (group.test instanceof RegExp ? group.test.test(id) : typeof group.test === 'function' ? group.test(id) : true));
+  return taking?.group.name;
+}
+
+test("with Rolldown's chunk groups (Vite 8), the install's graph gets a group ahead of the app's, entry or not", () => {
+  const lib = '/app/node_modules/react-inp-blame/dist/index.js';
+  const hook = '/app/node_modules/react-inp-blame/dist/hook.js';
+  const overlay = '/app/node_modules/react-inp-blame/dist/overlay.js';
+  const reactDom = '/app/node_modules/react-dom/index.js';
+  const portal = '/app/node_modules/@radix-ui/react-portal/dist/index.mjs';
+  const imports: Record<string, string[]> = { [`\0${INSTALL_MODULE}`]: [lib], [lib]: [hook], [hook]: [], [portal]: [reactDom] };
+  const getModuleInfo = (id: string) => ({ importedIds: imports[id] ?? [], dynamicallyImportedIds: id === lib ? [overlay] : [] });
+  const client = { environment: { name: 'client', config: { consumer: 'client', build: resolved().build } }, warn: (w: string) => assert.fail(w), emitFile: () => 'ref', getModuleInfo };
+  // An app that sends react-dom, and a library that imports it, to one vendor group, with a priority and a
+  // global minSize the library alone would be under.
+  const vendor = { name: 'vendor', test: /node_modules/, priority: 10 };
+  const react = { name: 'react', test: /node_modules[\\/]react-dom[\\/]/, priority: 20 };
+
+  for (const [options, name, install] of [
+    [{}, 'react-inp-blame', undefined],
+    [{ entry: 'app/root.tsx' }, 'react-inp-blame-install', 'react-inp-blame-install'],
+  ] as const) {
+    const runtime = pluginsFor('build', { enabled: true, ...options }).find((p) => p.name === INSTALL)!;
+    runtime.configResolved(resolved());
+    for (const key of ['codeSplitting', 'advancedChunks'] as const) {
+      // Rolldown calls outputOptions before the build, and chunks after it, when buildEnd has run.
+      const output = runtime.outputOptions.call(client, { [key]: { minSize: 100_000, groups: [vendor, react] } });
+      runtime.buildStart.call(client);
+      runtime.buildEnd.call(client);
+      const { groups, minSize } = output[key];
+      assert.equal(minSize, 100_000);
+      assert.deepEqual(groups.slice(1), [vendor, react]);
+      // First, above every priority of theirs, and never dropped for being small.
+      assert.equal(groups[0].name, name);
+      assert.ok(groups[0].priority > 20);
+      assert.equal(groups[0].minSize, 0);
+      assert.equal(groupOf(groups, lib), name, key);
+      assert.equal(groupOf(groups, hook), name);
+      assert.equal(groupOf(groups, `\0${INSTALL_MODULE}`), install);
+      // The badge, which the install loads with import(), react-dom and what imports it stay where the app puts them.
+      assert.equal(groupOf(groups, overlay), 'vendor');
+      assert.equal(groupOf(groups, portal), 'vendor');
+      assert.equal(groupOf(groups, reactDom), 'react');
+    }
   }
+
+  // With no groups, the page's script needs nothing; entry's install still gets its group, since Rolldown
+  // ignores a manualChunks function beside `codeSplitting`.
+  const page = pluginsFor('build', { enabled: true }).find((p) => p.name === INSTALL)!;
+  page.configResolved(resolved());
+  assert.equal(page.outputOptions.call(client, { codeSplitting: { minSize: 1000 } }), null);
+  assert.equal(page.outputOptions.call(client, { codeSplitting: true }), null);
+  const found = entryRuntime('build', { entry: 'app/root.tsx' });
+  const { codeSplitting } = found.runtime.outputOptions.call(client, { codeSplitting: { minSize: 1000 } });
+  assert.equal(codeSplitting.groups.length, 1);
+  assert.equal(codeSplitting.groups[0].name, 'react-inp-blame-install');
+  // A test before any build has run takes nothing, rather than failing the build.
+  assert.equal(codeSplitting.groups[0].test(lib), false);
 });
 
 test('a wrong entry path fails every browser build, one written as a single iife script too', () => {
@@ -565,9 +622,51 @@ test("a build where the install's chunk imports a chunk that runs react-dom as i
   runtime.generateBundle.call(context, {}, bundle);
   assert.equal(warnings.length, 6);
   assert.match(warnings[5]!, /assets\/index\.js, which holds the install call, imports assets\/vendor\.js/);
-  assert.match(warnings[5]!, /keep react-dom out of it too/);
+  assert.match(warnings[5]!, /keep react-dom and every library that imports it out of it too/);
 
   // The entry path's chunk is found by its name.
   build(['\0/app/node_modules/react-dom/client.js?commonjs-es-import'], chunk('assets/x.js', [], ['assets/lib.js'], { name: 'react-inp-blame-install' }));
   assert.equal(warnings.length, 7);
+});
+
+test("under @vitejs/plugin-legacy the warning names the modern bundle's files, and the legacy one's only when there is no modern bundle", () => {
+  const runtime = pluginsFor('build', { enabled: true }).find((p) => p.name === INSTALL)!;
+  runtime.configResolved(resolved({ plugins: [{ name: 'vite:legacy-config' }] }));
+  const warnings: string[] = [];
+  const context = {
+    environment: { name: 'client', config: { consumer: 'client', build: resolved().build } },
+    warn: (w: string) => warnings.push(w),
+    error: (m: string) => assert.fail(m),
+    getModuleInfo: () => null,
+  };
+  const chunk = (fileName: string, moduleIds: string[], imports: string[]) => ({ type: 'chunk', fileName, moduleIds, imports });
+  const bundle = (suffix: string) => ({
+    [`assets/index${suffix}-a1.js`]: chunk(`assets/index${suffix}-a1.js`, [`\0${INSTALL_MODULE}`, '/app/src/main.tsx'], [`assets/vendor${suffix}-b2.js`]),
+    [`assets/vendor${suffix}-b2.js`]: chunk(`assets/vendor${suffix}-b2.js`, ['\0/app/node_modules/react-dom/client.js?commonjs-es-import'], []),
+  });
+
+  // Vite 8 builds the legacy copy first, then the modern one, each with its own buildStart; Vite 7 writes
+  // both from one build. Either way one warning, naming the modern files.
+  for (const separateBuilds of [true, false]) {
+    warnings.length = 0;
+    runtime.buildStart.call(context);
+    runtime.generateBundle.call(context, {}, bundle('-legacy'));
+    assert.deepEqual(warnings, []);
+    if (separateBuilds) runtime.buildStart.call(context);
+    runtime.generateBundle.call(context, {}, bundle(''));
+    runtime.closeBundle.call(context);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /^inpBlame: assets\/index-a1\.js, which holds the install call, imports assets\/vendor-b2\.js/);
+  }
+
+  // `renderModernChunks: false`: the legacy copy is all there is, so it is named at the end of the build.
+  warnings.length = 0;
+  runtime.buildStart.call(context);
+  runtime.generateBundle.call(context, {}, bundle('-legacy'));
+  assert.deepEqual(warnings, []);
+  runtime.closeBundle.call(context);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /^inpBlame: assets\/index-legacy-a1\.js, which holds the install call, imports assets\/vendor-legacy-b2\.js/);
+  runtime.closeBundle.call(context);
+  assert.equal(warnings.length, 1);
 });

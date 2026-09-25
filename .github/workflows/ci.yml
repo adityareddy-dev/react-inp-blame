@@ -139,6 +139,8 @@ jobs:
             name: Astro
           - fixture: vite-vendor-chunk
             name: Vite 7 with a vendor chunk
+          - fixture: vite-vendor-groups
+            name: Vite 8 with a vendor codeSplitting group
           - fixture: component-libraries
             name: Vite with styled-components, emotion, lucide and Radix
           - fixture: next-14

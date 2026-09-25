@@ -77,6 +77,53 @@ function installGraph(getModuleInfo) {
 // expression; compilers print directives with a semicolon and without the comment.
 const DIRECTIVES = /^(?:\s*(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")[ \t]*(?:;|(?=\r?\n)|$))+/;
 
+/**
+ * Rolldown's chunk options in this output, and the key they are under: `codeSplitting` as an object, or the
+ * older `advancedChunks`, which Rolldown ignores when `codeSplitting` is set. Either one makes Rolldown ignore
+ * `manualChunks`. Null when the output has neither.
+ */
+function chunkGroups(output) {
+  const key = typeof output.codeSplitting === 'object' && output.codeSplitting !== null ? 'codeSplitting' : 'advancedChunks';
+  const options = output[key];
+  if (typeof options !== 'object' || options === null) return null;
+  return { key, options, groups: Array.isArray(options.groups) ? options.groups : [] };
+}
+
+/**
+ * The output with a chunk group of its own put ahead of the app's, which takes the install's graph (the
+ * modules `takes` accepts) away from every group of theirs. Rolldown fills the groups in order of priority
+ * and then of place in the list, and a module a group has taken is gone from the rest, so the group gets a
+ * priority above all of theirs as well as the first place, and size limits of its own, so that a global
+ * `minSize` or `maxModuleSize` meant for a vendor chunk cannot drop the library back into one. The name is
+ * a string and the choice is `test`'s, which Rolldown hands no module graph: `moduleInfo` gives the one of
+ * the build in progress. A function `name` would get the graph, and a warning on every build asking it
+ * for a `debugName`, an option older Rolldown refuses.
+ */
+function withInstallGroup(output, { key, options, groups }, name, takes, moduleInfo) {
+  const priorities = groups.map((group) => (typeof group?.priority === 'number' && Number.isFinite(group.priority) ? group.priority : 0));
+  // One walk per build, redone when a rebuild brings a new graph.
+  let walked = null;
+  let graph = null;
+  const group = {
+    name,
+    test: (id) => {
+      const getModuleInfo = moduleInfo();
+      if (!getModuleInfo) return false;
+      if (walked !== getModuleInfo) {
+        walked = getModuleInfo;
+        graph = installGraph(getModuleInfo);
+      }
+      return graph.has(id) && takes(id);
+    },
+    priority: Math.max(0, ...priorities) + 1,
+    minSize: 0,
+    minShareCount: 1,
+    minModuleSize: 0,
+    ...(options.maxModuleSize !== undefined && { maxModuleSize: Number.MAX_SAFE_INTEGER }),
+  };
+  return { ...output, [key]: { ...options, groups: [group, ...groups] } };
+}
+
 /** The file name of the chunk holding the install call, or undefined when this build has none. */
 function installChunk(bundle) {
   return Object.keys(bundle).find((file) => bundle[file].type === 'chunk' && bundle[file].facadeModuleId === RESOLVED_INSTALL_MODULE);
@@ -214,6 +261,9 @@ function holdsInstall(chunk) {
   return (chunk.moduleIds ?? Object.keys(chunk.modules ?? {})).includes(RESOLVED_INSTALL_MODULE);
 }
 
+// @vitejs/plugin-legacy's copy of a chunk: its file names take `-legacy` after the chunk's name.
+const LEGACY_FILE = /-legacy[-.]/;
+
 /** `iife` and `umd` are one file by definition, so asking for another chunk fails the build outright. */
 function singleFile(build) {
   return [build.rollupOptions?.output].flat().some((output) => output?.format === 'iife' || output?.format === 'umd');
@@ -325,7 +375,19 @@ export function inpBlame(options = {}) {
     // The builds, by environment, already warned that react-dom runs first: @vitejs/plugin-legacy writes
     // the same chunks a second time, for older browsers.
     const warnedReactDom = new Set();
+    // That warning for the legacy copy, by environment, held back so the modern copy's files are the
+    // ones named: @vitejs/plugin-legacy writes its copy first. Said at the end of the build only when the
+    // modern copy did not say it, as with `renderModernChunks: false`.
+    const legacyReactDom = new Map();
     const environmentOf = (context) => context.environment?.name ?? 'client';
+    // What each build, by environment, says of its modules, kept from buildEnd for the chunk group
+    // outputOptions adds: Rolldown sorts modules into chunks after the build, and hands a group's `test`
+    // nothing but the module id.
+    const moduleInfos = new Map();
+    const graphOf = (context) => {
+      const environment = environmentOf(context);
+      return () => moduleInfos.get(environment);
+    };
     plugins.push({
       name: 'react-inp-blame:install',
       enforce: 'pre',
@@ -368,13 +430,19 @@ export function inpBlame(options = {}) {
       buildStart() {
         entryImports.delete(environmentOf(this));
         warnedReactDom.delete(environmentOf(this));
+        moduleInfos.delete(environmentOf(this));
         if (entry === undefined && buildsPages(config, this.environment, pages)) this.emitFile({ type: 'chunk', id: INSTALL_MODULE, name: 'react-inp-blame-install' });
+      },
+      buildEnd() {
+        if (typeof this.getModuleInfo === 'function') moduleInfos.set(environmentOf(this), (id) => this.getModuleInfo(id));
       },
       /**
        * With `entry`, the install gets a chunk of its own through `manualChunks`, which takes the module
        * and everything it imports, and not the badge's chunk, which it loads with import(). Not as an
        * emitted chunk: that would be a second entry, which some frameworks refuse (TanStack Start's
        * manifest wants one). A manualChunks function the app already has decides every other module.
+       * Where the app has Rolldown's chunk groups, which Rolldown reads in place of manualChunks, the
+       * chunk comes from a group put ahead of theirs instead.
        */
       outputOptions(output) {
         // Decided here, from this output's own environment: Rolldown (Vite 8) calls this hook before
@@ -386,8 +454,12 @@ export function inpBlame(options = {}) {
           // The page script's chunk is emitted as an entry of its own. What it imports is left to the
           // bundler, which keeps it away from react-dom, unless the app sorts modules itself: a rule
           // sending node_modules to a vendor chunk would put the library beside react-dom there, and the
-          // install chunk would import it. So the library gets a chunk of its own then.
-          if (typeof theirs !== 'function' || !buildsPages(config, this.environment, pages)) return null;
+          // install chunk would import it. So the library gets a chunk of its own then, from a manualChunks
+          // function or, where the app has Rolldown's chunk groups (Vite 8), from a group ahead of theirs.
+          if (!buildsPages(config, this.environment, pages)) return null;
+          const split = chunkGroups(output);
+          if (split?.groups.length) return withInstallGroup(output, split, 'react-inp-blame', (id) => id !== RESOLVED_INSTALL_MODULE, graphOf(this));
+          if (typeof theirs !== 'function') return null;
           let graph = null;
           return {
             ...output,
@@ -401,9 +473,12 @@ export function inpBlame(options = {}) {
           };
         }
         if (!separateScript(config, this.environment)) return null;
-        const groups = output.advancedChunks ?? (typeof output.codeSplitting === 'object' ? output.codeSplitting : undefined);
-        if ((theirs !== undefined && typeof theirs !== 'function') || groups !== undefined) {
-          this.warn(`inpBlame: entry gives the install a chunk of its own through a manualChunks function, and this build already sorts modules into chunks another way (a manualChunks object, or Rolldown chunk groups). Write it as a manualChunks function, or the install may run after react-dom in a build. See ${README}vite-manual-chunks`);
+        // Rolldown's chunk options (Vite 8), under which a manualChunks function would be ignored: the
+        // install and its graph get a group ahead of the app's.
+        const split = chunkGroups(output);
+        if (split) return withInstallGroup(output, split, 'react-inp-blame-install', () => true, graphOf(this));
+        if (theirs !== undefined && typeof theirs !== 'function') {
+          this.warn(`inpBlame: entry gives the install a chunk of its own through a manualChunks function, and this build already sorts modules into chunks with a manualChunks object. Write it as a manualChunks function, or the install may run after react-dom in a build. See ${README}vite-manual-chunks`);
           return null;
         }
         // One walk per build: every module id is asked, and the install's graph is the same for all of them.
@@ -438,18 +513,33 @@ export function inpBlame(options = {}) {
         if (entryFile && clientBuild(config, this.environment) && !entryImports.has(environmentOf(this))) {
           this.error(`inpBlame: entry is '${entry}', and this build has no module at ${entryFile}. It is the path of a module of the app from the project root, such as 'app/root.tsx'.`);
         }
-        if (!bundle || warnedReactDom.has(environmentOf(this))) return;
+        const environment = environmentOf(this);
+        if (!bundle || warnedReactDom.has(environment)) return;
         for (const file of Object.keys(bundle)) {
           if (!holdsInstall(bundle[file])) continue;
           const runner = importsReactDom(bundle, file, this.getModuleInfo?.bind(this));
-          if (runner) {
-            warnedReactDom.add(environmentOf(this));
-            this.warn(
-              `inpBlame: ${file}, which holds the install call, imports ${runner.chunk}, where ${shortId(runner.module)} connects react-dom to React's DevTools hook as the chunk loads, so react-dom connects before install() and nothing is read. ` +
-                `A manualChunks or codeSplitting rule most likely put them together: keep react-inp-blame out of the rule, and where the install is in the page's own script (@vitejs/plugin-legacy), keep react-dom out of it too. See ${README}vite-react-dom-first`,
-            );
+          if (!runner) continue;
+          const message =
+            `inpBlame: ${file}, which holds the install call, imports ${runner.chunk}, where ${shortId(runner.module)} connects react-dom to React's DevTools hook as the chunk loads, so react-dom connects before install() and nothing is read. ` +
+            `A manualChunks or codeSplitting rule most likely put them together: keep react-inp-blame out of the rule, and where the install is in the page's own script (@vitejs/plugin-legacy), keep react-dom and every library that imports it out of it too. See ${README}vite-react-dom-first`;
+          if (LEGACY_FILE.test(file)) {
+            if (!legacyReactDom.has(environment)) legacyReactDom.set(environment, message);
             return;
           }
+          warnedReactDom.add(environment);
+          legacyReactDom.delete(environment);
+          this.warn(message);
+          return;
+        }
+      },
+      closeBundle() {
+        const environment = environmentOf(this);
+        const message = legacyReactDom.get(environment);
+        legacyReactDom.delete(environment);
+        if (message && !warnedReactDom.has(environment)) {
+          warnedReactDom.add(environment);
+          if (typeof this.warn === 'function') this.warn(message);
+          else config?.logger?.warn(`[react-inp-blame] ${message}`);
         }
       },
       transformIndexHtml: {

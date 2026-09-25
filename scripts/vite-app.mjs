@@ -70,6 +70,15 @@ const FIXTURES = {
     reported: ['vite', '@vitejs/plugin-react', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
   },
+  // The same app on Vite 8 (Rolldown) with a codeSplitting group sending node_modules to one vendor chunk,
+  // and Radix's Portal, which imports react-dom, in the page: the vendor chunk runs react-dom as it loads.
+  // The library used to sit there too, so on React 18 the install ran after react-dom. No README block.
+  'vite-vendor-groups': {
+    readme: '## Install with Vite',
+    files: [],
+    reported: ['vite', 'rolldown', '@vitejs/plugin-react', 'react', 'react-dom', '@radix-ui/react-portal', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
+  },
   // The Vite app with styled-components, @emotion/styled, lucide-react and Radix's DropdownMenu, whose own
   // components used to be what a report named. Its config adds debugGlobal to the README's, so no block.
   'component-libraries': {
