@@ -126,7 +126,7 @@ Terms this page uses: **INP** (Interaction to Next Paint) is the Core Web Vital 
 long a click, tap or key press took to reach the next frame drawn, at the page's slowest, with the worst
 few left out once a page has had many. **Event
 Timing** is the browser API INP is built on. **Long Animation Frames** is a second, Chromium-only API that
-says which scripts ran in a slow frame and how much layout they forced. React's **fiber tree** is the
+says which scripts ran in a slow frame and how much style and layout work they forced. React's **fiber tree** is the
 internal tree React keeps of your rendered components; the library reads it through the hook React
 exposes for developer tools. A **soft navigation** is a route change the framework makes in the page,
 with no new document.
@@ -1014,9 +1014,10 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   production build. The build is not the only thing that can lower a confidence, though: a script blame is
   `'inferred'` whenever a commit could not be tied to the interaction, since a script is what is left once
   React is ruled out and an unjoined commit is exactly what stops React from being ruled out.
-- **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only, and its
-  share of a script that ran on past the handlers is apportioned by time rather than measured, so such a
-  blame is `'inferred'`. Where the browser reports no long animation frames the report says nothing about
+- **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only. The
+  browser counts style recalculation in the same figure, so a `'layout'` blame covers either. Its share of
+  a script that ran on past the handlers is apportioned by time rather than measured, so such a blame is
+  `'inferred'`. Where the browser reports no long animation frames the report says nothing about
   layout at all, rather than implying none happened. Nothing records *which* read forced the layout, so a
   `'layout'` blame's `name` and `detail` say where it happened instead: the joined commit's subtree and
   what it was mostly made of. That name is dropped for the browser's own invoker where no commit joined,
