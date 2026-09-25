@@ -100,7 +100,6 @@ function chunkGroups(output) {
  * for a `debugName`, an option older Rolldown refuses.
  */
 function withInstallGroup(output, { key, options, groups }, name, takes, moduleInfo) {
-  const priorities = groups.map((group) => (typeof group?.priority === 'number' && Number.isFinite(group.priority) ? group.priority : 0));
   // One walk per build, redone when a rebuild brings a new graph.
   let walked = null;
   let graph = null;
@@ -115,7 +114,9 @@ function withInstallGroup(output, { key, options, groups }, name, takes, moduleI
       }
       return graph.has(id) && takes(id);
     },
-    priority: Math.max(0, ...priorities) + 1,
+    // The highest Rolldown reads: it takes a priority as an unsigned 32-bit number, so a negative one of the
+    // app's wraps to the top, and only first place in the list wins the tie.
+    priority: 0xffffffff,
     minSize: 0,
     minShareCount: 1,
     minModuleSize: 0,
