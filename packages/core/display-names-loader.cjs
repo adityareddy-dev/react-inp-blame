@@ -554,10 +554,11 @@ const ASSIGNED = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*(?:(?:\*\*|&&|\|\||\?\?|<<|>>>
 const DESTRUCTURED = /[[{]([^[\]{}=]*)[\]}]\s*=(?![=>])/g;
 const CONST_DECLARATION = /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\b/gm;
 const DISPLAY_NAME = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*\.\s*displayName/g;
-// An import statement's clause, up to the module it comes from. Everything named in it is a binding
-// this module did not declare, `as` and all; reading both sides of an `as` only over-collects, and an
-// over-collected name costs one stamp that was never needed.
-const IMPORT_CLAUSE = /^import\s+(?:type\s+)?([\w$*{},\s]+?)\s+from\s*['"]/gm;
+// An import statement's clause, up to the module it comes from. `export … from` is not one: it binds
+// nothing in this module. It runs on the masked copy, so a comment in the clause is spaces by now and a
+// string name, `{ 'row-card' as Card }`, is its quotes around spaces; a quoted name counts only in
+// front of its `as`, so a clause never runs on from an `import './styles.css'` into the next line.
+const IMPORT_CLAUSE = /^import(?![\w$])\s*(?:type\s+)?((?:[\w$*{},\s]|(['"])\s*\2(?=\s*as\s))+?)\s*(?<![\w$])from\s*['"]/gm;
 const IDENTIFIER = /[A-Za-z_$][\w$]*/g;
 // The `"use server"` directive, matched at the module's first statement.
 const USE_SERVER = /^(['"])use server\1/;
@@ -574,11 +575,20 @@ function countBy(code, re) {
   return counts;
 }
 
-/** Every name this module imports, so that a declaration elsewhere in the file is never mistaken for it. */
+/**
+ * Every name this module imports, so that a declaration elsewhere in the file is never mistaken for it.
+ * Only the local names: each binding is the last word of its piece of the clause, so `Button as
+ * ButtonPrimitive` binds `ButtonPrimitive`, `* as ui` binds `ui` and `type Props` binds `Props`. The
+ * name before an `as` is the other module's, and this module may declare one of its own under it, as
+ * every shadcn component does: `import { Button as ButtonPrimitive } from …` and then `function Button`.
+ */
 function importedNames(code) {
   const names = new Set();
   for (const m of code.matchAll(IMPORT_CLAUSE)) {
-    for (const id of m[1].matchAll(IDENTIFIER)) if (id[0] !== 'as' && id[0] !== 'type') names.add(id[0]);
+    for (const piece of m[1].split(/[,{}]/)) {
+      const local = piece.match(IDENTIFIER)?.at(-1);
+      if (local && local !== 'type') names.add(local);
+    }
   }
   return names;
 }
