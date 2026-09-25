@@ -71,9 +71,9 @@ function installGraph(getModuleInfo) {
 }
 
 // A directive prologue, such as "use client": string literals that are whole statements, ended by a
-// semicolon or a line break. It has to stay first in its module to mean anything. A comment after one on
-// its line is not read, so that directive ends up after the import, as a plain expression; compilers
-// print directives without one.
+// semicolon or a line break. It has to stay first in its module to mean anything. A directive with no
+// semicolon before a comment on its line is not read, so it ends up after the import, as a plain
+// expression; compilers print directives with a semicolon and without the comment.
 const DIRECTIVES = /^(?:\s*(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")[ \t]*(?:;|(?=\r?\n)|$))+/;
 
 /** The file name of the chunk holding the install call, or undefined when this build has none. */
@@ -242,7 +242,7 @@ export function inpBlame(options = {}) {
             } else if (!warnedGraph) {
               // Rollup and Rolldown both hand it over; a bundler that did not would leave the library to the app's rules.
               warnedGraph = true;
-              warn('inpBlame: this bundler gives manualChunks no getModuleInfo, so only the install call gets a chunk of its own, and the library goes where your manualChunks puts it. Keep react-inp-blame out of a vendor rule.');
+              warn('inpBlame: this bundler gives manualChunks no getModuleInfo, so only the install call gets a chunk of its own, and the library goes wherever your manualChunks or the bundler puts it. Keep react-inp-blame out of a vendor rule.');
             }
             return theirs?.(id, meta);
           },
