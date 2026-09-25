@@ -6,6 +6,12 @@
 const ELEMENT_NODE = 1;
 // The attributes tests select elements by. A selector names the one an element has.
 const TEST_ATTRIBUTES = ['data-test', 'data-testid'];
+// What a click on something inside it activates, by tag and by ARIA role.
+const CONTROL_TAGS = ['button', 'a', 'summary', 'label', 'input', 'select', 'textarea'];
+const CONTROL_ROLES = ['button', 'link', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'option', 'checkbox', 'radio', 'switch'];
+// How far above the element that control is looked for: an icon is a few levels deep (a path in a
+// group in an svg in a span), and a control further away than that is a card, not a button.
+const CONTROL_ANCESTORS = 5;
 
 /** The element itself, or the one holding it when the node is a text node. */
 export function elementOf(node: Node): Element | null {
@@ -25,4 +31,25 @@ export function selector(node: Node): string | null {
   }
   if (el.classList && el.classList.length) s += '.' + Array.from(el.classList).slice(0, 2).join('.');
   return s;
+}
+
+/**
+ * The control a click landed inside, or the element itself when there is none close by. A click on an
+ * icon button lands on the icon: the `line` or `path` of an svg, a `span`, an `img`. That is the
+ * event's target and what the selector says, and it names nothing anyone would recognise, so the label
+ * is the button's, and so is the component a report names it by, since an icon library's `Trash2` is
+ * not what anyone clicked. The selector stays the element the browser reported.
+ */
+export function controlAround(el: Element): Element {
+  let at: Element | null = el;
+  for (let up = 0; at && up <= CONTROL_ANCESTORS; up++, at = at.parentElement) {
+    if (CONTROL_TAGS.includes(at.tagName.toLowerCase()) || CONTROL_ROLES.includes(at.getAttribute('role') ?? '')) return at;
+  }
+  return el;
+}
+
+/** The control around a node, for the owners a report names it by; the node itself when it is not in an element. */
+export function controlOf(node: Node | null): Node | null {
+  const el = node && elementOf(node);
+  return el ? controlAround(el) : node;
 }

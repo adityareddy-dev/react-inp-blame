@@ -1,5 +1,5 @@
 import { heaviest, readableName } from './commits.js';
-import { selector } from './element.js';
+import { controlOf, selector } from './element.js';
 import { fiberFromNode, ownersOf } from './fiber.js';
 import { page } from './install-state.js';
 import type { Blame, CommitSummary, InteractionReport, RenderedComponent } from './types.js';
@@ -111,7 +111,9 @@ export type { Blame, RenderedComponent } from './types.js';
 export function generateTarget(node: Node | null): string | undefined {
   if (!node) return undefined;
   try {
-    const fiber = fiberFromNode(node);
+    // Named by the control the node is inside (the button around a clicked icon), as reports are.
+    const control = controlOf(node);
+    const fiber = (control !== node && control && fiberFromNode(control)) || fiberFromNode(node);
     if (!fiber) return undefined;
     // Nearest first from the tree React rendered the node in, which is the order a path reads in reverse.
     // Names a reader could not search their code for (a minifier's `Xe`, a styling library's `styled.div`)

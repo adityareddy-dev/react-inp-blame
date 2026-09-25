@@ -808,6 +808,39 @@ test('a clicked element that React deleted before its entry arrived is named by 
   });
 });
 
+test("a click on an icon that the click swapped out is named by the button it was in, read at dispatch", async () => {
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    function Toolbar() {}
+    function DeleteButton() {}
+    function removeRow() {}
+    const node = (tag: string, fiber: Record<string, unknown>, parent: Record<string, unknown> | null, attributes: Record<string, string> = {}) => ({
+      nodeType: 1, tagName: tag.toUpperCase(), id: '', classList: { length: 0 }, parentNode: parent, parentElement: parent, firstChild: null,
+      getAttribute: (name: string) => attributes[name] ?? null, __reactFiber$demo: fiber,
+    });
+    const toolbarFiber = { tag: 0, elementType: Toolbar, type: Toolbar, memoizedProps: {}, return: null };
+    const deleteFiber = { tag: 0, elementType: DeleteButton, type: DeleteButton, memoizedProps: {}, return: toolbarFiber };
+    const buttonFiber = { tag: 5, elementType: 'button', type: 'button', memoizedProps: { onClick: removeRow }, return: deleteFiber };
+    const iconType = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'Trash2' };
+    const iconFiber = { tag: 11, elementType: iconType, type: iconType, memoizedProps: {}, return: buttonFiber };
+    const svgFiber: Record<string, unknown> = { tag: 5, elementType: 'svg', type: 'svg', memoizedProps: {}, return: iconFiber };
+    const button = node('button', buttonFiber, null, { 'aria-label': 'Delete row' });
+    const svg: Record<string, unknown> = node('svg', svgFiber, button);
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: svg });
+    // The click swaps the icon: the svg leaves the page and React clears its fiber.
+    svg.parentNode = null;
+    svg.parentElement = null;
+    svgFiber.return = null;
+    delete svg.__reactFiber$demo;
+    page.paint([click(7, 1000, 120)]);
+    const target = api.last()?.target;
+    assert.deepEqual(target && { component: target.component, owners: target.owners, handler: target.handler, label: target.label, selector: target.selector }, {
+      component: 'DeleteButton', owners: ['DeleteButton', 'Toolbar'], handler: 'removeRow', label: 'button "Delete row"', selector: 'svg',
+    });
+    api.dispose();
+  });
+});
+
 test('two copies of the library on one page share one installation: one hook wrapper, one walk per commit, one set of listeners', async (t) => {
   const [a, b] = await Promise.all([copyOfLibrary(t), copyOfLibrary(t)]);
   assert.notEqual(a.install, b.install, 'the copies share their modules');

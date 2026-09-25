@@ -1,5 +1,5 @@
 import { heaviest, leafName, mostlyComponent, readableName } from './commits.js';
-import { elementOf, selector } from './element.js';
+import { controlAround, controlOf, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
 import { rateInp } from './inp.js';
@@ -77,12 +77,6 @@ const FRAME_MS = 16;
 // rows, and reading all of its text would cost more than the rest of the report, so at most its
 // first run of text is read, and at most 40 characters of the name inside a label are kept.
 const LABEL_CHARS = 40;
-// What a click on something inside it activates, by tag and by ARIA role.
-const CONTROL_TAGS = ['button', 'a', 'summary', 'label', 'input', 'select', 'textarea'];
-const CONTROL_ROLES = ['button', 'link', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'option', 'checkbox', 'radio', 'switch'];
-// How far above the element that control is looked for: an icon is a few levels deep (a path in a
-// group in an svg in a span), and a control further away than that is a card, not a button.
-const CONTROL_ANCESTORS = 5;
 // Elements whose text is never on the screen, so it cannot be what a reader knows the target by.
 const UNSEEN_TEXT_TAGS = ['noscript', 'script', 'style', 'template'];
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
@@ -349,7 +343,10 @@ export function buildReport(
   let owners: readonly string[] = [];
   let handler: string | null = null;
   if (fiber) {
-    owners = ownersOf(fiber);
+    // Named by the control the node is inside, as at dispatch; the handler is still looked for from the
+    // node itself, which is where a handler on the icon would be.
+    const control = controlOf(live);
+    owners = ownersOf((control !== live && control && fiberFromNode(control)) || fiber);
     for (const e of sorted) {
       // An Event Timing entry does not say which key was pressed; the ring entry for the same event
       // does, and which key it was decides whether the press could have submitted a form.
@@ -402,7 +399,8 @@ export function buildReport(
     processing: processingEnd - processingStart - walkMs,
     walkMs,
     presentation: end - processingEnd,
-    target: targetNode ? describeTarget(targetNode, owners, handler, labels) : null,
+    // A node that left the page has no control above it any more; the one found at dispatch labels it.
+    target: targetNode ? describeTarget(targetNode, owners, handler, labels, live ?? ring?.control ?? targetNode) : null,
     hydration: hydrationOf(inWindow, inputs, stamps),
     navigationURL: navigation?.url ?? '',
     navigationType: navigation?.type ?? 'navigate',
@@ -583,10 +581,10 @@ function namedOwner(owners: readonly string[]): string | null {
   return owners.find(readableName) ?? owners[0] ?? null;
 }
 
-function describeTarget(node: Node, owners: readonly string[], handler: string | null, labels: LabelSource): TargetInfo {
+function describeTarget(node: Node, owners: readonly string[], handler: string | null, labels: LabelSource, labelled: Node = node): TargetInfo {
   return Object.freeze({
     selector: selector(node),
-    label: labelOf(node, labels),
+    label: labelOf(labelled, labels),
     component: namedOwner(owners),
     owners: Object.isFrozen(owners) ? owners : Object.freeze(owners.slice()),
     handler,
@@ -614,20 +612,6 @@ function labelOf(node: Node, labels: LabelSource): string | null {
     written('data-test');
   const label = name ? clip(name) : '';
   return label ? `${word} "${label}"` : word;
-}
-
-/**
- * The control a click landed inside, or the element itself when there is none close by. A click on an
- * icon button lands on the icon: the `line` or `path` of an svg, a `span`, an `img`. That is the
- * event's target and what the selector says, and it names nothing anyone would recognise, so the label
- * is the button's. Only the label moves: the selector stays the element the browser reported.
- */
-function controlAround(el: Element): Element {
-  let at: Element | null = el;
-  for (let up = 0; at && up <= CONTROL_ANCESTORS; up++, at = at.parentElement) {
-    if (CONTROL_TAGS.includes(at.tagName.toLowerCase()) || CONTROL_ROLES.includes(at.getAttribute('role') ?? '')) return at;
-  }
-  return el;
 }
 
 /** Whitespace collapsed, cut at 40 characters. */

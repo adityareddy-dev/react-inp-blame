@@ -1540,3 +1540,40 @@ test('a render is named after its deepest readable component, and what it was mo
   assert.equal(minified.blame.name, '$');
   assert.equal(minified.blame.detail, 'et ×113');
 });
+
+test("a click on an icon inside a button is named by the button's component, not the icon's", () => {
+  // lucide-react builds every icon as a forwardRef with a displayName, so the icon is a component of its
+  // own: `button > svg > path`, with Trash2 between the button and the svg.
+  function removeRow() {}
+  function DeleteButton() {}
+  function Toolbar() {}
+  const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null });
+  const toolbar = fiberOf(0, Toolbar, null);
+  const deleteButton = fiberOf(0, DeleteButton, toolbar);
+  const buttonFiber = fiberOf(5, 'button', deleteButton, { onClick: removeRow, 'aria-label': 'Delete row' });
+  const trash2 = fiberOf(11, { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'Trash2' }, buttonFiber);
+  const svgFiber = fiberOf(5, 'svg', trash2, {});
+  const pathFiber = fiberOf(5, 'path', svgFiber, {});
+  const path = Object.assign(element('path', []), { __reactFiber$k1: pathFiber });
+  const svg = Object.assign(element('svg', [path]), { __reactFiber$k1: svgFiber });
+  const button = Object.assign(element('button', [svg], { 'aria-label': 'Delete row' }), { __reactFiber$k1: buttonFiber });
+
+  const live = report([entry('click', 0, 120, 3, 100, { target: path })], [], []);
+  assert.equal(live.target?.component, 'DeleteButton');
+  assert.deepEqual(live.target?.owners, ['DeleteButton', 'Toolbar']);
+  assert.equal(live.target?.label, 'button "Delete row"');
+  assert.equal(live.target?.handler, 'removeRow');
+  // The selector is still the element the browser reported.
+  assert.equal(live.target?.selector, 'path');
+  assert.ok(live.verdict.includes('click on button "Delete row" in DeleteButton'), live.verdict);
+
+  // A click that swaps the icon detaches the path before its entry arrives: the control found at
+  // dispatch labels it, where the path alone would read as `path`.
+  const detached = element('path', []);
+  const ring = [input(0, 'click', { target: detached as unknown as Node, control: button as unknown as Node, owners: ['DeleteButton', 'Toolbar'], handler: 'removeRow' })];
+  const gone = report([entry('click', 0, 120, 3, 100)], [], [], ring);
+  assert.equal(gone.target?.label, 'button "Delete row"');
+  assert.equal(gone.target?.component, 'DeleteButton');
+  assert.equal(gone.target?.selector, 'path');
+});
