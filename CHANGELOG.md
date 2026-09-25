@@ -11,15 +11,16 @@ it changes when a field is removed or changes meaning, which a minor release may
 - **A render that was mostly one component's own render says so.** Sorting TanStack Table's virtualized rows
   example (200,000 rows) by a click on a header read "React spent 277 ms re-rendering 637 components inside
   TableBody", which sends a reader off to memoise the rows. 257 ms of it was TableBody's own render: the sort
-  runs inside `table.getRowModel()`, which TableBody calls while it renders, and the 636 components under it
-  took about 17 ms. Where React timed each component, and one of them rendered once and spent 25 ms or more,
-  and half of the commit's render time or more, in its own render, the sentence now goes on "257 ms of it in
-  TableBody's own render rather than the components under it", and `blame.detail` is "TableBody's own render"
-  where it was "637 components". A render blame of that kind also gets a note: it usually means work done
-  while rendering, such as sorting, filtering or building data, which memoising the components under it does
-  not speed up. A render spread over its components reads as before, and so does a production build or a
-  clock too coarse for single components, where no component has a time of its own. `blame.detail` changes
-  value for those renders and keeps its meaning, so `schemaVersion` stays at 3.
+  runs inside `table.getRowModel()`, which TableBody calls while it renders, and the components under it took
+  about 17 ms. Where React timed each component, and one of them rendered once and spent 25 ms or more, and
+  half of the commit's render time or more, in its own render, the sentence now goes on "257 ms of it in
+  TableBody's own render", and `blame.detail` is "TableBody's own render" where it was "637 components". A
+  hydration blame, and a layout blame named after its commit, take their `detail` from the same rule, so they
+  can carry that value too. A render blame of that kind also gets a note: that time is usually work the
+  component does as it renders, like a sort or a filter, which memoising the components under it does not
+  speed up. A render spread over its components reads as before, and so does a production build or a clock
+  too coarse for single components, where no component has a time of its own. `blame.detail` changes value
+  for those renders and keeps its meaning, so `schemaVersion` stays at 3.
 
 ## [0.12.0] - 2026-09-25
 
