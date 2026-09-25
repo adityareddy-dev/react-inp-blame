@@ -1038,7 +1038,8 @@ browser names by its URL, or by the page's for an inline script, in a blame's `n
 ## Troubleshooting
 
 Each warning the library prints ends with a link to its entry below. In the browser a warning starts with
-`[react-inp-blame]` and prints once per page. At build time it starts with `withInpBlame:` or `inpBlame:`.
+`[react-inp-blame]` and prints once per page. At build time it starts with `withInpBlame:` or `inpBlame:`,
+except the Vite plugin's setup advice, which starts with `[react-inp-blame]` and links its setup section.
 To see whether the library installed at all, and why not, add `debugGlobal: true` and read
 `__REACT_INP_BLAME__.stats()`. If your problem is not here, open a
 [setup problem](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=setup-problem.yml) issue
@@ -1103,7 +1104,8 @@ no hook, so reports come without components. Remove that script where you want b
 <a id="shim-over-hook"></a>
 #### hook: 'shim' found a React DevTools hook already installed
 
-You asked for `hook: 'shim'`, but a hook was already there, usually the React DevTools extension. The
+You asked for `hook: 'shim'`, but a hook was already there: the React DevTools extension, or in Vite development the React
+Fast Refresh preamble. The
 library chained onto it instead, which works. Nothing to fix. Drop `hook: 'shim'` to stop the warning.
 
 <a id="locked-out"></a>
