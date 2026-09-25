@@ -1,0 +1,35 @@
+{
+  "name": "astro-fixture",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "description": "What `npm create astro@5.2.4 -- --template minimal` makes (Astro's examples/minimal at astro@7.3.5) after `npx astro add react`, with the README's Astro setup and two React islands, one of them slow. Run by scripts/vite-app.mjs --fixture astro from a temp copy.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "check": "astro check",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "astro": "^7.3.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-inp-blame": "^0.3.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@playwright/test": "1.59.1",
+    "typescript": "^6.0.3"
+  },
+  "allowScripts": {
+    "esbuild": true
+  }
+}

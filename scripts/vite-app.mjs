@@ -8,7 +8,7 @@
 //   node scripts/vite-app.mjs                          # pack packages/core, then install and test
 //   node scripts/vite-app.mjs --tarball <path>         # a tarball that already exists
 //   node scripts/vite-app.mjs --fresh                  # no lockfile: every dependency as npm resolves it today
-//   node scripts/vite-app.mjs --fixture react-router   # the React Router app, or tanstack-start
+//   node scripts/vite-app.mjs --fixture react-router   # the React Router app, or tanstack-start or astro
 //   node scripts/vite-app.mjs -- --project=dev         # anything after -- goes to Playwright
 //
 // The copy is what makes it the user's install. Inside the repo the app could resolve react-inp-blame
@@ -63,9 +63,16 @@ const FIXTURES = {
     // the build generates included.
     typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
   },
+  astro: {
+    readme: '## Install with Astro',
+    files: ['astro.config.mjs'],
+    reported: ['astro', '@astrojs/react', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    // `astro check`, which the template suggests: the .astro page as well as the islands, the specs and the config.
+    typecheck: (app) => npm('run check', app),
+  },
 };
 // Left behind by a run in the fixture folder itself, and not part of the app.
-const NOT_COPIED = new Set(['node_modules', 'dist', 'build', '.react-router', 'test-results', 'playwright-report']);
+const NOT_COPIED = new Set(['node_modules', 'dist', 'build', '.react-router', '.astro', 'test-results', 'playwright-report']);
 
 const quoted = (text) => `"${text}"`;
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -92,18 +99,18 @@ function run(what, command, args, options) {
  */
 const npm = (command, cwd) => run(`npm ${command}`, `npm ${command}`, [], { cwd, shell: true });
 
-/** The ```ts or ```tsx block under the README's `heading` whose first line is a comment naming `file`. */
+/** The ```ts, ```tsx or ```js block under the README's `heading` whose first line is a comment naming `file`. */
 function readmeBlock(heading, file) {
   const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
   const section = readme.indexOf(`\n${heading}\n`);
   assert.ok(section !== -1, `README.md has no "${heading}" heading, which scripts/vite-app.mjs reads the fixture's ${file} from`);
   const next = readme.indexOf('\n## ', section + 1);
-  const blocks = readme.slice(section, next === -1 ? undefined : next).matchAll(/\n```tsx?\n([\s\S]*?)\n```/g);
+  const blocks = readme.slice(section, next === -1 ? undefined : next).matchAll(/\n```(?:tsx?|js)\n([\s\S]*?)\n```/g);
   const block = [...blocks].find(([, code]) => {
     const first = code.split('\n', 1)[0];
     return first === `// ${file}` || first.startsWith(`// ${file},`);
   });
-  assert.ok(block, `README.md has no \`\`\`ts block under "${heading}" that starts with the comment // ${file}`);
+  assert.ok(block, `README.md has no \`\`\`ts or \`\`\`js block under "${heading}" that starts with the comment // ${file}`);
   return block[1];
 }
 
