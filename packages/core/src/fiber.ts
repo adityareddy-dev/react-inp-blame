@@ -33,8 +33,9 @@ const MINIFIED_NAME_LENGTH = 2;
 // Longer names that say nothing about the handler either. React Compiler hoists an inline handler to a
 // module-level `function _temp()` and compiles `const handleLogin = () => ...` to `t0 = () => ...`,
 // whose function is named `t0` or `t12`; Radix's composeEventHandlers (@radix-ui/primitive) wraps
-// every handler it composes in a function named `handleEvent`.
-const NAMELESS_HANDLER = /^(?:t\d+|_temp\d*|handleEvent)$/;
+// every handler it composes in a function named `handleEvent`, and lodash's debounce and throttle in one
+// named `debounced`.
+const NAMELESS_HANDLER = /^(?:t\d+|_temp\d*|handleEvent|debounced)$/;
 // A clock that steps in whole milliseconds (Firefox and Safari without cross-origin isolation) makes
 // every component's time a whole number. With this many components timed and every time whole, that
 // is the clock and not chance: Chromium steps in 0.1 ms, where eight whole values in a row are a
@@ -413,12 +414,16 @@ function typeName(t: unknown): string | null {
  */
 function nameOf(f: Fiber): string | null {
   const wrapper = f.return !== null && f.return.tag === MemoComponent ? componentName(f.return) : null;
-  const name = wrapper || componentName(f);
-  // @emotion/styled renders an `Insertion` component beside every element it styles, to insert the
-  // styles; it is the library's, so it is counted under the styled element's own name (`Styled(div)`),
-  // which no report names a component by, rather than read as a component of the app's.
-  if (name === 'Insertion' && f.return !== null && isEmotionStyled(f.return.elementType)) return componentName(f.return);
-  return name;
+  return wrapper || componentName(f);
+}
+
+/**
+ * @emotion/styled's `Insertion`: the component it renders first, beside the element it styles, to insert
+ * the styles. It is the library's, and a minifier renames it, so it is told by its place, not its name.
+ */
+function emotionInsertion(f: Fiber): boolean {
+  const styled = f.return;
+  return styled !== null && styled.child === f && f.sibling !== null && isEmotionStyled(styled.elementType);
 }
 
 /** A component @emotion/styled made: it carries the tag or component it wraps as `__emotion_base`. */
@@ -426,8 +431,11 @@ function isEmotionStyled(t: unknown): boolean {
   return t !== null && typeof t === 'object' && '__emotion_base' in (t as object);
 }
 
-/** A MemoComponent is counted as the component it renders, never as a component of its own. */
-const countsAsComponent = (f: Fiber) => f.tag !== MemoComponent && isComponent(f);
+/**
+ * A MemoComponent is counted as the component it renders, never as a component of its own, and emotion's
+ * `Insertion` not at all, since it is not a component the app wrote.
+ */
+const countsAsComponent = (f: Fiber) => f.tag !== MemoComponent && isComponent(f) && !emotionInsertion(f);
 
 /**
  * The components enclosing a fiber, nearest first. They follow the tree React rendered the fiber in,

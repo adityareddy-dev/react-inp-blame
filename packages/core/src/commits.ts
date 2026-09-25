@@ -26,16 +26,31 @@ const READABLE_NAME = /^[A-Z][A-Za-z0-9_$]{2,}$/;
 export const readableName = (name: string): boolean => name.split('.').every((part) => READABLE_NAME.test(part));
 
 /**
- * The component a commit is named after: the deepest readable name on its hot path, else its first
- * readable root, else the end of its hot path or its outermost root as they stand, since the alternative
- * is inventing a name; null when it rendered none.
+ * The component a commit is named after: the deepest readable name on its hot path, else the end of its
+ * hot path, or its outermost root, as they stand, since the alternative is inventing a name; null when it
+ * rendered none.
  */
 export function leafName(c: CommitSummary): string | null {
   for (let i = c.hotPath.length - 1; i >= 0; i--) if (readableName(c.hotPath[i]!)) return c.hotPath[i]!;
-  return c.roots.find(readableName) ?? (c.hotPath[c.hotPath.length - 1] || c.roots[0] || null);
+  // Not another root: the hot path starts at the heaviest, so any other root is a subtree beside the work.
+  return c.hotPath[c.hotPath.length - 1] || c.roots[0] || null;
 }
 
-/** What a commit was mostly made of: its most-rendered readable component, else its most-rendered one. */
+/** The names styling libraries give every element they wrap: `styled.div`, `Styled(Button)`. */
+const STYLING_WRAPPER = /^styled\.|^Styled\(/;
+
+/**
+ * What a commit was mostly made of: of the components a styling library did not make, the one that
+ * rendered most (took longest, where React measured), or a readable one that carries at least half as much,
+ * since a name the app wrote says more than a minifier's; the most-rendered of all when every one is a
+ * styling library's.
+ */
 export function mostlyComponent(c: CommitSummary): CommitSummary['components'][number] | undefined {
-  return c.components.find((component) => readableName(component.name)) ?? c.components[0];
+  const own = c.components.filter((component) => !STYLING_WRAPPER.test(component.name));
+  const first = own[0];
+  if (!first) return c.components[0];
+  const readable = own.find((component) => readableName(component.name));
+  if (!readable || readable === first) return first;
+  const weight = (component: CommitSummary['components'][number]) => component.self ?? component.count;
+  return weight(readable) >= weight(first) / 2 ? readable : first;
 }

@@ -261,8 +261,8 @@ Next.js reports the build without attribution, so there the React side is added 
 
 The component path goes into `attribution.interactionTarget`, where web-vitals otherwise puts a CSS
 selector, so it shows up wherever that field is already collected. A path names at most four
-components, and they are the four nearest the element, so a deep tree loses the page and the layout
-rather than the component that renders what was clicked. `generateTarget` returns `undefined` when the
+components, the four nearest the element whose names a reader could search their code for, so a deep
+tree loses the page and the layout rather than the component that renders what was clicked. `generateTarget` returns `undefined` when the
 node has no React fiber or no named component above it, which is web-vitals' signal to fall back to
 its own selector, and it never throws. `attributeINP(metric)` returns the
 metric's attribution (`{}` where there is none) with a frozen `react` field added, from this

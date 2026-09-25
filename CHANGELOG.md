@@ -15,29 +15,36 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 - **Render and layout blames name a component of the app, not a styling library's wrapper or a minified
   name.** The readable-name rule `where` already followed now picks the component a render blame names
-  (the deepest readable one on the hot path, else the first readable root), what a commit was "mostly" made
-  of, and the owners in `generateTarget`'s string. A list styled with styled-components used to be blamed
-  on `styled.section`, "mostly Styled(span) ×800"; it is now blamed on the component that renders it, mostly
-  the row component. Where nothing readable is there, the names stand as before. `blame.name`,
-  `blame.detail` and `generateTarget`'s string change value for those cases and keep their meaning.
+  (the deepest readable one on the hot path), what a commit was "mostly" made of (the most-rendered
+  component a styling library did not make, or a readable one carrying at least half as much), and the
+  owners in `generateTarget`'s string. A list styled with styled-components used to be blamed on
+  `styled.ul`, "mostly styled.li ×400", and one styled with @emotion/styled on `Styled(ul)`; both are now
+  blamed on the component that renders the list, mostly the row component. @emotion/styled's `Insertion`,
+  which it renders beside every element it styles, is no longer counted as a component, so an emotion list
+  of 400 rows no longer reads as 800 components. Where nothing readable is there, the names stand as
+  before. `blame.name`, `blame.detail`, a commit's `components` and `rendered` under emotion, and
+  `generateTarget`'s string change value for those cases and keep their meaning.
 - **A click on an icon inside a button is put on the button's component.** Event Timing names the element
   the pointer landed on, often an icon library's `<svg>` or `<path>`, and `target.component` and `owners`
-  were read from there: `Trash2` from lucide-react rather than the `DeleteButton` around it. They are now
-  read from the control the label already names (the nearest button, link, input or element with a control
-  role, up to five levels up), and so is `generateTarget`'s string. When the icon was swapped by the render
-  (a minus for a check), the label and the names still come from the button. `target.selector` and
-  `target.handler` still describe the element that was hit.
+  were read from there: `Trash2` from lucide-react rather than the `DeleteButton` around it. For a click on
+  an icon (an `<svg>` or something in one, an `<img>`, a `<picture>`) they are now read from the control the
+  label already names (the nearest button, link, input or element with a control role, up to five levels
+  up), and so is `generateTarget`'s string; a click anywhere else is named as before, so a card inside a
+  link is still the card. When the icon was swapped by the render (a minus for a check), the label and the
+  names still come from the button. `target.selector` and `target.handler` still describe the element that
+  was hit.
   CI runs these on real libraries (`fixtures/component-libraries`, styled-components 6, @emotion/styled 11,
   lucide-react 1 and Radix's DropdownMenu 2), in development and production builds.
 - **The handler named is the one whose event did the work.** A click is a pointerdown, a pointerup and a
   click, and the handler was looked for on the click first whatever each one's handlers cost, so a menu that
-  opens on pointerdown (Radix's DropdownMenu) was put on an `onClick` beside it that did nothing. The events
-  whose own handlers ran longest are now asked first, and the click still wins a tie. The report's `type`
-  is unchanged.
+  opens on pointerdown (Radix's DropdownMenu) was put on an `onClick` beside it that did nothing. Only the
+  events whose own handlers ran longest (within 4 ms of each other) are now asked, the click first among
+  them; where their work was a listener of the page's own rather than a React handler, `target.handler` is
+  null and the explanation names that listener. The report's `type` is unchanged.
 - **Names that say nothing about a handler give way to its prop.** React Compiler's temporaries (`t0`,
-  `t12`, `_temp`), the `handleEvent` Radix wraps every composed handler in, and the `bound ` on a bound
-  function no longer reach `target.handler`: the first three read as the prop, such as `onClick`, and a
-  bound function by its own name.
+  `t12`, `_temp`), the `handleEvent` Radix wraps every composed handler in, the `debounced` lodash's
+  debounce and throttle wrap one in, and the `bound ` on a bound function no longer reach `target.handler`:
+  the first four read as the prop, such as `onClick`, and a bound function by its own name.
 - A report whose only event is a mouse's pointerdown or pointerup reads "click", not "tap".
 
 ## [0.5.0] - 2026-09-25

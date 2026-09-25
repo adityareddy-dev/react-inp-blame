@@ -37,8 +37,8 @@ export function selector(node: Node): string | null {
  * The control a click landed inside, or the element itself when there is none close by. A click on an
  * icon button lands on the icon: the `line` or `path` of an svg, a `span`, an `img`. That is the
  * event's target and what the selector says, and it names nothing anyone would recognise, so the label
- * is the button's, and so is the component a report names it by, since an icon library's `Trash2` is
- * not what anyone clicked. The selector stays the element the browser reported.
+ * is the button's (and for an icon, the component a report names it by: see `namedFrom`). The selector
+ * stays the element the browser reported.
  */
 export function controlAround(el: Element): Element {
   let at: Element | null = el;
@@ -48,8 +48,25 @@ export function controlAround(el: Element): Element {
   return el;
 }
 
-/** The control around a node, for the owners a report names it by; the node itself when it is not in an element. */
+/** The control around a node, which labels it; the node itself when it is not in an element. */
 export function controlOf(node: Node | null): Node | null {
   const el = node && elementOf(node);
   return el ? controlAround(el) : node;
+}
+
+// What an icon is drawn with. A click inside one is a click on the control around it.
+const ICON_TAGS = ['svg', 'img', 'picture'];
+
+/**
+ * Where the components a report names a click by are read from: the control around an icon that was
+ * clicked, since an icon library's `Trash2` inside the button is not what anyone clicked, and otherwise the
+ * node itself, so a card inside a link or a row inside an option is still named by the card or the row.
+ */
+export function namedFrom(node: Node | null): Node | null {
+  const el = node && elementOf(node);
+  if (!el) return node;
+  for (let at: Element | null = el, up = 0; at && up <= CONTROL_ANCESTORS; up++, at = at.parentElement) {
+    if (ICON_TAGS.includes(at.tagName.toLowerCase())) return controlAround(el);
+  }
+  return node;
 }
