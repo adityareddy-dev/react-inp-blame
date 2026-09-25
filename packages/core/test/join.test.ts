@@ -1684,6 +1684,32 @@ test('what an icon belongs to is read from the fiber tree: a card\'s photo is th
   const userLinkComponent = component('UserLink');
   children(userLinkComponent, userLink.fiber);
   assert.deepEqual(ownersFor(photo.el), ['UserLink']);
+
+  // An element that handles the click itself is what was clicked, icon or not: a thumbnail's `<img onClick>`
+  // is named by the component that renders it, and so is a `<div onClick>` around an icon.
+  const thumbnails = [0, 1, 2].map(() => {
+    const img = host('img');
+    (img.fiber.memoizedProps as Record<string, unknown>).onClick = () => {};
+    const thumbnail = component('Thumbnail');
+    children(thumbnail, img.fiber);
+    return { img, thumbnail };
+  });
+  const gallery = host('div', {}, thumbnails.map((t) => t.img));
+  children(gallery.fiber, ...thumbnails.map((t) => t.thumbnail));
+  children(component('Gallery'), gallery.fiber);
+  assert.deepEqual(ownersFor(thumbnails[1]!.img.el), ['Thumbnail', 'Gallery']);
+  const pencil = host('svg');
+  const pencilIcon = icon('Pencil');
+  children(pencilIcon, pencil.fiber);
+  const iconDiv = host('div', {}, [pencil]);
+  (iconDiv.fiber.memoizedProps as Record<string, unknown>).onClick = () => {};
+  children(iconDiv.fiber, pencilIcon);
+  const editButton = component('EditButton');
+  children(editButton, iconDiv.fiber);
+  const toolbar = host('div', {}, [iconDiv, host('span')]);
+  children(toolbar.fiber, editButton, host('span').fiber);
+  children(component('Toolbar'), toolbar.fiber);
+  assert.deepEqual(ownersFor(pencil.el), ['EditButton', 'Toolbar']);
 });
 
 test("Enter's work in the keypress entry is named by the form's onSubmit, from the key its keydown recorded", () => {

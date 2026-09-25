@@ -471,12 +471,17 @@ const countsAsComponent = (f: Fiber) => f.tag !== MemoComponent && isComponent(f
 
 // How many fibers above an icon are climbed looking for what it belongs to.
 const ICON_CLIMB = 16;
+// The props that make an element what a click lands on, whatever its tag: a thumbnail `<img onClick>`, a
+// `<div onClick>` around an icon.
+const INPUT_HANDLERS = ['onClick', 'onDoubleClick', 'onPointerDown', 'onPointerUp', 'onMouseDown', 'onMouseUp', 'onTouchStart', 'onTouchEnd', 'onKeyDown', 'onKeyUp'];
 
 /**
  * The fiber a report reads the components that name an interaction from. For a click on an icon, the icon
  * library's components are not what anyone clicked: from the icon's own fiber this climbs through every
  * fiber that renders nothing but it (lucide's `Icon`, then `Trash2`, then a `<span>` around them), and stops
- * at a control (the `<button>` they are in) or at the first fiber that renders something beside them. A
+ * at a control (the `<button>` they are in), at an element with a handler of its own (a thumbnail's
+ * `<img onClick>`, which names the component that renders it), or at the first fiber that renders
+ * something beside them. A
  * `DeleteButton`'s trash icon is then named by `DeleteButton`, an option's person icon by the option's
  * component, and a card's photo or its row of stars by the card or the stars, as the fiber tree has them.
  * Anything that is not an icon is named from its own fiber.
@@ -486,7 +491,7 @@ export function namingFiber(node: Node | null): Fiber | null {
   const start = icon && fiberFromNode(icon);
   if (!start) return fiberFromNode(node);
   let f = start;
-  for (let i = 0; i < ICON_CLIMB && !isControlHost(f); i++) {
+  for (let i = 0; i < ICON_CLIMB && !isControlHost(f) && !handlesInput(f); i++) {
     const parent = f.return;
     const only = parent && onlyChild(parent);
     if (!only || (only !== f && only !== f.alternate)) break;
@@ -507,6 +512,11 @@ function onlyChild(parent: Fiber): Fiber | null {
 function isControlHost(f: Fiber): boolean {
   const el = f.stateNode as Element | null | undefined;
   return f.tag === HostComponent && !!el && typeof el.getAttribute === 'function' && isControl(el);
+}
+
+function handlesInput(f: Fiber): boolean {
+  const props = f.tag === HostComponent ? f.memoizedProps : null;
+  return !!props && INPUT_HANDLERS.some((name) => typeof props[name] === 'function');
 }
 
 /**

@@ -48,7 +48,7 @@ test("a click on a button a styling library labelled is named by the app's compo
   expect(problems).toEqual([]);
 });
 
-test("a click on a card's photo inside a link is named by the card, and an option's icon by the option", async ({ page }) => {
+test("a click on a card's photo inside a link is named by the card, an option's icon by the option, a thumbnail by itself", async ({ page }) => {
   const problems = await open(page);
   await clickOn(page, '[data-testid=photo]');
   const card = await slowReport(page);
@@ -61,6 +61,12 @@ test("a click on a card's photo inside a link is named by the card, and an optio
   const option = await slowReport(page);
   expect(option.target?.component).toBe('PersonOption');
   expect(option.target?.owners.slice(0, 2)).toEqual(['PersonOption', 'PeoplePicker']);
+
+  // An image with a click handler of its own is named by the component that renders it.
+  await page.evaluate(() => window.__REACT_INP_BLAME__.clear());
+  await clickOn(page, '[data-testid=thumb-1]');
+  const thumbnail = await slowReport(page);
+  expect(thumbnail.target?.owners.slice(0, 2)).toEqual(['Thumbnail', 'Gallery']);
   expect(problems).toEqual([]);
 });
 
