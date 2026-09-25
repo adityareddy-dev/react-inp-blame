@@ -36,6 +36,8 @@ jobs:
       # walkthrough, which nothing else compiles.
       - run: npm run typecheck
       - run: npm run test:unit
+      # The README's bundle sizes against this build, and each against its budget in scripts/size-budget.json.
+      - run: node scripts/size.mjs --check
 
   # Sees what users install, as the two vite-app jobs below do, and is the one gating job that checks
   # every file and subpath of it. The unit and e2e jobs resolve react-inp-blame through the workspace

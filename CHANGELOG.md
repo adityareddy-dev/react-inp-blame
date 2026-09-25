@@ -13,6 +13,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   screen's width less 32 px, its height follows the screen as the browser's bars come and go (`dvh`), and
   on a touch screen or a screen under 480 px wide the close button and the rows are larger to tap. CI opens
   it on a 360 px phone (Playwright's Galaxy S8) as well as the Pixel 7 and the iPhone 15.
+- **The README's bundle sizes are measured, and checked in CI.** The table said 39.0 KB minified and
+  14.4 KB gzipped for `react-inp-blame/auto`, figures from 0.1.1; the entry had grown to 59.0 and 21.2 KB. The
+  table now comes from `scripts/size.mjs`, which builds each bundle with the repo's rolldown, and CI's unit
+  job fails when the table is out of date or a gzipped size passes its budget in `scripts/size-budget.json`.
 
 ### Added
 
