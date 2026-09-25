@@ -6,6 +6,14 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Fixed
+
+- **The panel fits a 360 px phone screen.** It was 372 px wide, 16 px from the corner, so it ran 28 px off a
+  360 px Android screen and cut off the close button and each row's milliseconds; it is now at most the
+  screen's width less 32 px, its height follows the screen as the browser's bars come and go (`dvh`), and
+  on a touch screen or a screen under 480 px wide the close button and the rows are larger to tap. CI opens
+  it on a 360 px phone (Playwright's Galaxy S8) as well as the Pixel 7 and the iPhone 15.
+
 ## [0.7.0] - 2026-09-25
 
 ### Fixed

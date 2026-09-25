@@ -34,6 +34,8 @@ export default defineConfig({
     // Taps on a touch screen at a phone's size, the Android one with its CPU slowed as well.
     { name: `android-${mode}`, use: { ...devices['Pixel 7'] }, testMatch: phone },
     { name: `iphone-${mode}`, use: { ...devices['iPhone 15'] }, testMatch: phone },
+    // The narrowest screen in common use, 360 px, for the panel alone: the other two are wider than it needs.
+    { name: `galaxy-${mode}`, use: { ...devices['Galaxy S8'] }, testMatch: phone, grep: /the panel fits/ },
     // The headed walkthrough in ./tour is for a person to watch, so it is a project of its own that
     // only exists when INP_TOUR asks for it: a normal run neither collects it nor reports it skipped.
     ...(process.env.INP_TOUR ? [{ name: 'tour', testDir: './tour', use: { browserName: 'chromium' as const } }] : []),
