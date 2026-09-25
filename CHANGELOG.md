@@ -34,6 +34,16 @@ it changes when a field is removed or changes meaning, which a minor release may
 - **The panel's row reads naturally without a time.** Under a production build of React a handler's blame has no
   figure, and the row read "most likely onClick in Layout in the handler". It now reads "most likely the
   onClick handler in Layout".
+- **A React Router route's component keeps its name in production.** React Router's Vite plugin rewrites
+  `export default function Home()` in a route module to `export default withComponentProps(function Home()
+  {…})`, so no `Home` binding was left for the displayName pass to name, and the minifier dropped the name of
+  the function inside the wrapper. A click in the route's own markup was put down to the nearest named
+  component above it, `Layout` in the template, and the component itself showed as `(anonymous)` among the
+  renders. The Vite plugin now turns a component's `export default function Foo` into `function Foo` with
+  `export default Foo;` after it, in builds and before any other plugin reads the module, so the wrapper takes
+  the binding and the pass after the JSX compiler names it. Lines and the name's column stay where they were.
+  `fixtures/react-router` and `fixtures/react-router-7` now have a slow click handler in the route component,
+  and CI checks the verdict names `Home` in development and production.
 
 ## [0.10.0] - 2026-09-25
 

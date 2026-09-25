@@ -23,7 +23,8 @@ test('by default astro dev gets the install and the displayName transform, and a
   const dev = setup('dev');
   assert.equal(dev.name, 'react-inp-blame');
   assert.deepEqual(dev.scripts, [{ stage: 'before-hydration', content: "import { install } from 'react-inp-blame';\ninstall({});" }]);
-  assert.deepEqual(dev.plugins, ['react-inp-blame:display-names']);
+  // The second one's `apply` keeps it to builds, which Vite asks it itself.
+  assert.deepEqual(dev.plugins, ['react-inp-blame:display-names', 'react-inp-blame:default-exports']);
   assert.deepEqual(setup('build'), { name: 'react-inp-blame', scripts: [], plugins: [] });
 });
 
@@ -51,7 +52,7 @@ test("enabled: 'production' is astro build alone, true is both, false neither, a
 test('the install runs with the options it is given, and runtime: false keeps only the transform', () => {
   const { scripts } = setup('dev', { runtime: { overlay: 'query', debugGlobal: true } });
   assert.equal(scripts[0].content, 'import { install } from \'react-inp-blame\';\ninstall({"overlay":"query","debugGlobal":true});');
-  assert.deepEqual(setup('build', { enabled: true, runtime: false }), { name: 'react-inp-blame', scripts: [], plugins: ['react-inp-blame:display-names'] });
+  assert.deepEqual(setup('build', { enabled: true, runtime: false }), { name: 'react-inp-blame', scripts: [], plugins: ['react-inp-blame:display-names', 'react-inp-blame:default-exports'] });
   assert.throws(() => inpBlame({ runtime: 'query' as never }), /runtime is true, false or the options for install\(\)/);
 });
 

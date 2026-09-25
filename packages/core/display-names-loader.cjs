@@ -53,6 +53,8 @@
 // `function Foo(`, with the export forms and the generic one. Column 0 only: an indented declaration
 // is inside something, where the module's last line cannot reach it.
 const FUNCTION = /^(?:export\s+(?:default\s+)?)?function\s+([A-Z]\w*)\s*[(<]/gm;
+// The `export default` in front of such a declaration.
+const DEFAULT_EXPORT = /^export\s+default\s/;
 // `const Foo`, up to the name. What follows the name decides whether it is a component.
 const CONST = /^(?:export\s+)?const\s+([A-Z]\w*)\s*(?=[:=])/gm;
 // The wrappers whose argument is a component by definition, so what is inside them is not examined.
@@ -487,14 +489,18 @@ function componentEntries(code) {
   if (first >= 0 && USE_SERVER.test(source.slice(first))) return [];
   const depth = braceDepths(masked);
   const found = new Map();
-  const add = (name, kind) => {
+  const add = (name, kind, defaultExport = null) => {
     const seen = found.get(name);
-    found.set(name, { kind, declarations: (seen ? seen.declarations : 0) + 1 });
+    found.set(name, { kind, declarations: (seen ? seen.declarations : 0) + 1, defaultExport });
   };
   // Column 0 is where a top level declaration is, but not only: a declaration inside a block, a
   // namespace or a class body can be written there too, and the module's last line cannot reach it.
   const topLevel = (m) => depth.at(m.index) === 0;
-  for (const m of masked.matchAll(FUNCTION)) if (topLevel(m) && startsStatement(masked, m.index)) add(m[1], 'function');
+  for (const m of masked.matchAll(FUNCTION)) {
+    if (!topLevel(m) || !startsStatement(masked, m.index)) continue;
+    // `export default function Foo(`: where it starts and how far in the name is, for `hoistDefaultExport`.
+    add(m[1], 'function', DEFAULT_EXPORT.test(m[0]) ? { at: m.index, length: m[0].lastIndexOf(m[1]) } : null);
+  }
   for (const m of masked.matchAll(CONST)) {
     if (!topLevel(m)) continue;
     const after = m.index + m[0].length;
@@ -512,7 +518,7 @@ function componentEntries(code) {
   const stamped = countBy(masked, DISPLAY_NAME);
   const imported = importedNames(masked);
   const entries = [];
-  for (const [name, { kind, declarations }] of found) {
+  for (const [name, { kind, declarations, defaultExport }] of found) {
     // Declared twice, assigned to somewhere else, or given a displayName of its own: leave it be. The
     // count of assignments a plain declaration accounts for is one for a const and none for a function.
     if (declarations > 1) continue;
@@ -521,7 +527,7 @@ function componentEntries(code) {
     // The name the module's last line would reach is the imported one, not the declaration found
     // above, which is inside something. Stamping it would rename another module's component.
     if (imported.has(name)) continue;
-    entries.push({ name, kind });
+    entries.push({ name, kind, defaultExport });
   }
   return entries;
 }
@@ -649,6 +655,42 @@ function stamp(code) {
   return code + tail;
 }
 
+/**
+ * The source with its `export default function Foo(…)` turned into a plain `function Foo(…)` and an
+ * `export default Foo;` after the module's code, or the source untouched. Only for a component `stamp`
+ * would name, so every rule above about which declarations are safe to touch holds here too.
+ *
+ * This is for the Vite plugin, which runs it on a module before any other plugin has seen it. Some
+ * framework plugins rewrite a default export: React Router's wraps the route component in a component
+ * of its own, `export default withComponentProps(function Foo() {…})`, and a function that was a
+ * declaration is then an expression inside a call. No binding named `Foo` is left for `stamp`'s line to
+ * reach, and the minifier drops a function expression's name that nothing reads, so the component the
+ * fiber tree shows has no name at all. Declared on its own and exported by name, the function stays a
+ * binding whatever wraps the export, and `stamp` names it after the JSX is compiled as it names any
+ * other.
+ *
+ * `function` goes back to column 0, where `stamp` looks for a declaration, and the name keeps its line
+ * and column: the words taken out become spaces after `function`, and the line breaks among them stay.
+ * No other character moves, so a source map from before still holds, and the function is still
+ * hoisted as before. What moves is when the default export's value is read: at the end of the module
+ * rather than as it is declared, which only a module that imports itself in a cycle, and reads its
+ * default export before its own code has run, could tell apart. A wrapping plugin already makes it an
+ * expression evaluated in order.
+ */
+function hoistDefaultExport(code) {
+  const entry = componentEntries(code).find((e) => e.defaultExport);
+  if (!entry) return code;
+  // componentEntries reads the source without its byte order mark.
+  const at = entry.defaultExport.at + (code.charCodeAt(0) === 0xfeff ? 1 : 0);
+  const end = at + entry.defaultExport.length;
+  const words = code.slice(at, end);
+  const breaks = words.match(/\r?\n|\r/g) ?? [];
+  // How far in the name was on its own line, which the spaces after `function` make up.
+  const column = words.length - Math.max(words.lastIndexOf('\n'), words.lastIndexOf('\r')) - 1;
+  const declaration = `function${' '.repeat(Math.max(1, column - 'function'.length))}`;
+  return `${code.slice(0, at)}${breaks.join('')}${declaration}${code.slice(end)}\nexport default ${entry.name};`;
+}
+
 function loader(source) {
   const file = (this && this.resourcePath) || '';
   if (file.includes('node_modules')) return source;
@@ -657,3 +699,6 @@ function loader(source) {
 
 module.exports = loader;
 module.exports.stamp = stamp;
+// Not one of the loader's names, which are the loader and `stamp`: a symbol, which no import can name,
+// for the Vite plugin in this package alone.
+module.exports[Symbol.for('react-inp-blame.hoistDefaultExport')] = hoistDefaultExport;

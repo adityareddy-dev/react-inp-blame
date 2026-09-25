@@ -2,7 +2,7 @@
   "name": "react-router-7-fixture",
   "private": true,
   "type": "module",
-  "description": "What `npx create-react-router@7.18.4` makes, moved to React 18.3, with the README's React Router setup, a route that imports react-dom and one slow component. Run by scripts/vite-app.mjs --fixture react-router-7 from a temp copy.",
+  "description": "What `npx create-react-router@7.18.4` makes, moved to React 18.3, with the README's React Router setup, a route that imports react-dom, one slow component and a slow click handler in the route component. Run by scripts/vite-app.mjs --fixture react-router-7 from a temp copy.",
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
