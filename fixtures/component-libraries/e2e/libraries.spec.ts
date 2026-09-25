@@ -67,6 +67,12 @@ test("a click on a card's photo inside a link is named by the card, an option's 
   await clickOn(page, '[data-testid=thumb-1]');
   const thumbnail = await slowReport(page);
   expect(thumbnail.target?.owners.slice(0, 2)).toEqual(['Thumbnail', 'Gallery']);
+
+  // An icon given the handler itself, which lucide passes through to its <svg>, is the handler's writer's.
+  await page.evaluate(() => window.__REACT_INP_BLAME__.clear());
+  await clickOn(page, '[data-testid=trash-inline] path');
+  const trash = await slowReport(page);
+  expect(trash.target?.component).toBe('RemoveTag');
   expect(problems).toEqual([]);
 });
 

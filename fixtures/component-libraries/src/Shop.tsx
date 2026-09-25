@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import emotionStyled from '@emotion/styled'
-import { User } from 'lucide-react'
+import { Trash2, User } from 'lucide-react'
 import { burn } from './burn'
 
 const PHOTO = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
@@ -75,6 +75,15 @@ function Gallery() {
   )
 }
 
+// An icon given the handler itself: lucide passes onClick through to its <svg>.
+function RemoveTag() {
+  return (
+    <span>
+      Remove <Trash2 size={24} data-testid="trash-inline" onClick={() => burn(120)} />
+    </span>
+  )
+}
+
 // MUI labels each root it styles with @emotion/styled, so its wrapper has a name that reads like the app's.
 const ShopButtonRoot = emotionStyled('button', { label: 'ShopButtonRoot' })`
   padding: 4px 8px;
@@ -94,6 +103,7 @@ export function Shop() {
       <ProductList />
       <PeoplePicker />
       <Gallery />
+      <RemoveTag />
       <BuyButton />
     </section>
   )

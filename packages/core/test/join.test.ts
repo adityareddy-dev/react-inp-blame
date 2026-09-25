@@ -1710,6 +1710,35 @@ test('what an icon belongs to is read from the fiber tree: a card\'s photo is th
   children(toolbar.fiber, editButton, host('span').fiber);
   children(component('Toolbar'), toolbar.fiber);
   assert.deepEqual(ownersFor(pencil.el), ['EditButton', 'Toolbar']);
+
+  // A handler handed down to the icon, as lucide's Trash2 and Icon hand onClick to the svg, belongs to the
+  // component that wrote `<Trash2 onClick>`, beside a label or alone.
+  const trashWith = (parentProps: Record<string, unknown>) => {
+    const remove = () => {};
+    const svg = host('svg');
+    (svg.fiber.memoizedProps as Record<string, unknown>).onClick = remove;
+    const lucideIcon = icon('Icon');
+    lucideIcon.memoizedProps = { onClick: remove };
+    children(lucideIcon, svg.fiber);
+    const trash = icon('Trash2');
+    trash.memoizedProps = { onClick: remove };
+    children(trash, lucideIcon);
+    const writer = component('RemoveRow');
+    writer.memoizedProps = parentProps;
+    return { svg, trash, writer };
+  };
+  const inline = trashWith({});
+  const text = host('span', {}, [inline.svg]);
+  children(text.fiber, inline.trash, host('span').fiber);
+  children(inline.writer, text.fiber);
+  children(component('Rows'), inline.writer);
+  assert.deepEqual(ownersFor(inline.svg.el), ['RemoveRow', 'Rows']);
+  const alone = trashWith({});
+  children(alone.writer, alone.trash);
+  const row = host('div', {}, [alone.svg, host('span')]);
+  children(row.fiber, alone.writer, host('span').fiber);
+  children(component('Rows'), row.fiber);
+  assert.deepEqual(ownersFor(alone.svg.el), ['RemoveRow', 'Rows']);
 });
 
 test("Enter's work in the keypress entry is named by the form's onSubmit, from the key its keydown recorded", () => {
