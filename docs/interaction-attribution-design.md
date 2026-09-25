@@ -876,6 +876,21 @@ the theme toggle is the last input the ring held. Nothing here can tell that apa
 effect of the theme toggle might genuinely have scheduled a second later, and the default window is
 1.5 s because the renders worth reporting land inside it. A longer `inputWindow` reads more of these.
 
+Since 0.7.0 the hook tells some of them apart by what the page was doing as React committed, which
+costs nothing until a commit is in the window. A MediaQueryList's `change` is dispatched like any other
+event, React treats `change` as discrete and renders inside it, so `window.event` is that `change` while
+React commits; a derived event now counts as part of an input only when its target is a node, and a
+commit made while a resize, a scroll, a wheel, a hover or a media query's `change` is being dispatched,
+outside any input's task, is nobody's and is not walked. That catches the shadcn/ui case and everything
+React 17 renders, which it does inside the event. A resize hook that waits for a timer has no event to
+read, so a capture listener notes when the window's width changes and a commit outside any dispatch after
+that is the page's. React 18 and 19 render a hover's or a scroll's update in a task of their own, where
+`window.event` is empty. React 19 passes the hook the priority of the lanes it committed (user-blocking
+for that work, which nothing an input causes is given) in development and profiling builds; React 18
+passes the priority of the moment of the commit, normal in that task, and production builds pass none, so
+there such a render still joins. The demo's `#ambient` page and its spec check every case on React 17 to
+19.3.
+
 **Saying it in plain words.** Every report carries an `explanation`: a headline ("264 ms
 click"), a rating on the INP thresholds in web-vitals' words (good to 200 ms, needs improvement to
 500 ms, poor beyond),

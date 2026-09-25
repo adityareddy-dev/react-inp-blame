@@ -6,6 +6,19 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Fixed
+
+- **Renders that a resize, a scroll, a hover or a media query caused stop joining the last click.** A commit
+  made while one of those events was being dispatched, outside any input's task, was read as the newest
+  input's work, and a `change` from a `MediaQueryList` counted as part of the input the way a form field's
+  does. Narrowing the window re-rendered 441 components behind a `useMediaQuery` hook, reported as the second
+  render of a click a second earlier. Those commits are now left out, not walked and not counted as
+  `unjoinedCommits`, and so is a commit after the window changed width since the input. Under React 19's
+  development and profiling builds a hover's or a scroll's render, which comes in a task of its own, is told
+  by the priority React commits it with. React 18, and React 19 in production, say nothing that tells it
+  apart, and there it still joins (README, Known limits). The demo's `ambient` spec checks each case on
+  React 17 to 19.3 in development and production.
+
 ## [0.6.0] - 2026-09-25
 
 ### Added

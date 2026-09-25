@@ -53,6 +53,9 @@ interface Page {
   duringClick(inside: () => void): number;
 }
 
+
+/** The element a derived event (`input`, `change`, `submit`) is dispatched on: a node, unlike a media query's `change`. */
+const FIELD = { nodeType: 1 };
 /** Runs `body` against a stand-in browser: a window on PAGE_URL, Event Timing with interactionId unless told otherwise, no Long Animation Frames. */
 async function inBrowser(body: (page: Page) => void | Promise<void>, { entryTypes = ['event', 'first-input'], interactionId = true }: { entryTypes?: string[]; interactionId?: boolean } = {}): Promise<void> {
   const names = ['window', 'document', 'location', 'PerformanceObserver', 'PerformanceEventTiming'];
@@ -1455,7 +1458,7 @@ test("a commit inside a derived event's dispatch is the input that caused it, wh
     clock.now = 1000;
     page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 1000, target: null, code: 'KeyA' });
     // The browser dispatches `input` inside the keydown; React commits from its onChange.
-    page.window.event = { isTrusted: true, type: 'input', timeStamp: 1002, target: null };
+    page.window.event = { isTrusted: true, type: 'input', timeStamp: 1002, target: FIELD };
     clock.now = 3800;
     commitAgain(root, 2700);
     existing.onCommitFiberRoot(id, root, 1, false);
@@ -1499,7 +1502,7 @@ test('a change the browser fires long after its click, a file chosen in the syst
     page.paint([click(7, 1000, 24)]);
     await nextTask();
     clock.now = 21000;
-    page.window.event = { isTrusted: true, type: 'change', timeStamp: 21000, target: null };
+    page.window.event = { isTrusted: true, type: 'change', timeStamp: 21000, target: FIELD };
     commitAgain(root, 60);
     existing.onCommitFiberRoot(id, root, 1, false);
     delete page.window.event;
@@ -1533,7 +1536,7 @@ test('a report keeps revision 0 when a change arrives long after its click, and 
     await nextTask();
     // A choice from a native select's popup, 20 s on, then an effect of the render it made.
     clock.now = 21000;
-    page.window.event = { isTrusted: true, type: 'change', timeStamp: 21000, target: null };
+    page.window.event = { isTrusted: true, type: 'change', timeStamp: 21000, target: FIELD };
     commitAgain(root, 30);
     existing.onCommitFiberRoot(id, root, 1, false);
     delete page.window.event;
@@ -1567,7 +1570,7 @@ test('a change 1 s after its click still joins it as a later render, measured fr
     await nextTask();
     // An option picked from a native select a second after the click that opened it. Its render takes
     // 600 ms, so it ends 1.6 s after the click's own work, and the change itself came well inside the window.
-    page.window.event = { isTrusted: true, type: 'change', timeStamp: 2000, target: null };
+    page.window.event = { isTrusted: true, type: 'change', timeStamp: 2000, target: FIELD };
     clock.now = 2600;
     commitAgain(root, 600);
     existing.onCommitFiberRoot(id, root, 1, false);
@@ -1600,7 +1603,7 @@ test('text that arrives with no key pressed, one input event a second after a cl
     // keydown between them to start an interaction of their own. Were each to carry the window forward
     // from its own render, the stream would join the click for as long as it ran.
     for (const at of [2000, 3000, 4000, 5000]) {
-      page.window.event = { isTrusted: true, type: 'input', timeStamp: at, target: null };
+      page.window.event = { isTrusted: true, type: 'input', timeStamp: at, target: FIELD };
       clock.now = at + 10;
       commitAgain(root, 10);
       existing.onCommitFiberRoot(id, root, 1, false);
@@ -1610,6 +1613,144 @@ test('text that arrives with no key pressed, one input event a second after a cl
     assert.deepEqual(api.debug.commits().map((c) => c.at), [1003, 2010, 3010]);
     api.dispose();
   });
+});
+
+/**
+ * A click at 1000 whose own render lands inside it, painted at 1120 and reported; then `after` runs a
+ * second on, in a task of its own. Returns what the report and the hook made of it.
+ */
+async function clickThen(
+  t: TestContext,
+  after: (page: Page, commit: (at: number, priority?: number | null) => void) => void,
+  version = '19.3.0',
+): Promise<{ followUps: number[]; walked: number[]; unjoined: number }> {
+  const clock = useClock(t);
+  let result = { followUps: [] as number[], walked: [] as number[], unjoined: -1 };
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    page.window.innerWidth = 1280;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom(version));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.duringClick(() => {
+      clock.now = 1003;
+      commitAgain(root, 1);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    page.paint([click(7, 1000, 120)]);
+    await nextTask();
+    // A commit at normal priority unless the case says otherwise; null for a production build's none.
+    after(page, (at, priority = 3) => {
+      clock.now = at;
+      commitAgain(root, 200);
+      existing.onCommitFiberRoot(id, root, priority ?? undefined, false);
+    });
+    await nextTask();
+    result = { followUps: (api.last()?.followUps ?? []).map((c) => c.at), walked: api.debug.commits().map((c) => c.at), unjoined: api.last()?.unjoinedCommits ?? -1 };
+    api.dispose();
+  });
+  return result;
+}
+
+test("a render a media query hook makes when the window crosses a breakpoint is not the last click's", async (t) => {
+  // useMediaQuery subscribes to a MediaQueryList, whose `change` React treats as discrete and renders
+  // inside. Read as a derived event of the click, 400 components re-rendering at the breakpoint became
+  // the click's second render.
+  const mediaQuery = { matches: false, media: '(min-width: 600px)' };
+  const r = await clickThen(t, (page, commit) => {
+    page.window.event = { isTrusted: true, type: 'change', timeStamp: 1400, target: mediaQuery };
+    commit(1600, 1);
+    delete page.window.event;
+  });
+  assert.deepEqual(r, { followUps: [], walked: [1003], unjoined: 0 });
+});
+
+test('a render inside a resize, scroll or hover event is not the last click\'s, and neither is one a window focus causes', async (t) => {
+  for (const [type, target] of [['resize', null], ['scroll', FIELD], ['wheel', FIELD], ['pointerover', FIELD], ['mouseleave', FIELD], ['visibilitychange', FIELD]] as const) {
+    const r = await clickThen(t, (page, commit) => {
+      page.window.event = { isTrusted: true, type, timeStamp: 1400, target };
+      commit(1450, 1);
+      delete page.window.event;
+    });
+    assert.deepEqual(r, { followUps: [], walked: [1003], unjoined: 0 }, type);
+  }
+  const focused = await clickThen(t, (page, commit) => {
+    page.window.event = { isTrusted: true, type: 'focus', timeStamp: 1400, target: page.window };
+    commit(1450, 1);
+    delete page.window.event;
+  });
+  assert.deepEqual(focused.followUps, []);
+  // An element taking focus is not the window, and its render still joins.
+  const field = await clickThen(t, (page, commit) => {
+    page.window.event = { isTrusted: true, type: 'focus', timeStamp: 1400, target: FIELD };
+    commit(1450, 1);
+    delete page.window.event;
+  });
+  assert.deepEqual(field.followUps, [1450]);
+  // One made by a script is not the browser's, and joins as any commit outside an event does.
+  const scripted = await clickThen(t, (page, commit) => {
+    page.window.event = { isTrusted: false, type: 'resize', timeStamp: 1400, target: null };
+    commit(1450, 3);
+    delete page.window.event;
+  });
+  assert.deepEqual(scripted.followUps, [1450]);
+});
+
+test('a hover inside the input\'s own task is still the input\'s: a tap\'s mouse events come in the tap\'s task', async (t) => {
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('pointerup', { isTrusted: true, type: 'pointerup', timeStamp: 1000, target: null, pointerType: 'touch' });
+    // The compatibility mouseover a touch sends, in the same task as the pointerup.
+    page.window.event = { isTrusted: true, type: 'mouseover', timeStamp: 1001, target: FIELD };
+    clock.now = 1040;
+    commitAgain(root, 30);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    assert.deepEqual(api.debug.commits().map((c) => c.inputType), ['pointerup']);
+    api.dispose();
+  });
+});
+
+test('a render after the window changed width is not the last click\'s, and one after only its height changed still is', async (t) => {
+  // A resize hook that debounces renders in a timer of its own, where there is no event to read.
+  const wider = await clickThen(t, (page, commit) => {
+    page.window.innerWidth = 400;
+    page.fire('resize', { isTrusted: true, type: 'resize', timeStamp: 1400, target: null });
+    commit(1600);
+  });
+  assert.deepEqual(wider, { followUps: [], walked: [1003], unjoined: 0 });
+  // A phone's keyboard opening after a tap on a field changes the height alone.
+  const taller = await clickThen(t, (page, commit) => {
+    page.fire('resize', { isTrusted: true, type: 'resize', timeStamp: 1400, target: null });
+    commit(1600);
+  });
+  assert.deepEqual(taller.followUps, [1600]);
+});
+
+test("React 19's user-blocking priority marks a hover's or a scroll's render, outside any input's dispatch", async (t) => {
+  // React 19 renders continuous-event work in a task of its own, where window.event is empty, and passes
+  // the hook (development and profiling builds) the priority of the lanes it rendered.
+  const hover = await clickThen(t, (_page, commit) => commit(1400, 2));
+  assert.deepEqual(hover, { followUps: [], walked: [1003], unjoined: 0 });
+  const effect = await clickThen(t, (_page, commit) => commit(1400, 3));
+  assert.deepEqual(effect.followUps, [1400]);
+  // Production builds pass no priority, and the render joins as before.
+  const production = await clickThen(t, (_page, commit) => commit(1400, null));
+  assert.deepEqual(production.followUps, [1400]);
+  // React 18 passes the priority of the moment it commits, not of what it rendered, so it says nothing here.
+  const react18 = await clickThen(t, (_page, commit) => commit(1400, 2), '18.3.1');
+  assert.deepEqual(react18.followUps, [1400]);
 });
 
 test('a submit fired in its click\'s own task is the click\'s work however long the click\'s handler ran first', async (t) => {
@@ -1626,7 +1767,7 @@ test('a submit fired in its click\'s own task is the click\'s work however long 
     existing.onCommitFiberRoot(id, root);
     clock.now = 1000;
     page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
-    page.window.event = { isTrusted: true, type: 'submit', timeStamp: 3000, target: null };
+    page.window.event = { isTrusted: true, type: 'submit', timeStamp: 3000, target: FIELD };
     clock.now = 3050;
     commitAgain(root, 50);
     existing.onCommitFiberRoot(id, root, 1, false);

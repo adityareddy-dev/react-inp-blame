@@ -186,6 +186,12 @@ interface HookState {
   inputs: InputRecord[];
   /** The newest input while the task that dispatched it is still running; null once a task queued behind it has run. */
   inTask: InputRecord | null;
+  /**
+   * `timeStamp` of the last `resize` that changed the page's width (`noteResize`), and that width. Absent
+   * where a copy of an earlier version made the state; `noteResize` fills them in.
+   */
+  resizedAt?: number;
+  width?: number;
   /** Every root that committed while installed, held weakly so that an unmounted root is not kept alive by this list. */
   roots: WeakRef<FiberRoot>[];
   /** What the page's report listeners caused on each root in `roots`. */
@@ -235,6 +241,32 @@ const state = shared<HookState>('hook', () => ({
 // during one is stamped with the newest ring entry, which is the key or pointer that caused it.
 export const INPUT_TYPES = ['pointerdown', 'pointerup', 'click', 'keydown', 'keyup'];
 const DERIVED_TYPES = ['input', 'beforeinput', 'change', 'submit', 'keypress'];
+// Events that are never an interaction's work: the page resized or scrolled, or the pointer moved over it.
+// A commit React makes while one of them is being dispatched, outside any input's task, is that event's:
+// a resize hook (React treats `resize` as discrete and renders inside it), a handler under React 17,
+// which renders inside every event, or a flushSync in a scroll listener.
+const AMBIENT_TYPES = [
+  'resize',
+  'scroll',
+  'scrollend',
+  'wheel',
+  'visibilitychange',
+  'pointermove',
+  'pointerover',
+  'pointerout',
+  'pointerenter',
+  'pointerleave',
+  'mousemove',
+  'mouseover',
+  'mouseout',
+  'mouseenter',
+  'mouseleave',
+  'touchmove',
+];
+// The Scheduler priority React 19 passes with a commit of continuous-event work: a hover, a scroll, a
+// wheel or a drag, rendered in a task of its own after the event. React 19 derives it from the lanes it
+// rendered; React 18 passes the priority of the moment it commits, which in that task is normal.
+const USER_BLOCKING_PRIORITY = 2;
 const RING_SIZE = 8;
 // Times of commits that could not be joined to one input, kept per input. A page that commits in a
 // loop would otherwise grow this without end; the oldest are the least likely to be worth reporting.
@@ -380,6 +412,9 @@ export function dispatchedInput(): InputRecord | null {
   const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
   if (!ev || !ev.isTrusted) return null;
   if (DERIVED_TYPES.indexOf(ev.type) >= 0) {
+    // A `change` from a MediaQueryList, the screen's orientation or the network connection is not part
+    // of any input: only an element's (or the document's) derived event is.
+    if (!isNode(ev.target)) return null;
     const last = newestInput();
     if (!last) return null;
     return last === state.inTask || ev.timeStamp - last.work.ownEndedAt <= (state.options?.inputWindow ?? DEFAULT_INPUT_WINDOW) ? last : null;
@@ -397,6 +432,37 @@ export function dispatchedInput(): InputRecord | null {
  */
 export function joinWindow(): number | null {
   return state.options?.inputWindow ?? null;
+}
+
+/** A DOM node, told by its `nodeType`, so that a node of another frame counts too. */
+const isNode = (target: EventTarget | null): boolean => target !== null && typeof (target as { nodeType?: unknown }).nodeType === 'number';
+
+/**
+ * Whether `window.event` is a trusted event whose commits are its own and no input's: one of
+ * AMBIENT_TYPES, a `change` from something that is not an element (a media query hook), or the window
+ * itself gaining or losing focus. Asked only outside an input's task, where such an event cannot be
+ * the input's own doing.
+ */
+function inAmbientEvent(): boolean {
+  const ev = typeof window !== 'undefined' ? (window.event as DispatchedInput | undefined) : undefined;
+  if (!ev || !ev.isTrusted) return false;
+  if (AMBIENT_TYPES.indexOf(ev.type) >= 0) return true;
+  if (ev.type === 'change') return !isNode(ev.target);
+  return (ev.type === 'focus' || ev.type === 'blur') && ev.target === window;
+}
+
+/**
+ * Capture-phase listener for `resize`: a render after the page changed width is the page's, a layout
+ * hook's or a media query's, and not the last input's (`onCommit`). A resize that changes only the
+ * height is a phone's keyboard or address bar coming and going, which a tap on a field causes, and the
+ * render after it can still be the tap's.
+ */
+export function noteResize(e: Event): void {
+  if (!e.isTrusted) return;
+  const width = window.innerWidth;
+  if (width === state.width) return;
+  state.width = width;
+  state.resizedAt = e.timeStamp;
 }
 
 /** Whether `window.event` is one of DERIVED_TYPES, which `dispatchedInput` hands to the newest input. */
@@ -475,6 +541,8 @@ function owner(): string {
  */
 export function installHook(opts: HookOptions): void {
   state.options = opts;
+  state.width = window.innerWidth;
+  state.resizedAt = undefined;
   const holder = window as unknown as HookHolder;
   const existing = holder[HOOK_KEY] as DevtoolsHook | undefined;
   if (existing && existing === state.shim) {
@@ -605,6 +673,9 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   const input = dispatched ?? (firstCommit ? null : newestInput());
   // Outside an interaction window this is the whole cost: a few lookups and one subtraction.
   if (!input) return;
+  // A commit outside the input's dispatch that something else plainly caused is not the input's, and not
+  // a commit it could not account for either: it is left alone, like a commit before any input.
+  if (!dispatched && notTheInputs(input, renderer, priority)) return;
   // A commit React ran inside an input's own dispatch is that input's work however long it took to get
   // there: the handler is still on the stack and nothing else can have caused it. Sorting 200,000 rows
   // takes seconds on a throttled machine, and a window measured from the input dropped exactly those
@@ -650,6 +721,22 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   state.commits.push(summary);
   place.summary = summary;
   options.onSummary(summary);
+}
+
+/**
+ * Whether a commit outside any input's dispatch was caused by something other than `input`, the newest
+ * input: a resize, scroll or hover being dispatched as React committed (`inAmbientEvent`), the page's
+ * width changing since the input (`noteResize`), or, where React says so, continuous-event work. React 18
+ * and 19 render a hover's, a scroll's or a wheel's update in a task of its own, where there is no event
+ * to read, and React 19 commits it with user-blocking priority, which nothing an input causes is given:
+ * an input's own updates are immediate, and what its effects, timers and transitions set off is normal
+ * or lower. Production builds pass no priority, React 18 passes the commit's moment's (normal, in that
+ * task) and React 17 its own numbers, so there only the first two apply (README, Known limits).
+ */
+function notTheInputs(input: InputRecord, renderer: Renderer, priority: number | undefined): boolean {
+  if (state.inTask === null && inAmbientEvent()) return true;
+  if (state.resizedAt !== undefined && state.resizedAt > input.ts) return true;
+  return priority === USER_BLOCKING_PRIORITY && renderer.major >= 19;
 }
 
 function awaitingEffectsOf(root: FiberRoot): AwaitingEffects[] {
