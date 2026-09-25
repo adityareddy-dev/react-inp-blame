@@ -339,7 +339,8 @@ export interface Blame {
   readonly kind: 'render' | 'handler' | 'hydration' | 'layout' | 'waiting' | 'painting' | 'script' | 'none';
   /**
    * The subtree that re-rendered, the handler that ran, the script, or the boundary that was
-   * hydrated; null when unknown. For a 'layout' it is where the layout was forced, never what forced
+   * hydrated; null when unknown. A 'render' always has one: the subtree, or 'the app' where the commit
+   * named none. For a 'layout' it is where the layout was forced, never what forced
    * it, because no source says that. That is the subtree of a commit the interaction can claim: one
    * joined by its own input stamp, walked to the end, with no commit of the interaction left
    * unjoined. Failing that it is the invoker the browser charged the script to ("DIV#root.onclick"),
