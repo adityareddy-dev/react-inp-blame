@@ -39,6 +39,7 @@ const EXPECTED = {
   './next-client': { names: functions('onRouterTransitionStart') },
   './web-vitals': { names: functions('generateTarget', 'attributeINP') },
   './vite': { names: functions('inpBlame') },
+  './astro': { names: functions('inpBlame') },
   './display-names-loader': { whole: 'function', names: functions('stamp') },
   './package.json': { whole: 'object', names: { name: 'string' } },
 };

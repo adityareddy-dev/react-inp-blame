@@ -1475,8 +1475,8 @@ build as well as on the dev server.
   and behind a Chrome 133 user agent. Opening `apps/demo/traces/context-storm-dev.json` in the panel
   beside React's own tracks is still to do.
 
-- **Frameworks that render their own HTML have no setup yet**, apart from React Router and TanStack Start:
-  Remix, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
+- **Frameworks that render their own HTML have no setup yet**, apart from React Router, TanStack Start and
+  Astro: Remix, for one. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
   builds, and theirs never go through it, so the library most likely never installs there, and nothing
   says so. None of them has been tried, and neither has the READMEs' setup for a build with no HTML page.
   React Router and TanStack Start got a setup on 2026-09-23: `install()` in a module of the app's own that
@@ -1495,8 +1495,13 @@ build as well as on the dev server.
   TanStack Start the build's client input is `src/client.tsx` itself, the dev server imports it right after
   the Fast Refresh preamble, and `@tanstack/react-router` imports react-dom only for server rendering (read
   in @tanstack/start-plugin-core 1.171.47 and @tanstack/react-router 1.170.39). CI runs both in the job
-  `framework-app`, on the dev server and a production build. React Native is out of scope: only react-dom
-  commits are walked.
+  `framework-app`, on the dev server and a production build. Astro got an integration on 2026-09-24,
+  `react-inp-blame/astro`, which hands `install()` to Astro's `injectScript('before-hydration', …)`. Each
+  `<astro-island>` awaits `import()` of that script before it imports its component and its renderer, and
+  `@astrojs/react`'s renderer is the only module that imports `react-dom/client` (read in astro 7.3.5's
+  `runtime/server/astro-island.js` and @astrojs/react 7.0.0's `client.js`). The same job runs it in
+  Astro's minimal template with two islands. React Native is out of scope: only react-dom commits are
+  walked.
 
 ## Next steps
 

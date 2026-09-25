@@ -33,6 +33,12 @@ until the file has it:
 
     export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: true } })] });
 
+React Router in framework mode, TanStack Start and Astro write their own HTML, which this plugin
+never sees, so each has a setup of its own:
+[React Router](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router),
+[TanStack Start](https://github.com/adityareddy-dev/react-inp-blame#install-with-tanstack-start),
+[Astro](https://github.com/adityareddy-dev/react-inp-blame#install-with-astro).
+
 **What you will see.** Reload, then click something slow. A small dark badge appears in the corner,
 bottom-right by default, with the page's INP so far in milliseconds: green at 200 or under, amber up
 to 500, red above. INP, Interaction to Next Paint, is the Core Web Vital for responsiveness: how long
@@ -174,8 +180,25 @@ HTML too. There the install is an `install()` call in a module of the app's own 
 [repository README](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router) has
 the three files, and CI runs them on React Router 8.4. On React 18 the import goes first in
 `app/root.tsx` instead, also in CI. TanStack Start takes the same setup in
-`src/client.tsx`, also in CI. Remix and Astro have no setup
+`src/client.tsx`, also in CI. Astro has an integration of its own, below. Remix has no setup
 yet: the plugin most likely installs nothing there either, and nothing says so. Not tried yet.
+
+Astro writes its own pages too, and imports one script in every island before it loads the island's
+component and renderer. `react-inp-blame/astro` puts `install()` there, so it runs before
+`@astrojs/react` loads react-dom, and adds the `displayName` transform. It takes `enabled` and
+`runtime` as the Vite plugin does, with `'development'` meaning `astro dev` and `'production'`
+meaning `astro build`; list it after `react()`:
+
+    // astro.config.mjs
+    import { defineConfig } from 'astro/config';
+    import react from '@astrojs/react';
+    import { inpBlame } from 'react-inp-blame/astro';
+
+    export default defineConfig({ integrations: [react(), inpBlame({ runtime: { overlay: 'query' } })] });
+
+The install runs when the page's first island starts to hydrate, so a page whose islands are all
+`client:idle` or `client:visible` is not watched before then. CI runs this in Astro 7.3's minimal
+template under `astro dev` and on `astro preview` of a production build.
 
 Without the Vite plugin or the Next.js wrapper, make `import 'react-inp-blame/auto'` the first
 import of the entry module: it installs with the default options before react-dom loads. Under

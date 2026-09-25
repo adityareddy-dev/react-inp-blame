@@ -39,6 +39,10 @@ import { inpBlame } from 'react-inp-blame/vite';
 export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: true } })] });
 ```
 
+React Router in framework mode, TanStack Start and Astro write their own HTML, which this plugin never
+sees, so each has a setup of its own: [React Router](#install-with-react-router),
+[TanStack Start](#install-with-tanstack-start), [Astro](#install-with-astro).
+
 **What you will see.** Reload, then click something slow. A small dark badge appears in the corner,
 bottom-right by default, with the page's INP so far in milliseconds: green at 200 or under, amber up to
 500, red above. Click the badge for a panel of the recent slow interactions, newest first, and click a
@@ -359,6 +363,43 @@ first import runs before anything reaches react-dom: `@tanstack/react-router` lo
 server rendering. CI builds this from `npx @tanstack/cli@0.71.0 create --framework React --blank`
 (TanStack Start 1.168, Vite 8.3, React 19.3) and checks the same click under `vite dev` and on
 `vite preview` of the production build.
+
+## Install with Astro
+
+Astro writes its own pages too, and has a place for code that has to run before React does: a script
+every island imports, and waits for, before it loads its component and its renderer. The integration puts
+`install()` there, so it runs before `@astrojs/react` loads react-dom, and adds the `displayName` transform.
+
+```js
+// astro.config.mjs
+// @ts-check
+import { defineConfig } from 'astro/config';
+
+import react from '@astrojs/react';
+import { inpBlame } from 'react-inp-blame/astro';
+
+// https://astro.build/config
+export default defineConfig({
+  integrations: [
+    react(),
+    inpBlame({
+      enabled: true,                 // production builds too; the default is development only
+      runtime: { overlay: 'query' }, // the badge only on request, such as ?inp-blame in the URL
+    }),
+  ],
+});
+```
+
+`inpBlame()` from `react-inp-blame/astro` takes `enabled` and `runtime` as the Vite plugin does, with
+`'development'` meaning `astro dev` and `'production'` meaning `astro build`. It has no `pages`: every page's
+islands go through the same script. List it after `react()`, as above, which is the order CI runs: on the dev
+server `react()` puts its Fast Refresh preamble in the same script, and the library then chains onto the hook
+the preamble makes. The install runs when the page's first island starts to hydrate, so on a page whose
+islands are all `client:idle` or `client:visible`, a click before then lands on HTML React has not taken over,
+and the library is not there yet to see it. A page with no island loads no React, and no library. CI builds this
+from Astro's minimal template (`npm create astro@5.2.4 -- --template minimal`, then `npx astro add react`:
+Astro 7.3, Vite 8.3, React 19.3) with two islands, one `client:load` and one `client:idle`, and checks that a
+click is blamed on the component that rendered slowly under `astro dev` and on `astro preview` of the build.
 
 ## With web-vitals
 
@@ -777,17 +818,19 @@ oldest its `engines` allows, and imports and requires every subpath there; the c
 `next@canary` as well. No job runs `react@canary` alone. One more
 job puts the packed package into an app made the way `npm create vite` makes one, on Vite 8.3 with
 @vitejs/plugin-react 6.1 and the Vite setup above, and checks that a click there is blamed on the component
-that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. Two
-more check the same click, with no Fast Refresh edit, in the apps `npx create-react-router` and TanStack
-Start's CLI make, each with its setup above, and a fourth in React Router 7's app moved to React 18.
+that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. Three
+more check the same click, with no Fast Refresh edit, in the apps `npx create-react-router`, TanStack
+Start's CLI and `npm create astro` make, each with its setup above, and a fifth in React Router 7's app
+moved to React 18.
 
 ## Known limits
 
-- **Frameworks that render their own HTML have no setup yet**, beyond React Router's and TanStack Start's
-  above: Remix, Astro. The Vite plugin adds its install script only to the HTML pages Vite itself serves and
-  builds, and theirs never go through it, so the library most likely never installs there, and nothing says
-  so. An import first in the client entry, as those two setups do, may be enough where nothing else loads
-  react-dom before it. Not tried yet. React Native is out of scope: only react-dom commits are walked.
+- **Frameworks that render their own HTML have no setup yet**, beyond React Router's, TanStack Start's and
+  Astro's above: Remix, for one. The Vite plugin adds its install script only to the HTML pages Vite itself
+  serves and builds, and theirs never go through it, so the library most likely never installs there, and
+  nothing says so. An import first in the client entry, as the React Router and TanStack Start setups do,
+  may be enough where nothing else loads react-dom before it. Not tried yet. React Native is out of scope:
+  only react-dom commits are walked.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.

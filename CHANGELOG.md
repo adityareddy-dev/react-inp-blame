@@ -8,6 +8,14 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Added
 
+- **`react-inp-blame/astro`, an integration for Astro.** Astro writes its own pages, so the Vite plugin's
+  script never ran there and the library never installed. The integration hands `install()` to the script
+  Astro imports in every island before it loads the island's component and renderer, so it runs before
+  `@astrojs/react` loads react-dom, and adds the `displayName` transform. It takes `enabled` and `runtime`
+  as the Vite plugin does. CI runs it in Astro's minimal template (Astro 7.3, React 19.3) with two islands,
+  installed from the packed tarball, under `astro dev` and on `astro preview` of a production build.
+- The READMEs' Vite quick start says that React Router, TanStack Start and Astro need their own setup, and
+  links to it.
 - **A setup for React Router in framework mode and for TanStack Start.** Both write their own HTML, so the
   Vite plugin's script never ran there and the library never installed. The README's new sections put
   `install()` in a module of the app's own that the client entry (`app/entry.client.tsx`, `src/client.tsx`)
