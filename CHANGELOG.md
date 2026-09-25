@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-25
+
 ### Added
 
 - `pointerType` on a report: 'mouse', 'pen' or 'touch' for the event its `type` names, as the library saw it
@@ -37,7 +39,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   renders something beside it. So the trash icon is `DeleteButton`'s, an icon beside a name in an option is
   the option component's, a card's photo inside a link is still the card's, a thumbnail's `<img onClick>` is
   the thumbnail's, and `<Trash2 onClick>`, whose handler lucide hands down to its `<svg>`, is the component's
-  that wrote it; `generateTarget`'s string follows. A click anywhere else is named as before.
+  that wrote it, as is a click on any component that only hands its onClick to its one image or icon
+  (`<Avatar onClick>` is named by what renders it); `generateTarget`'s string follows. A click anywhere else is named as before.
   When the icon was swapped by the render (a minus for a check), the label and the names still come from
   the button. `target.selector` and `target.handler` still describe the element that was hit.
   CI runs these on real libraries (`fixtures/component-libraries`, styled-components 6, @emotion/styled and
@@ -538,7 +541,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.2.0...v0.3.0
