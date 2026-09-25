@@ -18,6 +18,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   to. The table, in the repository's README and in the package's own, now comes from `scripts/size.mjs`, which
   builds each bundle with the repo's rolldown, and CI's unit job fails when either is out of date or a gzipped
   size passes its budget in `scripts/size-budget.json`.
+- An icon that is a control of its own and was handed its handler, `<Trash2 role="button" onClick>`, names the
+  component that wrote the handler, as `<Trash2 onClick>` has since 0.6.0; it was named by lucide's `Trash`.
 
 ### Added
 
