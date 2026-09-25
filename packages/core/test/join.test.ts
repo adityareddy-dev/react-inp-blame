@@ -955,6 +955,15 @@ test('in a production build a render beside a handler is blamed only where its c
   assert.equal(blameOf(209, { ...timed, coarseClock: true, components: [{ name: 'DropdownMenuItem', count: 4, self: null, total: null }] }, 'handleExportCsv'), 'handler handleExportCsv inferred');
 });
 
+test('a render blame always names something: the subtree, or the app where the commit named none', () => {
+  // A commit that named no root and no hot path. 0.3.0 named such a render "the app"; the name went null
+  // with the readable-name rule, and a reader written against 0.3.0 that dereferences it threw.
+  const nameless = commit(50, 0, { hasDurations: false, total: 0, rendered: 40, roots: [], hotPath: [], components: [] });
+  const r = report([entry('click', 0, 120, 3, 100)], [nameless], []);
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.name, 'the app');
+});
+
 test('where React is not being read, the verdict says the setup is the cause rather than guessing at the working time', () => {
   // Next.js's dev server loaded react-dom before install(): React rendered on the page and nothing it did
   // is in the report. A click whose handlers ran from 2 to 202 ms, with the browser's record of the listener.
@@ -1982,12 +1991,13 @@ test('a render whose walk stopped at its budget says "at least", names no compon
   assert.deepEqual(one.blame, { kind: 'render', name: 'Dashboard', detail: 'at least 5000 components', ms: one.blame.ms, confidence: 'inferred' });
   assert.ok(one.cause.includes('re-rendering at least 5000 components inside Dashboard.'), one.cause);
   assert.doesNotMatch(one.cause, /mostly/);
-  // Several roots under no shared component: not the first root the walk reached.
+  // Several roots under no shared component: not the first root the walk reached. The name falls back to
+  // the app, as the sentence does, rather than to null, which a reader of a render blame does not expect.
   const several = blameOf({ roots: ['Orders', 'Metrics'], hotPath: [], components });
-  assert.equal(several.blame.name, null);
+  assert.equal(several.blame.name, 'the app');
   assert.ok(several.cause.includes('inside the app'), several.cause);
   // Nor the one root it reached, when the walk says the work may be beside it (an empty hot path).
-  assert.equal(blameOf({ roots: ['Orders'], hotPath: [], components }).blame.name, null);
+  assert.equal(blameOf({ roots: ['Orders'], hotPath: [], components }).blame.name, 'the app');
 });
 
 test('names that look minified get a note, and readable or styled names mixed with a few short ones do not', () => {

@@ -1301,7 +1301,8 @@ function explain(r: InteractionReport): Explanation {
     if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
-    blame = { kind: 'render', name: leafName(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
+    // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
+    blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
   } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list
     // among the components, and more of the working time than a tree accounts for.

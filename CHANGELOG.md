@@ -102,6 +102,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   production report put its clicks on the component above it. Only the local name, the one after `as`, now
   counts as imported. An import whose names are strings, `{ 'row-card' as Card }`, and one written with no
   spaces, `import{Card}from'./card'`, are read too.
+- **A render blame always has a name again.** Since 0.7.0, `blame.name` was null for a render whose cut
+  walk found no component holding all of its subtrees, and for a commit that rendered none, though the
+  sentence said "the app" for both. It reads `the app` there again, as it did through 0.6.0, so a reader
+  written against those versions that reads into a render's name does not throw.
 
 ## [0.11.0] - 2026-09-25
 
