@@ -82,7 +82,7 @@ test('component names ride web-vitals attribution, and the metric can be enriche
   expect(seen.react).not.toBeNull();
   expect(seen.react?.blame).toEqual(seen.blame);
   expect(seen.react?.interactionId).toBe(seen.interactionId);
-  expect(seen.react?.schemaVersion).toBe(2);
+  expect(seen.react?.schemaVersion).toBe(3);
   // Both sides non-empty, so the equality is of a real path rather than two empty lists.
   expect(seen.hotPath.length).toBeGreaterThan(0);
   expect(seen.react?.hotPath).toEqual(seen.hotPath);

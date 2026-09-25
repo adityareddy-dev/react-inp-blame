@@ -693,7 +693,7 @@ the `react-server` condition every export does nothing, here and on
 
 ```ts
 interface InteractionReport {
-  schemaVersion: 2; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
+  schemaVersion: 3; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
   pointerType: string | null;                            // 'mouse', 'pen' or 'touch' for a pointer's event
   reactStatus: 'reading' | 'waiting' | 'installed-late' | 'unreadable'; // stats().react as it was built
   start: number; end: number; duration: number; holdMs: number;             // ms, performance.now() clock

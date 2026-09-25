@@ -421,7 +421,7 @@ export function buildReport(
   const navigation = navigationAt(navigations, first);
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     interactionId: longest.interactionId,
     type: named.name,
     reactStatus,
