@@ -1688,7 +1688,7 @@ const tableSort = (opts: Partial<CommitSummary> = {}, at = 290) =>
 
 test("a render that was mostly one component's own render says so, rather than sending the reader to the components under it", () => {
   const r = report([entry('click', 0, 304, 2, 296)], [tableSort()], []).explanation;
-  assert.equal(r.cause, "React spent 277 ms re-rendering 637 components inside TableBody, 257 ms of it in TableBody's own render.");
+  assert.equal(r.cause, "React spent 277 ms re-rendering 637 components inside TableBody (257 ms of it in TableBody's own render).");
   assert.deepEqual(r.blame, { kind: 'render', name: 'TableBody', detail: "TableBody's own render", ms: 277, confidence: 'measured' });
   assert.deepEqual(r.notes, [
     "Time in TableBody's own render is usually work it does as it renders, like a sort or a filter, which memoising the components under it does not speed up.",
@@ -1696,7 +1696,7 @@ test("a render that was mostly one component's own render says so, rather than s
 
   // Where that component is not the one the render is named after, it is still the one named.
   const beside = report([entry('click', 0, 304, 2, 296)], [tableSort({ hotPath: ['App', 'Table'] })], []).explanation;
-  assert.match(beside.cause, /inside Table, 257 ms of it in TableBody's own render\.$/);
+  assert.match(beside.cause, /inside Table \(257 ms of it in TableBody's own render\)\.$/);
   assert.equal(beside.blame.detail, "TableBody's own render");
 
   // A production build has no time for any one component, so there is nothing to say about one.
@@ -1711,7 +1711,7 @@ test("a render that was mostly one component's own render says so, rather than s
   const screen = report([entry('click', 0, 425, 0, 210)], [tableSort({ startedAt: 10, total: 120, components: [{ name: 'TableBody', count: 1, self: 100, total: 118 }, ...tableSort().components.slice(1)] }, 200)], []).explanation;
   assert.equal(screen.blame.kind, 'painting');
   assert.ok(
-    screen.notes.includes("React still spent 120 ms re-rendering 637 components inside TableBody, 100 ms of it in TableBody's own render and 70 ms committing it in the 210 ms of working time before that."),
+    screen.notes.includes("React still spent 120 ms re-rendering 637 components inside TableBody (100 ms of it in TableBody's own render) and 70 ms committing it in the 210 ms of working time before that."),
     screen.notes.join(' | '),
   );
 
@@ -1724,7 +1724,7 @@ test("a render that was mostly one component's own render says so, rather than s
   assert.equal(both.blame.kind, 'painting');
   assert.ok(
     both.notes.includes(
-      "React still spent 80 ms re-rendering 637 components inside TableBody, 60 ms of it in TableBody's own render, 80 ms committing it and 70 ms running its useEffect callbacks in the 240 ms of working time before that.",
+      "React still spent 80 ms re-rendering 637 components inside TableBody (60 ms of it in TableBody's own render), 80 ms committing it and 70 ms running its useEffect callbacks in the 240 ms of working time before that.",
     ),
     both.notes.join(' | '),
   );
@@ -1739,7 +1739,7 @@ test("one component's own render is named from 25 ms and half of the render, and
 
   // 25 ms is enough, and just under it is not, with the share well over half.
   const at25 = sorted(25, 40);
-  assert.equal(at25.cause, "React spent 40 ms re-rendering 637 components inside TableBody, 25 ms of it in TableBody's own render.");
+  assert.equal(at25.cause, "React spent 40 ms re-rendering 637 components inside TableBody (25 ms of it in TableBody's own render).");
   assert.ok(named(at25), at25.cause);
   const under25 = sorted(24.9, 40);
   assert.equal(under25.cause, 'React spent 40 ms re-rendering 637 components inside TableBody.');

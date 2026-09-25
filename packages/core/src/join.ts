@@ -798,7 +798,7 @@ function renderedCount(c: CommitSummary): string {
 
 /**
  * "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "re-rendering 637
- * components inside TableBody, 257 ms of it in TableBody's own render" where one component's own render was
+ * components inside TableBody (257 ms of it in TableBody's own render)" where one component's own render was
  * most of it (`ownRender`); "hydrating" for a hydration.
  */
 function renderPhrase(c: CommitSummary): string {
@@ -816,8 +816,9 @@ function renderPhrase(c: CommitSummary): string {
     const time = top.self != null ? `, ${ms(top.self)}` : '';
     mostly = top.name === leaf ? ` (${top.count} of them${time})` : `, mostly ${top.name} (${top.count} of them${time})`;
   } else if (own) {
-    // Named even where it is the leaf: "in its own render" could be read as the render's own.
-    mostly = `, ${ms(own.self)} of it in ${own.name}'s own render`;
+    // Named even where it is the leaf: "in its own render" could be read as the render's own. In brackets, so
+    // a committing or effects figure after it reads as the next part of the whole rather than more of "it".
+    mostly = ` (${ms(own.self)} of it in ${own.name}'s own render)`;
   }
   return `${verb} ${renderedCount(c)} inside ${leaf}${mostly}`;
 }

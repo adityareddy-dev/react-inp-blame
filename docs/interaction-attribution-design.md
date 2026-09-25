@@ -949,7 +949,7 @@ working time known only by counts from 50 ms, the length of a long task. The hot
 child carrying 60% of its parent's work (`fiber.ts`). Where React timed each component and one of them,
 rendered once, spent 25 ms and half of the render or more in its own render, the sentence says so
 rather than leaving the reader with the count: sorting TanStack Table's 200,000 rows reads "re-rendering
-637 components inside TableBody, 257 ms of it in TableBody's own render", `blame.detail` is "TableBody's
+637 components inside TableBody (257 ms of it in TableBody's own render)", `blame.detail` is "TableBody's
 own render", and a note says that time is usually work TableBody does as it renders, like a sort or a
 filter, which memoising the rows does not speed up. `explanation.blame.confidence` says what the
 call rests on. It is `'measured'` when the blame follows from timings of the interaction itself:
