@@ -30,6 +30,11 @@ const MAX_ROOTS = 5;
 const MAX_HOPS = 64;
 // A minifier leaves one- and two-letter function names, which say nothing about the handler.
 const MINIFIED_NAME_LENGTH = 2;
+// Longer names that say nothing about the handler either. React Compiler hoists an inline handler to a
+// module-level `function _temp()` and compiles `const handleLogin = () => ...` to `t0 = () => ...`,
+// whose function is named `t0` or `t12`; Radix's composeEventHandlers (@radix-ui/primitive) wraps
+// every handler it composes in a function named `handleEvent`.
+const NAMELESS_HANDLER = /^(?:t\d+|_temp\d*|handleEvent)$/;
 // A clock that steps in whole milliseconds (Firefox and Safari without cross-origin isolation) makes
 // every component's time a whole number. With this many components timed and every time whole, that
 // is the clock and not chance: Chromium steps in 0.1 ms, where eight whole values in a row are a
@@ -598,6 +603,15 @@ function labelledControl(label: Fiber): Fiber | null {
   return null;
 }
 
+/**
+ * What a handler is called in a report: its own name, less the `bound ` a bound function carries, or the
+ * prop it was passed as when its name says nothing (see MINIFIED_NAME_LENGTH and NAMELESS_HANDLER).
+ */
+function handlerName(fn: Function, key: string): string {
+  const name = ((fn as { displayName?: string }).displayName || fn.name || '').replace(/^(?:bound )+/, '');
+  return name.length > MINIFIED_NAME_LENGTH && !NAMELESS_HANDLER.test(name) ? name : key;
+}
+
 /** The first of `props` set on `fiber` or an ancestor, as a name. `stop` is the last fiber looked at. */
 function firstHandler(fiber: Fiber | null, props: readonly string[], stop: Fiber | null): string | null {
   let f = fiber;
@@ -607,11 +621,7 @@ function firstHandler(fiber: Fiber | null, props: readonly string[], stop: Fiber
     if (p) {
       for (const key of props) {
         const fn = p[key];
-        if (typeof fn === 'function') {
-          const name = (fn as { displayName?: string }).displayName || fn.name || '';
-          // A minified name ("l") says nothing; the prop name at least says which handler.
-          return name.length > MINIFIED_NAME_LENGTH ? name : key;
-        }
+        if (typeof fn === 'function') return handlerName(fn, key);
       }
     }
     if (f === stop) return null;

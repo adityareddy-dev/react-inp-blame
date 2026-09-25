@@ -639,6 +639,7 @@ the `react-server` condition every export does nothing, here and on
 ```ts
 interface InteractionReport {
   schemaVersion: 2; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
+  pointerType: string | null;                            // 'mouse', 'pen' or 'touch' for a pointer's event
   start: number; end: number; duration: number; holdMs: number;             // ms, performance.now() clock
   inputDelay: number; processing: number; walkMs: number; presentation: number; // add up to duration
   target: TargetInfo | null; entries: EventEntrySummary[]; // target: selector, label, component, owners, handler
@@ -664,7 +665,12 @@ interface InteractionReport {
 
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when that
 function has no name worth printing. An inline `onClick={() => ...}` therefore reads as `onClick`, and so
-does a handler the minifier renamed: name the function if you want the report to name it.
+does a handler the minifier renamed: name the function if you want the report to name it. Under React
+Compiler, a handler declared as `const handleLogin = () => ...` becomes an alias of a temporary named `t0`
+and is named by its prop, while a `function handleLogin()` keeps its name; a handler Radix composed is named
+by its prop too, since every one it wraps is called `handleEvent`. When a click's events ran handlers of
+their own, the handler named is the one whose event took longest, so a menu that opens on pointerdown is
+put on its `onPointerDown`, not on an `onClick` that did nothing.
 
 `target.component` is the nearest component enclosing the element whose name a reader could search their own
 code for: one React would accept as a component name (capitalised), that a minifier has not cut down to a

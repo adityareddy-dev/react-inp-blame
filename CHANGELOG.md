@@ -6,6 +6,11 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- `pointerType` on a report: 'mouse', 'pen' or 'touch' for the event its `type` names, as the library saw it
+  dispatched, and null for a key.
+
 ### Changed
 
 - **Render and layout blames name a component of the app, not a styling library's wrapper or a minified
@@ -22,6 +27,16 @@ it changes when a field is removed or changes meaning, which a minor release may
   role, up to five levels up), and so is `generateTarget`'s string. When the icon was swapped by the render
   (a minus for a check), the label and the names still come from the button. `target.selector` and
   `target.handler` still describe the element that was hit.
+- **The handler named is the one whose event did the work.** A click is a pointerdown, a pointerup and a
+  click, and the handler was looked for on the click first whatever each one's handlers cost, so a menu that
+  opens on pointerdown (Radix's DropdownMenu) was put on an `onClick` beside it that did nothing. The events
+  whose own handlers ran longest are now asked first, and the click still wins a tie. The report's `type`
+  is unchanged.
+- **Names that say nothing about a handler give way to its prop.** React Compiler's temporaries (`t0`,
+  `t12`, `_temp`), the `handleEvent` Radix wraps every composed handler in, and the `bound ` on a bound
+  function no longer reach `target.handler`: the first three read as the prop, such as `onClick`, and a
+  bound function by its own name.
+- A report whose only event is a mouse's pointerdown or pointerup reads "click", not "tap".
 
 ## [0.5.0] - 2026-09-25
 

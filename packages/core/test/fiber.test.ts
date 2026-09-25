@@ -365,6 +365,30 @@ test('a handler is named by its function, or by its prop when the minifier left 
   assert.equal(handlerOf(button(minified) as any, 'click'), 'onClick');
 });
 
+test("a compiler temporary, Radix's wrapper and a bound function's prefix are not the handler's name", () => {
+  const named = (name: string) => Object.defineProperty(() => {}, 'name', { value: name });
+  const button = (onClick: unknown) => ({ ...fiber(5, 'button'), memoizedProps: { onClick } });
+  const handlerNamed = (name: string) => handlerOf(button(named(name)) as any, 'click');
+  // React Compiler: `const handleLogin = () => ...` compiles to `t0 = () => ...`, and an inline handler
+  // is hoisted to `function _temp()`.
+  assert.equal(handlerNamed('t1'), 'onClick');
+  assert.equal(handlerNamed('t12'), 'onClick');
+  assert.equal(handlerNamed('_temp'), 'onClick');
+  assert.equal(handlerNamed('_temp2'), 'onClick');
+  // @radix-ui/primitive's composeEventHandlers.
+  assert.equal(handlerNamed('handleEvent'), 'onClick');
+  assert.equal(handlerNamed('handleLogin'), 'handleLogin');
+  // Names that only start like one.
+  assert.equal(handlerNamed('toggle'), 'toggle');
+  assert.equal(handlerNamed('t1Row'), 't1Row');
+  assert.equal(handlerNamed('handleEvents'), 'handleEvents');
+  function handleSave() {}
+  assert.equal(handlerOf(button(handleSave.bind(null)) as any, 'click'), 'handleSave');
+  assert.equal(handlerOf(button(handleSave.bind(null).bind(null)) as any, 'click'), 'handleSave');
+  // A bound temporary is still a temporary.
+  assert.equal(handlerOf(button(named('_temp').bind(null)) as any, 'click'), 'onClick');
+});
+
 /** A host fiber for `<tag …props>`, with `parent` above it as React's `return` chain has it. */
 const host = (tag: string, props: Record<string, unknown>, parent?: Record<string, unknown>) => ({ ...fiber(5, tag), memoizedProps: props, return: parent ?? null });
 /** A handler the minifier stripped the name off, so the prop it sits on is what names it. */
