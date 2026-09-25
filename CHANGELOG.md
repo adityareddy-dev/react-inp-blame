@@ -12,8 +12,9 @@ it changes when a field is removed or changes meaning, which a minor release may
   script never ran there and the library never installed. The integration hands `install()` to the script
   Astro imports in every island before it loads the island's component and renderer, so it runs before
   `@astrojs/react` loads react-dom, and adds the `displayName` transform. It takes `enabled` and `runtime`
-  as the Vite plugin does. CI runs it in Astro's minimal template (Astro 7.3, React 19.3) with two islands,
-  installed from the packed tarball, under `astro dev` and on `astro preview` of a production build.
+  as the Vite plugin does. CI runs it in Astro's minimal template (Astro 7.3, React 19.3), installed from
+  the packed tarball, under `astro dev` and on `astro preview` of a production build: a page with two
+  islands, and one whose only island hydrates when it scrolls into view.
 - The READMEs' Vite quick start says that React Router, TanStack Start and Astro need their own setup, and
   links to it.
 - **A setup for React Router in framework mode and for TanStack Start.** Both write their own HTML, so the
@@ -27,6 +28,12 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Fixed
 
+- **The warning that `install()` ran too late needs React on the page.** It came 3 s after install
+  whenever no react-dom had registered with the hook, which is also a page that has not loaded React yet:
+  under Astro, one whose only React island is `client:visible` below the fold, or whose islands are all
+  another framework's. It now also needs an element react-dom has rendered, or a root container, which a
+  react-dom that loaded before the install leaves behind, and names `react-inp-blame/astro` among the
+  setups. Found by review.
 - **A click made from the keyboard belongs to its key, not to the mouse click before it.** A pointerup
   or a click is tied to the press it releases by its `pointerId`, and the click that Enter or Space makes
   has none to go by: its `pointerId` is -1. It took the newest pointerdown of the last 5 s instead. So

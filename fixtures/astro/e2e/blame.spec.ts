@@ -35,3 +35,24 @@ test('a click is blamed on SlowList, in the island it rendered in', async ({ pag
     console.log(`${test.info().project.name}: ${count} page load${count === 1 ? '' : 's'}`);
   }
 });
+
+// The install runs as soon as the first island's element is parsed, whatever its directive, and React may
+// not load for a long while after, or at all. The library must not take that for an install that came too
+// late, which it says after 3 s when no react-dom has registered.
+test('a page whose only island hydrates when it scrolls into view gets no warning, before or after it hydrates', async ({ page }) => {
+  const problems: string[] = [];
+  page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
+  page.on('console', (message) => {
+    const type = message.type();
+    if (type === 'error' || (type === 'warning' && message.text().startsWith('[react-inp-blame]'))) problems.push(`${type}: ${message.text()}`);
+  });
+  await page.goto('/below-the-fold?inp-blame');
+  await page.locator('#react-inp-blame .badge').waitFor();
+  await page.waitForFunction(() => performance.now() > 4000, undefined, { timeout: 10_000 });
+  expect(await page.locator('body[data-visible-note]').count()).toBe(0);
+  expect(problems).toEqual([]);
+
+  await page.locator('.visible-note').scrollIntoViewIfNeeded();
+  await page.locator('body[data-visible-note]').waitFor();
+  expect(problems).toEqual([]);
+});
