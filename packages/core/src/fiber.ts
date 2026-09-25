@@ -481,7 +481,9 @@ const INPUT_HANDLERS = ['onClick', 'onDoubleClick', 'onPointerDown', 'onPointerU
  * fiber that renders nothing but it (lucide's `Icon`, then `Trash2`, then a `<span>` around them), and stops
  * at a control (the `<button>` they are in), at an element with a handler of its own (a thumbnail's
  * `<img onClick>`, which names the component that renders it), or at the first fiber that renders
- * something beside them. A
+ * something beside them. A handler the icon got from the components that render nothing but it is the one
+ * that wrote it's: `<Trash2 onClick>` passes onClick through Trash2 and Icon to the `<svg>`, and names the
+ * component that wrote `<Trash2 onClick>`. A
  * `DeleteButton`'s trash icon is then named by `DeleteButton`, an option's person icon by the option's
  * component, and a card's photo or its row of stars by the card or the stars, as the fiber tree has them.
  * Anything that is not an icon is named from its own fiber.
@@ -491,10 +493,13 @@ export function namingFiber(node: Node | null): Fiber | null {
   const start = icon && fiberFromNode(icon);
   if (!start) return fiberFromNode(node);
   let f = start;
-  for (let i = 0; i < ICON_CLIMB && !isControlHost(f) && !handlesInput(f); i++) {
+  const handled = handlesInput(start);
+  for (let i = 0; i < ICON_CLIMB && !isControlHost(f) && (handled || !handlesInput(f)); i++) {
     const parent = f.return;
     const only = parent && onlyChild(parent);
     if (!only || (only !== f && only !== f.alternate)) break;
+    // With a handler on the icon, only the components that handed it down are climbed.
+    if (handled && !(isComponent(parent) && handsDown(parent, start))) break;
     f = parent;
   }
   // A component at the top of the climb renders nothing but the icon, so it is the icon's own: the one it
@@ -517,6 +522,13 @@ function isControlHost(f: Fiber): boolean {
 function handlesInput(f: Fiber): boolean {
   const props = f.tag === HostComponent ? f.memoizedProps : null;
   return !!props && INPUT_HANDLERS.some((name) => typeof props[name] === 'function');
+}
+
+/** Whether a component was given the handler an element below it has, under the same prop. */
+function handsDown(component: Fiber, element: Fiber): boolean {
+  const own = element.memoizedProps;
+  const given = component.memoizedProps;
+  return !!own && !!given && INPUT_HANDLERS.some((name) => typeof own[name] === 'function' && given[name] === own[name]);
 }
 
 /**
