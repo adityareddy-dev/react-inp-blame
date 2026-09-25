@@ -15,6 +15,6 @@
     "incremental": true,
     "plugins": [{ "name": "next" }]
   },
-  "include": ["next-env.d.ts", "app", "e2e", "playwright.config.ts"],
+  "include": ["next-env.d.ts", "app", "pages", "e2e", "playwright.config.ts"],
   "exclude": ["node_modules"]
 }

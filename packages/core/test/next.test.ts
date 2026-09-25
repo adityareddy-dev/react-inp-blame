@@ -497,3 +497,84 @@ test('from 14.2 to 15.2 the install goes first in webpack\'s client entries, wit
   assert.match(String(turbo[0]!.arguments[0]), /14\.2\.35.*next dev without --turbo/);
   forgetWarnings();
 });
+
+test("from 15.3 next dev puts the install first in the Pages Router's entry, webpack's main and Turbopack's next-dev-turbopack.js alike", async (t) => {
+  const dirs = ['15.3.9', '15.5.26', '16.2.12', '16.3.6'].map((version) => ({ version, dir: projectWithNext(version) }));
+  const turbopack = process.env.TURBOPACK;
+  t.after(() => {
+    for (const { dir } of dirs) fs.rmSync(dir, { recursive: true, force: true });
+    if (turbopack === undefined) delete process.env.TURBOPACK;
+    else process.env.TURBOPACK = turbopack;
+    forgetWarnings();
+  });
+  t.mock.method(console, 'warn', () => {});
+  /** Next.js's client entries on `next dev`, as its webpack() hook is handed them. */
+  const clientEntries = () => ({
+    module: { rules: [] as unknown[] },
+    entry: async () => ({ main: './client/next-dev.js', 'main-app': ['./client/app-next-dev.js'], 'pages/_app': ['./_app.js'] }) as Record<string, any>,
+  });
+  const entriesOf = async (config: { entry: unknown }) => await (config.entry as () => Promise<Record<string, any>>)();
+
+  for (const { version, dir } of dirs) {
+    delete process.env.TURBOPACK;
+    const config = inProject(dir, () => wrapped('development', {}));
+    // webpack's next-dev.js loads react-dom before it loads instrumentation-client, so the install goes
+    // ahead of it in `main`. The App Router's entry loads instrumentation-client first and is left alone.
+    const dev = clientEntries();
+    config.webpack(dev, { isServer: false, dev: true });
+    const entries = await entriesOf(dev);
+    assert.deepEqual(entries.main, [CLIENT_MODULE, './client/next-dev.js'], version);
+    assert.deepEqual(entries['main-app'], ['./client/app-next-dev.js'], version);
+    assert.deepEqual(entries['pages/_app'], ['./_app.js'], version);
+    // A production build's entry loads instrumentation-client first, and the server has no such entry.
+    for (const context of [{ isServer: false, dev: false }, { isServer: true, dev: true }]) {
+      const other = clientEntries();
+      config.webpack(other, context);
+      assert.equal((await entriesOf(other)).main, './client/next-dev.js', `${version} ${JSON.stringify(context)}`);
+    }
+    const namesOnly = clientEntries();
+    inProject(dir, () => wrapped('development', {}, { runtime: false })).webpack(namesOnly, { isServer: false, dev: true });
+    assert.equal((await entriesOf(namesOnly)).main, './client/next-dev.js', version);
+    // Under webpack the Turbopack rules are not read, and only the names loader's is there.
+    assert.deepEqual(Object.keys(config.turbopack.rules), [GLOB], version);
+
+    // Under Turbopack, which Next.js says in TURBOPACK before it reads the config, the dev entry gets a
+    // rule of its own, in the form the version takes.
+    process.env.TURBOPACK = version.startsWith('16.') ? 'auto' : '1';
+    const turbo = inProject(dir, () => wrapped('development', {}));
+    const rule = turbo.turbopack.rules['next-dev-turbopack.js'];
+    assert.ok(rule, version);
+    if (version.startsWith('16.')) assert.equal(rule.condition, 'browser', version);
+    else assert.deepEqual(Object.keys(rule), ['browser'], version);
+    const loaders = version.startsWith('16.') ? rule.loaders : rule.browser.loaders;
+    assert.equal(loaders.length, 1);
+    assert.match(loaders[0], /next-dev-entry-loader\.cjs$/);
+    // Not in a production build, which has no such entry, nor with runtime: false.
+    assert.deepEqual(Object.keys(inProject(dir, () => wrapped('production', {}, { enabled: true })).turbopack.rules), [GLOB], version);
+    assert.deepEqual(Object.keys(inProject(dir, () => wrapped('development', {}, { runtime: false })).turbopack.rules), [GLOB], version);
+  }
+});
+
+test("the dev entry loader puts the install at the top of Next.js's next-dev-turbopack.js and leaves every other file alone", () => {
+  const loader = require('../next-dev-entry-loader.cjs') as (this: { resourcePath: string }, source: string) => string;
+  const run = (resourcePath: string, source: string) => loader.call({ resourcePath }, source);
+  const install = `require("${CLIENT_MODULE}");`;
+  // The file as Next.js ships it, from the repo's own install.
+  const entry = require.resolve('next/dist/client/next-dev-turbopack.js', { paths: [path.join(import.meta.dirname, '../../../apps/next-demo')] });
+  const source = fs.readFileSync(entry, 'utf8');
+  const out = run(entry, source);
+  // Ahead of the module that loads react-dom, after the directive, and no line moves.
+  assert.ok(out.indexOf(install) >= 0 && out.indexOf(install) < out.indexOf('require("./")'), out.slice(0, 400));
+  assert.ok(out.indexOf(install) > out.indexOf('"use strict";'));
+  assert.equal(out.split('\n').length, source.split('\n').length);
+  assert.equal(out.replace(` ${install}`, ''), source);
+  // Once, however often it runs.
+  assert.equal(run(entry, out), out);
+  // A file with no directive gets the line first, on the file's own first line.
+  assert.equal(run('/app/node_modules/next/dist/client/next-dev-turbopack.js', 'const _ = require("./");'), `${install} const _ = require("./");`);
+  assert.equal(run('C:\\app\\node_modules\\next\\dist\\client\\next-dev-turbopack.js', "'use strict'\nx();"), `'use strict' ${install}\nx();`);
+  // Any other file of that name is not Next.js's entry.
+  for (const other of ['/app/src/next-dev-turbopack.js', '/app/node_modules/next/dist/esm/client/next-dev.js']) {
+    assert.equal(run(other, '"use strict";\nx();'), '"use strict";\nx();', other);
+  }
+});

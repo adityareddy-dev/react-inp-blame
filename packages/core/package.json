@@ -75,7 +75,7 @@
     }
   },
   "sideEffects": ["./dist/auto.js", "./dist/next-client.js", "./src/auto.ts", "./src/next-client.ts"],
-  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next.d.cts", "vite.mjs", "vite.d.mts", "astro.mjs", "astro.d.mts", "README.md", "LICENSE"],
+  "files": ["dist", "display-names-loader.cjs", "display-names-loader.d.cts", "next.cjs", "next-dev-entry-loader.cjs", "next.d.cts", "vite.mjs", "vite.d.mts", "astro.mjs", "astro.d.mts", "README.md", "LICENSE"],
   "engines": {
     "node": ">=20.19"
   },

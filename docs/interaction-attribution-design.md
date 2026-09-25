@@ -1039,8 +1039,14 @@ interactions that began after it, and quiet interactions held so far are let go,
 new page stamped with an input from before it cannot publish them. The App Router announces a push
 or replace without `basePath`, so `withInpBlame` hands the module the app's `basePath` to put back.
 Next.js calls the hook only for the App Router. The Pages Router's client entry imports the injected
-modules too (read in Next.js 16.3.5's source, not run), which gives it attribution but no navigation
-join. `apps/next-demo/e2e/load-order.spec.ts` clicks a Link whose handler takes 60 ms and checks the
+modules too, which gives it attribution but no navigation join. Its production entry, `next.js`, imports
+them before the module that loads react-dom, but its dev entries, `next-dev.js` and
+`next-dev-turbopack.js`, import that module first and the injected ones later, through `page-bootstrap`
+(read in 15.5.26 and 16.3.5). A Pages Router page on `next dev` from 15.3 therefore read nothing until the
+wrapper also put the install first in that entry: in webpack's `main` entry, and under Turbopack through a
+rule on `next-dev-turbopack.js` whose loader adds the require on the line of its `"use strict"`, so no
+line moves. `apps/next-demo/pages/pages-router.tsx` is checked by `e2e/pages-router.spec.ts` in every
+Next.js suite, and `fixtures/next-14` has a Pages Router page beside its App Router one. `apps/next-demo/e2e/load-order.spec.ts` clicks a Link whose handler takes 60 ms and checks the
 click's report, the reset and a report on the page it opened, under `next dev` and both production
 builds.
 
