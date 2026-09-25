@@ -826,12 +826,18 @@ commit costs a renderer lookup and one subtraction, and at the default `walkBudg
 cut short. With `enabled` at its default, neither plugin adds anything to a production build (on Next.js 15.3 to
 16.2 the line's module is the exception, shipped unused); where it loads:
 
-| Bundle (rolldown 1.2.8, minified ESM) | Minified | Gzip |
+<!-- size:start -->
+| Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 39.0 KB | 14.4 KB |
-| The badge and panel, a chunk loaded only when shown | 11.2 KB | 4.2 KB |
-| Of that, the part that has to run before react-dom, not a separate entry yet: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
-| `react-inp-blame/web-vitals` on its own, measured 2026-09-19 by a different script that read `/auto` at 38.2 / 14.1 | 2.7 KB | 1.3 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 59.0 KB | 21.2 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 12.8 KB | 4.8 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 22.2 KB | 8.4 KB |
+| `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
+<!-- size:end -->
+
+`node scripts/size.mjs` measures these from the build on every CI run, and CI fails when this table is out
+of date or a size passes its budget in `scripts/size-budget.json`. The table before 0.8.0 said 39.0 and
+14.4 KB for `/auto`, figures from 0.1.1 that had not been measured again as the entry grew.
 
 On four open-source apps, built with and without it, 15 paired runs each unthrottled and at 4x CPU:
 [docs/benchmarks](docs/benchmarks/README.md). INP did not move on any of them. On a Next.js site
