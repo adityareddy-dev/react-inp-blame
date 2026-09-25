@@ -271,7 +271,7 @@ export interface TargetInfo {
    * in one, an `<img>`, a `<picture>`) inside a control is read from the control, as `label` is.
    */
   readonly component: string | null;
-  /** The components enclosing the target (for a click on an icon, the control around it), nearest first, by the same tree. */
+  /** The components enclosing the target (for a click on an icon, the control around it), nearest first, by the same tree: the eight innermost. */
   readonly owners: readonly string[];
   /**
    * Name of the React prop handler on the target chain for the event that did the work: of the entries

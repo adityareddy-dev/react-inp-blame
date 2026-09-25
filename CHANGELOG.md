@@ -54,6 +54,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   page, checked in every Next.js suite CI runs, from 15.3.9 to 16.3.5 under both bundlers, and
   `fixtures/next-14` has one beside its App Router page. The Troubleshooting entry for this warning now lists the
   setups that still load react-dom first.
+- **The README says `target.owners` holds the eight innermost components**, which it always has, and that
+  `component` is picked from those eight. It said the whole chain.
 - **The Next.js quick start has a `next.config.mjs` for 14.2**, which reads no `next.config.ts`. It told 14.2
   users to use that file and showed only the TypeScript one, which is a syntax error there.
 

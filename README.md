@@ -763,9 +763,9 @@ nothing but it is their caller's: `<Trash2 onClick>` names the component that wr
 icon library's
 `<svg>` inside a button names the component that renders the button, not the icon, an icon beside a name in
 an option names the option's component, and a card's photo inside a link names the card. Anywhere else the
-chain starts from the element itself. `target.owners` keeps the whole chain, innermost
-first, whatever the names are, and where nothing in it passes, `component` is the innermost owner as it
-always was.
+chain starts from the element itself. `target.owners` keeps the chain's eight innermost components, nearest
+first, whatever the names are, and `component` is picked from those eight: where nothing in them passes, it is
+the innermost owner as it always was.
 
 `duration` is the longest single Event Timing entry, as web-vitals measures it; `holdMs` is how much longer
 the span from press to release ran. Reports are frozen: a late entry, frame or render that joins one reaches
@@ -1020,8 +1020,8 @@ moved to React 18.
   is passed over for the next one out, but only if there is one, so a chain holding nothing better prints the
   name as it stands. That goes for `where`, for the component a render blame names and what it was "mostly"
   made of, and for `generateTarget`. A short capitalised name cannot be told from minifier output, so `Abc` is
-  taken at face value either way. The full chains are on `target.owners` and each commit's `hotPath` and
-  `components`. A name with the `$1` that Vite's development server and Rolldown add to one that clashes
+  taken at face value either way. The names as they are stay on `target.owners` (the eight innermost) and
+  each commit's `hotPath` and `components`. A name with the `$1` that Vite's development server and Rolldown add to one that clashes
   (`Dt$1`) is judged without it. The component emotion renders beside every element @emotion/styled or the
   `css` prop styles, to insert its styles, is not counted.
 - **A styling library's wrapper is named the way the library names one it was given no label for**, whatever
