@@ -4,14 +4,16 @@ import { burn } from './burn';
 // A page for e2e/budget.spec.ts, at #budget and not in the lab's list: one click re-renders 9,000 small
 // components, 3,000 in the first subtree and 6,000 in the second, past the walk's budget of 5,000. A
 // production build has no durations, so the walk goes by counts, and it reaches the first subtree first.
-// Each row spends 10 µs, so the click is slow enough to be reported in a production build too.
+// Orders spends 20 ms and Metrics 40, so the click is slow enough to be reported in a production build
+// too, and in a development build the durations put Metrics on the hot path. The rows spend nothing, since
+// a clock in whole milliseconds (WebKit's) would turn a few microseconds each into seconds.
 
 function Order({ i, round }: { i: number; round: number }) {
-  burn(0.01);
   return <li>{`order ${i} · ${round}`}</li>;
 }
 
 function Orders({ round }: { round: number }) {
+  burn(20);
   return (
     <ul hidden>
       {Array.from({ length: 3000 }, (_, i) => (
@@ -22,11 +24,11 @@ function Orders({ round }: { round: number }) {
 }
 
 function Metric({ i, round }: { i: number; round: number }) {
-  burn(0.01);
   return <li>{`metric ${i} · ${round}`}</li>;
 }
 
 function Metrics({ round }: { round: number }) {
+  burn(40);
   return (
     <ul hidden>
       {Array.from({ length: 6000 }, (_, i) => (
