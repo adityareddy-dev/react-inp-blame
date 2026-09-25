@@ -14,6 +14,15 @@ it changes when a field is removed or changes meaning, which a minor release may
   on a touch screen or a screen under 480 px wide the close button and the rows are larger to tap. CI opens
   it on a 360 px phone (Playwright's Galaxy S8) as well as the Pixel 7 and the iPhone 15.
 
+### Added
+
+- **A report says when component names look minified.** Names come from `displayName` or the function's
+  name, and only the Vite plugin, the Next.js wrapper and the loader stamp them, so under `react-inp-blame/auto`
+  in a webpack, Rspack, Parcel or Rsbuild build a blame read "inside e, mostly Xe" with nothing to say why.
+  Where a report's commits hold at least five different names and four in five of them are one or two
+  characters long, it gets a note naming the setups that keep names, and the console says so once, with a
+  link. The blame is unchanged.
+
 ## [0.7.0] - 2026-09-25
 
 ### Fixed

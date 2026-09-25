@@ -1939,6 +1939,50 @@ test("the dev overlay's own react-dom does not keep a page supported whose app R
   });
 });
 
+test('a build whose component names look minified says so in the report and once in the console', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  // A production build with nothing stamping displayName: every component is what the minifier left.
+  const minified = () => {
+    const names = ['e', 'Xe', 'Tt', 'nc', '$'];
+    let child: Record<string, any> | null = null;
+    for (const name of names.reverse()) {
+      const type = Object.defineProperty(function () {}, 'name', { value: name });
+      const fiber: Record<string, any> = { tag: 0, flags: 1, mode: 0, elementType: type, type, memoizedProps: {}, memoizedState: null, return: null, child, sibling: null, alternate: null };
+      if (child) child.return = fiber;
+      child = fiber;
+    }
+    return { tag: 3, flags: 0, mode: 0, elementType: null, type: null, memoizedProps: null, memoizedState: null, return: null, child, sibling: null, alternate: null };
+  };
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = { current: minified(), pendingLanes: 0 };
+    existing.onCommitFiberRoot(id, root);
+    for (const at of [1000, 3000]) {
+      clock.now = at;
+      page.fire('click', { isTrusted: true, type: 'click', timeStamp: at, target: null });
+      page.duringClick(() => {
+        clock.now = at + 90;
+        const next = minified();
+        next.alternate = root.current;
+        root.current = next;
+        existing.onCommitFiberRoot(id, root);
+      });
+      page.paint([click(at, at, 120)]);
+      await nextTask();
+    }
+    assert.equal(api.reports().length, 2);
+    for (const r of api.reports()) assert.ok(r.explanation.notes.some((n) => n.startsWith('Most component names here look minified')), r.explanation.notes.join('\n'));
+    const said = warn.mock.calls.filter((c) => /look minified/.test(String(c.arguments[0])));
+    assert.equal(said.length, 1);
+    assert.match(String(said[0]!.arguments[0]), /#install-with-vite$/);
+    api.dispose();
+  });
+});
+
 test("the pointer an input came from is kept at dispatch, and a mouse's pointerdown alone reads as a click", async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {

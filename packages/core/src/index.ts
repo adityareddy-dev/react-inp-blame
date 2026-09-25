@@ -1,3 +1,4 @@
+import { MINIFIED_NAMES_NOTE, namesLookMinified } from './commits.js';
 import { createTimeline } from './devtools.js';
 import { checkHookReplaced, clearCommits, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, noteResize, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
@@ -20,6 +21,8 @@ export type { OverlayHandle } from './overlay.js';
 const DEBUG_GLOBAL = '__REACT_INP_BLAME__';
 /** `threshold` by default: web-vitals' default `durationThreshold`, two and a half frames at 60 Hz. */
 const DEFAULT_THRESHOLD = 40;
+/** Where the README says how each build keeps component names. */
+const SETUP_URL = 'https://github.com/adityareddy-dev/react-inp-blame#install-with-vite';
 /** `walkBudget` by default: over three times the 1441 components of the demo's largest commit, and still a bound on a runaway tree inside React's commit. */
 const DEFAULT_WALK_BUDGET = 5000;
 /** How long react-dom has to register with the hook before the page is told install() ran too late. */
@@ -183,6 +186,7 @@ function installNow(opts: InstallOptions): Api {
     labels,
     now: () => performance.now(),
     publish: (r) => {
+      if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', `${MINIFIED_NAMES_NOTE} See ${SETUP_URL}`);
       drawWhenIdle(r);
       undelivered.push(r);
       delivery ??= setTimeout(deliver, 0);
