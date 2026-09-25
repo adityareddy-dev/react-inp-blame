@@ -14,10 +14,15 @@ purpose. Click something and read what the badge blames.
 
 ```ts
 // next.config.ts
+import type { NextConfig } from 'next';
 import { withInpBlame } from 'react-inp-blame/next';
 
+const nextConfig: NextConfig = {
+  /* config options here */
+};
+
 // Your config first, this library's options second. They are not Next.js config keys.
-export default withInpBlame({ /* your config */ }, { runtime: { overlay: true } });
+export default withInpBlame(nextConfig, { runtime: { overlay: true } });
 ```
 
 On Next.js 15.3 to 16.2, add one line to `instrumentation-client.ts` as well. `withInpBlame` prints it
@@ -43,12 +48,15 @@ React Router in framework mode, Remix, TanStack Start and Astro write their own 
 never sees on its own, so each has a setup of its own: [React Router](#install-with-react-router),
 [Remix](#install-with-remix), [TanStack Start](#install-with-tanstack-start), [Astro](#install-with-astro).
 
-**What you will see.** Reload, then click something slow. A small dark badge appears in the corner,
-bottom-right by default, with the page's INP so far in milliseconds: green at 200 or under, amber up to
-500, red above. Click the badge for a panel of the recent slow interactions, newest first, and click a
-row for the whole explanation. The demo above sets `position: 'bottom-left'`, which is why its badge
-sits on the left: its own explanation column has the right-hand side. From the demo's sign-in page,
-in development, this is `report.verdict`, which the row spreads over its header and body:
+**What you will see.** Reload the page. A small dark badge sits in the corner, bottom-right by default,
+and reads `INP —` until you interact. Click something slow and it shows the page's INP so far in
+milliseconds: green at 200 or under, amber up to 500, red above. Click the badge for a panel of the recent
+slow interactions, newest first, and click a row for the whole explanation. A click, tap or key press of
+40 ms or more gets a row (the `threshold` option), so a 150 ms click has one, though the badge stays green
+and the panel says Good: INP counts anything up to 200 ms as good. The demo above sets
+`position: 'bottom-left'`, which is why its badge sits on the left: its own explanation column has the
+right-hand side. From the demo's sign-in page, in development, this is `report.verdict`, which the row
+spreads over its header and body:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
@@ -59,8 +67,10 @@ in development, this is `report.verdict`, which the row spreads over its header 
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
 production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
 defaults to `'development'`, so a production build carries nothing from either plugin until you say
-`enabled: true` or `enabled: 'production'`. The one exception is the line on Next.js 15.3 to 16.2: its code
-is in every build, and in the ones `enabled` leaves out it ships unused and installs nothing.
+`enabled: true` or `enabled: 'production'`. So `vite preview` and `next start`, which serve a production
+build, show no badge by default, and the build prints a line saying it left the library out. The one
+exception is the line on Next.js 15.3 to 16.2: its code is in every build, and in the ones `enabled` leaves
+out it ships unused and installs nothing.
 
 If you would rather read reports than look at a badge, drop `overlay` and subscribe:
 
@@ -71,6 +81,9 @@ import { onInteraction } from 'react-inp-blame';
 // A report can come again as a later revision when more data joins it: keep the latest per interactionId.
 onInteraction((report) => console.log(report.verdict, report.explanation.blame));
 ```
+
+To read the whole report of the last interaction in the console, add `debugGlobal: true` to `runtime` and
+run `__REACT_INP_BLAME__.last()`.
 
 ## When the blame is wrong
 
@@ -281,9 +294,8 @@ export default defineConfig({
     tailwindcss(),
     reactRouter(),
     inpBlame({
-      enabled: true,                 // production builds too; the default is development only
-      runtime: { overlay: "query" }, // the badge only on request, such as ?inp-blame in the URL
-      entry: "app/root.tsx",         // React Router writes its own HTML, so the install goes first in the root route
+      runtime: { overlay: true }, // the badge on every page of the dev server
+      entry: "app/root.tsx",      // React Router writes its own HTML, so the install goes first in the root route
     }),
   ],
   resolve: {
@@ -291,6 +303,11 @@ export default defineConfig({
   },
 });
 ```
+
+This shows the badge under `react-router dev`. A production build leaves the library out, since `enabled` defaults to
+`'development'`, and the build prints a line saying so. To keep it in production too, add `enabled: true` and
+make the overlay `'query'`, so a visitor sees the badge only with `?inp-blame` in the URL. CI's copy of this
+app does that.
 
 That is the whole setup: the plugin adds the import to the browser's copy of the module (never the server's),
 and nothing in your own files changes. Leave `entry` out and the plugin warns, when the dev server starts and
@@ -359,13 +376,17 @@ export default defineConfig({
     }),
     tsconfigPaths(),
     inpBlame({
-      enabled: true,                 // production builds too; the default is development only
-      runtime: { overlay: "query" }, // the badge only on request, such as ?inp-blame in the URL
-      entry: "app/root.tsx",         // Remix writes its own HTML, so the install goes first in the root route
+      runtime: { overlay: true }, // the badge on every page of the dev server
+      entry: "app/root.tsx",      // Remix writes its own HTML, so the install goes first in the root route
     }),
   ],
 });
 ```
+
+This shows the badge under `remix vite:dev`. A production build leaves the library out, since `enabled` defaults to
+`'development'`, and the build prints a line saying so. To keep it in production too, add `enabled: true` and
+make the overlay `'query'`, so a visitor sees the badge only with `?inp-blame` in the URL. CI's copy of this
+app does that.
 
 Without `entry`, both ways of writing the install yourself fail in Remix's template: in the client entry it is
 too late for the root route's react-dom, and first in `app/root.tsx` it works on the dev server but is dropped
@@ -412,15 +433,19 @@ const config = defineConfig({
     tanstackStart(),
     viteReact(),
     inpBlame({
-      enabled: true,                 // production builds too; the default is development only
-      runtime: { overlay: 'query' }, // the badge only on request, such as ?inp-blame in the URL
-      entry: 'src/client.tsx',       // TanStack Start writes its own HTML, so the install goes first in the client entry
+      runtime: { overlay: true }, // the badge on every page of the dev server
+      entry: 'src/client.tsx',    // TanStack Start writes its own HTML, so the install goes first in the client entry
     }),
   ],
 })
 
 export default config
 ```
+
+This shows the badge under `vite dev`. A production build leaves the library out, since `enabled` defaults to
+`'development'`, and the build prints a line saying so. To keep it in production too, add `enabled: true` and
+make the overlay `'query'`, so a visitor sees the badge only with `?inp-blame` in the URL. CI's copy of this
+app does that.
 
 CI builds this from `npx @tanstack/cli@0.71.0 create --framework React --blank` (TanStack Start 1.168, Vite
 8.3, React 19.3) and checks the same click under `vite dev` and on `vite preview` of the production build.
@@ -443,13 +468,15 @@ import { inpBlame } from 'react-inp-blame/astro';
 export default defineConfig({
   integrations: [
     react(),
-    inpBlame({
-      enabled: true,                 // production builds too; the default is development only
-      runtime: { overlay: 'query' }, // the badge only on request, such as ?inp-blame in the URL
-    }),
+    inpBlame({ runtime: { overlay: true } }), // the badge on every page of the dev server
   ],
 });
 ```
+
+This shows the badge under `astro dev`. A production build leaves the library out, since `enabled` defaults to
+`'development'`, and the build prints a line saying so. To keep it in production too, add `enabled: true` and
+make the overlay `'query'`, so a visitor sees the badge only with `?inp-blame` in the URL. CI's copy of this
+app does that.
 
 `inpBlame()` from `react-inp-blame/astro` takes `enabled` and `runtime` as the Vite plugin does, with
 `'development'` meaning `astro dev` and `'production'` meaning `astro build`. It has no `pages`: every page's
@@ -854,8 +881,8 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 62.7 KB | 22.4 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 15.7 KB | 5.9 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 62.8 KB | 22.4 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 15.8 KB | 6.0 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 24.2 KB | 9.0 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
 <!-- size:end -->
@@ -1029,7 +1056,8 @@ moved to React 18.
 ## Labels and personal data
 
 `target.label` names the element by its tag and a name of at most 40 characters, and never reads a form
-field's value or an element's whole text. A click that lands inside a control is labelled by that control,
+field's value or an element's whole text. It is read as the input is dispatched, before your handlers run,
+so a click on a button reading "Count is 0" is labelled that, not with the "Count is 1" it then shows. A click that lands inside a control is labelled by that control,
 tag and name included: the first of the element and its five nearest ancestors that is a `button`, a link,
 `summary`, `label`, `input`, `select` or `textarea`, or has the ARIA role `button`, `link`, `menuitem`,
 `menuitemcheckbox`, `menuitemradio`, `tab`, `option`, `checkbox`, `radio` or `switch`. A click on the `path`
@@ -1047,7 +1075,9 @@ browser names by its URL, or by the page's for an inline script, in a blame's `n
 
 Each warning the library prints ends with a link to its entry below. In the browser a warning starts with
 `[react-inp-blame]` and prints once per page. At build time it starts with `withInpBlame:` or `inpBlame:`,
-except the Vite plugin's setup advice, which starts with `[react-inp-blame]` and links its setup section.
+except the Vite plugin's setup advice, which starts with `[react-inp-blame]` and links its setup section, and
+the line a production build prints when it leaves the library out, which starts with `[react-inp-blame]` too
+under Vite and Astro.
 To see whether the library installed at all, and why not, add `debugGlobal: true` and read
 `__REACT_INP_BLAME__.stats()`. If your problem is not here, open a
 [setup problem](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=setup-problem.yml) issue
@@ -1156,6 +1186,18 @@ for the chunk, and a `script-src` policy that blocks it. Reports still come thro
 
 Usually Trusted Types. If the page enforces them, add `react-inp-blame` to its `trusted-types` directive.
 See [the badge and panel](#the-badge-and-panel). Reports still come through `onInteraction`.
+
+### At build time, any setup
+
+<a id="left-out-of-a-production-build"></a>
+#### Left out of this production build
+
+`enabled` defaults to `'development'`, so a production build carries nothing from this library. The page it
+serves (`vite preview`, `next start`, `astro preview` or your own server) shows no badge and makes no reports.
+That is on purpose, so real visitors get none of it until you choose. To include it, pass `enabled: true` or
+`enabled: 'production'`, and think about `runtime: { overlay: 'query' }`, which shows the badge only when the
+URL has `?inp-blame`. To keep it out without the line, write `enabled: 'development'` yourself. The Vite plugin
+and the Astro integration print the line once per build, and `withInpBlame` once per `next build`.
 
 ### At build time, Next.js
 

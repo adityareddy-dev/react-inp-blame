@@ -6,7 +6,8 @@ export interface InpBlameOptions {
   /**
    * Which runs of Astro get anything from this integration: 'development' (`astro dev`), 'production'
    * (`astro build`), true for both, false for neither. Default 'development', so a production build
-   * carries nothing from it.
+   * carries nothing from it, and says so in one line. Write 'development' yourself to keep it out
+   * without the line.
    */
   enabled?: 'development' | 'production' | boolean;
   /**

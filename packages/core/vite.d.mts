@@ -6,7 +6,8 @@ export interface InpBlameOptions {
   /**
    * Which runs of Vite get anything from these plugins: 'development' (the dev server), 'production'
    * (`vite build`), true for both, false for neither. Default 'development', so a production build
-   * carries nothing from them.
+   * carries nothing from them, and says so in one line. Write 'development' yourself to keep it out
+   * without the line.
    */
   enabled?: 'development' | 'production' | boolean;
   /**
