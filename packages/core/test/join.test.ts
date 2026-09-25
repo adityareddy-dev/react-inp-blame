@@ -330,6 +330,21 @@ test('a short or uncapitalised name is only ever passed over for one that is bet
   assert.equal(clickedInside(['Xe1', 'ProductCard']).component, 'Xe1');
 });
 
+test("a Radix Slot is passed over for the component that rendered it, since it renders nothing of its own", () => {
+  // The chain under a Radix DropdownMenu item, as a production build with the shadcn wrappers around it
+  // reads it. Each `X.Slot` is the Slot that X rendered to merge its props into its child, and the collection
+  // item slot before it renders only that Slot; the roving focus item is the first component that does more.
+  const item = ['Primitive.div', 'Primitive.span.Slot', 'Primitive.span', 'RovingFocusGroupCollectionItemSlot.Slot', 'RovingFocusGroupCollectionItemSlot', 'RovingFocusGroupItem'];
+  assert.equal(clickedInside(item).component, 'RovingFocusGroupItem');
+  assert.equal(clickedInside(['MenuCollectionItemSlot.Slot', 'MenuCollectionItemSlot', 'MenuItemImpl', 'MenuItem']).component, 'MenuItemImpl');
+  assert.equal(clickedInside(['RovingFocusGroupCollectionSlot.SlotClone', 'RovingFocusGroupCollectionSlot', 'RovingFocusGroup']).component, 'RovingFocusGroup');
+  // shadcn's Button renders a plain Slot for `asChild`, and older Radix a SlotClone under every Slot.
+  assert.equal(clickedInside(['Slot', 'Button', 'Toolbar']).component, 'Button');
+  assert.equal(clickedInside(['Primitive.button.SlotClone', 'Primitive.button', 'Slot.SlotClone', 'Button']).component, 'Button');
+  // Passed over, never dropped: with nothing better above it, the Slot is named as it is.
+  assert.equal(clickedInside(['Menu.Slot', 'x']).component, 'Menu.Slot');
+});
+
 test('each revision is explained on first read, and a later render makes a new revision with its own verdict', () => {
   const data = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
   const later = commit(400, 0, { total: 40 });
@@ -517,10 +532,11 @@ test('forced layout the browser measured outranks a render no build timed', () =
   const r = report(tabs, [rerender], thrash, [input(0, 'click')]);
 
   // Nothing names the read that forced the layout, but the subtree it happened in is held and is the
-  // only thing here a reader can open a file on, so it is what the blame carries.
+  // only thing here a reader can open a file on, so it is what the blame carries. Radix's SlotClone at
+  // the end of the hot path renders nothing of its own, so the subtree is named by the component before it.
   assert.deepEqual(r.explanation.blame, {
     kind: 'layout',
-    name: 'RovingFocusGroupCollectionSlot.SlotClone',
+    name: 'Tabs',
     detail: 'TabsTrigger ×16',
     ms: 108,
     confidence: 'measured',
@@ -532,7 +548,7 @@ test('forced layout the browser measured outranks a render no build timed', () =
       // Where the layout happened and where React was working are two records, and only the first is
       // the browser's. The sentence carries both, so the subtree is never the only thing named.
       ' It was charged to DIV#root.onmousedown.' +
-      ' React was re-rendering 181 components inside RovingFocusGroupCollectionSlot.SlotClone, mostly TabsTrigger (16 of them).' +
+      ' React was re-rendering 181 components inside Tabs, mostly TabsTrigger (16 of them).' +
       " That happens when code reads an element's size right after changing styles, often in a layout effect.",
   );
   // The note would say the same thing a second time.
