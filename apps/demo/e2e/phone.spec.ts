@@ -185,3 +185,30 @@ test(`a finger held down ${HOLD_MS} ms is kept out of the headline, in holdMs`, 
   expect(r.holdMs).toBeGreaterThanOrEqual(HOLD_MS * 0.8);
   expect(r.explanation.blame).toMatchObject({ kind: 'script', name: r.target?.handler, confidence: 'measured' });
 });
+
+test('the panel fits the phone screen, with its close button and the first row in reach', async ({ page }) => {
+  // #budget is a page that fits a phone. The lab's pages are wider than one, so the phone's browser widens the
+  // page to fit them and a fixed badge sits outside what the screen shows; an app built for phones does not.
+  await interact(page, 'budget', () => tap(page, '[data-test=trigger]'));
+  expect(await page.evaluate(() => innerWidth)).toBe(page.viewportSize()!.width);
+  await page.locator('#react-inp-blame .badge').tap();
+  const panel = page.locator('#react-inp-blame .panel');
+  await expect(panel).toBeVisible();
+  const screen = page.viewportSize()!;
+  const inside = async (what: string, selector: string) => {
+    const box = (await page.locator(selector).first().boundingBox())!;
+    expect(box, what).not.toBeNull();
+    expect(box.x, `${what} starts on the screen`).toBeGreaterThanOrEqual(0);
+    expect(box.y, `${what} starts on the screen`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `${what} ends on the screen, ${screen.width} px wide`).toBeLessThanOrEqual(screen.width);
+    expect(box.y + box.height, `${what} ends on the screen, ${screen.height} px high`).toBeLessThanOrEqual(screen.height);
+    return box;
+  };
+  await inside('the panel', '#react-inp-blame .panel');
+  const close = await inside('the close button', '#react-inp-blame .panel .x');
+  // A finger needs about 40 px; the button was 24 px across before phones got a larger one.
+  expect(close.width).toBeGreaterThanOrEqual(36);
+  await inside("the first row's milliseconds", '#react-inp-blame .panel .row .ms');
+  await page.locator('#react-inp-blame .panel .x').tap();
+  await expect(panel).toBeHidden();
+});

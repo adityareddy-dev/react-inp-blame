@@ -44,7 +44,7 @@ const CSS = `
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: ${IDLE}; box-shadow: 0 0 0 3px rgba(255,255,255,.07); flex: none; }
 .ms { font-variant-numeric: tabular-nums; }
 .badge .n { color: #9aa0ad; font-weight: 500; }
-.panel { position: absolute; width: 372px; max-height: min(72vh, 660px); overflow: auto; border-radius: 14px; background: rgba(17,19,24,.97); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 50px rgba(0,0,0,.42); backdrop-filter: blur(14px); }
+.panel { position: absolute; width: min(372px, calc(100vw - 32px)); max-height: min(72vh, 660px); max-height: min(72dvh, 660px); overflow: auto; border-radius: 14px; background: rgba(17,19,24,.97); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 50px rgba(0,0,0,.42); backdrop-filter: blur(14px); }
 .br .panel, .bl .panel { bottom: 42px; } .tr .panel, .tl .panel { top: 42px; }
 .br .panel, .tr .panel { right: 0; } .bl .panel, .tl .panel { left: 0; }
 .head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 12px; background: rgba(17,19,24,.98); border-bottom: 1px solid rgba(255,255,255,.08); }
@@ -54,6 +54,7 @@ const CSS = `
 .tag { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: 10px; vertical-align: 4px; color: #0b0d11; }
 .x { flex: none; background: none; border: 0; color: #9aa0ad; font: inherit; font-size: 18px; line-height: 1; cursor: pointer; padding: 3px 7px; border-radius: 6px; }
 .x:hover { color: #fff; background: rgba(255,255,255,.08); }
+@media (pointer: coarse), (max-width: 480px) { .x { padding: 9px 12px; font-size: 20px; } .row { padding: 14px 16px; } }
 .row { padding: 11px 16px 12px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; }
 .row:hover { background: rgba(255,255,255,.035); }
 .r1 { display: flex; align-items: center; gap: 8px; }
