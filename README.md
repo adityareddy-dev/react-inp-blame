@@ -592,15 +592,16 @@ after `install()` returns, only when shown. `mountOverlay(options)` shows it aft
 root is an open one on `#react-inp-blame`, but a test that wants the reports should read them through
 [`debugGlobal`](#installoptions) rather than from the panel's DOM, which may change between versions.
 
-**Content Security Policy.** The badge and panel need `'unsafe-inline'` in `style-src`, with no nonce or
-hash beside it: a browser ignores `'unsafe-inline'` in a directive that also lists a nonce or a hash. They
-style their shadow root with a `<style>` element that carries no nonce, and set `style` attributes (dot
-colours, bar widths) through `innerHTML` with values that change with every report, so a `style-src` of
-nonces and hashes blocks them: the badge is then an unstyled button at the foot of the page, and the
-console reports the violation. The runtime still installs and measures, so on such a page read reports with
-`onInteraction` or the Performance panel track. On Vite, `html.cspNonce` puts the nonce on the plugin's
-script in development and in a build, and the badge's chunk loads through that script's import, so a
-nonce-based `script-src` needs nothing more.
+**Content Security Policy.** The badge and panel need nothing in `style-src`: their stylesheet is a
+constructed one adopted by the shadow root, which `style-src` does not govern, and their colours and bar
+widths are set through classes and the style object rather than `style` attributes. Safari before 16.4 has
+no constructed stylesheets and gets a `<style>` element instead, which needs `'unsafe-inline'` in
+`style-src` there. A page that enforces Trusted Types (`require-trusted-types-for 'script'`) lists
+`react-inp-blame` in its `trusted-types` directive, the policy the panel's markup goes through; where it does
+not, the console says so once and the badge is not drawn, but the runtime still installs and measures, so
+reports come through `onInteraction` and the Performance panel track. On Vite, `html.cspNonce` puts the
+nonce on the plugin's script in development and in a build, and the badge's chunk loads through that
+script's import, so a nonce-based `script-src` needs nothing more.
 
 ## API
 
@@ -841,7 +842,7 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
 | `react-inp-blame/auto`: everything that loads with the page | 62.9 KB | 22.4 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 15.6 KB | 5.9 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 15.7 KB | 5.9 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 24.2 KB | 9.0 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
 <!-- size:end -->

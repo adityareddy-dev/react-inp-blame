@@ -2,6 +2,7 @@ import { heaviest, leafName, mostlyComponent } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { carriesWork, isPointerEvent, isTypingEvent, kindOf } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
+import { shared } from './session.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { warnOnce } from './warn.js';
 
@@ -163,7 +164,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     try {
       draw();
     } catch (error) {
-      warnOnce('overlay-draw', `the badge and panel could not be drawn (${String(error)}). A page that enforces Trusted Types allows them by listing ${POLICY} in its trusted-types directive.`);
+      warnOnce('overlay-draw', `the badge and panel could not be drawn (${String(error)}). If the page enforces Trusted Types, it allows them by listing ${POLICY} in its trusted-types directive.`);
     }
   }
 
@@ -441,7 +442,11 @@ interface HtmlPolicy {
 }
 /** The policy name to allow in a `trusted-types` directive. */
 const POLICY = 'react-inp-blame';
-let policy: HtmlPolicy | null | undefined;
+/**
+ * The policy, created once per page: a second copy of this chunk (a duplicated package, or a module in two
+ * chunks) that asked for the same name again would be refused, and draw nothing.
+ */
+const trusted = shared('trusted-types', () => ({ policy: undefined as HtmlPolicy | null | undefined }));
 
 /**
  * Sets an element's markup, then its bar widths. Every string that reaches here was built in this file with
@@ -451,16 +456,17 @@ let policy: HtmlPolicy | null | undefined;
  * rather than a style attribute in the markup, which a style-src without 'unsafe-inline' blocks.
  */
 function setHTML(el: HTMLElement, html: string): void {
-  if (policy === undefined) {
+  if (trusted.policy === undefined) {
     const tt = (globalThis as { trustedTypes?: { createPolicy(name: string, rules: HtmlPolicy): HtmlPolicy } }).trustedTypes;
     try {
-      policy = tt ? tt.createPolicy(POLICY, { createHTML: (s) => s }) : null;
+      trusted.policy = tt ? tt.createPolicy(POLICY, { createHTML: (s) => s }) : null;
     } catch {
       // The page's trusted-types directive does not list this name. Where Trusted Types are enforced the
       // assignment below then throws, and the overlay says so once rather than breaking the page.
-      policy = null;
+      trusted.policy = null;
     }
   }
+  const { policy } = trusted;
   el.innerHTML = (policy ? policy.createHTML(html) : html) as string;
   el.querySelectorAll<HTMLElement>('[data-width]').forEach((bar) => {
     bar.style.width = `${bar.dataset.width}%`;
