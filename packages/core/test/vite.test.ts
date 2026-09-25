@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import fs from 'node:fs';
+import { mock, test } from 'node:test';
 import { inpBlame } from '../vite.mjs';
 
 const INSTALL = 'react-inp-blame:install';
@@ -9,6 +10,10 @@ const ENTRY = 'react-inp-blame:entry';
 const INSTALL_MODULE = 'virtual:react-inp-blame/install';
 
 type Options = Parameters<typeof inpBlame>[0];
+
+// The entry files these tests name exist as far as the plugin can tell, on any machine; the test for a
+// missing one says otherwise for its own call.
+const exists = mock.method(fs, 'existsSync', () => true);
 type Plugin = Record<string, any>;
 
 /** The plugins a run of Vite uses: those whose `apply` accepts its command. */
@@ -371,4 +376,98 @@ test('the install module is marked as having side effects, and entry is a path w
   assert.throws(() => inpBlame({ entry: '' }), /entry is the path of a module from the project root/);
   assert.throws(() => inpBlame({ entry: ['app/root.tsx'] as never }), /entry is the path of a module/);
   assert.throws(() => inpBlame({ entry: 'app/root.tsx', runtime: false }), /runtime: false leaves the install out/);
+});
+
+test('an entry naming a file that does not exist fails the dev server and the build at once, and not a preview', () => {
+  exists.mock.mockImplementation(() => false);
+  try {
+    for (const command of ['serve', 'build'] as const) {
+      const runtime = pluginsFor(command, { enabled: true, entry: 'app/roots.tsx' }).find((p) => p.name === INSTALL)!;
+      assert.throws(() => runtime.configResolved(resolved({ command })), /entry is 'app\/roots\.tsx', and there is no file at \/app\/app\/roots\.tsx/);
+    }
+    const preview = pluginsFor('serve', { enabled: true, entry: 'app/roots.tsx' }).find((p) => p.name === INSTALL)!;
+    assert.doesNotThrow(() => preview.configResolved(resolved({ command: 'serve', isPreview: true })));
+  } finally {
+    exists.mock.mockImplementation(() => true);
+  }
+});
+
+test('without entry, a framework that writes its own HTML and a build of scripts only are told what to do, once', () => {
+  const warnings: string[] = [];
+  const logger = { warn: (message: string) => warnings.push(message) };
+  const configure = (config: Record<string, any>, options: Options = {}) => {
+    const runtime = pluginsFor('serve', { enabled: true, ...options }).find((p) => p.name === INSTALL);
+    runtime?.configResolved(resolved({ command: 'serve', logger, ...config }));
+  };
+  const plugins = (...names: string[]) => names.map((name) => ({ name }));
+  configure({ plugins: plugins('vite:esbuild', 'react-router') });
+  configure({ plugins: plugins('remix', 'remix-hmr') });
+  configure({ plugins: plugins('tanstack-start-core:config') });
+  configure({ plugins: plugins('astro:build', '@astrojs/react') });
+  configure({ build: { rollupOptions: { input: ['resources/js/app.tsx', 'resources/css/app.css'] } } });
+  assert.equal(warnings.length, 5);
+  assert.match(warnings[0]!, /^\[react-inp-blame\] React Router writes its own HTML.*Add entry: 'app\/root\.tsx' to inpBlame\(\).*#install-with-react-router$/);
+  assert.match(warnings[1]!, /Remix writes its own HTML.*entry: 'app\/root\.tsx'.*#install-with-remix$/);
+  assert.match(warnings[2]!, /TanStack Start writes its own HTML.*entry: 'src\/client\.tsx'.*#install-with-tanstack-start$/);
+  assert.match(warnings[3]!, /Astro writes its own pages.*'react-inp-blame\/astro'.*#install-with-astro$/);
+  assert.match(warnings[4]!, /no HTML page, only scripts.*entry: '<the script every page loads first>'/);
+  // Once per process: a framework that resolves a second config through the same plugins says nothing new.
+  configure({ plugins: plugins('react-router') });
+  // And nothing where the install has somewhere to go, or was set up another way, or is not wanted.
+  configure({ plugins: plugins('react-router') }, { entry: 'app/root.tsx' });
+  configure({ plugins: plugins('react-router') }, { runtime: false });
+  configure({});
+  configure({ build: { rollupOptions: {} } });
+  configure({ build: { lib: { entry: 'src/index.ts' }, rollupOptions: { input: 'src/index.ts' } } });
+  configure({ build: { ssr: true, rollupOptions: { input: 'src/server.ts' } } });
+  configure({ plugins: plugins('remix'), isPreview: true });
+  process.env.VITEST = 'true';
+  try {
+    configure({ plugins: plugins('tanstack-start-core:dev-server'), build: { rollupOptions: { input: 'src/other.ts' } } });
+  } finally {
+    delete process.env.VITEST;
+  }
+  assert.equal(warnings.length, 5, warnings.slice(5).join('\n'));
+});
+
+test("on an HTML page, an app's own manualChunks cannot put the library in its vendor chunk", () => {
+  const runtime = pluginsFor('build', { enabled: true }).find((p) => p.name === INSTALL)!;
+  runtime.configResolved(resolved());
+  const context = { environment: { name: 'client', config: { consumer: 'client', build: resolved().build } }, warn: () => {} };
+  // Nothing to do when the app leaves chunks to the bundler.
+  assert.equal(runtime.outputOptions.call(context, {}), null);
+  const lib = '/app/node_modules/react-inp-blame/dist/index.js';
+  const hook = '/app/node_modules/react-inp-blame/dist/hook.js';
+  const imports: Record<string, string[]> = { [`\0${INSTALL_MODULE}`]: [lib], [lib]: [hook], [hook]: [] };
+  const meta = { getModuleInfo: (id: string) => ({ importedIds: imports[id] ?? [] }) };
+  const vendor = (id: string) => (id.includes('/node_modules/') ? 'vendor' : undefined);
+  const { manualChunks } = runtime.outputOptions.call(context, { manualChunks: vendor });
+  assert.equal(manualChunks(lib, meta), 'react-inp-blame');
+  assert.equal(manualChunks(hook, meta), 'react-inp-blame');
+  // The install call stays the emitted entry the page's script tag points at.
+  assert.equal(manualChunks(`\0${INSTALL_MODULE}`, meta), undefined);
+  assert.equal(manualChunks('/app/node_modules/react-dom/index.js', meta), 'vendor');
+  assert.equal(manualChunks('/app/src/main.tsx', meta), undefined);
+});
+
+test('a build whose install chunk imports react-dom, however the chunks came out, gets a warning naming the chunk', () => {
+  const runtime = pluginsFor('build', { enabled: true }).find((p) => p.name === INSTALL)!;
+  runtime.configResolved(resolved());
+  const warnings: string[] = [];
+  const context = { environment: { name: 'client', config: { consumer: 'client', build: resolved().build } }, warn: (w: string) => warnings.push(w), error: (m: string) => assert.fail(m) };
+  const chunk = (fileName: string, moduleIds: string[], imports: string[], extra: Record<string, unknown> = {}) => ({ type: 'chunk', fileName, moduleIds, imports, ...extra });
+  const bundle: Record<string, unknown> = {
+    'assets/react-inp-blame-install.js': chunk('assets/react-inp-blame-install.js', [`\0${INSTALL_MODULE}`], ['assets/lib.js'], { facadeModuleId: `\0${INSTALL_MODULE}` }),
+    'assets/lib.js': chunk('assets/lib.js', ['/app/node_modules/react-inp-blame/dist/index.js'], ['assets/vendor.js']),
+    'assets/vendor.js': chunk('assets/vendor.js', ['/app/node_modules/react-dom/cjs/react-dom.production.js'], []),
+  };
+  runtime.generateBundle.call(context, {}, bundle);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /the install chunk assets\/react-inp-blame-install\.js imports assets\/vendor\.js, which holds react-dom/);
+  // The entry path's chunk is found by its name, and a clean graph says nothing.
+  (bundle['assets/lib.js'] as { imports: string[] }).imports = [];
+  runtime.generateBundle.call(context, {}, bundle);
+  runtime.generateBundle.call(context, {}, { 'assets/x.js': chunk('assets/x.js', [], ['assets/v.js'], { name: 'react-inp-blame-install' }), 'assets/v.js': chunk('assets/v.js', ['C:\\app\\node_modules\\react-dom\\index.js'], []) });
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[1]!, /assets\/x\.js imports assets\/v\.js/);
 });
