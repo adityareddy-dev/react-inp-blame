@@ -556,11 +556,19 @@ test("from 15.3 next dev puts the install first in the Pages Router's entry, web
 });
 
 test("the dev entry loader puts the install at the top of Next.js's next-dev-turbopack.js and leaves every other file alone", () => {
-  const loader = require('../next-dev-entry-loader.cjs') as (this: { resourcePath: string }, source: string) => string;
+  type Loader = ((this: { resourcePath: string }, source: string) => string) & { clientModule: string; requestFrom(file: string): string };
+  const loader = require('../next-dev-entry-loader.cjs') as Loader;
   const run = (resourcePath: string, source: string) => loader.call({ resourcePath }, source);
-  const install = `require("${CLIENT_MODULE}");`;
+  // The install is required by its path from the entry, not the package name: the entry is Next.js's own
+  // file, and a strict node_modules (pnpm with hoisting off) does not let next resolve this package.
+  assert.equal(loader.clientModule, path.join(import.meta.dirname, '..', 'dist', 'next-client.js'));
+  assert.ok(fs.existsSync(loader.clientModule), 'dist/next-client.js is built');
   // The file as Next.js ships it, from the repo's own install.
   const entry = require.resolve('next/dist/client/next-dev-turbopack.js', { paths: [path.join(import.meta.dirname, '../../../apps/next-demo')] });
+  const request = loader.requestFrom(entry);
+  assert.match(request, /^\.\.?\//);
+  assert.equal(path.resolve(path.dirname(entry), request), loader.clientModule);
+  const install = `require(${JSON.stringify(request)});`;
   const source = fs.readFileSync(entry, 'utf8');
   const out = run(entry, source);
   // Ahead of the module that loads react-dom, after the directive, and no line moves.
@@ -571,8 +579,11 @@ test("the dev entry loader puts the install at the top of Next.js's next-dev-tur
   // Once, however often it runs.
   assert.equal(run(entry, out), out);
   // A file with no directive gets the line first, on the file's own first line.
-  assert.equal(run('/app/node_modules/next/dist/client/next-dev-turbopack.js', 'const _ = require("./");'), `${install} const _ = require("./");`);
-  assert.equal(run('C:\\app\\node_modules\\next\\dist\\client\\next-dev-turbopack.js', "'use strict'\nx();"), `'use strict' ${install}\nx();`);
+  const installFor = (file: string) => `require(${JSON.stringify(loader.requestFrom(file))});`;
+  const posix = '/app/node_modules/next/dist/client/next-dev-turbopack.js';
+  assert.equal(run(posix, 'const _ = require("./");'), `${installFor(posix)} const _ = require("./");`);
+  const windows = 'C:\\app\\node_modules\\next\\dist\\client\\next-dev-turbopack.js';
+  assert.equal(run(windows, "'use strict'\nx();"), `'use strict' ${installFor(windows)}\nx();`);
   // Any other file of that name is not Next.js's entry.
   for (const other of ['/app/src/next-dev-turbopack.js', '/app/node_modules/next/dist/esm/client/next-dev.js']) {
     assert.equal(run(other, '"use strict";\nx();'), '"use strict";\nx();', other);
