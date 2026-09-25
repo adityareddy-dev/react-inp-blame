@@ -832,15 +832,15 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 60.3 KB | 21.5 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 62.6 KB | 22.3 KB |
 | The badge and panel, a chunk loaded by `import()` only when shown | 14.9 KB | 5.6 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 22.4 KB | 8.4 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 23.9 KB | 8.9 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
 <!-- size:end -->
 
 `node scripts/size.mjs` measures these from the build on every CI run, and CI fails when this table is out
 of date or a size passes its budget in `scripts/size-budget.json`. The table before 0.8.0 said 39.0 and
-14.4 KB for `/auto`, figures from 0.1.1 that had not been measured again as the entry grew.
+14.4 KB for `/auto`, figures from 0.1.0 that had not been measured again as the entry grew.
 
 On four open-source apps, built with and without it, 15 paired runs each unthrottled and at 4x CPU:
 [docs/benchmarks](docs/benchmarks/README.md). INP did not move on any of them. On a Next.js site

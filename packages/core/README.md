@@ -438,18 +438,20 @@ flag it keeps is cleared before it calls the hook, so nothing there is ever repo
 
 ## Size
 
-Measured 2026-09-15 with rolldown 1.2.8, minified ESM for the browser, gzip at its default level:
+Measured on this version's build by `scripts/size.mjs` in the repository, which CI runs to keep this table
+current:
 
-| What | Minified | Gzip |
+<!-- size:start -->
+| Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 39.0 KB | 14.4 KB |
-| The badge and panel, a chunk loaded only when shown | 11.2 KB | 4.2 KB |
-| Of that, the part that has to run before react-dom, not a separate entry yet: the hook, the fiber reading, the observers | 14.5 KB | 5.8 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 62.6 KB | 22.3 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 14.9 KB | 5.6 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 23.9 KB | 8.9 KB |
+| `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
+<!-- size:end -->
 
-`react-inp-blame/web-vitals` on its own is 2.7 KB minified, 1.3 KB gzipped, measured 2026-09-19 with
-the same rolldown settings but by a different script, which read `/auto` at 38.2 / 14.1 that day
-against the 39.0 / 14.4 above. It pulls in none of the hook, the observers or the badge: an app that
-only wants component names in its web-vitals attribution pays for the fiber reading and nothing else.
+`react-inp-blame/web-vitals` pulls in none of the hook, the observers or the badge: an app that only wants
+component names in its web-vitals attribution pays for the fiber reading and nothing else.
 
 Under the `react-server` condition, `react-inp-blame`, `react-inp-blame/auto`,
 `react-inp-blame/next-client` and `react-inp-blame/web-vitals` resolve to a module whose exports do

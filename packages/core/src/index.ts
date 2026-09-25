@@ -1,4 +1,4 @@
-import { MINIFIED_NAMES_NOTE, namesLookMinified } from './commits.js';
+import { MINIFIED_NAMES_CONSOLE, namesLookMinified } from './commits.js';
 import { createTimeline } from './devtools.js';
 import { checkHookReplaced, clearCommits, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteInput, noteResize, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
@@ -214,7 +214,7 @@ function installNow(opts: InstallOptions): Api {
     reactStatus,
     now: () => performance.now(),
     publish: (r) => {
-      if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', `${MINIFIED_NAMES_NOTE} See ${SETUP_URL}`);
+      if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', `${MINIFIED_NAMES_CONSOLE} See ${SETUP_URL}`);
       drawWhenIdle(r);
       undelivered.push(r);
       delivery ??= setTimeout(deliver, 0);
@@ -271,6 +271,8 @@ function installNow(opts: InstallOptions): Api {
           'Install with react-inp-blame/vite (with `entry` where the framework writes its own HTML), react-inp-blame/next or react-inp-blame/astro, ' +
           "or make `import 'react-inp-blame/auto'` the first import of your entry module.",
       );
+      // The badge says so too, now rather than at the next report.
+      page.overlay?.then((handle) => handle?.refresh());
     }
   };
   const stopEvents = observeEventTiming((batch) => {
