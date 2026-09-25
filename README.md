@@ -913,11 +913,15 @@ moved to React 18.
   holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
   it, `name` is `null` and the cause names the largest with the share it holds. The milliseconds are the
   browser's either way, so `confidence` is about them alone and is never lowered to cover a doubtful name.
-- **`where` names the nearest owner with a readable name, not always the innermost one.** A component whose
-  real name is one or two characters (`Td`, `Li`), or lowercase in any part of it (`header`, `motion.div`,
-  `UI.list`), is passed over for the next one out, but only if there is one, so a chain holding nothing
-  better prints the name as it stands. A short capitalised name cannot be told from minifier output, so
-  `Abc` is taken at face value either way. The full chain is on `target.owners`.
+- **Reports name the nearest component with a readable name, not always the innermost one.** A component
+  whose real name is one or two characters (`Td`, `Li`), or lowercase in any part of it (`header`,
+  `motion.div`, `UI.list`), or that a styling library named after what it wraps (`styled.li`, `Styled(span)`),
+  is passed over for the next one out, but only if there is one, so a chain holding nothing better prints the
+  name as it stands. That goes for `where`, for the component a render blame names and what it was "mostly"
+  made of, and for `generateTarget`. A short capitalised name cannot be told from minifier output, so `Abc` is
+  taken at face value either way. The full chains are on `target.owners` and each commit's `hotPath` and
+  `components`. The component @emotion/styled renders beside every styled element to insert its styles is
+  counted under that element's name when a development build names it `Insertion`.
 - The names loader stamps any capitalised top-level binding whose value is a function, written at the start of
   a line: `function Foo`, `const Foo = (props) => …`, `const Foo: React.FC = …`, `memo`, `forwardRef` and
   their generic forms, exported or not. Still minified: classes, anything indented inside another block,

@@ -81,6 +81,25 @@ test('only component fibers count against the walk budget, not the DOM and text 
   );
 });
 
+test("@emotion/styled's Insertion is counted under the styled element's name, never as a component of the app's", () => {
+  function Row() {}
+  function Insertion() {}
+  function OtherInsertion() {}
+  // A styled component from @emotion/styled: a forwardRef that carries the tag it wraps as __emotion_base.
+  const styled = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'Styled(td)', __emotion_base: 'td' };
+  const cell = () => fiber(11, styled, [rendered(Insertion), element('td', text())], 1);
+  const table = root(rendered(Row, element('tr', cell(), cell(), cell())));
+  const walked = walkCommit(table as any, 100, 100, click, development);
+  assert.deepEqual(
+    walked.components.map((c) => `${c.name} ×${c.count}`),
+    ['Styled(td) ×6', 'Row ×1'],
+  );
+  // An Insertion anywhere else is an ordinary component with that name.
+  Object.defineProperty(OtherInsertion, 'name', { value: 'Insertion' });
+  const plain = walkCommit(root(rendered(Row, rendered(OtherInsertion))) as any, 100, 100, click, development);
+  assert.deepEqual(plain.components.map((c) => c.name).sort(), ['Insertion', 'Row']);
+});
+
 test('a tree deeper than the walk follows is cut off there, without overflowing the stack', () => {
   function Runaway() {}
   function Footer() {}

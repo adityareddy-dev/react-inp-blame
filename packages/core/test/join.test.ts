@@ -1510,3 +1510,33 @@ test('a sentence says across how many commits only where more than one holds the
   assert.equal(r.explanation.blame.kind, 'handler');
   assert.match(r.explanation.cause, /React also spent 190 ms running useEffect callbacks\.$/);
 });
+
+test('a render is named after its deepest readable component, and what it was mostly made of after a readable one', () => {
+  const ring = loginClick('onClick');
+  const slow = [entry('click', 0, 120, 3, 100)];
+  const blameOf = (opts: Partial<CommitSummary>) => report(slow, [commit(4, 0, { hasDurations: false, total: 0, rendered: 332, ...opts })], [], ring).explanation;
+
+  // styled-components names every element it wraps `styled.<tag>` or `Styled(<Name>)`, and a minifier
+  // leaves a dependency's components one or two letters: none of them is a name the app wrote.
+  const styled = blameOf({
+    roots: ['Calendar'],
+    hotPath: ['Calendar', 'MonthGrid', 'styled.tbody', '$'],
+    components: [
+      { name: 'Styled(td)', count: 200, self: null, total: null },
+      { name: 'et', count: 113, self: null, total: null },
+      { name: 'DayCell', count: 90, self: null, total: null },
+    ],
+  });
+  assert.equal(styled.blame.kind, 'render');
+  assert.equal(styled.blame.name, 'MonthGrid');
+  assert.equal(styled.blame.detail, 'DayCell ×90');
+  assert.ok(styled.cause.includes('inside MonthGrid, mostly DayCell (90 of them)'), styled.cause);
+
+  // A readable root stands in when the hot path holds nothing readable.
+  assert.equal(blameOf({ roots: ['$', 'Calendar'], hotPath: ['$', '_'], components: [] }).blame.name, 'Calendar');
+
+  // With nothing readable anywhere the names are kept as they stand, rather than one being invented.
+  const minified = blameOf({ roots: ['Xe'], hotPath: ['Xe', '$'], components: [{ name: 'et', count: 113, self: null, total: null }] });
+  assert.equal(minified.blame.name, '$');
+  assert.equal(minified.blame.detail, 'et ×113');
+});

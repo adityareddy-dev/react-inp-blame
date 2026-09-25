@@ -408,7 +408,17 @@ function typeName(t: unknown): string | null {
  */
 function nameOf(f: Fiber): string | null {
   const wrapper = f.return !== null && f.return.tag === MemoComponent ? componentName(f.return) : null;
-  return wrapper || componentName(f);
+  const name = wrapper || componentName(f);
+  // @emotion/styled renders an `Insertion` component beside every element it styles, to insert the
+  // styles; it is the library's, so it is counted under the styled element's own name (`Styled(div)`),
+  // which no report names a component by, rather than read as a component of the app's.
+  if (name === 'Insertion' && f.return !== null && isEmotionStyled(f.return.elementType)) return componentName(f.return);
+  return name;
+}
+
+/** A component @emotion/styled made: it carries the tag or component it wraps as `__emotion_base`. */
+function isEmotionStyled(t: unknown): boolean {
+  return t !== null && typeof t === 'object' && '__emotion_base' in (t as object);
 }
 
 /** A MemoComponent is counted as the component it renders, never as a component of its own. */

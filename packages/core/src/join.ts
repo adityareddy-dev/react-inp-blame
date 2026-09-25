@@ -1,4 +1,4 @@
-import { heaviest, leafName } from './commits.js';
+import { heaviest, leafName, mostlyComponent, readableName } from './commits.js';
 import { elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
@@ -572,17 +572,7 @@ export function attachLaterRender(r: ReportData, c: CommitSummary, frames: reado
   return { ...r, followUps, laterFrames, overheadMs: r.overheadMs + c.walkMs, revision: r.revision + 1 };
 }
 
-/**
- * A component name a reader could search their own code for. React treats only a capitalised name as
- * a component, so `header`, the name a column definition's `header: ({ table }) => …` lends its
- * render function, is a property name that reads as an HTML tag rather than a component anybody
- * wrote. One and two character names are what a minifier leaves on a dependency that ships no
- * `displayName`. A dotted name counts only when every part of it does, which is what keeps
- * `Primitive.button` out: it names the element that was clicked, and "button in Primitive.button"
- * tells a reader nothing they did not write themselves.
- */
-const READABLE_NAME = /^[A-Z][A-Za-z0-9_$]{2,}$/;
-const readableName = (name: string): boolean => name.split('.').every((part) => READABLE_NAME.test(part));
+// What counts as a readable name is `readableName`, in commits.ts, shared with everything that names a commit.
 
 /**
  * The owner a report names the target by: the nearest readable one. Where the chain holds no
@@ -738,7 +728,7 @@ function leafOf(c: CommitSummary): string {
 /** "LineItem ×800", or the component count when no single component dominates. */
 function mostlyOf(c: CommitSummary): string | null {
   if (c.rendered === 1) return null;
-  const top = c.components[0];
+  const top = mostlyComponent(c);
   if (top && top.count > 1) return `${top.name} ×${top.count}`;
   return plural(c.rendered, 'component');
 }
@@ -747,7 +737,7 @@ function mostlyOf(c: CommitSummary): string | null {
 function renderPhrase(c: CommitSummary): string {
   const verb = c.hydrated ? 'hydrating' : 're-rendering';
   const leaf = leafOf(c);
-  const top = c.components[0];
+  const top = mostlyComponent(c);
   // React commits with nothing rendered: a retry that found the boundary still blocked, or an update
   // every component bailed out of. Calling that a re-render of no components reads as a bug in the
   // report rather than as what it is.

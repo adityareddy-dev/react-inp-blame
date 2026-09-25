@@ -6,6 +6,16 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Changed
+
+- **Render and layout blames name a component of the app, not a styling library's wrapper or a minified
+  name.** The readable-name rule `where` already followed now picks the component a render blame names
+  (the deepest readable one on the hot path, else the first readable root), what a commit was "mostly" made
+  of, and the owners in `generateTarget`'s string. A list styled with styled-components used to be blamed
+  on `styled.section`, "mostly Styled(span) ×800"; it is now blamed on the component that renders it, mostly
+  the row component. Where nothing readable is there, the names stand as before. `blame.name`,
+  `blame.detail` and `generateTarget`'s string change value for those cases and keep their meaning.
+
 ## [0.5.0] - 2026-09-25
 
 ### Added
