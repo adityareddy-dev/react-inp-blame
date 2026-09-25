@@ -92,7 +92,7 @@ const README = 'https://github.com/adityareddy-dev/react-inp-blame#';
 const FRAMEWORKS = [
   { name: 'React Router', matches: (plugin) => plugin === 'react-router', entry: 'app/root.tsx', section: 'install-with-react-router' },
   { name: 'Remix', matches: (plugin) => plugin === 'remix', entry: 'app/root.tsx', section: 'install-with-remix' },
-  { name: 'TanStack Start', matches: (plugin) => plugin.startsWith('tanstack-start'), entry: 'src/client.tsx', section: 'install-with-tanstack-start' },
+  { name: 'TanStack Start', matches: (plugin) => plugin.startsWith('tanstack-start'), entry: 'src/client.tsx', create: true, section: 'install-with-tanstack-start' },
   { name: 'Astro', matches: (plugin) => plugin === 'astro' || plugin.startsWith('astro:'), entry: null, section: 'install-with-astro' },
 ];
 
@@ -111,7 +111,9 @@ function setupAdvice(config) {
     return `Astro writes its own pages, so this plugin's install script never reaches one and nothing installs. Use the integration instead, inpBlame() from 'react-inp-blame/astro' in \`integrations\`: ${README}${framework.section}`;
   }
   if (framework) {
-    return `${framework.name} writes its own HTML, so this plugin's install script never reaches a page and nothing installs. Add entry: '${framework.entry}' to inpBlame(): ${README}${framework.section}`;
+    // TanStack Start's client entry is virtual until the app writes one, so the file is part of the fix.
+    const add = framework.create ? `Create ${framework.entry} as the README shows and add entry: '${framework.entry}'` : `Add entry: '${framework.entry}'`;
+    return `${framework.name} writes its own HTML, so this plugin's install script never reaches a page and nothing installs. ${add} to inpBlame(): ${README}${framework.section}`;
   }
   const build = config.build;
   if (build?.lib || build?.ssr) return null;
@@ -122,11 +124,60 @@ function setupAdvice(config) {
   return `this build has no HTML page, only scripts, so this plugin's install script has nowhere to go and nothing installs. Add entry: '<the script every page loads first>' to inpBlame(), or set runtime: false and give the install an entry of its own: ${README}install-with-vite`;
 }
 
+const REACT_DOM = '/node_modules/react-dom/';
+
+// react-dom's major version, by the folder it is installed in, read from its package.json once.
+const reactDomMajors = new Map();
+
+function reactDomMajor(folder) {
+  if (!reactDomMajors.has(folder)) {
+    let major = null;
+    try {
+      major = Number.parseInt(JSON.parse(fs.readFileSync(`${folder}package.json`, 'utf8')).version, 10) || null;
+    } catch {
+      // Not a folder on disk: a virtual module, or a test's made-up path.
+    }
+    reactDomMajors.set(folder, major);
+  }
+  return reactDomMajors.get(folder);
+}
+
 /**
- * Whether a chunk of the bundle imports, directly or through other chunks, a chunk holding react-dom:
- * that chunk would run before the install call does.
+ * Whether requiring this react-dom module connects react-dom to React's DevTools hook, which is what has to
+ * happen after install(). That is `react-dom/client` (and `react-dom/profiling`) always, and `react-dom`
+ * itself up to React 18; from React 19 `react-dom` alone connects nothing.
  */
-function importsReactDom(bundle, file) {
+function connectsReactDom(id) {
+  const file = fileOf(id).replace(/^\0/, '');
+  const at = file.indexOf(REACT_DOM);
+  if (at < 0) return false;
+  const entry = file.slice(at + REACT_DOM.length);
+  if (entry === 'client.js' || entry === 'profiling.js') return true;
+  if (entry !== 'index.js') return false;
+  const major = reactDomMajor(file.slice(0, at + REACT_DOM.length));
+  return major !== null && major <= 18;
+}
+
+/**
+ * Whether a module connects react-dom as its chunk is evaluated. react-dom is CommonJS, and both bundlers
+ * wrap its body in a function that runs at the first require of it: Rollup's commonjs plugin puts that call
+ * in a `?commonjs-es-import` module of its own beside the ES module that imports react-dom, and Rolldown in
+ * the importing ES module itself, which `inputFormat` tells from a CommonJS one. The chunk holding the body
+ * runs nothing until then, so it is not the chunk to ask about. What a bundler does not say is never
+ * warned about, rather than a build that works warned about.
+ */
+function runsReactDom(id, getModuleInfo) {
+  if (id.endsWith('?commonjs-es-import')) return connectsReactDom(id);
+  if (fileOf(id).includes(REACT_DOM)) return false;
+  const info = getModuleInfo?.(id);
+  return info?.inputFormat === 'es' && (info.importedIds ?? []).some(connectsReactDom);
+}
+
+/**
+ * The chunk that a chunk of the bundle imports, directly or through other chunks, and that runs react-dom
+ * when it is evaluated, which is before the importing chunk's own code runs; null when there is none.
+ */
+function importsReactDom(bundle, file, getModuleInfo) {
   const seen = new Set();
   const pending = [...(bundle[file]?.imports ?? [])];
   while (pending.length) {
@@ -136,10 +187,20 @@ function importsReactDom(bundle, file) {
     const chunk = bundle[next];
     if (chunk?.type !== 'chunk') continue;
     const modules = chunk.moduleIds ?? Object.keys(chunk.modules ?? {});
-    if (modules.some((id) => fileOf(id).includes('/node_modules/react-dom/'))) return next;
+    if (modules.some((id) => runsReactDom(id, getModuleInfo))) return next;
     pending.push(...(chunk.imports ?? []));
   }
   return null;
+}
+
+/**
+ * A chunk the install call is in: the emitted one, the one `entry` gives it, or, where @vitejs/plugin-legacy
+ * or a single-file format keeps the install in the page's own script, that chunk.
+ */
+function holdsInstall(chunk) {
+  if (chunk.type !== 'chunk') return false;
+  if (chunk.facadeModuleId === RESOLVED_INSTALL_MODULE || chunk.name === 'react-inp-blame-install') return true;
+  return (chunk.moduleIds ?? Object.keys(chunk.modules ?? {})).includes(RESOLVED_INSTALL_MODULE);
 }
 
 /** `iife` and `umd` are one file by definition, so asking for another chunk fails the build outright. */
@@ -248,6 +309,11 @@ export function inpBlame(options = {}) {
     let entryFile = null;
     // The builds, by environment, that have put the install first in `entry`, which a wrong path never does.
     const entryImports = new Set();
+    // Whether this is `vite preview`, which Vite says only to the config hook: it serves a build as it is.
+    let preview = false;
+    // The builds, by environment, already warned that react-dom runs first: @vitejs/plugin-legacy writes
+    // the same chunks a second time, for older browsers.
+    const warnedReactDom = new Set();
     const environmentOf = (context) => context.environment?.name ?? 'client';
     plugins.push({
       name: 'react-inp-blame:install',
@@ -258,7 +324,10 @@ export function inpBlame(options = {}) {
        * transformed it, so it never sees the import `entry` gets. Found only once the page asks for it,
        * the library would be bundled then, and the dev server would reload the page while it hydrates.
        */
-      config: () => (entry !== undefined ? { optimizeDeps: { include: ['react-inp-blame'] } } : undefined),
+      config: (_config, env) => {
+        preview = env?.isPreview === true;
+        return entry !== undefined ? { optimizeDeps: { include: ['react-inp-blame'] } } : undefined;
+      },
       /**
        * Says up front when nothing will install: `entry` naming a file that does not exist fails the
        * dev server and the build, and a framework or a scripts-only build the page script cannot reach
@@ -268,12 +337,12 @@ export function inpBlame(options = {}) {
         config = resolved;
         if (entry !== undefined) {
           entryFile = entryPath(resolved.root, entry);
-          if (!resolved.isPreview && !fs.existsSync(entryFile)) {
+          if (!preview && !fs.existsSync(entryFile)) {
             throw new Error(`inpBlame: entry is '${entry}', and there is no file at ${entryFile}. It is the path of a module of the app from the project root, such as 'app/root.tsx'.`);
           }
           return;
         }
-        if (resolved.isPreview || process.env.VITEST) return;
+        if (preview || process.env.VITEST) return;
         const advice = setupAdvice(resolved);
         if (advice && resolved.logger && !said.has(advice)) {
           said.add(advice);
@@ -287,6 +356,7 @@ export function inpBlame(options = {}) {
        */
       buildStart() {
         entryImports.delete(environmentOf(this));
+        warnedReactDom.delete(environmentOf(this));
         if (entry === undefined && buildsPages(config, this.environment, pages)) this.emitFile({ type: 'chunk', id: INSTALL_MODULE, name: 'react-inp-blame-install' });
       },
       /**
@@ -349,21 +419,22 @@ export function inpBlame(options = {}) {
       resolveId: (id) => (id === INSTALL_MODULE ? { id: RESOLVED_INSTALL_MODULE, moduleSideEffects: true } : null),
       load: (id) => (id === RESOLVED_INSTALL_MODULE ? `import { install } from 'react-inp-blame';\ninstall(${JSON.stringify(install)});\n` : null),
       /**
-       * A path that matched nothing would leave the page without the install, and say nothing. And an
-       * install chunk that imports react-dom, however the chunks came out, runs after it: said, naming
-       * the chunk, since the build itself looks fine.
+       * A path that matched nothing would leave the page without the install, and say nothing. And a
+       * chunk with the install in it that imports a chunk running react-dom, however the chunks came out,
+       * runs after react-dom: said once per build, naming both, since the build itself looks fine.
        */
       generateBundle(_options, bundle) {
         if (entryFile && clientBuild(config, this.environment) && !entryImports.has(environmentOf(this))) {
           this.error(`inpBlame: entry is '${entry}', and this build has no module at ${entryFile}. It is the path of a module of the app from the project root, such as 'app/root.tsx'.`);
         }
-        if (!bundle) return;
+        if (!bundle || warnedReactDom.has(environmentOf(this))) return;
         for (const file of Object.keys(bundle)) {
-          const chunk = bundle[file];
-          if (chunk.type !== 'chunk' || (chunk.facadeModuleId !== RESOLVED_INSTALL_MODULE && chunk.name !== 'react-inp-blame-install')) continue;
-          const holder = importsReactDom(bundle, file);
-          if (holder) {
-            this.warn(`inpBlame: the install chunk ${file} imports ${holder}, which holds react-dom, so react-dom runs before install() and nothing is read. A manualChunks rule most likely put them together: keep react-inp-blame out of it.`);
+          if (!holdsInstall(bundle[file])) continue;
+          const runner = importsReactDom(bundle, file, this.getModuleInfo?.bind(this));
+          if (runner) {
+            warnedReactDom.add(environmentOf(this));
+            this.warn(`inpBlame: ${file}, which holds the install call, imports ${runner}, which connects react-dom to React's DevTools hook as it loads, so react-dom connects before install() and nothing is read. A manualChunks or codeSplitting rule most likely put react-inp-blame in that chunk: keep it out of the rule.`);
+            return;
           }
         }
       },

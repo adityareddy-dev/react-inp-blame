@@ -116,7 +116,7 @@ jobs:
   # the first import of the module the plugin's `entry` names, or in Astro the script every island imports
   # before it hydrates.
   # On the dev server a Fast Refresh preamble makes the hook, as plugin-react's does in the Vite app; a build
-  # has none.
+  # has none. The same job runs Vite apps whose own config decides the chunks, such as a vendor rule.
   framework-app:
     name: ${{ matrix.name }} app from the packed tarball
     runs-on: ubuntu-latest
