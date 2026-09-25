@@ -68,7 +68,9 @@ const WAITED_BEHIND_MIN_SHARE = 0.5;
 // paint, a spinner going away or a status line changing, which is not what anyone was waiting for.
 const LATER_MIN_MS = 10;
 const LATER_MIN_COMPONENTS = 25;
-// Forced layout is worth a sentence from 4 ms, a quarter of a frame.
+// Forced layout is worth a sentence from 4 ms, a quarter of a frame. It is Long Animation Frames'
+// forcedStyleAndLayoutDuration, style recalculation and layout together, so the sentences say both: opening
+// a shadcn/ui Sheet, a Chrome trace put about 80 ms of it on styles and 1 ms on layout.
 const FORCED_LAYOUT_MIN_MS = 4;
 // It takes the blame instead from half of the window it was counted across, on top of the long task
 // above. Several things share that window (the handler, React's render, the commit, this library's own
@@ -1269,7 +1271,7 @@ function explain(r: InteractionReport): Explanation {
     const rest = overlapping
       ? "which overlaps React's own render: geometry read inside a render body is charged to both"
       : `leaving ${ms(left)} for React's render and commit, its layout effects${ourRead} and the ${kind} handler together`;
-    const spent = `${ms(forcedWhileHandling)} of the ${window} recalculating layout, ${rest}`;
+    const spent = `${ms(forcedWhileHandling)} of the ${window} recalculating styles and layout, ${rest}`;
     // Where the layout happened and where React was working are two different records, and the
     // browser's is the one that is never a reading. Naming the subtree without it would point a
     // reader at a file that need have nothing to do with the layout: an observer callback running
@@ -1456,13 +1458,13 @@ function explain(r: InteractionReport): Explanation {
   }
   if (namesLookMinified([...r.commits, ...r.followUps])) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
-    notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
+    notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
   }
   if (r.followUps.length) {
     const f = heaviest(r.followUps);
     const what = f.hasDurations ? `${ms(f.total)} ${renderPhrase(f)}` : renderPhrase(f);
     const laterForced = r.laterFrames ? r.laterFrames.reduce((a, x) => a + x.forcedLayout, 0) : 0;
-    const layout = laterForced >= FORCED_LAYOUT_MIN_MS ? `, and it made the browser recalculate layout for ${ms(laterForced)} on the way` : '';
+    const layout = laterForced >= FORCED_LAYOUT_MIN_MS ? `, and it made the browser recalculate styles and layout for ${ms(laterForced)} on the way` : '';
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated: ${what}${layout}. INP doesn't count it, but people still wait for it.`);
   }
   if (r.presentation > PRESENTATION_NOTE_MS && r.presentation > r.processing && blame.kind !== 'painting') {

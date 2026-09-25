@@ -362,6 +362,16 @@ test('each revision is explained on first read, and a later render makes a new r
   assert.equal(JSON.parse(JSON.stringify(after)).verdict, after.verdict);
 });
 
+test("the browser's forced layout is said as styles and layout, since its one figure holds both", () => {
+  const data = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
+  const later = sealReport(attachLaterRender(data, commit(400, 0, { total: 40 }), [frame(350, 60, [script('#root.onclick', 355, 45, 12)])])!);
+  assert.match(later.verdict, /A second React render landed 280 ms after the screen updated: 40 ms re-rendering 30 components inside List, mostly Row \(30 of them, 20 ms\), and it made the browser recalculate styles and layout for 12 ms on the way\. /);
+  // The blame keeps its kind.
+  const thrash = report([entry('click', 0, 128, 2, 118)], [], [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 108)])]).explanation;
+  assert.equal(thrash.blame.kind, 'layout');
+  assert.match(thrash.cause, /^The browser spent 108 ms of the 116 ms spent handling the click recalculating styles and layout, leaving 8 ms for React's render and commit/);
+});
+
 test('later renders attach only by an exact stamp', () => {
   const r = buildReport([entry('click', 0, 120, 3, 100)], [], []);
   assert.equal(isLaterRender(r, commit(400, 0)), true);
@@ -543,7 +553,7 @@ test('forced layout the browser measured outranks a render no build timed', () =
   });
   assert.equal(
     r.explanation.cause,
-    'The browser spent 108 ms of the 116 ms spent handling the click recalculating layout, leaving 8 ms for' +
+    'The browser spent 108 ms of the 116 ms spent handling the click recalculating styles and layout, leaving 8 ms for' +
       " React's render and commit, its layout effects and the click handler together." +
       // Where the layout happened and where React was working are two records, and only the first is
       // the browser's. The sentence carries both, so the subtree is never the only thing named.
@@ -552,12 +562,12 @@ test('forced layout the browser measured outranks a render no build timed', () =
       " That happens when code reads an element's size right after changing styles, often in a layout effect.",
   );
   // The note would say the same thing a second time.
-  assert.equal(r.explanation.notes.some((note) => note.includes('recalculating layout')), false);
+  assert.equal(r.explanation.notes.some((note) => note.includes('recalculating styles and layout')), false);
 
   // Half the working time is what makes it the answer rather than a note: under that the render keeps the blame.
   const little = report(tabs, [rerender], [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 40)])], [input(0, 'click')]);
   assert.equal(little.explanation.blame.kind, 'render');
-  assert.ok(little.explanation.notes.some((note) => note.includes('recalculating layout')));
+  assert.ok(little.explanation.notes.some((note) => note.includes('recalculating styles and layout')));
 
   // A render React did time, and timed higher than the layout, keeps it too.
   const timed = report(tabs, [commit(60, 0, { total: 110, rendered: 181 })], thrash, [input(0, 'click')]);
@@ -639,7 +649,7 @@ test("the share a forced layout has to reach is taken over the window it was cou
   // 120 the layout was measured across.
   const under = report(click, [walked], thrash(52), [input(0, 'click')]);
   assert.equal(under.explanation.blame.kind, 'render');
-  assert.ok(under.explanation.notes.some((note) => note.includes('recalculating layout')));
+  assert.ok(under.explanation.notes.some((note) => note.includes('recalculating styles and layout')));
 
   const over = report(click, [walked], thrash(62), [input(0, 'click')]);
   assert.equal(over.explanation.blame.kind, 'layout');

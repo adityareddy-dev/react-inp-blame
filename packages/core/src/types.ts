@@ -333,8 +333,8 @@ export interface Blame {
    * server-rendered HTML the input landed on: the report's `hydration` names the boundary. An input
    * that was never dispatched because its HTML was *still* waiting spent its time elsewhere, so it
    * keeps the blame that says where, and `hydration.kind` is `'not-hydrated'`. 'layout' is the
-   * browser recalculating layout inside the handlers, which a Long Animation Frames entry measures
-   * in every build, React's durations or not.
+   * browser recalculating styles and layout inside the handlers, one figure in a Long Animation Frames
+   * entry, which measures it in every build, React's durations or not.
    */
   readonly kind: 'render' | 'handler' | 'hydration' | 'layout' | 'waiting' | 'painting' | 'script' | 'none';
   /**

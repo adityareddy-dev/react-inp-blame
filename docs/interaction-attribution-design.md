@@ -712,7 +712,9 @@ render was slow" from "your layout effect forced layout 400 times". Only Chromiu
 Firefox and Safari a report's `frames` and `laterFrames` are `null`, and the explanation leaves
 out the forced-layout and script sentences rather than implying none happened.
 
-Forced layout inside the handlers can take the blame outright, as `blame.kind: 'layout'`, and until
+Forced layout inside the handlers, which Long Animation Frames counts together with style recalculation
+(a Chrome trace of a shadcn/ui Sheet opening had about 80 ms of style against 1 ms of layout, so the
+sentences say styles and layout), can take the blame outright, as `blame.kind: 'layout'`, and until
 2026-09-20 it could not: the one branch that weighed anything against a render needed React's render
 durations to subtract them, and a production build has none, so however much layout the browser had
 measured it came out as a footnote under a render nobody had timed. On the shadcn/ui documentation
@@ -728,7 +730,7 @@ sentence is printed against that same window, or it reads "110 ms of the 100 ms 
 So the sentence names that window rather than the working time — "the 116 ms spent handling the
 click" — and its numbers add up to it. Where the walk is worth a whole millisecond the remainder
 names it too, because the window it was taken from holds it. The sentence says what is left over —
-"the browser spent 108 ms of the 116 ms spent handling the click recalculating layout, leaving 8 ms
+"the browser spent 108 ms of the 116 ms spent handling the click recalculating styles and layout, leaving 8 ms
 for React's render and commit, its layout effects and the click handler together" — which is what
 makes the demotion of the
 render a measurement rather than a preference. Where React's render is itself timed higher than that

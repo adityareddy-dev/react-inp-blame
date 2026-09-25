@@ -101,7 +101,7 @@ Each warning the library prints ends with a link to its entry under
 
 No dependencies. React 17 to 19 (react-dom). Browsers with Event Timing's `interactionId`
 (Chrome 96, Firefox 144, Safari 26.2); only Chromium has Long Animation Frames, the API that says
-which scripts ran in a slow frame and how much layout they forced. Anywhere else `install()` installs
+which scripts ran in a slow frame and how much style and layout work they forced. Anywhere else `install()` installs
 nothing, and `stats()` says why.
 
 ## Next.js

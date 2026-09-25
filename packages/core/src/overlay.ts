@@ -50,7 +50,7 @@ function statusOf(source: Source): Status | null {
   }
   const types = typeof PerformanceObserver !== 'undefined' ? PerformanceObserver.supportedEntryTypes : undefined;
   if (types && !types.includes('long-animation-frame')) {
-    return { key: 'no-frames', level: 'info', text: 'This browser does not report long animation frames, so scripts and forced layouts outside React are not named.' };
+    return { key: 'no-frames', level: 'info', text: 'This browser does not report long animation frames, so scripts outside React, and the style and layout work they force, are not named.' };
   }
   return null;
 }
@@ -543,7 +543,7 @@ function blameText(blame: Blame): Child[] {
     // says which line caused it. The name is where it happened, the subtree or the script, and it is
     // null where several scripts shared the total; the row then says only what was measured.
     case 'layout':
-      return [`browser recalculated layout${ms}`, name && ' in ', name && b(name), detail && `${DOT}${detail}`];
+      return [`browser recalculated styles and layout${ms}`, name && ' in ', name && b(name), detail && `${DOT}${detail}`];
     case 'waiting':
       return [`main thread was busy${ms} before the handler could start`, ...named];
     case 'painting':

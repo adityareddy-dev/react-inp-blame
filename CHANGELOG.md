@@ -34,6 +34,11 @@ it changes when a field is removed or changes meaning, which a minor release may
   ("59 components") where it was "Label ×4", as its description always said. The panel's line for a later
   render follows the same rule. Which kind of blame an interaction gets does not change. `blame.detail` keeps
   its meaning, so `schemaVersion` stays at 3.
+- **Forced layout reads as "recalculating styles and layout".** The figure is Long Animation Frames'
+  `forcedStyleAndLayoutDuration`, which holds style recalculation and layout together, and a Chrome trace of a
+  shadcn/ui Sheet opening had about 80 ms of style recalculation in it against 1 ms of layout. The cause of a
+  layout blame, the note beside another blame, the note on a later render and the panel's row now say styles
+  and layout. `blame.kind` is still `'layout'` and no field changes name, so `schemaVersion` stays at 3.
 
 ## [0.12.0] - 2026-09-25
 
