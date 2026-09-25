@@ -1,0 +1,32 @@
+{
+  "name": "component-libraries-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "fixtures/vite-react-ts with four libraries whose components used to name what a report says: styled-components, @emotion/styled, lucide-react and Radix's DropdownMenu. Run by scripts/vite-app.mjs --fixture component-libraries from a temp copy.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@radix-ui/react-dropdown-menu": "^2.1.24",
+    "lucide-react": "^1.48.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-inp-blame": "^0.3.0",
+    "styled-components": "^6.5.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}

@@ -27,6 +27,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   role, up to five levels up), and so is `generateTarget`'s string. When the icon was swapped by the render
   (a minus for a check), the label and the names still come from the button. `target.selector` and
   `target.handler` still describe the element that was hit.
+  CI runs these on real libraries (`fixtures/component-libraries`, styled-components 6, @emotion/styled 11,
+  lucide-react 1 and Radix's DropdownMenu 2), in development and production builds.
 - **The handler named is the one whose event did the work.** A click is a pointerdown, a pointerup and a
   click, and the handler was looked for on the click first whatever each one's handlers cost, so a menu that
   opens on pointerdown (Radix's DropdownMenu) was put on an `onClick` beside it that did nothing. The events

@@ -8,7 +8,7 @@
 //   node scripts/vite-app.mjs                          # pack packages/core, then install and test
 //   node scripts/vite-app.mjs --tarball <path>         # a tarball that already exists
 //   node scripts/vite-app.mjs --fresh                  # no lockfile: every dependency as npm resolves it today
-//   node scripts/vite-app.mjs --fixture react-router   # the React Router app, or tanstack-start, remix or astro
+//   node scripts/vite-app.mjs --fixture react-router   # the React Router app, or tanstack-start, remix, astro, ...
 //   node scripts/vite-app.mjs -- --project=dev         # anything after -- goes to Playwright
 //
 // The copy is what makes it the user's install. Inside the repo the app could resolve react-inp-blame
@@ -68,6 +68,14 @@ const FIXTURES = {
     readme: '## Install with Vite',
     files: [],
     reported: ['vite', '@vitejs/plugin-react', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
+  },
+  // The Vite app with styled-components, @emotion/styled, lucide-react and Radix's DropdownMenu, whose own
+  // components used to be what a report named. Its config adds debugGlobal to the README's, so no block.
+  'component-libraries': {
+    readme: '## Install with Vite',
+    files: [],
+    reported: ['vite', '@vitejs/plugin-react', 'react', 'react-dom', 'styled-components', '@emotion/styled', 'lucide-react', '@radix-ui/react-dropdown-menu', '@playwright/test', PACKAGE],
     typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
   },
   // Remix 2, on the React 18 its template brings. @remix-run/react imports react-router-dom, which imports

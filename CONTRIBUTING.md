@@ -24,6 +24,9 @@ we can agree on the approach before you spend time on it.
   minimal` makes it from astro@7.3.5, after `npx astro add react`, with the slow component in one of
   two islands. `fixtures/vite-vendor-chunk` is `fixtures/vite-react-ts` on Vite 7.3, plugin-react 5 and
   React 18.3, with a `manualChunks` function sending all of `node_modules` to one vendor chunk.
+  `fixtures/component-libraries` is `fixtures/vite-react-ts` with styled-components, @emotion/styled,
+  lucide-react and Radix's DropdownMenu, each in the case where its own components used to be what a
+  report named.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
 
 ## Setup
