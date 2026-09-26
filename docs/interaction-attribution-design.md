@@ -1467,7 +1467,9 @@ What needs help:
   production, 2026-09-14. Cost, for the guarded stamps written since 2026-09-19 (below), is
   about 120 bytes minified and 16 gzipped per function component and about 35 and 6 per `memo`
   or `forwardRef` one, against about 20 and 5 for a bare assignment (rolldown 1.2.8, twenty
-  components with four-letter names). The alternatives are worse:
+  components with four-letter names). Since 2026-09-26 a module's function components share one
+  helper for the check where it has two or more, and those twenty come to about 40 and 11 each
+  (below). The alternatives are worse:
   `next build --no-mangling` keeps every name (+9.6% gzip on react-dom alone), and an SWC
   plugin has to be rebuilt against each Next release's swc_core.
 
@@ -1554,6 +1556,35 @@ What needs help:
   used or not, so no name survives minification and the transform does nothing at all. The remaining
   cost is stated in both READMEs, and it only applies where the plugin or the loader is turned on, which
   for `enabled: 'development'` is not the production build.
+
+  **Since 2026-09-26 a module's function components share one check.** Written out, each one's stamp
+  repeats the whole check, and a minifier can shorten only the name in it: 106 bytes a stamp after
+  Next.js's own SWC minifier, on modules shaped the way webpack hands them over. Where a module has two or
+  more, the loader declares the check once after the module's code, and each stamp calls it:
+
+  ```js
+  function __reactInpBlameName(f, n) { Object.isExtensible(f) && !Object.getOwnPropertyDescriptor(f, "displayName") && (f.displayName = n); }
+  typeof Foo === "function" && __reactInpBlameName(Foo, "Foo");
+  ```
+
+  That comes to 75 bytes a stamp with two components, 42 with five and 26 with twenty, and under
+  Rolldown's minifier to 40 against 120 with twenty. Gzipped, two come to about the same, five to 17% less
+  and twenty to 43% less, so what it saves is mostly bytes the browser parses rather than bytes sent. A
+  lone stamp stays written out, since the helper and its one call come to as much or more. The `typeof`
+  stays at each call, because passing a name that does not exist to the helper would throw before the
+  helper ran. `memo` and `forwardRef` stamps stay written out however many there are: through a helper,
+  two of them came to more under Rolldown's minifier (40 bytes a stamp against 34), and most counts to
+  more gzipped. On `apps/next-demo`'s own files, 25 stamps in 11 of them with 6 that call the helper,
+  the stamps went from 2,539 bytes to 1,473 after Next.js's minifier, and from 805 to 733 gzipped.
+
+  The helper costs Rollup its tree shaking. On a module of seven exported function components with one
+  imported, Rollup keeps all seven where the stamps call a helper, against the one it keeps where they
+  are written out; Rolldown keeps all seven either way. So the Vite plugin calls the helper only under
+  Rolldown (Vite 8, where `this.meta.rolldownVersion` is set), and `stamp(code)` writes every stamp out.
+  Under webpack and Turbopack, SWC and terser already kept the component a written-out stamp names. The
+  helper's name is one that nothing in the module mentions, with a number after it where it has to be,
+  and a module that reaches the loader twice is stamped once, since a name handed to the helper counts as
+  named.
 
   Measured over the Excalidraw app and two TanStack Table examples, 301 files with JSX that a parser
   accepts: the names stamped went from 57 to 256, all 316 components the corpus can identify now carry
