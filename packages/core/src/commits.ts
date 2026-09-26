@@ -57,8 +57,8 @@ const PROVIDER = /Provider$|Context$/;
 export const frameworkLayers = new Set<string>();
 /**
  * The framework's components that render an element for the component above them, as next/link's
- * `LinkComponent` renders the `<a>`. A click in one is named after that component where it is the app's. Filled
- * the same way as `frameworkLayers`.
+ * `LinkComponent` renders the `<a>`. A click in one is named after that component where it is not the
+ * framework's own. Filled the same way as `frameworkLayers`.
  */
 export const frameworkWrappers = new Set<string>();
 export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name) || frameworkLayers.has(name);

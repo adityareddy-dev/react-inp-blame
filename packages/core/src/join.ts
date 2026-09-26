@@ -722,8 +722,8 @@ export function attachLaterRender(r: ReportData, c: CommitSummary, frames: reado
 /**
  * The owner a report names the target by: the nearest readable one. Where that is a framework's wrapper
  * (next/link's LinkComponent, which renders the `<a>` for the component above it), the next readable owner is
- * named instead if it is the app's; a link a server component wrote has only the App Router's boundaries above
- * it, and keeps the wrapper's name. Where the chain holds no readable name the nearest owner is named anyway,
+ * named instead if it is not the framework's own; a link a server component wrote directly has only the App
+ * Router's boundaries above it, and keeps the wrapper's name. Where the chain holds no readable name the nearest owner is named anyway,
  * because the alternative is inventing one, and `owners` keeps the chain whole either way.
  */
 function namedOwner(owners: readonly string[]): string | null {
