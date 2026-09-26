@@ -436,10 +436,15 @@ const EMOTION_CSS_PROP_TYPE = '__EMOTION_TYPE_PLEASE_DO_NOT_USE__';
  * name, a wrapper reads the same in development and production. Null for any other fiber.
  */
 function stylingName(f: Fiber, elementType: unknown): string | null {
-  const t = elementType as { __emotion_base?: unknown; styledComponentId?: unknown; target?: unknown } | null;
+  const t = elementType as { __emotion_base?: unknown; styledComponentId?: unknown; target?: unknown; __wyw_meta?: { extends?: unknown }; __linaria?: { extends?: unknown } } | null;
   if (t !== null && typeof t === 'object') {
     if ('__emotion_base' in t) return `Styled(${baseName(t.__emotion_base)})`;
     if (typeof t.styledComponentId === 'string') return typeof t.target === 'string' ? `styled.${t.target}` : `Styled(${baseName(t.target)})`;
+    // Linaria's `styled` marks the forwardRef it returns with what it extends, as `__wyw_meta` on newer
+    // releases and `__linaria` on older ones, and its Babel plugin names each one after its variable:
+    // Twenty has some 270 called `StyledContainer`.
+    const linaria = t.__wyw_meta ?? t.__linaria;
+    if (linaria) return typeof linaria.extends === 'string' ? `styled.${linaria.extends}` : `Styled(${baseName(linaria.extends)})`;
   }
   const cssProp = isComponent(f) ? f.memoizedProps?.[EMOTION_CSS_PROP_TYPE] : undefined;
   return cssProp === undefined ? null : `Styled(${baseName(cssProp)})`;

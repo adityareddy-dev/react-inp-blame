@@ -192,6 +192,24 @@ test('a commit counts the components rendering for the first time, and those ins
   assert.equal(walkCommit(root(rendered(App, rendered(Sidebar, element('nav', text())))) as any, 5000, 100, click, development).mounted, 2);
 });
 
+test('a walk cut short under several roots names the component above a styling wrapper they share', () => {
+  function RecordIndexContainer() {}
+  function Orders() {}
+  function Order() {}
+  function Metrics() {}
+  function Metric() {}
+  // Twenty styles with Linaria, whose Babel plugin names each styled element after its variable: some 270 of
+  // them are called StyledContainer, and the innermost component above every root was one of those.
+  const styledDiv = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'StyledContainer', __wyw_meta: { className: 'x1', extends: 'div' } };
+  const rows = (component: () => void, n: number) => Array.from({ length: n }, () => rendered(component, element('li', text())));
+  const tree = () => root(fiber(0, RecordIndexContainer, [fiber(11, styledDiv, [rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000))], 0)], 0));
+  const cut = walkCommit(tree() as any, 5000, 100, click, development);
+  assert.deepEqual([cut.truncated, cut.hotPath, cut.pathRendered], [true, ['RecordIndexContainer'], cut.rendered]);
+  // Where nothing better sits above the roots, the wrapper is named as it stands.
+  const only = walkCommit(root(fiber(11, styledDiv, [rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000))], 0)) as any, 5000, 100, click, development);
+  assert.deepEqual(only.hotPath, ['styled.div']);
+});
+
 test("@emotion/styled's Insertion is not counted as a component, whatever the minifier named it", () => {
   function Row() {}
   function Insertion() {}
@@ -235,6 +253,11 @@ test("a styling library's wrapper is named the way the library names an unlabell
   const priceRow = forwardRef({ displayName: 'PriceList__Item', styledComponentId: 'sc-a1', target: 'li' });
   const styledCard = forwardRef({ displayName: 'Tile', styledComponentId: 'sc-b2', target: Card });
   assert.deepEqual(names(rendered(Row, fiber(11, priceRow, [element('li', text())], 1), fiber(11, styledCard, [rendered(Card)], 1))), ['Card', 'Row', 'Styled(Card)', 'styled.li']);
+  // Linaria's plugin does the same, and its styled marks each one with what it extends: `__wyw_meta` on newer
+  // releases, `__linaria` on older ones.
+  const linariaRow = forwardRef({ displayName: 'StyledRow', __wyw_meta: { className: 'r1', extends: 'li' } });
+  const linariaCard = forwardRef({ displayName: 'StyledCard', __linaria: { className: 'c1', extends: Card } });
+  assert.deepEqual(names(rendered(Row, fiber(11, linariaRow, [element('li', text())], 1), fiber(11, linariaCard, [rendered(Card)], 1))), ['Card', 'Row', 'Styled(Card)', 'styled.li']);
   // @emotion/react's css prop renders a component of its own around the element, and its Insertion beside it.
   const cssProp = (type: unknown) => {
     const wrapper = fiber(11, forwardRef({ displayName: 'EmotionCssPropInternal' }), [rendered(Insertion), typeof type === 'string' ? element(type, text()) : rendered(type as () => void)], 1);

@@ -62,6 +62,14 @@ it changes when a field is removed or changes meaning, which a minor release may
   Portal down, 31 of them inside DismissableLayer", a handler blame's clause says React mounted them, and the
   panel's rows say "mounted". A hydration reads as hydrating, as before. Which blame the interaction gets
   does not change, so `schemaVersion` stays at 3.
+- **A component Linaria's `styled` made is named the way a styled-components one is.** Twenty styles with
+  Linaria, whose Babel plugin names each styled element after its variable, and some 270 of them are
+  `StyledContainer`: selecting every row read "at least 4632 components inside StyledContainer", the wrapper
+  div in RecordIndexContainer, which sends a reader to any of 270 files. Told by the mark Linaria leaves on
+  the component (`__wyw_meta`, `__linaria` on older releases) rather than by its name, it now reads
+  `styled.div` or `Styled(Card)`, so it is passed for the component above it wherever a styled-components
+  wrapper is, and that render is named after RecordIndexContainer. The name changes in `components`, in
+  `target.owners` and in `generateTarget`'s path. `schemaVersion` stays at 3.
 
 - **A render that was mostly one component's own render says so.** Sorting TanStack Table's virtualized rows
   example (200,000 rows) by a click on a header read "React spent 277 ms re-rendering 637 components inside
