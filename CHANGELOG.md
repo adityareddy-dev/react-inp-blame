@@ -26,8 +26,9 @@ it changes when a field is removed or changes meaning, which a minor release may
   what filled it, and the blame is a `waiting` whose `detail` says where: "between click and keyup". Where the
   wait before the handlers or the screen update is larger, that time is a note instead. A handler is never
   said to have run through it. A script that ran in it is part of that wait, named the way a script the input
-  waited behind is, and never as the handler. A report built before its long animation frame arrives gives the
-  wait too, and says no frame that says what else ran has been recorded yet.
+  waited behind is, and never as the handler. The wait runs from the next event's own input, so a key held down
+  is not one, and a report built before its long animation frame arrives gives the same wait, saying no frame
+  that says what else ran has been recorded yet.
 
 
 ## [0.14.0] - 2026-09-26
