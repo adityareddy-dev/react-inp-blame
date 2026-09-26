@@ -1195,16 +1195,7 @@ interactions before a restore that copy and this estimate can point at different
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
 is large (50 components when a handler is named, 10 otherwise), and a named handler with a
 small render is blamed as "most likely", with the note that a profiling build would give exact
-numbers; its `confidence` is `'inferred'`. Since 2026-09-25 a count also needs 50 ms of working
-time, the bar the handler rung and the constants comment already held it to: excalidraw re-rendered
-149 components in 2.8 ms of a 40 ms click and read as the render, since the 34 ms screen update is
-only weighed from 50 ms, and a shadcn/ui Sheet closing re-rendered 56 in 17 ms and read the same,
-when most of the 17 ms is a style recalculation Radix forces. Under the bar nothing in the working
-time is blamed, and the sentence that does name a render by its count gives the working time the
-count is read against. Where LoAF is supported and no frame covered the interaction, the frame was
-under 50 ms and the style recalculation and layout inside it went unmeasured (the Sheet opening on
-a phone forces four whole-document recalculations inside 31 ms of working time), and the sentence
-says that in place of the render. LoAF cannot separate the two: the handler and React's
+numbers; its `confidence` is `'inferred'`. LoAF cannot separate the two: the handler and React's
 sync render run inside the same script entry. It can separate out the forced layout inside that
 script, which is measured whatever the build records, so since 2026-09-20 a large forced layout
 outranks a render the build never timed and stays `'measured'` there. It is the only blame about
@@ -1213,6 +1204,21 @@ browser and never depended on the build at all, though `script` turns `inferred`
 not be tied to the interaction, which has nothing to do with which build is running.
 A minified handler keeps only the name of the prop
 it was found on, so production sentences say "the onClick handler".
+
+**Counts under a long task.** Since 2026-09-25 a count also needs 50 ms of working time, the bar the
+handler rung already had and the `LONG_TASK_MS` comment describes, taken on the figure the sentence
+prints: excalidraw re-rendered 149 components in 2.8 ms of a 40 ms click and read as the render,
+since the 34 ms screen update is only weighed from 50 ms, and a shadcn/ui Sheet closing re-rendered
+56 in 17 ms and read the same, when most of the 17 ms is a style recalculation Radix forces. Under
+the bar nothing in the working time is blamed, the handler's script included where a frame lists
+it, since that script holds React's render too. The cause leads with the working time and says the
+count sat in it, short of a long task, rather than calling the render small; the sentence that does
+name a render by its count gives the working time the count is read against. Where LoAF is
+supported and no frame covered the interaction, the frame was under 50 ms and whatever style
+recalculation and layout it forced went unmeasured (the Sheet opening on a phone forces four
+whole-document recalculations inside 31 ms of working time), and the sentence says so. Hydration is
+the exception: a boundary the interaction waited for is named by its count at any working time, as
+it was.
 
 ## The demo
 

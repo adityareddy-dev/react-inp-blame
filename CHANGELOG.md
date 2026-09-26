@@ -29,33 +29,43 @@ it changes when a field is removed or changes meaning, which a minor release may
 ### Changed
 
 - **A render known only by its counts is not blamed under a long task of working time, and where no long
-  animation frame covered the interaction the report says the styles and layout it forced went unmeasured.**
-  A production build records no render durations, so a render there was blamed on its count alone, whatever
-  working time it sat in. Finishing a rectangle in excalidraw re-rendered 149 components inside
-  FixedSideContainer in 2.8 ms of working time, with 34 of the click's 40 ms on the screen update, and read
-  "React was most likely re-rendering 149 components inside FixedSideContainer": the screen update is only
-  weighed from 50 ms, so nothing outranked the count. Closing a shadcn/ui Sheet re-rendered 56 components in
-  17 ms of a 48 ms click and read the same way, when most of those 17 ms is one style recalculation Radix's
-  Presence forces, which no frame under 50 ms reports. A render known by its count is now held to the 50 ms
-  of working time the handler is held to without durations, the bar `LONG_TASK_MS` promised all along. Under
-  it the count is not a slow render, however large; from it the verdict reads as it did. Where the browser
-  supports Long Animation Frames and no frame covered the interaction, its frame was under 50 ms and what the
-  browser spent in it recalculating styles and layout was never measured, and the report now says so instead
-  of naming a render: "React was re-rendering 56 components inside Presence in 17 ms of working time, short
-  of a long task; the rest went to waiting and painting. No long animation frame covered the click, so the
-  styles and layout it forced went unmeasured." Where the count still names the render, its sentence gives
-  the working time the count is read against: releasing Control after select-all in excalidraw reads "React
-  was most likely re-rendering 161 components inside FixedSideContainer in the 55 ms of working time.", and
-  55 ms hung on 161 components is a claim a reader can weigh, since the same render took 7 ms on another key
-  press in the same session. The note a screen update leaves about the render it outran follows the same bar,
-  so 40 ms of working time before a 200 ms screen update no longer says React was "still re-rendering" in
-  it. The panel's line for a report that blames nothing is "nothing stood out"; the cause under it says where
-  the time went. `blame.kind` changes only for a production build's render under 50 ms of working time. It
-  is `'none'` where no frame covered the interaction, and also where the browser reports no frames at all,
-  with `name` and `detail` null. Where a frame did cover it and recorded a script of 20 ms or more it is
-  `'script'`, named after that script, and where the wait before the handler or the screen update after it
-  is over 50 ms it is that phase, `'waiting'` or `'painting'`, as it would have been with no render at all.
-  Builds with durations are unchanged. The report's `schemaVersion` stays 3.
+  animation frame covered the interaction the report says how much of that time went to styles and layout
+  is unmeasured.** A production build records no render durations, so a render there was blamed on its
+  count alone, whatever working time it sat in. Finishing a rectangle in excalidraw re-rendered 149
+  components inside FixedSideContainer in 2.8 ms of working time, with 34 of the click's 40 ms on the screen
+  update, and read "React was most likely re-rendering 149 components inside FixedSideContainer": the screen
+  update is only weighed from 50 ms, so nothing outranked the count. Closing a shadcn/ui Sheet re-rendered
+  56 components in 17 ms of a 48 ms click and read the same way, when most of those 17 ms is one style
+  recalculation Radix's Presence forces, which no frame under 50 ms reports. A render known by its count is
+  now held to the 50 ms of working time the handler is held to without durations, the bar the `LONG_TASK_MS`
+  comment describes, taken on the figure the sentence prints. From it the verdict reads as it did. Under it
+  the count is not a slow render, however large, and the cause leads with the working time and says the
+  count sat in it, short of a long task, rather than calling the render small. Opening the same Sheet on a
+  phone now reads "In 31 ms of working time, short of a long task, React was mounting 59 components, 31 of
+  them inside DismissableLayer; the rest went to waiting and painting. No long animation frame covered the
+  click, so how much of the working time went to any styles and layout it forced is unmeasured." (the 59 was
+  measured; the 31 and the name come from a read of Radix's source, as the entry below says). The last
+  sentence is there where the browser supports Long Animation Frames and none covered the interaction: its
+  frame was under 50 ms, and what the browser spent in it recalculating styles and layout, if anything, was
+  never measured. Where a frame covered the interaction the cause opens the same way, naming a script the
+  frame listed outside the handlers where one ran for 20 ms or more, and where the browser reports no frames
+  it ends by saying so. Where the count still names
+  the render, its sentence gives the working time the count is read against, after a comma so a count's own
+  clause ("31 of them inside DismissableLayer") does not read as what took it: releasing Control after
+  select-all in excalidraw now ends ", in the 55 ms of working time.", and 55 ms hung on the chrome's 161
+  components is a claim a reader can weigh, since the same render took 7 ms on another key press in the same
+  session. The note a screen update leaves about the render it outran follows the same bar, so 40 ms of
+  working time before a 200 ms screen update no longer says React was "still re-rendering" in it. The
+  panel's line for a report that blames nothing is "nothing stood out"; the cause under it says where the
+  time went. `blame.kind` changes only for a production build's render under 50 ms of working time whose
+  effects did not earn React the blame. Where the wait before the handler was over 50 ms it is `'waiting'`.
+  Otherwise it is `'script'` where a frame over the interaction recorded a script of 20 ms or more that ran
+  outside the handlers, named by the browser's invoker with `detail` null, and `'none'` with `name` and
+  `detail` null everywhere else: where the frame's script ran as the handler, since that script holds React's
+  render as well and is not measured in its place, where no script was that long, where no frame covered the
+  interaction, and where the browser reports no frames. A screen update over 50 ms after under 50 ms of
+  working time was `'painting'` before and stays so; only its note changes. Builds with durations are
+  unchanged. The report's `schemaVersion` stays 3.
 - **The count a render is said to be "inside" a component is that component's own, and the render is named
   from where it started where that holds them all.** On cal.com, switching an event type to its advanced tab
   read "React spent 180 ms re-rendering 1216 components inside Form", where 1216 was the whole commit's

@@ -1010,9 +1010,11 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
 - Production React records no durations, so blame there rests on render counts and is `'inferred'`
   (`react-dom/profiling` gives durations), and minified handlers are named by their prop. An inferred blame
   says "most likely" in its sentence and in the overlay; take it as the likeliest reading, not a measurement.
-  A count says nothing about time, so a render known by its count alone is blamed only from 50 ms of working
-  time, the length of a long task, and its sentence gives the working time the count is read against. Under
-  that the count is not a slow render, however large, and the report says what else it knows.
+  A count says nothing about time, so the render rung blames a render known by its count alone only from
+  50 ms of working time, the length of a long task, and its sentence gives the working time the count is
+  read against. Under that the count is not a slow render, however large: the cause leads with the working
+  time and says the count sat in it, short of a long task, before what else the report knows. A hydration
+  the interaction waited for is still named by its count at any working time, as before.
   The exceptions are what the browser times itself and the build cannot change: waiting, the screen update,
   a Long Animation Frames script, and forced layout inside the handlers, which stay `'measured'` in a
   production build. The build is not the only thing that can lower a confidence, though: a script blame is
@@ -1023,9 +1025,10 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   a script that ran on past the handlers is apportioned by time rather than measured, so such a blame is
   `'inferred'`. Where the browser reports no long animation frames the report says nothing about
   layout at all, rather than implying none happened. Where it does report them and none covered the
-  interaction, the frame was under 50 ms, and a production build's report says the styles and layout the
-  interaction forced went unmeasured rather than blaming a render on its count: a style recalculation
-  inside a 17 ms frame is invisible to the browser's own record. Nothing records *which* read forced the
+  interaction, the frame was under 50 ms, and a production build's report whose count would otherwise have
+  named the render says how much of the working time went to any styles and layout the interaction forced
+  is unmeasured, rather than blaming the render on its count: a style recalculation inside 17 ms of working
+  time is invisible to the browser's own record. Nothing records *which* read forced the
   layout, so a `'layout'` blame's `name` and `detail` say where it happened instead: the joined commit's subtree and
   what it was mostly made of. That name is dropped for the browser's own invoker where no commit joined,
   or where the one that did only overlapped the interaction in time, was walked short of the end, or sat

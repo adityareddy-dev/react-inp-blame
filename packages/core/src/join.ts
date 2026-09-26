@@ -1156,9 +1156,17 @@ function explain(r: InteractionReport): Explanation {
   // working time, most of it one style recalculation that no frame under 50 ms reports; both read as the
   // render. The same bar keeps a render out of the blame where its working time was the smaller part of
   // the interaction: a screen update longer than 50 ms of working time is over a long task itself, and
-  // `screenOutranks` gives it the verdict.
-  const countEarns = (x: CommitSummary) => r.processing >= LONG_TASK_MS && (handlerName ? countExplains(x) : x.rendered >= RENDER_MIN_COMPONENTS);
+  // `screenOutranks` gives it the verdict. The bar is taken on the figure the sentence prints, or 49.6 ms
+  // read as "50 ms of working time, short of a long task".
+  const longTaskOfWork = Math.round(r.processing) >= LONG_TASK_MS;
+  const countSays = (x: CommitSummary) => (handlerName ? countExplains(x) : x.rendered >= RENDER_MIN_COMPONENTS);
+  const countEarns = (x: CommitSummary) => longTaskOfWork && countSays(x);
   const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : countEarns(c)));
+  // A count the bar alone kept from naming the render. The rungs below the phase blames say so, with the
+  // working time the count sat in, rather than calling the render small: nothing measured it, and a
+  // count of 1298 is not small by the library's own bars. The time leads, so the count's own clauses
+  // ("31 of them inside DismissableLayer") do not read as what took it.
+  const shortOf = c && !hasDurations && !longTaskOfWork && countSays(c) ? `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(c)}` : null;
   // The commit a render blame names is the one React spent longest on, committing and effects included,
   // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
   // no commit has a span this is the heaviest render, as everywhere else. Committing and effects only
@@ -1280,7 +1288,7 @@ function explain(r: InteractionReport): Explanation {
                 ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time before that.`
                 : effectsFigure >= 1
                   ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldAll ? ',' : ''} in the ${ms(r.processing)} of working time before that.`
-                  : `React was ${HEDGE} still ${renderPhrase(rc)} in the ${ms(r.processing)} of working time before that.`,
+                  : `React was ${HEDGE} still ${renderPhrase(rc)}, in the ${ms(r.processing)} of working time before that.`,
             )
           : null;
 
@@ -1397,12 +1405,13 @@ function explain(r: InteractionReport): Explanation {
     // Without durations the blame rests on the component count alone, which is why it is a reading:
     // 600 cheap components can outrank the one expensive component that actually took the time. The
     // working time is what the count is read against, so the sentence gives it: 55 ms hung on a render of
-    // 161 components is a claim the reader can weigh, and the same render in 7 ms elsewhere is not.
+    // 161 components is a claim the reader can weigh, and the same render in 7 ms elsewhere is not. After
+    // a comma, so a count's own clause ("31 of them inside DismissableLayer") does not read as what took it.
     const likely = hasDurations
       ? // The measured render is the claim; the working time is context. Saying React spent all of it
         // rendering and then that other code ran for a third of it was two claims that cannot both hold.
         `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}.`
-      : `React was ${HEDGE} ${renderPhrase(rc)} in the ${ms(r.processing)} of working time. This React build records no render durations, so that is read from the component counts, not measured.`;
+      : `React was ${HEDGE} ${renderPhrase(rc)}, in the ${ms(r.processing)} of working time. This React build records no render durations, so that is read from the component counts, not measured.`;
     // A production build times the effects but not the render, so there the effects lead.
     cause =
       !hasDurations && effectsFigure >= 1
@@ -1417,7 +1426,7 @@ function explain(r: InteractionReport): Explanation {
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
     blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
-  } else if (c && !hasDurations && handler && r.processing >= LONG_TASK_MS && r.processing >= r.inputDelay && r.processing >= r.presentation) {
+  } else if (c && !hasDurations && handler && longTaskOfWork && r.processing >= r.inputDelay && r.processing >= r.presentation) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list
     // among the components, and more of the working time than a tree accounts for.
     const howLittle =
@@ -1465,11 +1474,13 @@ function explain(r: InteractionReport): Explanation {
     const held = recorded ? ` The browser recorded ${aScript(recorded.script)} running for ${ms(recorded.ms)} of it, which holds React's render as well as the handler.` : '';
     cause = `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen, and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
-  } else if (anyScript) {
+  } else if (anyScript && !(shortOf && ranAsHandler(anyScript.script))) {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the
-    // interaction is exactly what stops this from being a finding.
+    // interaction is exactly what stops this from being a finding. A script that ran as the handler holds
+    // React's render as well (the blind rung above says why), so where the count would have named that
+    // render but for the bar, the script is not measured in its place: nothing under the bar is blamed.
     const confidence = unsure ? 'inferred' : 'measured';
-    const small = c ? `React's render was small (${renderPhrase(c)})` : renderedNothing;
+    const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : renderedNothing);
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(anyScript.ms) < Math.round(anyScript.script.duration) ? ' of it' : '';
     const ran = `${scriptPhrase(anyScript.script)} ran for ${ms(anyScript.ms)}${ofIt}`;
@@ -1482,10 +1493,13 @@ function explain(r: InteractionReport): Explanation {
     // on a phone forces four whole-document style recalculations inside 31 ms of working time, no frame
     // reported them, and the report read "re-rendering 59 components inside DismissableLayer". The sentence
     // says what is known instead, and that the working time is under a long task, which is why nothing in
-    // it is blamed. A frame that did overlap, with no script long enough to name, reads as it did.
-    const unmeasured = c && !hasDurations && r.processing < LONG_TASK_MS && r.frames.length === 0;
-    cause = unmeasured
-      ? `React was ${renderPhrase(c)} in ${ms(r.processing)} of working time, short of a long task; the rest went to waiting and painting. No long animation frame covered the ${kind}, so the styles and layout it forced went unmeasured.`
+    // it is blamed. Whether the interaction forced any is not known either, so the sentence says "any". A
+    // frame that did overlap says the same of the working time, without the clause: the frame was long,
+    // and its scripts are either too short to name or the handler's, which holds React's render (above).
+    // A count under the library's own bars reads as it did, in any build.
+    const unmeasured = r.frames.length === 0 ? ` No long animation frame covered the ${kind}, so how much of the working time went to any styles and layout it forced is unmeasured.` : '';
+    cause = shortOf
+      ? `${shortOf}; the rest went to waiting and painting.${unmeasured}`
       : c
         ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
         : `${renderedNothing} and no long task was recorded, so the time went to waiting and painting.`;
@@ -1495,7 +1509,7 @@ function explain(r: InteractionReport): Explanation {
   } else {
     // Without Long Animation Frames there is no record to say no long task ran.
     cause = c
-      ? `React's render was small (${renderPhrase(c)}); this browser does not report long tasks, so what else ran is unknown.`
+      ? `${shortOf ?? `React's render was small (${renderPhrase(c)})`}; this browser does not report long tasks, so what else ran is unknown.`
       : `${renderedNothing}; this browser does not report long tasks, so what ran instead is unknown.`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   }
