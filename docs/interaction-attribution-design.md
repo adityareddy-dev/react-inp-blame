@@ -111,7 +111,13 @@ Since 2026-09-14 `apps/demo/e2e/cross-browser.spec.ts` also runs in Firefox 148 
 26.4 (Playwright's builds, checked on Windows): reports appear and name the component, with
 `frames: null`, and a page whose `PerformanceObserver.supportedEntryTypes` lacks `event` gets
 nothing installed. Both time React's components with a clock too coarse for the demo's (see
-"Coarse clocks" below), so their development reports carry counts and inferred blame.
+"Coarse clocks" below), so their development reports carry counts and inferred blame. Since
+2026-09-26 it checks the blame in production builds too, where before it checked none, and clicks
+three more of the lab's scenarios in all three browsers. In layout thrash the forced layout goes
+unseen outside Chromium, so the 400 PriceTicker rows take the blame as an inferred render. In
+handler hog the handler is named and, with no script timed and nothing rendered, nothing is blamed.
+Slow render's sections take 10 ms each, which a whole-millisecond clock times well enough for a
+development build's blame to be measured there as well.
 
 Since 2026-09-23 `apps/demo/e2e/phone.spec.ts` taps the lab's scenarios on two emulated phones, each
 with a touch screen and a phone's viewport: a Pixel 7 in Chromium with the CPU slowed 4x through the
