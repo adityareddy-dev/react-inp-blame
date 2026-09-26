@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { renderedVerb } from '../src/join.ts';
 import { laterDetail, titleFor } from '../src/overlay.ts';
 import type { CommitSummary, InteractionReport } from '../src/types.ts';
 
@@ -40,4 +41,10 @@ test("the panel's line for a later render says what the render was made of in th
   // Most of the time in one component, too little of it for its own render to be named, is not "Chart ×1".
   assert.equal(laterDetail(later(40, [['Chart', 1, 15], ['Bar', 10, 2]], 20)), '40 components');
   assert.equal(laterDetail(later(1, [['Toast', 1, 30]], 30)), '1 component');
+  // The count inside the component the row names, where the walk counted fewer there than in the commit.
+  assert.equal(laterDetail({ ...later(59, [['Label', 4]]), pathRendered: 31 }), '31 of 59 components');
+  // A row's verb: a render that mounted most of what it rendered mounted, the way the verdict says.
+  assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 57 }), 'mounted');
+  assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 20 }), 're-rendered');
+  assert.equal(renderedVerb(later(59, [['Label', 4]])), 're-rendered');
 });

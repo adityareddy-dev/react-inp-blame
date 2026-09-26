@@ -366,18 +366,7 @@ on without components. Since 0.1.0 `stats().unsupportedReason` says which of the
 commit with a rendered tree already behind it means `install()` ran after that root rendered, and a
 warning says so once.
 
-**The walk.** After a commit the current tree is walked once. A component fiber that rendered
-carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
-bailed out, so its whole subtree is stale and gets pruned; that prune is what keeps the walk
-cheap on big trees. Ancestors that were only cloned on the way down (App, layouts, providers)
-are named on the path but never counted as roots. The hot path follows the child carrying at
-least 60% of the parent's work, so it stops at "the OrderSummary subtree" rather than
-descending into 800 identical rows. A memo wrapper is a fiber of its own above the component it
-renders (`memo(fn, compare)`, `memo(forwardRef(...))` and `memo(Class)`, but not `memo(fn)`, which
-React keeps as a single fiber), and React flags both as having rendered, so each such component was
-counted twice until 2026-09-15: 504 rendered where 304 did, on 17, 18 and 19 alike. The wrapper now
-counts as the component below it and lends it its name, which is where `displayName` is stamped and
-what a minifier cannot rename.
+
 
 Only component fibers count against `walkBudget` (default 5000). DOM and text fibers are most of
 any tree, and until 2026-09-15 they counted too: at the default budget every context-storm click

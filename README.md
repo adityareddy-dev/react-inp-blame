@@ -1033,7 +1033,10 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   name as it stands. That goes for `where`, for the component a render blame names and what it was "mostly"
   made of, and for `generateTarget`. A short capitalised name cannot be told from minifier output, so `Abc` is
   taken at face value either way. The names as they are stay on `target.owners` (the eight innermost) and
-  each commit's `hotPath` and `components`. A name with the `$1` that Vite's development server and Rolldown add to one that clashes
+  each commit's `components`; a commit's `hotPath` names the app's own components on it, and passes a library's
+  layers between them (a Slot, `Primitive.div`, a Provider, a wrapper named after the component it renders)
+  without a name or one of its twelve steps, so it reaches the app's component below them where there is
+  one. A name with the `$1` that Vite's development server and Rolldown add to one that clashes
   (`Dt$1`) is judged without it. The component emotion renders beside every element @emotion/styled or the
   `css` prop styles, to insert its styles, is not counted.
 - **A styling library's wrapper is named the way the library names one it was given no label for**, whatever
