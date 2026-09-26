@@ -3362,6 +3362,36 @@ test('a script after the handlers is what held the screen update only from half 
   assert.equal(report(click, [handled], timer(184, 300), [input(0, 'click')]).explanation.blame.name, null);
 });
 
+test('a screen update of 100 ms or more gets its note under another verdict where the working time was longer too', () => {
+  // twenty's select-all in a production build: a 1712 ms click, 947 ms of it the handler rendering 4632 components,
+  // then 762 ms of the screen updating, 712 of it the frame's own style, layout and paint.
+  const rows = {
+    rendered: 4632,
+    roots: ['RecordIndexFiltersToContextStoreEffect', 'RecordTableHeaderCheckboxColumn'],
+    hotPath: ['RecordTableHeaderCheckboxColumn'],
+    components: [{ name: 'RecordTableCell', count: 4000, self: null, total: null }],
+    hasDurations: false,
+    total: 0,
+  };
+  const selectAll = report(
+    [entry('click', 0, 1712, 3, 950)],
+    [commit(940, 0, rows)],
+    [frame(0, 952, [script('#document.onclick', 3, 947)]), frame(960, 752, [], 1000)],
+    [input(0, 'click')],
+  );
+  assert.equal(selectAll.explanation.blame.kind, 'render');
+  assert.deepEqual(selectAll.explanation.notes, [
+    'After the handler finished, the screen took another 762 ms to update, mostly the browser recalculating styles and layout and painting the frame: 712 ms.',
+  ]);
+
+  // From 100 ms, not under it: 197 ms of working time, then 104 ms and 96 ms of the screen updating.
+  const rendered = (end: number) =>
+    report([entry('click', 0, end, 3, 200)], [commit(190, 0, { total: 150 })], [frame(0, end, [script('#document.onclick', 3, 197)], 210)], [input(0, 'click')]).explanation;
+  assert.equal(rendered(304).blame.kind, 'render');
+  assert.deepEqual(rendered(304).notes, ['After the handler finished, the screen took another 104 ms to update, mostly the browser recalculating styles and layout and painting the frame: 94 ms.']);
+  assert.deepEqual(rendered(296).notes, []);
+});
+
 test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {
   // Enter on a button whose click changed a class on 30,000 cells, in Chromium: the keydown and the click it
   // made took 1 ms, then 147 ms went by before the keyup's handler ran, the browser restyling the page.

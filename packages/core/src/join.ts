@@ -2072,8 +2072,10 @@ function explain(r: InteractionReport): Explanation {
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
   // A render the clause ties to the script is said there and nowhere else, so the note is kept for it
-  // under PRESENTATION_NOTE_MS too.
-  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && r.presentation > r.processing && blame.kind !== 'painting') {
+  // under PRESENTATION_NOTE_MS too. From PRESENTATION_NOTE_MS it is kept where the working time was longer
+  // as well, the way closedByTheScreen keeps a render the screen update outranked: on twenty's select-all,
+  // 762 ms of the screen updating went unsaid behind 947 ms of rendering.
+  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`);
   }
   // The other half of that note: where the screen update did take the blame, the work it outranked
