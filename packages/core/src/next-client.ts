@@ -5,7 +5,7 @@
  * App Router calls its `onRouterTransitionStart` as each navigation starts. Before Next.js 16.3 the
  * app's own instrumentation-client re-exports it, and Next.js imports that file just as early.
  */
-import { frameworkLayers } from './commits.js';
+import { frameworkLayers, frameworkWrappers } from './commits.js';
 import { install } from './index.js';
 import { announceNavigation } from './navigation.js';
 import type { InstallOptions, StartedNavigation } from './types.js';
@@ -37,7 +37,7 @@ const APP_ROUTER_LAYERS: readonly string[] = [
 /**
  * next/link's component, named the same in both routers from Next.js 14.2 to 16.3. It renders the `<a>` around
  * what the app gives it, so in development a click on a link was named after it rather than after the
- * component that wrote `<Link>`.
+ * component that wrote `<Link>`. Not a layer: a render that stops at it is still named after it.
  */
 const NEXT_WRAPPERS: readonly string[] = ['LinkComponent'];
 
@@ -54,7 +54,8 @@ const settings: WrapperSettings | null = wrapper ? { install: {}, basePath: '', 
 if (settings) {
   // Under Next.js these names are its own, so a render that starts at the App Router's Router, and a click on
   // a link, are named after the app's components.
-  for (const name of [...APP_ROUTER_LAYERS, ...NEXT_WRAPPERS]) frameworkLayers.add(name);
+  for (const name of APP_ROUTER_LAYERS) frameworkLayers.add(name);
+  for (const name of NEXT_WRAPPERS) frameworkWrappers.add(name);
   install(settings.install);
 }
 

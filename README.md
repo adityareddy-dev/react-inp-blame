@@ -762,7 +762,9 @@ put on its `onPointerDown`, not on an `onClick` that did nothing.
 `target.component` is the nearest component enclosing the element whose name a reader could search their own
 code for: one React would accept as a component name (capitalised), that a minifier has not cut down to a
 letter or two, and whose every dotted part is the same, so a design system's `Primitive.button` gives way to
-the `TabsTrigger` above it. When the click landed on an icon, an `<svg>` or something in one, an `<img>` or a
+the `TabsTrigger` above it. Through `react-inp-blame/next`, next/link's `LinkComponent` gives way to the
+component above it where that is the app's, so a link a page wrote names the page. When the click landed on
+an icon, an `<svg>` or something in one, an `<img>` or a
 `<picture>`, the chain starts from what the icon belongs to in the tree React rendered: above every component
 that renders nothing but the icon (an icon library's `Trash2` and the `Icon` under it), at the control around
 it, at an element with a click handler of its own (a thumbnail's `<img onClick>`), or at the first element or
