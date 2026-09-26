@@ -50,12 +50,17 @@ export const readableName = (name: string): boolean =>
  */
 const PROVIDER = /Provider$|Context$/;
 /**
- * Names the page's framework renders around the app's own components, passed like any other layer, and passed
- * over for the app's own where a report names the component a click landed in. Only the framework's own entry
- * adds to it, since there the names are known to be its: `react-inp-blame/next-client` adds the App Router's
- * and next/link's.
+ * Names the page's framework renders around the app's own components and nothing else, passed like any other
+ * layer. Only the framework's own entry adds to it, since there the names are known to be its:
+ * `react-inp-blame/next-client` adds the App Router's.
  */
 export const frameworkLayers = new Set<string>();
+/**
+ * The framework's components that render an element for the component above them, as next/link's
+ * `LinkComponent` renders the `<a>`. A click in one is named after that component where it is the app's. Filled
+ * the same way as `frameworkLayers`.
+ */
+export const frameworkWrappers = new Set<string>();
 export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name) || frameworkLayers.has(name);
 
 /**

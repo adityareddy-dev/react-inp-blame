@@ -26,8 +26,9 @@ it changes when a field is removed or changes meaning, which a minor release may
   after. Vite and other setups are unchanged.
 - **Under `next dev`, a click on a link is said to be in the component that wrote `<Link>`.** It was said to
   be in `LinkComponent`, next/link's own component that renders the `<a>`: on the Next.js demo, "click on link
-  "Second page" in LinkComponent", now "in Page". Through `react-inp-blame/next` that name is passed over for
-  the nearest readable owner above it, and named as before when there is none. `target.owners` still has it.
+  "Second page" in LinkComponent", now "in Page". Through `react-inp-blame/next` that name gives way to the
+  component above it where that is the app's. A link a server component wrote has only Next.js's own components
+  above it and is still said to be in `LinkComponent`. `target.owners` still has it.
 
 ## [0.13.0] - 2026-09-26
 

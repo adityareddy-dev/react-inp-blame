@@ -69,6 +69,12 @@ test("under Next.js a click on a link is named after the component that wrote <L
   const link = ['LinkComponent', 'Page', 'ClientPageRoot', 'InnerLayoutRouter'];
   await nextEntry();
   assert.deepEqual(clickedInside(link), { component: 'Page', owners: link, where: 'link in Page' });
-  // Passed over, never dropped: with nothing of the app's readable above it, the link is named as it is.
+  // Passed over only for the app's component right above it. A link a server component wrote has only the App
+  // Router's boundaries above it, as in a root layout's header on 15.3, where the eighth owner up is the dev
+  // overlay: that name is readable and unlisted, and a link there is still said to be in LinkComponent.
+  const rootLayout = ['RedirectErrorBoundary', 'RedirectBoundary', 'HTTPAccessFallbackErrorBoundary', 'HTTPAccessFallbackBoundary', 'DevRootHTTPAccessFallbackBoundary', 'AppDevOverlayErrorBoundary', 'AppDevOverlay'];
+  assert.equal(clickedInside(['LinkComponent', ...rootLayout]).component, 'LinkComponent');
   assert.equal(clickedInside(['LinkComponent', 'x', 'ClientPageRoot']).component, 'LinkComponent');
+  // Only the wrapper is passed over: a button in the same layout is named as it was, after the nearest boundary.
+  assert.equal(clickedInside(rootLayout).component, 'RedirectErrorBoundary');
 });

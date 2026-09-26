@@ -1,4 +1,4 @@
-import { dominantComponent, frameworkLayers, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
+import { dominantComponent, frameworkLayers, frameworkWrappers, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, INPUT_TYPES, joinWindow, type InputRecord } from './hook.js';
@@ -720,13 +720,19 @@ export function attachLaterRender(r: ReportData, c: CommitSummary, frames: reado
 // What counts as a readable name is `readableName`, in commits.ts, shared with everything that names a commit.
 
 /**
- * The owner a report names the target by: the nearest readable one, passing over the framework's own where
- * its entry has said which they are (next/link's LinkComponent, which renders the `<a>` the app's component
- * asked for). Where the chain holds no readable name the nearest owner is named anyway, because the
- * alternative is inventing one, and `owners` keeps the chain whole either way.
+ * The owner a report names the target by: the nearest readable one. Where that is a framework's wrapper
+ * (next/link's LinkComponent, which renders the `<a>` for the component above it), the next readable owner is
+ * named instead if it is the app's; a link a server component wrote has only the App Router's boundaries above
+ * it, and keeps the wrapper's name. Where the chain holds no readable name the nearest owner is named anyway,
+ * because the alternative is inventing one, and `owners` keeps the chain whole either way.
  */
 function namedOwner(owners: readonly string[]): string | null {
-  return owners.find((name) => readableName(name) && !frameworkLayers.has(name)) ?? owners.find(readableName) ?? owners[0] ?? null;
+  const nearest = owners.findIndex(readableName);
+  if (nearest === -1) return owners[0] ?? null;
+  const name = owners[nearest]!;
+  if (!frameworkWrappers.has(name)) return name;
+  const above = owners.slice(nearest + 1).find(readableName);
+  return above && !frameworkLayers.has(above) && !frameworkWrappers.has(above) ? above : name;
 }
 
 function describeTarget(node: Node, owners: readonly string[], handler: string | null, labels: LabelSource, labelled: Node = node, dispatched?: string | null): TargetInfo {
