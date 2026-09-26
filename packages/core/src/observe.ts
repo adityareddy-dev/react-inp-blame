@@ -31,6 +31,15 @@ interface PerformanceScriptTiming extends PerformanceEntry {
   readonly forcedStyleAndLayoutDuration: number;
 }
 
+/** A connected observer: `flush` hands over at once what the browser has queued for it and not delivered yet. */
+export interface Observing {
+  stop(): void;
+  flush(): void;
+}
+
+/** What an observer that could not connect hands back. */
+export const NOT_OBSERVING: Observing = { stop() {}, flush() {} };
+
 function supportedEntryTypes(): readonly string[] {
   return typeof PerformanceObserver !== 'undefined' ? PerformanceObserver.supportedEntryTypes || [] : [];
 }
@@ -57,15 +66,15 @@ export function supportsLongAnimationFrames(): boolean {
  * duration, carrying its interactionId, so that type is observed too (web-vitals' onINP does
  * the same). When its `event` entry has been handed over, the copy adds nothing and is dropped.
  */
-export function observeEventTiming(onBatch: (entries: InteractionTiming[]) => void): () => void {
-  if (typeof PerformanceObserver === 'undefined') return () => {};
+export function observeEventTiming(onBatch: (entries: InteractionTiming[]) => void): Observing {
+  if (typeof PerformanceObserver === 'undefined') return NOT_OBSERVING;
   const firstInput = supportedEntryTypes().includes('first-input');
   // The interactionIds of `event` entries handed over, kept until the page's first-input entry comes.
   // Deciding on the copy's duration is not enough: `buffered: true` replays `event` entries to a late
   // install() only from 104 ms, and `first-input` at any duration, so a 56 ms first input has no other entry.
   let handedOver: Set<number> | null = firstInput ? new Set() : null;
-  const po = new PerformanceObserver((list) => {
-    const entries = list.getEntries() as InteractionTiming[];
+  // Delivered entries and flushed ones both come through here, so the first input is dropped the same way.
+  const take = (entries: InteractionTiming[]) => {
     if (handedOver) for (const e of entries) if (e.entryType === 'event' && e.interactionId) handedOver.add(e.interactionId);
     const batch = entries.filter((e) => {
       if (!e.interactionId) return false;
@@ -75,29 +84,31 @@ export function observeEventTiming(onBatch: (entries: InteractionTiming[]) => vo
       return !copy;
     });
     if (batch.length) onBatch(batch);
-  });
+  };
+  const po = new PerformanceObserver((list) => take(list.getEntries() as InteractionTiming[]));
   const events: EventTimingObserverInit = { type: 'event', buffered: true, durationThreshold: EVENT_TIMING_FLOOR_MS };
   try {
     po.observe(events);
   } catch {
-    return () => {};
+    return NOT_OBSERVING;
   }
   if (firstInput) po.observe({ type: 'first-input', buffered: true });
-  return () => po.disconnect();
+  return { stop: () => po.disconnect(), flush: () => take(po.takeRecords() as InteractionTiming[]) };
 }
 
-export function observeFrames(store: FrameSummary[], onFrame: (f: FrameSummary) => void): () => void {
-  if (!supportsLongAnimationFrames()) return () => {};
-  const po = new PerformanceObserver((list) => {
-    for (const e of list.getEntries() as PerformanceLongAnimationFrameTiming[]) {
+export function observeFrames(store: FrameSummary[], onFrame: (f: FrameSummary) => void): Observing {
+  if (!supportsLongAnimationFrames()) return NOT_OBSERVING;
+  const take = (entries: PerformanceLongAnimationFrameTiming[]) => {
+    for (const e of entries) {
       const f = summarizeFrame(e);
       store.push(f);
       if (store.length > MAX_FRAMES) store.splice(0, store.length - MAX_FRAMES);
       onFrame(f);
     }
-  });
+  };
+  const po = new PerformanceObserver((list) => take(list.getEntries() as PerformanceLongAnimationFrameTiming[]));
   po.observe({ type: 'long-animation-frame', buffered: true });
-  return () => po.disconnect();
+  return { stop: () => po.disconnect(), flush: () => take(po.takeRecords() as PerformanceLongAnimationFrameTiming[]) };
 }
 
 /** A frame summary is frozen: reports hold the same object from the revision it joins onwards. */

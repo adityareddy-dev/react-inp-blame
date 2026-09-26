@@ -6,7 +6,7 @@ import { page, type Listener } from './install-state.js';
 import { labelOf, type LabelSource } from './join.js';
 import { createLifecycle } from './lifecycle.js';
 import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
-import { observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
+import { NOT_OBSERVING, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
 import { incompatibleCopy } from './session.js';
@@ -241,9 +241,15 @@ function installNow(opts: InstallOptions): Api {
     const current = navigations[navigations.length - 1];
     if (e.persisted && current) navigated({ url: current.url, type: 'back-forward-cache', start: e.timeStamp, router: null });
   };
-  // web-vitals chooses INP again when the page is hidden, at the interaction count by then.
+  // web-vitals chooses INP again when the page is hidden, at the interaction count by then, and first takes the
+  // entries its observer has not been handed yet. The observers here are flushed too, so the interaction it
+  // reports has its report. This listener is on the window in the capture phase and added before the app
+  // runs, so it comes before web-vitals' own. Frames go first, so a report is built with its frame in it.
   const onVisibilityChange = () => {
-    if (document.visibilityState === 'hidden') lifecycle.onHidden();
+    if (document.visibilityState !== 'hidden') return;
+    frameObserver.flush();
+    eventObserver.flush();
+    lifecycle.onHidden();
   };
   // The App Router announces a navigation from inside the handler that starts it, so the input
   // being dispatched, if any, is the one that started it.
@@ -258,7 +264,7 @@ function installNow(opts: InstallOptions): Api {
   window.addEventListener('resize', noteResize, { capture: true, passive: true });
   window.addEventListener('pageshow', onPageShow, { capture: true });
   window.addEventListener('visibilitychange', onVisibilityChange, { capture: true });
-  const stopFrames = frames ? observeFrames(frames, lifecycle.onFrame) : () => {};
+  const frameObserver = frames ? observeFrames(frames, lifecycle.onFrame) : NOT_OBSERVING;
   // Observe at the browser's floor so short interactions with a heavy later render are not lost, and
   // so the INP estimate sees every interaction it can; everything else under the threshold stays quiet.
   // React on the page with no react-dom registered means install() ran after react-dom loaded. Without
@@ -284,7 +290,7 @@ function installNow(opts: InstallOptions): Api {
       page.overlay?.then((handle) => handle?.refresh());
     }
   };
-  const stopEvents = observeEventTiming((batch) => {
+  const eventObserver = observeEventTiming((batch) => {
     checkHookReplaced();
     reactLookDue = true;
     if (rendererCheck === 'again') checkRenderer();
@@ -313,8 +319,8 @@ function installNow(opts: InstallOptions): Api {
       if (delivery !== null) clearTimeout(delivery);
       undelivered.length = 0;
       if (cancelDraw) cancelDraw();
-      stopFrames();
-      stopEvents();
+      frameObserver.stop();
+      eventObserver.stop();
       stopRouterNavigations();
       for (const t of INPUT_TYPES) window.removeEventListener(t, noteInput, { capture: true });
       for (const t of CLOSER_TYPES) window.removeEventListener(t, noteCloser, { capture: true });

@@ -1324,7 +1324,10 @@ dependency: the interaction count is `performance.interactionCount` where the br
 it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
 (Chrome steps ids by 7); the 10 longest interactions are kept by their longest single entry;
 INP is the one at index `min(floor(count / 50), n - 1)` among the `n` kept, longest first, chosen as
-entries arrive and again when the page is hidden, which are the two moments web-vitals chooses at. After
+entries arrive and again when the page is hidden, which are the two moments web-vitals chooses at. At
+hide both observers first hand over what the browser has queued for them and not delivered yet, as
+web-vitals takes its own observer's entries then, so the interaction it reports at hide has a report
+here too. Long animation frames go first, so a report built then already holds its frame. After
 a soft navigation or a back/forward cache restore, interactions the browser counted but sent no entry
 for read as the 8 ms
 web-vitals stands in for them, with `interactionId: null`. It counts every interaction
@@ -1360,11 +1363,10 @@ the browser's soft navigation entries where the library learns of it from the ro
 Navigations above), so at a soft navigation the two can start over at different moments, or only
 one of them at all. The library starts over on `clear()`, including the panel's Clear button;
 web-vitals does not. web-vitals updates once the page is idle, so for a moment after an interaction the
-library's number is ahead, and when the page is hidden it also takes the entries its observer has not
-delivered yet, which this estimate sees only when they are delivered. And Next.js 16.3.5's
-`useReportWebVitals` runs the web-vitals 4 it vendors, which after a back/forward cache restore keeps
-counting every interaction since the page loaded (its base is only ever set to 0), so past 50
-interactions before a restore that copy and this estimate can point at different interactions.
+library's number is ahead. And Next.js 16.3.5's `useReportWebVitals` runs the web-vitals 4 it vendors,
+which after a back/forward cache restore keeps counting every interaction since the page loaded (its
+base is only ever set to 0), so past 50 interactions before a restore that copy and this estimate can
+point at different interactions.
 
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
