@@ -18,13 +18,13 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Fixed
 
-- **A forced layout's sentence says whether a layout effect could have held it.** It always ended "often in a
-  layout effect", which on cmdk's list and Radix's tabs pointed at the wrong code: their reads are not in layout
-  effects. A development or profiling build times React's commit, so where the commit and its effects took far
-  less than the layout, the sentence now says "Not in a layout effect here: React's commit took 5 ms in all, so
-  it was code outside React, such as the click handler or a library's listener", and where they took as long,
-  "most likely in a layout effect or a ref callback". A production build keeps the usual line, unless React
-  did not render at all.
+- **A forced layout's sentence no longer says "a layout effect" where none could have held it.** It always
+  ended "often in a layout effect", even where the browser charged the layout to a listener no React commit ran
+  in, which no layout effect can be. Now, in any build, it says "No React commit ran in the script it was
+  charged to, so it was not in a layout effect but in code outside React, such as the click handler or a
+  library's listener", and the blame names that script rather than the subtree React rendered. Where the commit
+  ran in the same script and the build times it, the sentence says at most what the commit and its effects
+  took was a layout effect's, where that is under half. Otherwise the usual line stays.
 - **Time between an interaction's events is said to be that, not handler time.** Enter on the restyle storm
   ran the keydown's and the click's handlers in 1 ms, then 157 ms went by, the browser restyling the page,
   before the keyup's handler ran. That time sits inside the working time, which runs from the first handler to
