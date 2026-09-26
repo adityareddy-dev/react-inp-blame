@@ -1194,6 +1194,13 @@ test('the forced layout sentence says a layout effect only where a commit ran in
   // A commit long enough to have held it, or one a production build does not time, leaves the usual line.
   assert.equal(said([commit(110, 0, { total: 5, startedAt: 40 })], root), `${reads}, often in a layout effect.`);
   assert.equal(said([commit(110, 0, { total: 0, hasDurations: false, rendered: 3 })], root), `${reads}, often in a layout effect.`);
+  // So does a commit stamped at the very end of React's listener, and one on its first tick whose effects, run
+  // straight after it, ended inside it (as measured in Chromium, where a trivial click update and a useEffect
+  // reading the layout commit on the listener's first tick 7 times in 150).
+  assert.equal(said([commit(118, 0, { total: 0, hasDurations: false, rendered: 3 })], root), `${reads}, often in a layout effect.`);
+  for (const effectsEndedAt of [2.1, 118]) {
+    assert.equal(said([commit(2, 0, { total: 0, hasDurations: false, rendered: 3, effectsStartedAt: 2, effectsEndedAt })], root), `${reads}, often in a layout effect.`);
+  }
 
   // The layout charged to a listener no commit ran in, React's own script holding the commit and forcing
   // nothing: in no layout effect, in any build, however long React's commit took. The blame is the
@@ -1225,15 +1232,21 @@ test('the forced layout sentence says a layout effect only where a commit ran in
     [4.8, { total: 0, hasDurations: false, rendered: 3 }],
     [4, { total: 1, startedAt: 3 }],
     [5.2, { total: 0, hasDurations: false, rendered: 3 }],
+    [5.2, { total: 0, hasDurations: false, rendered: 3, effectsStartedAt: 5.2, effectsEndedAt: 5.2 }],
+    [5.2, { total: 0, hasDurations: false, rendered: 3, effectsStartedAt: 119, effectsEndedAt: 121 }],
   ] as const) {
     const e = explain([commit(at, 0, c)], [script('DOCUMENT.onclick', 5.2, 112.8, 90)], [input(0, 'click', named)]);
     assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${measureThing}`), e.cause);
     assert.deepEqual([e.blame.name, e.blame.detail], ['DOCUMENT.onclick', null]);
   }
   // Nor in the one that ended just before it. As timed in Chromium: a library's capture listener forced the layout,
-  // and React's listener, too short to be listed, ran after it, its commit stamped 0.4 ms after the capture
+  // and React's listener, too short to be listed, ran after it, its commit stamped 0.1 to 0.4 ms after the capture
   // listener ended, where its own microtask did.
-  for (const c of [commit(57.3, 0, { total: 0, hasDurations: false, rendered: 3 }), commit(57.3, 0, { total: 0.1, startedAt: 57.1 })]) {
+  for (const c of [
+    commit(57.3, 0, { total: 0, hasDurations: false, rendered: 3 }),
+    commit(57.3, 0, { total: 0.1, startedAt: 57.1 }),
+    commit(57, 0, { total: 0, hasDurations: false, rendered: 3, effectsStartedAt: 57, effectsEndedAt: 57 }),
+  ]) {
     const e = report([entry('click', 0, 68, 2, 59.8)], [c], [frame(0, 68, [script('DOCUMENT.onclick', 2, 54.9, 54.7)])], [input(0, 'click', named)]).explanation;
     assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${measureThing}`), e.cause);
     assert.deepEqual([e.blame.name, e.blame.detail], ['DOCUMENT.onclick', null]);
@@ -1267,14 +1280,36 @@ test('the forced layout sentence says a layout effect only where a commit ran in
   // blame is the click's handler, whatever ran around the pointerup's commit. Entries in any order.
   const [up, clicked] = [entry('pointerup', 0, 128, 2, 20), entry('click', 0, 128, 20, 118)];
   for (const entries of [[up, clicked], [clicked, up]]) {
-    const e = report(
-      entries,
-      [commit(9, 0, { startedAt: 7.5 }), commit(20, 0, { total: 0.2, startedAt: 19.6 })],
-      [frame(0, 128, [script('DOCUMENT.onpointerup', 10, 8, 5), script('DIV#root.onclick', 20.1, 97.9, 85)])],
-      [input(0, 'pointerup', named), input(0, 'click', named)],
-    ).explanation;
-    assert.deepEqual([e.blame.name, e.blame.detail], ['measureThing', null]);
+    for (const start of [20, 20.1]) {
+      const e = report(
+        entries,
+        [commit(9, 0, { startedAt: 7.5 }), commit(20, 0, { total: 0.2, startedAt: 19.6 })],
+        [frame(0, 128, [script('DOCUMENT.onpointerup', 10, 8, 5), script('DIV#root.onclick', start, 118 - start, 85)])],
+        [input(0, 'pointerup', named), input(0, 'click', named)],
+      ).explanation;
+      assert.deepEqual([e.blame.name, e.blame.detail], ['measureThing', null]);
+    }
   }
+  // Enter, as Chromium times it: the click is dispatched inside the keypress's handlers, so its entry sits inside
+  // the keypress's. React's keypress listener, too short to be listed, committed on the click's first tick, and the
+  // click's listener held the layout: that listener is the handler's, whether the click committed too or not. A
+  // script in the keypress's own handlers, before the click's, is not the click handler, where the click committed.
+  const enter = (click: number, commits: CommitSummary[], scripts: ScriptSummary[], reversed = false) => {
+    const entries = [entry('keydown', 0, 70, 2, 2), entry('keypress', 0, 70, 2, 65), entry('click', 0, 70, click, 65)];
+    return report(
+      reversed ? entries.reverse() : entries,
+      commits,
+      [frame(0, 70, scripts)],
+      [input(0, 'keydown', named), input(0, 'keypress', named), input(0, 'click', named)],
+    ).explanation;
+  };
+  // A development build, where a 0.1 ms render is too short to hold the layout.
+  const onKeyPress = commit(2.2, 0, { total: 0.1, startedAt: 2.1 });
+  const onClick = commit(65, 0, { total: 0.1, startedAt: 64.8 });
+  const clickListener = script('DIV#root.onclick', 2.2, 62.8, 61.7);
+  for (const reversed of [false, true]) assert.equal(enter(2.2, [onKeyPress, onClick], [clickListener], reversed).blame.name, 'measureThing');
+  assert.equal(enter(2.2, [onKeyPress], [clickListener]).blame.name, 'measureThing');
+  assert.equal(enter(62, [onClick], [script('DIV#root.onkeypress', 2, 59.9, 58)]).blame.name, 'DIV#root.onkeypress');
   // Most of it, not all: the share outside is said as a figure, and no one script holds enough to be named.
   const most = explain([commit(55, 0, { total: 3, startedAt: 50 })], [script('DIV#root.onclick', 2, 58, 20), script('DOCUMENT.onclick', 60, 58, 50)]);
   assert.ok(most.cause.endsWith(`${reads}. 50 ms of it was charged to a script no React commit ran in, so that was not in a layout effect but in ${outsideReact}`), most.cause);
