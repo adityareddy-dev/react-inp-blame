@@ -42,12 +42,12 @@ const PROVIDER = /Provider$|Context$/;
 export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name);
 
 /**
- * The component a commit is named after: the deepest readable name on its hot path, else the end of its
- * hot path, or its outermost root, as they stand, since the alternative is inventing a name; null when it
- * rendered none.
+ * The component a commit is named after: the deepest name on its hot path that is not a layer
+ * (`passedLayer`), else the end of its hot path, or its outermost root, as they stand, since the alternative
+ * is inventing a name; null when it rendered none.
  */
 export function leafName(c: CommitSummary): string | null {
-  for (let i = c.hotPath.length - 1; i >= 0; i--) if (readableName(c.hotPath[i]!)) return c.hotPath[i]!;
+  for (let i = c.hotPath.length - 1; i >= 0; i--) if (!passedLayer(c.hotPath[i]!)) return c.hotPath[i]!;
   // A walk cut short with no durations to go by leaves no hot path where the work could be in more than one
   // subtree and nothing holds them all, and its first root is only the one the walk reached first.
   if (c.truncated && !c.hasDurations) return c.hotPath[c.hotPath.length - 1] || null;
@@ -57,13 +57,14 @@ export function leafName(c: CommitSummary): string | null {
 
 /**
  * The component a commit's render started from, for a sentence that says where it went: the top of its hot
- * path, where the path goes below it and the name is one a reader could search for. It is often where the
- * cause is: on cal.com the form's state lives in EventTypeWeb, and the render was named after a component
- * eleven layers down.
+ * path, where the path goes below it, the name is not a layer, and it holds the whole commit
+ * (`startRendered`), since "from X down" claims the count under X, and the path starts at the heaviest of
+ * the roots that rendered, not at all of them. It is often where the cause is: on cal.com the form's state
+ * lives in EventTypeWeb, and the render was named after a component eleven layers down.
  */
 export function startName(c: CommitSummary): string | null {
   const first = c.hotPath[0];
-  return first && c.hotPath.length > 1 && first !== leafName(c) && readableName(first) ? first : null;
+  return first && c.hotPath.length > 1 && first !== leafName(c) && !passedLayer(first) && c.startRendered === c.rendered ? first : null;
 }
 
 /** The names styling libraries give every element they wrap: `styled.div`, `Styled(Button)`. */

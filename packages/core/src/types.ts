@@ -58,19 +58,29 @@ export interface CommitSummary {
   /** The outermost components that rendered, at most 5. */
   readonly roots: readonly string[];
   /**
-   * The chain that carries most of the work, outermost first, naming the app's own components on it: a
+   * The chain that carries most of the work, outermost first, every name on it as it stands. It spends at
+   * most twelve steps below the component it starts from, on the components a reader could search for: a
    * library's layers between them (`Primitive.div`, a Slot, a Provider, a wrapper named after the component
-   * it renders) are passed without a name. For a production walk cut at `walkBudget`, whose counts cannot
-   * choose among subtrees it reached in part or not at all, it stops at its one subtree where nothing it did
-   * not reach rendered beside it, and is otherwise the component its subtrees all sit under, or empty where
-   * they sit under none.
+   * it renders) are on the chain but spend no step. For a production walk cut at `walkBudget`, whose counts
+   * cannot choose among subtrees it reached in part or not at all, it stops at its one subtree where
+   * nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
+   * under, or empty where they sit under none.
    */
   readonly hotPath: readonly string[];
   /**
-   * Of `rendered`, those inside the component `hotPath` ends on, that component included: what a sentence
-   * can say rendered "inside" it, where `rendered` is the whole commit's. Equal to `rendered` where the
-   * path holds one component or none, and partial like `rendered` where the walk was cut. Absent on a
-   * report stored by an earlier release.
+   * Of `rendered`, those inside the component `hotPath` starts from, that component included. Equal to
+   * `rendered` where that is the commit's one root or the component every root sits under, and below it
+   * where other roots rendered beside the one the path starts from, since the path starts at the heaviest
+   * of them: what a sentence can say rendered "from X down". Absent on a report stored by an earlier
+   * release.
+   */
+  readonly startRendered?: number;
+  /**
+   * Of `rendered`, those inside the component the commit is named after, that component included: the
+   * deepest on `hotPath` that is not a library's layer, else the one it ends on. What a sentence can say
+   * rendered "inside" it, where `rendered` is the whole commit's. Equal to `startRendered` where the path
+   * names nothing below the component it starts from, and partial like `rendered` where the walk was cut.
+   * Absent on a report stored by an earlier release.
    */
   readonly pathRendered?: number;
   /** Per-component aggregates, heaviest first, at most 12. */
@@ -371,11 +381,12 @@ export interface Blame {
   /**
    * For a render or a hydration, what it was mostly made of: many of one component ("LineItem ×800"), one
    * component's own render where React timed it at half the render or more ("TableBody's own render"), else
-   * how many components rendered ("637 components"), of which how many inside the component `name` gives
-   * where that is fewer ("812 of 1216 components"); null where it rendered one. For a handler, its
-   * component, or null where the name is a listener the browser recorded rather than a React handler. For a
-   * 'layout', what that same commit was mostly made of, wherever `name` came from that commit, and null
-   * wherever `name` did not, since a script has no component counts.
+   * how many components rendered ("637 components"). For a render, of which how many inside the component
+   * `name` gives, where that is fewer ("812 of 1216 components"); a hydration is named after a boundary or
+   * the page, which holds them all, so it carries the whole count. Null where it rendered one. For a
+   * handler, its component, or null where the name is a listener the browser recorded rather than a React
+   * handler. For a 'layout', what that same commit was mostly made of, as a render's, wherever `name` came
+   * from that commit, and null wherever `name` did not, since a script has no component counts.
    */
   readonly detail: string | null;
   /** How much of the interaction it accounts for, in ms; null when the build records no durations. */
