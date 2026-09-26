@@ -412,7 +412,8 @@ function typeChecks(app) {
 }
 
 // Jest's error for an ES module it was left to load as CommonJS, which its default runtime does with
-// everything. The package is ES modules only, so this is where a test that reaches it stops.
+// everything. The package is ES modules only, so this is where a test that reaches it stops. It is the
+// error from Jest 30.5 on; before that Jest says "Cannot use import statement outside a module".
 const ESM_REFUSED = 'Must use import to load ES Module';
 
 // The entries a module of the app's own imports, and so the ones its tests reach.
@@ -440,10 +441,16 @@ test('onInteraction', () => {
 `;
 }
 
+// The READMEs' transformIgnorePatterns. Jest leaves a file uncompiled where a pattern matches anywhere in its
+// real path, and pnpm's real path for a package is node_modules/.pnpm/<name>@<version>/node_modules/<name>.
+// So the pattern has to let the package through at the first node_modules there as well as at npm's only one.
+const JEST_PATTERN = `/node_modules/(?!(.pnpm/)?${PACKAGE}[@/])`;
+
 const JEST_PLAIN = "module.exports = { testEnvironment: 'jsdom' };\n";
-const JEST_BABEL = `module.exports = {
-  testEnvironment: 'jsdom',
-  transformIgnorePatterns: ['/node_modules/(?!${PACKAGE}/)'],
+/** The Jest config the READMEs give for Babel, under a preset where there is one. */
+const jestBabel = (preset) => `module.exports = {
+${preset ? `  preset: '${preset}',\n` : ''}  testEnvironment: 'jsdom',
+  transformIgnorePatterns: ['${JEST_PATTERN}'],
 };
 `;
 const JEST_NEXT = `const nextJest = require('next/jest');
@@ -459,8 +466,9 @@ const nextJestConfig = (config) => `const { withInpBlame } = require('${PACKAGE}
 module.exports = withInpBlame(${config});
 `;
 
-// Jest can require() an ES module itself only under --experimental-vm-modules, and only on a Node whose vm
-// modules can be evaluated synchronously, 24.9 and later. Its error offers that Node and leaves out the flag.
+// Jest can require() an ES module itself only from 30.4, only under --experimental-vm-modules, and only on
+// a Node whose vm modules can be evaluated synchronously, 24.9 and later. Its error offers that Node and
+// leaves out the flag. The app's Jest is 30.5 or later, so the Node is all that is left to ask about.
 const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
 const jestRequiresEsm = nodeMajor > 24 || (nodeMajor === 24 && nodeMinor >= 9);
 
@@ -479,17 +487,29 @@ const JEST_SETUPS = [
   // they are, and Babel reads a .babelrc for the app's own files, never for one in node_modules.
   {
     setup: 'with transformIgnorePatterns and no Babel config',
-    files: { 'jest.config.js': JEST_BABEL },
+    files: { 'jest.config.js': jestBabel() },
     loads: false,
   },
   {
     setup: 'with transformIgnorePatterns and the presets in a .babelrc',
-    files: { 'jest.config.js': JEST_BABEL, '.babelrc': BABELRC },
+    files: { 'jest.config.js': jestBabel(), '.babelrc': BABELRC },
     loads: false,
   },
   {
     setup: 'with transformIgnorePatterns and the presets in babel.config.js',
-    files: { 'jest.config.js': JEST_BABEL, 'babel.config.js': BABEL_CONFIG },
+    files: { 'jest.config.js': jestBabel(), 'babel.config.js': BABEL_CONFIG },
+    loads: true,
+  },
+  // babel-jest runs only where the Jest config sets no `transform`. ts-jest's preset sets one for .ts files
+  // alone, so nothing compiles the package's .js, and its js-with-babel preset hands .js to babel-jest.
+  {
+    setup: "under ts-jest's preset with transformIgnorePatterns and babel.config.js",
+    files: { 'jest.config.js': jestBabel('ts-jest'), 'babel.config.js': BABEL_CONFIG },
+    loads: false,
+  },
+  {
+    setup: "under ts-jest's js-with-babel preset with transformIgnorePatterns and babel.config.js",
+    files: { 'jest.config.js': jestBabel('ts-jest/presets/js-with-babel'), 'babel.config.js': BABEL_CONFIG },
     loads: true,
   },
   // next/jest compiles with Next.js's own SWC, and in node_modules only the packages in transpilePackages.
@@ -511,6 +531,16 @@ const JEST_SETUPS = [
  * the failure, and with no cache so no setup runs on what another compiled.
  */
 function runsUnderJest(app) {
+  // npm installed this app, so the setups see the package only where npm puts it. Where pnpm does, the
+  // pattern has to let Babel at it all the same, and in both it has to keep Babel from every other package.
+  const uncompiled = new RegExp(JEST_PATTERN);
+  for (const [file, compiled] of [
+    [`node_modules/.pnpm/${PACKAGE}@1.0.0/node_modules/${PACKAGE}/dist/index.js`, true],
+    ['node_modules/.pnpm/react@19.2.0/node_modules/react/index.js', false],
+    ['node_modules/react/index.js', false],
+  ]) {
+    assert.ok(uncompiled.test(`/app/${file}`) !== compiled, `transformIgnorePatterns ['${JEST_PATTERN}'] ${compiled ? 'keeps Babel from' : 'lets Babel at'} ${file}`);
+  }
   fs.writeFileSync(path.join(app, 'smoke.test.js'), jestTest());
   // next/jest looks for the app directory before it reads next.config.js.
   fs.mkdirSync(path.join(app, 'app'));
@@ -553,11 +583,13 @@ const FIXTURES = {
   // The types, as an app's tsconfig finds them. TypeScript 5, the last with node10 as it was: 6.0 fails
   // a config that sets it unless ignoreDeprecations says "6.0", and 7.0 removed it.
   types: { install: ['typescript@5'], beside: ['typescript'], check: typeChecks },
-  // Jest 30 with each setup the READMEs give it, the Next.js one included. @babel/preset-env 7 is the
-  // Babel Jest's own packages are on; 8 works as well, with npm warning that it overrides their peer ranges.
+  // Jest from 30.5, the first to give ESM_REFUSED, with each setup the READMEs give it, the Next.js and
+  // ts-jest ones included. @babel/preset-env 7 is the Babel Jest's own packages are on; 8 works as well,
+  // with npm warning that it overrides their peer ranges. ts-jest 29 is the one that takes Jest 30, and npm
+  // installs the TypeScript it asks for.
   jest: {
-    install: ['jest@30', 'jest-environment-jsdom@30', '@babel/preset-env@7', `next@${nextDemo.dependencies.next}`],
-    beside: ['jest', 'babel-jest', 'jest-environment-jsdom', '@babel/preset-env', ...NEXT_APP],
+    install: ['jest@^30.5', 'jest-environment-jsdom@^30.5', '@babel/preset-env@7', 'ts-jest@29', `next@${nextDemo.dependencies.next}`],
+    beside: ['jest', 'babel-jest', 'jest-environment-jsdom', '@babel/preset-env', 'ts-jest', 'typescript', ...NEXT_APP],
     check: runsUnderJest,
     type: 'commonjs',
   },
