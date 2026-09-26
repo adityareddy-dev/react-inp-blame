@@ -263,7 +263,10 @@ test('restyle storm: the browser restyling the page is what a click waits on, an
   // frame. A click's style and layout comes before the frame renders, for the pointer's hit test, so it is
   // only frame time no script ran in. From Enter the keyup is handled after it, in the same frame, so the
   // restyle is a wait between the keydown's handlers and the keyup's, inside the working time.
-  const click = await interact(page, 'restyle-storm', () => page.click('[data-test=trigger]'));
+  // What filled the time is read from the long animation frame, which can reach the report after it is built.
+  await interact(page, 'restyle-storm', () => page.click('[data-test=trigger]'));
+  await waitForFrames(page);
+  const click = await lastReport(page);
   expect(click.explanation.blame, click.verdict).toMatchObject({ kind: 'painting', name: null, confidence: 'measured' });
   expect(click.explanation.cause).toMatch(/the browser's own work on the main thread, most likely recalculating styles and layout|mostly the browser recalculating styles and layout and painting the frame/);
   expect(click.commits.map((c) => c.rendered)).toEqual([1]);
@@ -271,6 +274,7 @@ test('restyle storm: the browser restyling the page is what a click waits on, an
   await clearReports(page);
   await page.focus('[data-test=trigger]');
   await page.keyboard.press('Enter');
+  await waitForFrames(page);
   const key = await lastReport(page);
   expect(key.explanation.blame, key.verdict).toMatchObject({ kind: 'waiting', name: null, confidence: 'measured' });
   expect(key.explanation.blame.detail).toBe('between click and keyup');
