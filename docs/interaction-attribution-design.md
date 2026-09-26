@@ -1020,17 +1020,21 @@ the wait before the first handler, and the screen update does not outrank the wo
 last two stop it, it is a note. Only entries painted within 8 ms of the headline paint count: a keyup released
 after the key press painted is in a frame of its own, and one whose handlers start just past the working time's
 rounded end is clamped to it. What the next event waited of a gap is all of it from its own input on, and
-before that only the time something on record kept the main thread busy: a script, a frame's own style and
-layout, a React render, or all of a long frame whose blocking time is more than what it records can account
-for. A paint held up off the main thread can keep a key held down for 100 ms in one frame with the thread idle,
-and that is no wait; people hold a key for 80 to 150 ms, and a timer the keydown left running through it is.
-Before the frames arrive, the next event's handlers starting more than 4 ms after its input say the thread was
-busy when it came, and the time before it is taken as busy too. Where the idle part is a tenth of the gap or
-more, the sentence says the key or pointer was still down for that long and what the wait was. Where long
-animation frames cover most of the wait the sentence says what ran, and where they do not yet, it says no frame
-that says what else ran has been recorded yet; they can reach a report after it is built (it is revised when
-they do), so they change how much of the time before an input was a wait, but never whether the time after it
-was. The wait once took only the covered part, which made a 147 ms wait lose to a 100 ms render with half of it
+before that only time something on record places there: a script or a frame's own style and layout that Long
+Animation Frames recorded, or a React render that kept its durations. A paint held up off the main thread can
+keep a key held down for 100 ms in one frame with the thread idle, and that is no wait; people hold a key for 80
+to 150 ms, and a timer the keydown left running through it is. Nothing is guessed from what is not placed: not
+from the next event's handlers starting late (a 7 ms task at the release says nothing of the 99 ms before it),
+and not from a frame's blocking time, which does not say when in the frame it fell. So without the frames,
+before they arrive or in a browser without them, a timer that ran while a key was held is not counted, and only
+the time after the release is. A render with no durations is timed by the script it committed in, where a frame
+recorded one, and weighed as a render, not as a wait on React's scheduler task. Where the part nothing placed is
+a tenth of the gap or more, the sentence says the key or pointer was still down for that long with nothing on
+record running, and what the wait was; the two figures add up to the gap as printed, and the blame carries the
+wait. Where long animation frames cover most of the wait the sentence says what ran, and where they do not yet,
+it says no frame that says what else ran has been recorded yet; they can reach a report after it is built (it is
+revised when they do), so they change how much of the time before an input they place, but never whether the
+time after it was a wait. The wait once took only the covered part, which made a 147 ms wait lose to a 100 ms render with half of it
 covered and win with less, and gave a report built before its frame "The onClick handler most likely took about
 2 ms of the 420 ms", in CI on React 19.2's production build. A render that committed before the next event's
 handlers began is in the gap however close to them. A script that starts from the end of one event's handlers on is in the gap however soon

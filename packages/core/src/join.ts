@@ -67,8 +67,6 @@ const LONG_TASK_MS = 50;
 const WAITED_BEHIND_MIN_SHARE = 0.5;
 /** How much of a wait between handlers long animation frames have to cover for the sentence to say what filled it from them. */
 const FRAMES_COVER_SHARE = 0.9;
-/** How soon after its input an event's handlers start when the main thread is free for them: dispatch alone. */
-const DISPATCHED_AT_ONCE_MS = 4;
 // Time between handlers before the next input, with nothing on record running, is said from a tenth of the
 // time between on. Under that it is the odd moment between two tasks, not a key or a button held down.
 const HELD_SAID_SHARE = 0.1;
@@ -1141,27 +1139,20 @@ function explain(r: InteractionReport): Explanation {
       last.input = Math.min(last.input, e.startTime);
     } else handling.push({ from, to, first: e.name, last: e.name, input: e.startTime });
   }
-  // What the next event waited of each gap: all of it from its own input on, and before that, only the time
-  // something on record kept the main thread busy. A key held down while a paint held up off the thread kept
-  // both events in one frame, with the thread idle until the key came up, and that is no wait. Busy is a
-  // script, a frame's own style and layout or a React render, or all of a long frame whose blocking time is
-  // more than what it records can account for. Before the frames arrive, handlers that started well after
-  // their input say the thread was busy when it came, and the time before it is taken as busy too.
+  // What went into each gap: all of it from the next event's own input on, and before that, only time something
+  // on record places there: a script or a frame's own style and layout Long Animation Frames recorded, or a
+  // React render that kept its durations. A key held down while a paint held up off the thread kept both events
+  // in one frame, with the thread idle until the key came up, and that is no wait; a timer that ran while it was
+  // held is. What nothing places, a browser without those frames included, is not counted.
   const busyBefore = (from: number, h: { from: number; input: number }): Interval[] => {
     const until = Math.min(h.input, h.from);
-    if (until <= from) return [];
-    if (!r.frames?.length && h.from - h.input > DISPATCHED_AT_ONCE_MS) return [{ from, to: until }];
-    const clip = (a: number, b: number): Interval[] => (a < until && b > from ? [{ from: Math.max(a, from), to: Math.min(b, until) }] : []);
-    const busy: Interval[] = [];
+    const clip = (x: Interval): Interval[] => (x.from < until && x.to > from ? [{ from: Math.max(x.from, from), to: Math.min(x.to, until) }] : []);
+    const placed: Interval[] = r.commits.filter((x) => x.hasDurations).map((x) => ({ from: x.startedAt ?? x.at - x.total, to: x.at }));
     for (const f of r.frames ?? []) {
-      const end = f.start + f.duration;
-      const located: Interval[] = f.scripts.map((x) => ({ from: x.start, to: x.start + x.duration }));
-      if (f.styleAndLayoutStart !== null) located.push({ from: f.styleAndLayoutStart, to: end });
-      busy.push(...located.flatMap((x) => clip(x.from, x.to)));
-      if (f.blocking > coverage(located) + STAMP_TOLERANCE) busy.push(...clip(f.start, end));
+      placed.push(...f.scripts.map((x) => ({ from: x.start, to: x.start + x.duration })));
+      if (f.styleAndLayoutStart !== null) placed.push({ from: f.styleAndLayoutStart, to: f.start + f.duration });
     }
-    for (const x of r.commits) if (x.hasDurations) busy.push(...clip(x.startedAt ?? x.at - x.total, x.at));
-    return busy;
+    return placed.flatMap(clip);
   };
   const gaps = handling.slice(1).map((h, i) => {
     const from = handling[i]!.to;
@@ -1177,11 +1168,12 @@ function explain(r: InteractionReport): Explanation {
   const partsBetween = gaps.flatMap((g) => scriptParts(r.frames ?? [], g.from, g.to));
   const scriptedBetween = partsBetween.reduce((a, p) => a + p.ms, 0);
   const waitedBetween = gaps.reduce((a, g) => a + coverage(g.waited), 0);
-  // Time before an input with nothing on record running: the key or the pointer still down.
+  // Time before an input with nothing on record running: the key or the pointer still down, or work no record
+  // places.
   const heldBetween = between - waitedBetween;
   const heldGap = heldBetween >= HELD_SAID_SHARE * between ? gaps.find((g) => g.to - g.from - coverage(g.waited) >= 0.5) : undefined;
   // Long frames over the wait say what filled it. They can reach a report after it is built (it is revised when
-  // they do), so they change what the sentence says of it, and how much of the time before an input was a wait.
+  // they do), so they change what the sentence says of it, and how much of the time before an input they place.
   const framedWaited = gaps.reduce(
     (a, g) => a + coverage((r.frames ?? []).flatMap((f) => g.waited.map((w) => ({ from: Math.max(w.from, f.start), to: Math.min(w.to, f.start + f.duration) })))),
     0,
@@ -1189,13 +1181,20 @@ function explain(r: InteractionReport): Explanation {
   const framesSay = !!r.frames && framedWaited >= FRAMES_COVER_SHARE * waitedBetween;
   const renderedBetween = r.commits.filter((x) => inAGap(x.at));
   const renderedBetweenMs = renderedBetween.reduce((a, x) => a + (x.hasDurations ? x.total : 0), 0);
+  // A render that kept no durations is timed by the script it committed in, where a long frame recorded one.
+  const untimedIn = partsBetween.filter((p) =>
+    renderedBetween.some((x) => !x.hasDurations && x.at >= p.script.start - STAMP_TOLERANCE && x.at <= p.script.start + p.script.duration + STAMP_TOLERANCE),
+  );
   /**
    * The time between handlers the next event waited on the main thread, React's renders aside, which are
    * weighed as renders; a script that ran there is part of it, the way a script the input waited behind is
    * part of the wait before the handlers. Where React is not read, or rendered without durations, and no
    * frame says what ran, it is unknown and taken as none.
    */
-  const waitBetween = !framesSay && (blind || renderedBetween.some((x) => !x.hasDurations && carriesWork(x))) ? 0 : Math.max(0, waitedBetween - renderedBetweenMs);
+  const waitBetween =
+    !framesSay && (blind || renderedBetween.some((x) => !x.hasDurations && carriesWork(x)))
+      ? 0
+      : Math.max(0, waitedBetween - renderedBetweenMs - untimedIn.reduce((a, p) => a + p.ms, 0));
   const onlyGap = gaps.length === 1 ? gaps[0]! : null;
   const whereBetween = !onlyGap
     ? "between one event's handlers and the next's"
@@ -1601,8 +1600,9 @@ function explain(r: InteractionReport): Explanation {
     const longest = longestPart(partsBetween);
     // Where the key or the pointer was still down for part of it, what follows is said of the rest, the wait.
     const it = heldGap ? 'the wait' : 'it';
+    // The figures add up as printed, the wait's being the one the blame carries.
     const heldSaid = heldGap
-      ? ` The ${heldGap.before.startsWith('key') ? 'key' : 'pointer'} was still down for ${ms(heldBetween)} of it, with nothing on record running, and the ${onlyGap ? onlyGap.before : 'next event'} waited the other ${ms(between - Math.round(heldBetween))}.`
+      ? ` The ${/^(pointer|mouse|touch|click)/.test(heldGap.before) ? 'pointer' : 'key'} was still down for ${ms(Math.round(between) - Math.round(waitedBetween))} of it with nothing on record running, so the wait was the other ${ms(waitedBetween)}.`
       : '';
     const scriptsSaid =
       partsBetween.length === 1
