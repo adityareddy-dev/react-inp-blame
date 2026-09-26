@@ -632,9 +632,9 @@ export interface InstallOptions {
   /** Draw each report in the Chrome Performance panel, in a "react-inp-blame" track group, once the page is idle. Default true. */
   devtoolsTrack?: boolean;
   /**
-   * Maximum component fibers (function, class, memo and forwardRef components) visited per commit walk;
-   * DOM and text fibers do not count, and a memo wrapper counts as one with the component it renders.
-   * Default 5000.
+   * Maximum component fibers (function, class, memo and forwardRef components) React rendered or passed
+   * through per commit walk; DOM and text fibers do not count, nor does a component React only cloned and
+   * skipped, and a memo wrapper counts as one with the component it renders. Default 5000.
    */
   walkBudget?: number;
   /**

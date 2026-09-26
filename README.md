@@ -1027,10 +1027,11 @@ its own React does not switch off the app's own. Reports carry on without compon
   `alternate` (the same `child` there means the fiber bailed out), `deletions` (only on a Suspense or Activity
   boundary, to tell one React hydrated from one it rendered on the client), `actualDuration`, `elementType`
   and `type` (for names: `displayName` or `name`, through `render` for forwardRef and `type` for memo; on a
-  DOM element's fiber, its tag name), `memoizedProps` (a form control's `type`, and the event's handler
-  prop, such as `onClick`, on an element with no `__reactProps$`), `memoizedState` (whether a root or a
-  boundary was still server-rendered HTML: `isDehydrated` and `dehydrated`), and `stateNode` (the root
-  fiber's, the FiberRoot, to reach its `current`, and a DOM element's fiber's, the element).
+  DOM element's fiber, its tag name), `memoizedProps` (a form control's `type`, the event's handler prop,
+  such as `onClick`, on an element with no `__reactProps$`, and the handlers a clicked icon was handed, to
+  name what it belongs to), `memoizedState` (whether a root or a boundary was still server-rendered HTML:
+  `isDehydrated` and `dehydrated`), and `stateNode` (the root fiber's, the FiberRoot, to reach its
+  `current`, and a DOM element's fiber's, the element).
 - On DOM nodes: React's `__reactFiber$` key, `__reactProps$` (the props React runs the element's handlers
   from, where the event's handler prop is read), and `__reactContainer$` on the element `createRoot` or
   `hydrateRoot` was given. In server-rendered HTML: the comments React puts around a boundary, `$`, `$?`,
