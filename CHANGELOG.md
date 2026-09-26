@@ -25,7 +25,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   reads "The handlers took 1 ms in all, but 157 ms went by between the click's handlers and the keyup's", with
   what filled it, and the blame is a `waiting` whose `detail` says where: "between click and keyup". Where the
   wait before the handlers or the screen update is larger, that time is a note instead. A handler is never
-  said to have run through it, and a script that ran in it is named by what ran it.
+  said to have run through it. A script that ran in it is part of that wait, named the way a script the input
+  waited behind is, and never as the handler.
 
 
 ## [0.14.0] - 2026-09-26
