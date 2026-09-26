@@ -46,10 +46,16 @@ export const readableName = (name: string): boolean =>
  * `CollectionProvider`, `ProviderProvider`) spent the twelve steps between Tabs and the trigger that
  * rendered, and on cal.com a provider and a minified name spent the two that would have reached the tab
  * below the form. A library's readable parts (Radix's RovingFocusGroup, DismissableLayer) are not layers:
- * names alone cannot tell them from the app's.
+ * names alone cannot tell them from the app's. A framework that knows its own can say so (`frameworkLayers`).
  */
 const PROVIDER = /Provider$|Context$/;
-export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name);
+/**
+ * Names the page's framework renders around the app's own components and nothing else, passed like any other
+ * layer. Only the framework's own entry adds to it, since there the names are known to be its:
+ * `react-inp-blame/next-client` adds the App Router's.
+ */
+export const frameworkLayers = new Set<string>();
+export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name) || frameworkLayers.has(name);
 
 /**
  * The component a commit is named after: the deepest name on its hot path that is not a layer

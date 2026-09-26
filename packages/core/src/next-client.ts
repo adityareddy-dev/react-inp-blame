@@ -5,6 +5,7 @@
  * App Router calls its `onRouterTransitionStart` as each navigation starts. Before Next.js 16.3 the
  * app's own instrumentation-client re-exports it, and Next.js imports that file just as early.
  */
+import { frameworkLayers } from './commits.js';
 import { install } from './index.js';
 import { announceNavigation } from './navigation.js';
 import type { InstallOptions, StartedNavigation } from './types.js';
@@ -17,6 +18,22 @@ interface WrapperSettings {
   basePath: string;
 }
 
+/**
+ * The components Next.js's App Router renders between the root and a page, from Next.js 14.2 to 16.3: the
+ * boundaries every layout and page segment gets, the layout routers, the scroll handlers, the page's own root
+ * and the development build's hot reloader and overlay boundary. Each renders what it is given. A production
+ * build minifies them, and the hot path passes them already; in development they are readable, and a render
+ * that starts at the Router, as a Server Action's result does, spent the path's twelve
+ * steps on them two segments above the page, and was named after the page segment's ErrorBoundary.
+ */
+const APP_ROUTER_LAYERS: readonly string[] = [
+  'Router', 'HotReload', 'ReactDevOverlay', 'AppDevOverlayErrorBoundary', 'ServerRoot', 'AppRouter',
+  'DevRootHTTPAccessFallbackBoundary', 'DevRootNotFoundBoundary', 'HTTPAccessFallbackBoundary', 'HTTPAccessFallbackErrorBoundary',
+  'NotFoundBoundary', 'NotFoundErrorBoundary', 'RedirectBoundary', 'RedirectErrorBoundary', 'ErrorBoundary', 'ErrorBoundaryHandler',
+  'LoadingBoundary', 'OuterLayoutRouter', 'InnerLayoutRouter', 'SegmentViewNode', 'ScrollAndFocusHandler', 'ScrollAndMaybeFocusHandler',
+  'InnerScrollAndFocusHandler', 'InnerScrollAndFocusHandlerOld', 'InnerScrollHandlerNew', 'ClientPageRoot', 'ClientSegmentRoot',
+];
+
 // Next.js replaces this expression with the JSON `withInpBlame` put in `env`, at build time. Declared
 // here rather than taken from Node's types, because in the browser nothing else of `process` is read.
 declare const process: { readonly env: { readonly REACT_INP_BLAME_NEXT?: string } };
@@ -27,7 +44,12 @@ declare const process: { readonly env: { readonly REACT_INP_BLAME_NEXT?: string 
 const wrapper = process.env.REACT_INP_BLAME_NEXT;
 const settings: WrapperSettings | null = wrapper ? { install: {}, basePath: '', ...JSON.parse(wrapper) } : null;
 
-if (settings) install(settings.install);
+if (settings) {
+  // Under the App Router these names are Next.js's own, so a render that starts at its Router is named after
+  // the app's components below them.
+  for (const name of APP_ROUTER_LAYERS) frameworkLayers.add(name);
+  install(settings.install);
+}
 
 /** The third argument under `experimental.instrumentationClientRouterTransitionEvents`, reduced to what is read; Next.js passes null without the flag. */
 interface RouterTransitionStartEvent {

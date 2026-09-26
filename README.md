@@ -946,9 +946,9 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 69.6 KB | 24.8 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 69.7 KB | 24.8 KB |
 | The badge and panel, a chunk loaded by `import()` only when shown | 15.1 KB | 5.9 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 25.2 KB | 9.4 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 25.2 KB | 9.5 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
 <!-- size:end -->
 
@@ -1154,8 +1154,13 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   library cannot see. A handler that works for two seconds and commits nothing leaves the window running from
   the input, so a transition it starts afterwards can fall outside it. That render is then dropped and counted
   rather than reported: the interaction says React rendered something it could not tie to it.
-- Waiting on the server is not a phase: the render showing the result joins as a later render within
-  `inputWindow` of the paint (1.5 s unless you set it), or not at all.
+- **Waiting on the server is not a phase.** A click that calls a Server Action, a route handler or any `fetch`
+  and shows a pending state paints at once, so INP and the report count the click, not the wait. The render
+  showing the result joins as a later render within `inputWindow` of the paint (1.5 s unless you set it), and
+  the sentence says how long after the paint it landed: "A second React render landed 567 ms after the screen
+  updated". That gap is the server's time and whatever else ran meanwhile, which the report does not split.
+  Past the window nothing holds that render, and no report says it was slow. CI runs both on the Next.js demo,
+  a Server Action and a route handler at 400 ms and at 2 s, under `next dev` and both production bundlers.
 
 ## Labels and personal data
 
