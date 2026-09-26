@@ -328,6 +328,23 @@ test('the badge and panel stay while any handle mountOverlay() gave is left, and
   });
 });
 
+test('a handle another copy of the library gave out keeps the badge and panel up too', async (t) => {
+  const other = await copyOfLibrary(t);
+  await inBrowser(async () => {
+    const { hosts } = badgeDocument();
+    const api = install();
+    const a = await mountOverlay();
+    const b = await other.mountOverlay();
+    assert.equal(hosts(), 1);
+    a?.dispose();
+    await nextTask();
+    assert.equal(hosts(), 1, "one copy's handle took the badge down while the other copy's was still held");
+    b?.dispose();
+    assert.equal(hosts(), 0);
+    api.dispose();
+  });
+});
+
 test("dispose() takes down the badge install({ overlay: true }) showed, and a handle from before it leaves the next one's alone", async () => {
   await inBrowser(async () => {
     const { hosts } = badgeDocument();

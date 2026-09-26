@@ -9,7 +9,7 @@ import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavig
 import { NOT_OBSERVING, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
-import { incompatibleCopy } from './session.js';
+import { incompatibleCopy, shared } from './session.js';
 import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, ReactStatus, RendererInfo } from './types.js';
 import { warnOnce } from './warn.js';
 
@@ -372,10 +372,10 @@ function installNow(opts: InstallOptions): Api {
 }
 
 /**
- * How many handles mountOverlay() has given out on each badge and panel shown and not yet disposed. Kept
- * by this copy of the library rather than in the page's state, whose shape every copy on the page shares.
+ * How many handles mountOverlay() has given out on each badge and panel shown and not yet disposed. The
+ * badge is the page's, so the count is too: a handle another copy of the library gave out counts as well.
  */
-const holders = new WeakMap<Promise<OverlayHandle | null>, { count: number }>();
+const holders = shared('overlay-holders', () => new WeakMap<Promise<OverlayHandle | null>, { count: number }>());
 
 /**
  * Show the badge and panel for an already installed library (for example after
