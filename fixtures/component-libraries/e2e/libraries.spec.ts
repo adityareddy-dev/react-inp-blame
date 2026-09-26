@@ -12,6 +12,8 @@ test('a list styled with styled-components is blamed on the component that rende
   expect(r.explanation.blame.name).toBe('PriceList');
   expect(r.explanation.blame.detail).toMatch(/^PriceRow ×400\b/);
   expect(r.verdict).not.toMatch(/styled\.|Styled\(/);
+  // The fixture installs with overlay: 'query', and '/' has no ?inp-blame, so no visitor gets the badge.
+  await expect(page.locator('#react-inp-blame')).toHaveCount(0);
   expect(problems).toEqual([]);
 });
 
