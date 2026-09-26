@@ -23,15 +23,33 @@ export function selector(node: Node): string | null {
   const el = elementOf(node);
   if (!el) return null;
   let s = el.tagName.toLowerCase();
-  if (el.id) s += '#' + el.id;
+  if (el.id) s += '#' + ident(el.id);
   for (const name of TEST_ATTRIBUTES) {
     const value = el.getAttribute(name);
     // Quoted, so that a value with spaces or brackets is still one selector.
     if (value) return `${s}[${name}="${value.replace(/["\\]/g, '\\$&')}"]`;
   }
-  if (el.classList && el.classList.length) s += '.' + Array.from(el.classList).slice(0, 2).join('.');
+  if (el.classList && el.classList.length) s += '.' + Array.from(el.classList).slice(0, 2).map(ident).join('.');
   return s;
 }
+
+/**
+ * An id or a class written the way `CSS.escape` writes it, so that React 18's `:r1:` and Tailwind's
+ * `md:flex` or `w-1/2` are still one selector: a character CSS would read as syntax gets a backslash, a
+ * control character or a digit the name starts with is written as its code point, and anything past
+ * ASCII is left as it is, so React 19.1's `«r1»` reads the same. Done here rather than by `CSS.escape`,
+ * so the string the tests check is the one every page gets.
+ */
+function ident(name: string): string {
+  return name.replace(/^(-?)(\d)|^-$|[^\w\x80-\uffff-]/g, (c: string, dash: string, digit?: string) => {
+    if (digit) return dash + codePoint(digit);
+    if (c === '\0') return '\ufffd';
+    return c < ' ' || c === '\x7f' ? codePoint(c) : '\\' + c;
+  });
+}
+
+/** A character as a CSS escape of its code point, with the space that ends one. */
+const codePoint = (c: string): string => `\\${c.charCodeAt(0).toString(16)} `;
 
 /**
  * The control a click landed inside, or the element itself when there is none close by. A click on an
