@@ -895,15 +895,17 @@ the `tt-fuzzy` sort click collected the page-size render 1017 ms after its paint
 Since then a capture listener on the window hears `input`, `change` and `submit` too. One a script
 dispatched outside any input's task is noted on the newest input (`InputWork.closers`, the first 16),
 and a commit after one that came after the interaction's paint is attached to nothing, as after a
-newer input. It is not an input: it has no Event Timing entry, never enters the ring and never starts
-a report. One the browser fires is left alone. It comes in the task of the key or pointer that caused
-it, or carries on what that input began (an option picked from the native select the click opened, a
-file chosen, text dictated into the field it focused), which `dispatchedInput` hands to that input
+newer input. It is not an input: Event Timing has no entry for it and the ring never holds it, so it
+never starts a report. One the browser fires is left alone. It comes in the task of the key or pointer
+that caused it, or carries on what that input began (an option picked from the native select the click
+opened, or text dictated into the field it focused), which `dispatchedInput` hands to that input
 within `inputWindow`; and a person picking a page size presses something first, which the ring already
-holds. A script's `click()` does not count either, as no untrusted input does. The price is a page
-whose own code dispatches one of those events after the paint, from a timer or from an effect React
-runs in a task of its own (React 17 runs every effect that way): the interaction loses its later
-renders from there, the one that event's own handler causes included.
+holds. One a script fires in the task of such a trusted event answers the same input and is left alone
+too (`derivedTask`), as when a select's onChange fires `input` on a second field to keep it in step. A
+script's `click()` does not count either, as no untrusted input does. The price is a page whose own
+code dispatches one of those events after the paint, from a timer or from an effect React runs in a
+task of its own (React 17 runs every effect that way): the interaction loses its later renders from
+there, the one that event's own handler causes included.
 
 A run on the shadcn/ui documentation site on 2026-09-20 produced a fourth: resizing the viewport. A
 theme toggle was credited with a second render of 441 components inside `SidebarContent` 982 ms after

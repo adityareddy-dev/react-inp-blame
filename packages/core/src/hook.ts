@@ -149,9 +149,10 @@ export interface InputWork {
   unjoined: number[];
   /**
    * The times of the first few `input`, `change` and `submit` events a script dispatched while this was
-   * the newest input, once its task had ended. None of them is an interaction, but a render after one can
-   * be its work rather than this input's, so a report takes no later render past one that came after its
-   * paint (`noteCloser`). Absent until one arrives.
+   * the newest input, once its task had ended, and outside the task of a trusted one of those handed to
+   * it. None of them is an interaction, but a render after one can be its work rather than this input's,
+   * so a report takes no later render past one that came after its paint (`noteCloser`). Absent until one
+   * arrives.
    */
   closers?: number[];
 }
@@ -205,6 +206,12 @@ interface HookState {
   inputs: InputRecord[];
   /** The newest input while the task that dispatched it is still running; null once a task queued behind it has run. */
   inTask: InputRecord | null;
+  /**
+   * The newest input while a later task runs a trusted `input`, `change` or `submit` that
+   * `dispatchedInput` hands to it (`noteCloser`); null once a task queued behind that one has run.
+   * Absent where a copy of an earlier version made the state.
+   */
+  derivedTask?: InputRecord | null;
   /**
    * `timeStamp` of the last `resize` that changed the page's width (`noteResize`), and that width. Absent
    * where a copy of an earlier version made the state; `noteResize` fills them in.
@@ -318,12 +325,23 @@ export const CLOSER_TYPES = ['input', 'change', 'submit'];
  * the page-size render on the sort as its later render. The time is kept on the newest input
  * (`InputWork.closers`), where `join.ts` reads it. One the browser fires is left alone: it comes in the
  * task of the key or click that caused it, or carries on what that input began (an option picked from
- * the select it opened, a file chosen, text dictated into the field it focused), which `dispatchedInput`
- * hands to the input within `inputWindow`.
+ * the select it opened, or text dictated into the field it focused), which `dispatchedInput` hands to
+ * the input within `inputWindow`. So is one a script dispatches in the task of such a trusted event, as a
+ * select's onChange firing `input` on another field does: it answers the same input (`derivedTask`).
  */
 export function noteCloser(e: Event): void {
   const last = newestInput();
-  if (e.isTrusted || state.inTask !== null || !last) return;
+  if (state.inTask !== null || !last) return;
+  if (e.isTrusted) {
+    if (isNode(e.target) && e.timeStamp - last.work.ownEndedAt <= (state.options?.inputWindow ?? DEFAULT_INPUT_WINDOW)) {
+      state.derivedTask = last;
+      setTimeout(() => {
+        if (state.derivedTask === last) state.derivedTask = null;
+      }, 0);
+    }
+    return;
+  }
+  if (state.derivedTask === last) return;
   // The first few are enough: only the first after the report's paint closes anything, and at most a
   // handful come between the end of the input's task and its paint.
   const closers = (last.work.closers ??= []);
@@ -632,6 +650,7 @@ export function uninstallHook(): void {
   state.commits = [];
   state.inputs = [];
   state.inTask = null;
+  state.derivedTask = null;
   state.walks = 0;
   state.walkTotalMs = 0;
   state.roots = [];

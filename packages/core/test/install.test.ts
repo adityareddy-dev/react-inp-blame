@@ -1580,8 +1580,103 @@ test('a change 1 s after its click still joins it as a later render, measured fr
     delete page.window.event;
     assert.equal(api.last()?.revision, 1);
     assert.deepEqual(api.last()?.followUps.map((c) => c.at), [2600]);
+    // The change came in a task of its own, so its render is outside the click's entry.
+    assert.deepEqual(api.debug.commits().map((c) => c.inDispatch), [true, false]);
     api.dispose();
   });
+});
+
+test("an input a script fires from the change the browser handed to the click is part of that change, and one on its own is not", async (t) => {
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.duringClick(() => {
+      clock.now = 1003;
+      commitAgain(root, 1);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+    page.paint([click(7, 1000, 120)]);
+    await nextTask();
+    // An option picked from the select the click opened, and the select's onChange firing `input` on
+    // another field in the same task, the way a form library keeps a second control in step.
+    const change = { isTrusted: true, type: 'change', timeStamp: 2000, target: FIELD };
+    page.fire('change', change);
+    page.window.event = change;
+    page.fire('input', { isTrusted: false, type: 'input', timeStamp: 2000.5, target: FIELD });
+    clock.now = 2600;
+    commitAgain(root, 600);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    assert.deepEqual(api.last()?.followUps.map((c) => c.at), [2600]);
+    // Once that task is over, one a script fires with nothing trusted behind it is something new.
+    await nextTask();
+    page.fire('change', { isTrusted: false, type: 'change', timeStamp: 3000, target: FIELD });
+    clock.now = 3100;
+    commitAgain(root, 50);
+    existing.onCommitFiberRoot(id, root, 3, false);
+    assert.deepEqual(api.debug.commits().map((c) => c.at), [1003, 2600, 3100]);
+    assert.deepEqual(api.last()?.followUps.map((c) => c.at), [2600]);
+    api.dispose();
+  });
+});
+
+/**
+ * A pointerdown at 1000 that paints after `pressMs`, then its pointerup at 1060, which renders in its own
+ * dispatch at 1070, and its effects rendering at 1400. `before` runs once the press has painted and
+ * `inside` in the pointerup's task. Returns what was published and what the hook made of the two renders.
+ */
+async function heldRelease(t: TestContext, pressMs: number, before: (page: Page) => void, inside: (page: Page) => void) {
+  const clock = useClock(t);
+  let result = { published: [] as number[], followUps: [] as number[], inDispatch: [] as (boolean | undefined)[] };
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.fire('pointerdown', { isTrusted: true, type: 'pointerdown', timeStamp: 1000, target: null, pointerId: 1 });
+    page.paint([pointer('pointerdown', 7, 1000, pressMs)]);
+    await nextTask();
+    before(page);
+    clock.now = 1060;
+    const up = { isTrusted: true, type: 'pointerup', timeStamp: 1060, target: null, pointerId: 1 };
+    page.fire('pointerup', up);
+    inside(page);
+    page.window.event = up;
+    clock.now = 1070;
+    commitAgain(root, 20);
+    existing.onCommitFiberRoot(id, root, 1, false);
+    delete page.window.event;
+    await nextTask();
+    clock.now = 1400;
+    commitAgain(root, 60);
+    existing.onCommitFiberRoot(id, root, 3, false);
+    result = { published: api.reports().map((r) => r.interactionId), followUps: (api.last()?.followUps ?? []).map((c) => c.at), inDispatch: api.debug.commits().map((c) => c.inDispatch) };
+    api.dispose();
+  });
+  return result;
+}
+
+/** A `change` a script dispatches at `timeStamp`, with no trusted event behind it. */
+const scriptedChange = (timeStamp: number) => (page: Page) => page.fire('change', { isTrusted: false, type: 'change', timeStamp, target: FIELD });
+
+test("a change a script fires in a held press's release task closes nothing the release renders", async (t) => {
+  // A 32 ms press stays quiet through its release's own render, and the render after it publishes it.
+  assert.deepEqual(await heldRelease(t, 32, () => {}, scriptedChange(1062)), { published: [7], followUps: [1070, 1400], inDispatch: [true, false] });
+});
+
+test('a change a script fires after a held press painted and before its release closes nothing the release renders', async (t) => {
+  // A 48 ms press is published at its paint, 1048, and the change comes before the pointerup at 1060.
+  assert.deepEqual(await heldRelease(t, 48, scriptedChange(1050), () => {}), { published: [7], followUps: [1070, 1400], inDispatch: [true, false] });
 });
 
 test('text that arrives with no key pressed, one input event a second after a click, stops joining the click once it passes the window', async (t) => {

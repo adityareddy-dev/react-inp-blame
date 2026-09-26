@@ -169,8 +169,9 @@ it changes when a field is removed or changes meaning, which a minor release may
   events when a script dispatches one outside any input's task, and a render after one that came after an
   interaction's paint joins nothing, as after a newer input. Such an event is never an interaction of its
   own. One the browser fires still carries on the input before it, as an option picked from a native
-  select or dictated text did. The sort click now has no later render and no note. `followUps` loses the
-  render and no blame changes, since a blame never rests on a later render. A page whose own code
+  select or dictated text did, and so does one a script fires in that event's task, as a select's onChange
+  firing `input` on another field does. The sort click now has no later render and no note. `followUps`
+  loses the render and no blame changes, since a blame never rests on a later render. A page whose own code
   dispatches one of those events after the paint loses the renders after it too (README, Known limits).
 - **Past 50 published reports, the ten slowest and every report INP can still point at are kept.**
   `reports()` let the oldest go first, whatever it was, and drawing sixty rectangles in excalidraw pushed
