@@ -476,6 +476,18 @@ how many components it took, are measured; how long it took is not. `next build 
 durations back. React 17 is left out altogether: it has no dehydrated Suspense state, and the one hydration
 flag it keeps is cleared before it calls the hook, so nothing there is ever reported as a hydration.
 
+## Versions
+
+react-dom 17 to 19, Next.js 14.2 and later, Vite 5 and later, and Node 20.19 and later for the build plugins.
+What CI runs is in the [repository's README](https://github.com/adityareddy-dev/react-inp-blame#versions). The
+peer dependencies are `*` on purpose: npm refuses a canary against any range, so the library checks the versions
+itself and says what is wrong.
+
+While on 0.x a minor release can break things (an export, an option, what a report field holds, an oldest
+version), and the CHANGELOG says which; `schemaVersion` on a report moves when a field is removed or changes
+meaning. A patch only fixes. The component a report blames, and its sentence, can change in any release as the
+verdict gets better. Fixes go into the latest release only.
+
 ## Size
 
 Measured on this version's build by `scripts/size.mjs` in the repository, which CI runs to keep this table
