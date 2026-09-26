@@ -2076,6 +2076,54 @@ test("a click on an icon that the click swapped out is named by the button it wa
   });
 });
 
+test("Enter in a form's field is named by the onSubmit its keypress reached, read as the keypress was dispatched", async () => {
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    function Wizard() {}
+    function goNext() {}
+    function finish() {}
+    const node = (tag: string, fiber: Record<string, unknown>, parent: Record<string, unknown> | null) => ({
+      nodeType: 1, tagName: tag.toUpperCase(), id: '', classList: { length: 0 }, parentNode: parent, parentElement: parent, firstChild: null,
+      getAttribute: () => null, __reactFiber$demo: fiber,
+    });
+    const rootFiber = { tag: 3, elementType: null, type: null, memoizedProps: null, memoizedState: { isDehydrated: false }, return: null };
+    const wizardFiber = { tag: 0, elementType: Wizard, type: Wizard, memoizedProps: {}, return: rootFiber };
+    const formFiber: Record<string, unknown> = { tag: 5, elementType: 'form', type: 'form', memoizedProps: { onSubmit: goNext }, return: wizardFiber };
+    const fieldFiber = { tag: 5, elementType: 'input', type: 'input', memoizedProps: { type: 'text' }, return: formFiber };
+    const container = { ...node('div', rootFiber, null), __reactContainer$demo: rootFiber };
+    delete (container as Record<string, unknown>).__reactFiber$demo;
+    const form: Record<string, unknown> = { ...node('form', formFiber, container), __reactProps$demo: { onSubmit: goNext } };
+    formFiber.stateNode = form;
+    const field: Record<string, unknown> = node('input', fieldFiber, form);
+    const enter = (id: number, ts: number, render: () => void) => {
+      page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' });
+      page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: field, code: 'Enter' });
+      render();
+      const keydown = { ...pointer('keydown', id, ts, 140), processingEnd: ts + 3, target: field };
+      page.paint([keydown, { ...keydown, name: 'keypress', processingStart: ts + 3, processingEnd: ts + 123 }]);
+      return api.last()?.target?.handler;
+    };
+    // The first step's submit renders the second, whose onSubmit is finish, before the entries come.
+    assert.equal(
+      enter(7, 1000, () => (form.__reactProps$demo = { onSubmit: finish })),
+      'goNext',
+    );
+    // Server HTML React had not hydrated by the keypress has no handler to read yet: the form is read when the
+    // entries come, once React hydrated it to run the submit.
+    rootFiber.memoizedState = { isDehydrated: true };
+    delete form.__reactFiber$demo;
+    delete form.__reactProps$demo;
+    delete field.__reactFiber$demo;
+    const hydrate = () => {
+      rootFiber.memoizedState = { isDehydrated: false };
+      Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit: finish } });
+      field.__reactFiber$demo = fieldFiber;
+    };
+    assert.equal(enter(8, 2000, hydrate), 'finish');
+    api.dispose();
+  });
+});
+
 test('two copies of the library on one page share one installation: one hook wrapper, one walk per commit, one set of listeners', async (t) => {
   const [a, b] = await Promise.all([copyOfLibrary(t), copyOfLibrary(t)]);
   assert.notEqual(a.install, b.install, 'the copies share their modules');
