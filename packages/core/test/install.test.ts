@@ -235,7 +235,7 @@ test('a browser without Event Timing interactionId gets nothing installed, one w
 /**
  * Gives the stand-in browser a document with what the badge and panel are drawn with: elements that keep
  * their children and their parent, and a body. `hosts()` counts the elements in the body that the badge
- * and panel live in.
+ * and panel live in, and `panelHidden()` says whether the panel of the first of them is hidden.
  */
 function badgeDocument() {
   const element = (tagName: string): Record<string, any> => {
@@ -252,7 +252,7 @@ function badgeDocument() {
       },
       setAttribute() {},
       addEventListener() {},
-      attachShadow: () => element('#shadow-root'),
+      attachShadow: () => (el.shadowRoot = element('#shadow-root')),
       append: (...nodes: unknown[]) => el.childNodes.push(...nodes),
       prepend: (...nodes: unknown[]) => el.childNodes.unshift(...nodes),
       replaceChildren: (...nodes: unknown[]) => (el.childNodes = nodes),
@@ -270,7 +270,14 @@ function badgeDocument() {
   const body = element('BODY');
   const document = { body, createElement: element, addEventListener() {}, removeEventListener() {} };
   Object.defineProperty(globalThis, 'document', { value: document, configurable: true, writable: true });
-  return { hosts: () => body.childNodes.filter((node: { id: string }) => node.id === 'react-inp-blame').length };
+  const hosts = () => body.childNodes.filter((node: { id: string }) => node.id === 'react-inp-blame');
+  return {
+    hosts: () => hosts().length,
+    panelHidden: (): boolean => {
+      const wrap = hosts()[0].shadowRoot.childNodes.find((node: { className?: string }) => node.className?.startsWith('wrap'));
+      return wrap.childNodes.find((node: { className?: string }) => node.className === 'panel').hidden;
+    },
+  };
 }
 
 test('mountOverlay() after its handle was disposed shows the badge and panel again, with a handle of its own', async () => {
@@ -314,7 +321,7 @@ test('a component that shows the badge from an effect keeps it under StrictMode,
 
 test('the badge and panel stay while any handle mountOverlay() gave is left, and go with the last one', async () => {
   await inBrowser(async () => {
-    const { hosts } = badgeDocument();
+    const { hosts, panelHidden } = badgeDocument();
     const api = install();
     const [a, b] = await Promise.all([mountOverlay(), mountOverlay()]);
     assert.notEqual(a, b);
@@ -322,6 +329,14 @@ test('the badge and panel stay while any handle mountOverlay() gave is left, and
     a?.dispose();
     await nextTask();
     assert.equal(hosts(), 1, 'disposing one handle twice let go of the other one');
+    a?.open();
+    assert.equal(panelHidden(), true, 'a disposed handle opened the panel another handle holds');
+    a?.toggle();
+    assert.equal(panelHidden(), true, 'a disposed handle toggled the panel another handle holds');
+    b?.open();
+    assert.equal(panelHidden(), false);
+    a?.close();
+    assert.equal(panelHidden(), false, 'a disposed handle closed the panel another handle holds');
     b?.dispose();
     assert.equal(hosts(), 0);
     api.dispose();
