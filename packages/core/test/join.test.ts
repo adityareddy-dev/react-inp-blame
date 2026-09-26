@@ -3282,7 +3282,10 @@ test("a wait between one event's handlers and the next is put on the wait, not o
     [frame(8.1, 156.9, [], 13.1)],
     [input(0, 'keydown')],
   );
-  assert.deepEqual([pastTheEnd.explanation.blame.kind, pastTheEnd.explanation.blame.detail], ['waiting', 'between click and keyup']);
+  assert.deepEqual(
+    [pastTheEnd.explanation.blame.kind, pastTheEnd.explanation.blame.detail, Math.round(pastTheEnd.explanation.blame.ms)],
+    ['waiting', 'between click and keyup', 155],
+  );
 
   // A keyup released after the key press painted is in a frame of its own, and leaves no wait in this one.
   const typed = report(
