@@ -231,6 +231,39 @@ test("the transform stamps displayName on the app's component files, and leaves 
   assert.equal(transform.transform(source, '/app/src/cart.ts'), null);
 });
 
+test('under Rolldown (Vite 8) the transform calls a helper for two function components or more, and under Rollup it writes every one out', () => {
+  // Rollup drops a written-out stamp along with the component nobody imported, and keeps every component
+  // a helper is called on. Rolldown keeps them all either way, so there only the bytes differ.
+  const transform = pluginsFor('build', { enabled: true, runtime: false }).find((p) => p.name === NAMES)!;
+  const source = 'export function Cart() {}\nexport function Row() {}\n';
+  const rolldown = transform.transform.call({ meta: { rollupVersion: '4.23.0', rolldownVersion: '1.2.8' } }, source, '/app/src/Cart.tsx').code;
+  assert.match(rolldown, /\ntypeof Cart === "function" && __reactInpBlameName\(Cart, "Cart"\);/);
+  const rollup = transform.transform.call({ meta: { rollupVersion: '4.52.0' } }, source, '/app/src/Cart.tsx').code;
+  assert.doesNotMatch(rollup, /__reactInpBlame/);
+  assert.match(rollup, /\(Cart\.displayName = "Cart"\);/);
+});
+
+test('Rolldown keeps every component of a stamped module however its stamps are written, so the helper costs Vite 8 no tree shaking', async () => {
+  const { rolldown } = await import('rolldown');
+  const transform = pluginsFor('build', { enabled: true, runtime: false }).find((p) => p.name === NAMES)!;
+  const icons = ['Home', 'Cart', 'Row', 'Badge', 'Menu', 'Star', 'Bell'].map((name) => `export function ${name}() { return "${name} icon"; }`).join('\n');
+  /** How many of the seven the bundle keeps where the app imports one, stamped by a plugin context with this `meta`. */
+  const kept = async (meta: Record<string, string>) => {
+    const stamped = transform.transform.call({ meta }, icons, '/app/src/icons.tsx').code;
+    const bundle = await rolldown({
+      input: 'entry',
+      logLevel: 'silent',
+      plugins: [{ name: 'files', resolveId: (id: string) => id, load: (id: string) => (id === 'entry' ? "import { Cart } from './icons';\nconsole.log(Cart());" : stamped) }],
+    });
+    const { output } = await bundle.generate({ format: 'esm' });
+    return icons.match(/"\w+ icon"/g)!.filter((body) => output[0].code.includes(body)).length;
+  };
+  assert.equal(await kept({ rollupVersion: '4.23.0', rolldownVersion: '1.2.8' }), 7);
+  // Should Rolldown learn to drop a written-out stamp with its component, the plugin would do better to
+  // write them out under Rolldown as well.
+  assert.equal(await kept({ rollupVersion: '4.52.0' }), 7, 'Rolldown now drops the written-out stamps of components nobody imported');
+});
+
 test("in a build, a component's `export default function` becomes a declaration exported by name before any other plugin reads the module", () => {
   const hoist = pluginsFor('build', { enabled: true, runtime: false }).find((p) => p.name === DEFAULT_EXPORTS)!;
   assert.equal(hoist.enforce, 'pre');

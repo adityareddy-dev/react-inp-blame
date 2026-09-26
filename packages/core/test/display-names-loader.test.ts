@@ -6,13 +6,17 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 
-const loader = createRequire(import.meta.url)('../display-names-loader.cjs') as {
+const require = createRequire(import.meta.url);
+const loader = require('../display-names-loader.cjs') as {
+  (this: { resourcePath?: string }, source: string): string;
   stamp(code: string): string;
   [key: symbol]: (code: string) => string;
 };
 const { stamp } = loader;
 /** The pass the Vite plugin runs before any other plugin, which the loader keeps under a symbol rather than a name. */
 const hoistDefaultExport = loader[Symbol.for('react-inp-blame.hoistDefaultExport')]!;
+/** What the loader gives webpack and Turbopack for one of the app's own files. */
+const load = (code: string): string => loader.call({ resourcePath: '/app/src/Cart.tsx' }, code);
 
 /**
  * The components the loader names in a module, read off the lines `stamp` adds after it, in their order.
@@ -120,6 +124,68 @@ try { if (Badge.displayName == null) Badge.displayName = "Badge"; } catch (e) {}
   assert.equal(stamp('export const price = 1;'), 'export const price = 1;');
 });
 
+test('the loader calls one helper for the function components of a module that has two or more, and writes a lone one out', () => {
+  // Written out, every function component's stamp repeats the whole check, and a minifier can shorten
+  // only the name in it. Through a helper the module declares once, the check is written once. A lone
+  // stamp stays written out, since the helper and its one call come to more than the stamp does, and so
+  // does a memo or forwardRef one, whose check is short. The `typeof` stays at each call: passing a name
+  // that does not exist would throw before the helper ran.
+  const code = 'export function Cart() {}\nconst Row = (props) => null;\nconst Badge = memo(() => null);\nconst Chip = forwardRef((props, ref) => null);\n';
+  assert.equal(
+    load(code),
+    `${code}
+function __reactInpBlameName(f, n) { Object.isExtensible(f) && !Object.getOwnPropertyDescriptor(f, "displayName") && (f.displayName = n); }
+typeof Cart === "function" && __reactInpBlameName(Cart, "Cart");
+typeof Row === "function" && __reactInpBlameName(Row, "Row");
+try { if (Badge.displayName == null) Badge.displayName = "Badge"; } catch (e) {}
+try { if (Chip.displayName == null) Chip.displayName = "Chip"; } catch (e) {}`,
+  );
+  const lone = 'export function Cart() {}\nconst Badge = memo(() => null);\nconst Chip = memo(() => null);\n';
+  assert.equal(load(lone), stamp(lone));
+  // `stamp` writes every one out, for Rollup, which drops a written-out stamp along with the component
+  // nobody imported but keeps every component a helper is called on.
+  assert.doesNotMatch(stamp(code), /__reactInpBlame/);
+  assert.equal(loader.call({ resourcePath: '/app/node_modules/ui/Cart.jsx' }, code), code);
+});
+
+test('the helper takes a name nothing in the module has, and a module that reaches the loader twice is stamped once', () => {
+  // A binding of the same name would stop the module from parsing, so any mention of it at all, a
+  // comment's included, moves the helper on to the next name that is free.
+  const taken = 'const __reactInpBlameName = "taken";\n// __reactInpBlameName1\nexport function Cart() {}\nexport function Row() {}\n';
+  const stamped = load(taken);
+  assert.match(stamped, /\nfunction __reactInpBlameName2\(f, n\) \{/);
+  assert.match(stamped, /\ntypeof Row === "function" && __reactInpBlameName2\(Row, "Row"\);/);
+  // withInpBlame's rule and an app's own can both run it on one file. A name handed to the helper counts
+  // as named, as a written-out stamp's `Foo.displayName` does.
+  const twice = 'export function Cart() {}\nexport function Row() {}\nconst Badge = memo(() => null);\n';
+  assert.equal(load(load(twice)), load(twice));
+  assert.equal(stamp(stamp(twice)), stamp(twice));
+});
+
+test("after Next.js's own minifier, a module's stamps come to far fewer bytes through the helper, and a lone one to no more", async () => {
+  // The minifier and the options next build runs it with, on modules the way webpack hands them over:
+  // each a function in the chunk, whose bindings the minifier renames, with its exports read by name.
+  const swc = require('next/dist/build/swc') as { loadBindings(): Promise<unknown>; minify(code: string, options: object): Promise<{ code: string }> };
+  await swc.loadBindings();
+  const options = { compress: { inline: 2, keep_classnames: false, keep_fnames: false }, mangle: { reserved: ['AbortSignal'], disableCharFreq: false }, module: 'unknown', output: { comments: false } };
+  const chunk = (names: string[], module: string) =>
+    `(self.webpackChunk_N_E = self.webpackChunk_N_E || []).push([[1], { 42: (module, exports, require) => { "use strict"; require.d(exports, { ${names.map((name) => `${name}: () => ${name}`).join(', ')} }); var jsx = require(5250);\n${module}\n} }]);`;
+  const minified = async (names: string[], module: string) => Buffer.byteLength((await swc.minify(chunk(names, module), options)).code);
+  // About 106 bytes a stamp written out, and through the helper 75 with two components and 42 with five.
+  for (const [count, most] of [
+    [1, 1],
+    [2, 0.8],
+    [5, 0.5],
+  ] as const) {
+    const names = Array.from({ length: count }, (_, i) => `ProductCard${i}`);
+    const source = names.map((name) => `function ${name}(props) { return jsx.jsx("div", { className: "card", children: props.label }); }`).join('\n');
+    const bare = await minified(names, source);
+    const written = (await minified(names, stamp(source))) - bare;
+    const helper = (await minified(names, load(source))) - bare;
+    assert.ok(helper <= written * most, `${count} stamps: ${helper} bytes through the helper, ${written} written out`);
+  }
+});
+
 test('a module whose first statement is "use server" is left alone, and a "use client" one is not', () => {
   const server = '"use server";\nexport const Save = async (data) => data;\nexport async function Load() {}\n';
   assert.deepEqual(names(server), []);
@@ -203,18 +269,30 @@ test('a stamped module loads whatever the binding turned out to hold, and the co
     },
     // Nothing in a "use server" module is stamped at all, so the component after it keeps no name.
     { label: 'a "use server" module', body: '"use server";\nexport const Save = async (data) => data;', named: false },
+    // The loader's helper takes another name, or the module would not parse.
+    { label: "a binding of the helper's name", body: 'export const __reactInpBlameName = "taken";', check: (m) => assert.equal(m.__reactInpBlameName, 'taken') },
   ];
   const dir = mkdtempSync(join(tmpdir(), 'inp-display-names-'));
   try {
     for (const [index, { label, body, named, check }] of cases.entries()) {
-      // Every module declares the same plain component, so each case also proves that a value the
-      // stamp had to step over did not stop the name after it from being set.
-      const source = `${body}\nexport const Row = (props) => null;\n`;
-      const file = join(dir, `${index}.mjs`);
-      writeFileSync(file, stamp(source));
-      const loaded = (await import(pathToFileURL(file).href)) as Loaded;
-      assert.equal(loaded.Row?.displayName, named === false ? undefined : 'Row', label);
-      check?.(loaded);
+      // Every module declares the same two plain components, so each case also proves that a value the
+      // stamp had to step over did not stop the names after it from being set, and the loader names them
+      // through its helper. Written out or through the helper, the same bindings get the same names.
+      const source = `${body}\nexport const Row = (props) => null;\nexport const Cell = (props) => null;\n`;
+      const given: Array<Record<string, unknown>> = [];
+      for (const [form, stamped] of [
+        ['written out', stamp(source)],
+        ['through the helper', load(source)],
+      ] as const) {
+        const file = join(dir, `${index}-${given.length}.mjs`);
+        writeFileSync(file, stamped);
+        const loaded = (await import(pathToFileURL(file).href)) as Loaded;
+        assert.equal(loaded.Row?.displayName, named === false ? undefined : 'Row', `${label}, ${form}`);
+        check?.(loaded);
+        given.push(Object.fromEntries(Object.entries(loaded).map(([key, value]) => [key, value?.displayName])));
+      }
+      assert.deepEqual(given[1], given[0], label);
+      if (named !== false) assert.match(load(source), /&& __reactInpBlameName\d*\(Row, "Row"\);/, label);
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
