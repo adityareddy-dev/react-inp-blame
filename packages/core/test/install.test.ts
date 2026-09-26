@@ -1253,6 +1253,51 @@ test("the renders a listener's render sets off, from its layout effects or its p
   });
 });
 
+test('a page that keeps creating React roots and dropping them holds on to the dropped ones only for a while, report listener or not', async (t) => {
+  // A root per toast, popup or map marker. The roots the listeners' work is looked for on are held
+  // weakly, so a dropped one leaves an empty WeakRef behind. This one lets the test drop a root at once.
+  const dropped = new WeakSet<object>();
+  class DroppableRef<T extends object> {
+    target: T;
+    constructor(target: T) {
+      this.target = target;
+    }
+    deref(): T | undefined {
+      return dropped.has(this.target) ? undefined : this.target;
+    }
+  }
+  const { WeakRef } = globalThis;
+  globalThis.WeakRef = DroppableRef as unknown as WeakRefConstructor;
+  t.after(() => {
+    globalThis.WeakRef = WeakRef;
+  });
+  const roots = () => (session?.slots as Record<string, { roots: { deref(): unknown }[] }>).hook!.roots;
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const app = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, app);
+    const toasts = () => {
+      for (let i = 0; i < 2000; i++) {
+        const root = mountedRoot(0b11, 4);
+        existing.onCommitFiberRoot(id, root);
+        dropped.add(root);
+      }
+    };
+
+    toasts();
+    assert.ok(roots().length <= 128, `${roots().length} roots held with no report listener`);
+    // A listener that no report has reached yet, so nothing has looked at the roots for it.
+    onInteraction(() => {});
+    toasts();
+    assert.ok(roots().length <= 128, `${roots().length} roots held with a report listener`);
+    assert.ok(roots().some((ref) => ref.deref() === app), 'the root still mounted was let go');
+    api.dispose();
+  });
+});
+
 test("a root's first commit is an input's only when React ran it inside that input's dispatch", async (t) => {
   const clock = useClock(t);
   await inBrowser((page) => {
