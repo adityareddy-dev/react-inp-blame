@@ -906,11 +906,13 @@ function takeNewLanes(root: FiberRoot, work: ListenerWork): void {
  * hook, so it is theirs too; what its passive effects schedule is taken when React says they ran.
  *
  * Not a commit inside an input's dispatch (`inInput`) that finished such a lane: that is the input's work
- * with theirs rendered along. React 19.3 renders sync, continuous and default updates in one pass, so a key
+ * with theirs rendered along. React 19 renders sync, continuous and default updates in one pass, so a key
  * pressed before React's own task for a listener's update renders that update with the key's. Typing at
  * full speed in the demo, 9 of 23 keystrokes had their commit read as the panel's render and dropped, and
  * their reports said the handler's script took the time. Kept, the commit counts the listener's components
- * beside the input's, which is the lesser error.
+ * beside the input's, and where the input's own render is small they can be what the render blame names.
+ * Nor is `effectsPending` set for it, so an update the listener's components make in useEffect reads as
+ * the input's later render. Both are the lesser error.
  */
 function causedByListeners(root: FiberRoot, inInput: boolean): boolean {
   const work = listenerWorkOf(root);

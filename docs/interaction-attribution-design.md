@@ -327,11 +327,15 @@ commits, so a commit during the delivery, a commit that finishes a lane the deli
 whatever that commit's own render and layout effects schedule are not read at all; for its passive
 effects React 18 and 19 call `onPostCommitFiberRoot` when they have run, and React 17 has no such call,
 so there an effect of a listener's own render can still join a report. The one commit that finishes such
-a lane and is read anyway is one inside an input's dispatch. React 19.3 renders sync, continuous and
-default updates in one pass, so a key pressed before React's own task for the listener's update renders
-that update with its own. Typing at full speed in the demo, 9 of 23 keystrokes lost their commit that way
-until 2026-09-25, and their reports put the render's time on the handler's script. Kept, the commit
-counts the listener's components beside the key's, which is the smaller error. An update a listener defers
+a lane and is read anyway is one inside an input's dispatch. React 19 renders sync, continuous and
+default updates in one pass (react-dom 19.0.0 already groups `lanes & 42`), so a key pressed before
+React's own task for the listener's update renders that update with its own. Typing at full speed in the
+demo, 9 of 23 keystrokes lost their commit that way until 2026-09-25, and their reports put the render's
+time on the handler's script. Kept, the commit is the key's, with two costs. It counts the listener's
+components beside the key's, and where the key's own render is small, those components can be the render
+the blame names, not only a part of its counts. And the hook does not mark it as the listener's, so what
+the listener's components update in `useEffect` is not recognised either: that commit reads as the key's
+later render. Both are smaller errors than a keystroke with no render at all. An update a listener defers
 instead, with `setTimeout`, `requestAnimationFrame` or an `await`, is scheduled after the lanes have been
 taken, so its commit is read like any other render. That is the library working as intended: a genuine
 later render is the thing it exists to report. Measured against a 37-component

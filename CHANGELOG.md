@@ -223,12 +223,14 @@ it changes when a field is removed or changes meaning, which a minor release may
   development build and 10 in a production build had no commit, and their reports put the time on the
   field's handler as a script, `onEmailChange` or `onChange`, where the email's render of 1000 tiles took
   it. The demo's panel sets state when it hears a report, and the next key often came before React's own
-  task for that update. React 19.3 renders sync, continuous and default updates in one pass, so the key's
+  task for that update. React 19 renders sync, continuous and default updates in one pass, so the key's
   render took the panel's update along and finished its lane, and the hook read the whole commit as the
   listener's work and dropped it. A commit inside an input's dispatch is now the input's even where it
   finishes a lane the listeners left pending; outside any dispatch such a commit is still theirs and not
   read. Every keystroke now has its commit and its report blames the render or the handler. The kept
-  commit counts the listener's components beside the input's (README, Known limits).
+  commit counts the listener's components beside the input's, and where the input's own render is small
+  they can be the render the blame names. It is not marked as the listener's either, so an update the
+  listener's components make in `useEffect` reads as the input's later render (README, Known limits).
 - **A commit joins an entry of its own input's type, and a release's press is matched against presses only.**
   Typing at full speed, the next key can go down under a millisecond after the last one came up, before the
   frame that keyup paints in, so the keyup's entry runs to the paint after the next key's render. A commit's
