@@ -99,10 +99,11 @@ export type { Blame, RenderedComponent } from './types.js';
  *     onINP(send, { generateTarget });
  *
  * It reads the fiber React stored on the node, so it needs neither `install()` nor any React
- * internals beyond that one property, and never throws: a detached node, a text node, a node from
- * another document and a page with no React all return undefined, which is web-vitals' signal to
- * fall back to its own CSS selector. So does an element whose enclosing components have no names
- * worth printing.
+ * internals beyond that one property. A text node gives the path of the element holding it, and a
+ * node with no fiber of its own, like an element the app added outside React, is placed by the
+ * nearest element that has one. It never throws: a detached node, a node from another document and
+ * a page with no React all return undefined, which is web-vitals' signal to fall back to its own
+ * CSS selector. So does an element whose enclosing components have no names worth printing.
  *
  * Under a production build without the `displayName` transform (`react-inp-blame/next`,
  * `react-inp-blame/vite` or `react-inp-blame/display-names-loader`) the minifier has renamed the
