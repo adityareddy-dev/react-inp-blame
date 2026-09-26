@@ -373,7 +373,8 @@ function installNow(opts: InstallOptions): Api {
 
 /**
  * How many handles mountOverlay() has given out on each badge and panel shown and not yet disposed. The
- * badge is the page's, so the count is too: a handle another copy of the library gave out counts as well.
+ * badge is the page's, so the count is too: a handle another copy of the library gave out counts as well,
+ * where that copy is this version or later. An older one hands out the badge's own handle, uncounted.
  */
 const holders = shared('overlay-holders', () => new WeakMap<Promise<OverlayHandle | null>, { count: number }>());
 
