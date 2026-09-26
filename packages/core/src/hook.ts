@@ -220,6 +220,11 @@ interface HookState {
   width?: number;
   /** Every root that committed while installed, held weakly so that an unmounted root is not kept alive by this list. */
   roots: WeakRef<FiberRoot>[];
+  /**
+   * The length at which `roots` next lets go of the roots React has dropped (`listenerWorkOf`). Absent where
+   * a copy of an earlier version made the state, or since the last dispose().
+   */
+  pruneAt?: number;
   /** What the page's report listeners caused on each root in `roots`. */
   listenerWork: WeakMap<FiberRoot, ListenerWork>;
   /** The page's report listeners are running. */
@@ -300,6 +305,8 @@ const RING_SIZE = 8;
 const MAX_UNJOINED = 16;
 /** Commits per root waiting for React to say their passive effects ran. Only one committed inside another's effects waits behind a newer one. */
 const MAX_AWAITING_EFFECTS = 8;
+// The fewest roots held before the ones React has dropped are let go of (`listenerWorkOf`).
+const MIN_PRUNE_AT = 64;
 // A press can be held this long and its release still counts as the same gesture.
 const PRESS_WINDOW = 5000;
 
@@ -654,6 +661,7 @@ export function uninstallHook(): void {
   state.walks = 0;
   state.walkTotalMs = 0;
   state.roots = [];
+  state.pruneAt = undefined;
   state.listenerWork = new WeakMap();
   state.hearing = false;
   state.awaitingEffects = new WeakMap();
@@ -903,6 +911,13 @@ function listenerWorkOf(root: FiberRoot): ListenerWork {
   let work = state.listenerWork.get(root);
   if (!work) {
     state.listenerWork.set(root, (work = { lanes: 0, seen: root.pendingLanes, effectsPending: false }));
+    // hearingReports lets go of dropped roots only when a report reaches a listener, so on a page that keeps
+    // creating roots and dropping them (a root per toast or map marker) the list would fill with empty refs.
+    // They go here too, each time it reaches twice the roots that were alive at the last look.
+    if (state.roots.length >= (state.pruneAt ?? MIN_PRUNE_AT)) {
+      state.roots = state.roots.filter((ref) => ref.deref() !== undefined);
+      state.pruneAt = Math.max(MIN_PRUNE_AT, 2 * state.roots.length);
+    }
     state.roots.push(new WeakRef(root));
   }
   return work;
