@@ -372,16 +372,43 @@ function installNow(opts: InstallOptions): Api {
 }
 
 /**
+ * How many handles mountOverlay() has given out on each badge and panel shown and not yet disposed. Kept
+ * by this copy of the library rather than in the page's state, whose shape every copy on the page shares.
+ */
+const holders = new WeakMap<Promise<OverlayHandle | null>, { count: number }>();
+
+/**
  * Show the badge and panel for an already installed library (for example after
  * `import 'react-inp-blame/auto'`). Installs with defaults if nothing has yet. Their code loads
- * on demand, so the handle arrives in a promise: null where nothing was installed.
+ * on demand, so the handle arrives in a promise: null where nothing was installed. Each call gets
+ * a handle of its own, and the badge and panel go when the last of them is disposed, so a component
+ * can show them from an effect and dispose its handle in the cleanup, under StrictMode too.
  */
 export function mountOverlay(opts: OverlayOptions = {}): Promise<OverlayHandle | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
   const api = install();
   // A browser without Event Timing gets the badge that says so; a page the sample left out gets none.
   if (!page.installed && api.stats().unsupportedReason?.kind !== 'browser') return Promise.resolve(null);
-  return page.overlay ?? showOverlay(api, opts);
+  const shown = page.overlay ?? showOverlay(api, opts);
+  const held = holders.get(shown) ?? { count: 0 };
+  holders.set(shown, held);
+  held.count++;
+  let disposed = false;
+  return shown.then(
+    (handle) =>
+      handle && {
+        ...handle,
+        // A handle disposed twice lets go once, and one left from before the badge was hidden or
+        // replaced lets go of nothing that is showing now.
+        dispose: () => {
+          if (disposed) return;
+          disposed = true;
+          if (--held.count || page.overlay !== shown) return;
+          page.overlay = null;
+          handle.dispose();
+        },
+      },
+  );
 }
 
 /**
@@ -412,6 +439,8 @@ function showOverlay(api: Api, opts: OverlayOptions): Promise<OverlayHandle | nu
     .then((code) => (code && page.overlay === shown ? code.createOverlay(api, opts) : null))
     .catch((error: unknown) => {
       warnOnce('overlay-failed', `the badge and panel could not be shown (${String(error)}).`);
+      // The next mountOverlay() tries again, rather than getting this null for as long as the page is open.
+      if (page.overlay === shown) page.overlay = null;
       return null;
     });
   page.overlay = shown;
