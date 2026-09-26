@@ -155,7 +155,7 @@ test('a deep tree and a long id are capped, keeping the components nearest the e
   assert.equal(only?.includes('('), false, only);
 });
 
-test('a long escaped id is shortened to its last whole escape, never cut inside one', () => {
+test('a long escaped id is shortened to its last whole escape or character, never cut inside one', () => {
   // Each colon of React 18's useId is written as two characters, and the room left for the element runs
   // from 55 to 60, so a slice would end two of these on a backslash that escapes the bracket after it.
   for (let length = 57; length <= 62; length++) {
@@ -171,6 +171,12 @@ test('a long escaped id is shortened to its last whole escape, never cut inside 
   for (let length = 57; length <= 62; length++) {
     const target = generateTarget(asNode(element('td', { attributes: { 'data-test': 'C:\\'.repeat(20) }, fiber: owners('D'.repeat(length)) })));
     assert.match(target?.slice(length) ?? '', /^ \(td\[data-test="(C|:|\\\\)+\)$/, target);
+  }
+  // An emoji is two UTF-16 code units, and a cut between them would leave half of one, which UTF-8
+  // cannot carry: a beacon would send a replacement character in its place.
+  for (let length = 57; length <= 62; length++) {
+    const target = generateTarget(asNode(element('button', { id: '\u{1F600}'.repeat(30), fiber: owners('B'.repeat(length)) })));
+    assert.match(target?.slice(length) ?? '', /^ \(button#\u{1F600}+\)$/u, target);
   }
 });
 

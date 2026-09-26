@@ -141,9 +141,10 @@ export function generateTarget(node: Node | null): string | undefined {
  * The first `max` characters of a selector, less an escape the cut went through: a backslash left at
  * the end would escape the bracket after it, and a code point cut short would be another character.
  * Backslashes in a row pair up, as an escaped backslash does, so only an odd run ends in an escape.
+ * Less the first half of an emoji too, or of any character past U+FFFF, which UTF-8 cannot carry alone.
  */
 function shortened(element: string, max: number): string {
-  return element.slice(0, max).replace(/(^|[^\\])((?:\\\\)*)\\[\da-f]*$/, '$1$2');
+  return element.slice(0, max).replace(/(^|[^\\])((?:\\\\)*)\\[\da-f]*$|[\ud800-\udbff]$/, '$1$2');
 }
 
 /**
