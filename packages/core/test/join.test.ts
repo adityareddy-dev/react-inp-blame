@@ -1152,6 +1152,35 @@ test('the screen update takes the blame off a rung only by taking it, never by e
   assert.equal(painted.explanation.blame.ms, 155);
 });
 
+test('where a build times React\'s commit, the forced layout sentence says whether a layout effect could have held it', () => {
+  // 100 ms of forced layout in a 116 ms click handler, in a development build that times the commit.
+  const thrash = [frame(0, 128, [script('DIV#root.onclick', 2, 116, 100)])];
+  const click = [entry('click', 0, 128, 2, 118)];
+  const tail = (c: CommitSummary[]) => report(click, c, thrash, [input(0, 'click')]).explanation.cause.replace(/^.*\. (That happens)/, '$1');
+
+  // A commit that took 5 ms held none of it, nor did a 5 ms render: it was outside React.
+  assert.equal(
+    tail([commit(110, 0, { total: 5, startedAt: 100 })]),
+    "That happens when code reads an element's size right after changing styles. Not in a layout effect here: React's commit took 5 ms in all, so it was code outside React, such as the click handler or a library's listener.",
+  );
+  // With the commit's useEffect timed, the effects are counted and said too.
+  assert.match(
+    tail([commit(110, 0, { total: 5, startedAt: 100, effectsStartedAt: 108, effectsEndedAt: 110 })]),
+    /Not in a layout effect here: React's commit and effects took 7 ms in all, so it was code outside React/,
+  );
+  // A render that could have held it leaves the render in.
+  assert.match(tail([commit(110, 0, { total: 60, startedAt: 48 })]), /took 2 ms in all, so it was React's render or code outside React\.$/);
+  // A commit long enough to have held it is most likely where it was.
+  assert.equal(
+    tail([commit(110, 0, { total: 5, startedAt: 40 })]),
+    "That happens when code reads an element's size right after changing styles, here most likely in a layout effect or a ref callback: React spent 65 ms committing.",
+  );
+  // React not rendering at all rules it out in any build.
+  assert.match(tail([]), /right after changing styles\. React did not render, so here it was code outside React, such as the click handler or a library's listener\.$/);
+  // A production build keeps no commit time, so only the usual place is said.
+  assert.match(tail([commit(110, 0, { total: 0, hasDurations: false, rendered: 3 })]), /right after changing styles, often in a layout effect\.$/);
+});
+
 test('a measured forced layout is not unseated by a screen update shorter than the time it ran in', () => {
   // A production build: 120 ms of working time, 70 of it recalculating layout, and a 78 ms screen
   // update. 78 beats the 70 without beating the 120 the 70 happened inside, and the layout used to

@@ -810,6 +810,16 @@ The demo's layout-thrash scenario is the case: 400 layout effects writing a styl
 about 190 ms of layout against a 48 ms render, named `LayoutThrash` with `PriceTicker ×400` beside
 it, exactly as the render blame it replaced was.
 
+The sentence then says what forces a layout, a read of an element's size right after a style change, and
+where that read could have been. It is usually a layout effect's, and a production build keeps nothing that
+says otherwise, so there the sentence says "often in a layout effect". A development or profiling build times
+React's commit (`startedAt` to `at`, less the render) and, on React 18 and 19, its effects, and a layout
+effect's read sits inside that time. So where the commit and effects hold half the layout or more, the read
+was "most likely in a layout effect, a ref callback or an effect"; where they hold less, it was not in a
+layout effect, and where the render holds less too, it was code outside React, the handler or a library's
+listener. On cmdk's list and Radix's tabs the reads are not in layout effects. A commit with no timed
+effects, React 17's or one with no `useEffect`, is said to have timed the commit only.
+
 Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are
 nowhere in it, and the working time outside the render was all the handler's: on Linux WebKit in CI

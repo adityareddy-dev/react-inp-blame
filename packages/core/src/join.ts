@@ -84,6 +84,8 @@ const FORCED_LAYOUT_MIN_MS = 4;
 // against React's render, and a production build measures no render at all, which is exactly where
 // this has to hold.
 const FORCED_LAYOUT_MIN_SHARE = 0.5;
+/** React's commit and effects, where the build times them, have to hold this much of a forced layout for it to be said to be theirs. */
+const FORCED_LAYOUT_IN_REACT_SHARE = 0.5;
 // Where no render was timed (a production build, or no commit joined at all), the long task is too
 // high a bar: on the shadcn docs a sheet opened with 44 to 49 ms of layout in 55 ms of working time,
 // and the blame went to a render known only by its counts, then back to the layout on the run where
@@ -1406,6 +1408,30 @@ function explain(r: InteractionReport): Explanation {
     if (unspanned.length) rendersInside.set(span.commit, unspanned.length);
   }
   const effects = [...effectsOf.values()].reduce((a, x) => a + x, 0);
+  /**
+   * Where the read that forced a layout could have been, for the sentence that says what forces one. It is
+   * usually a layout effect's, but a build that times React's commit can rule that out: a commit and effects
+   * that took 2 ms in all did not hold 70 ms of layout. Then it was in React's render or outside React, and
+   * where the render took little as well, outside it. On cmdk's list and Radix's tabs the reads are not in
+   * layout effects. A production build keeps no commit time, so there only the usual place can be said, unless
+   * React rendered nothing at all.
+   */
+  const commitTimed = r.commits.length > 0 && r.commits.every((x) => x.startedAt !== null && x.hasDurations);
+  const noRender = !blind && !unjoined && r.commits.length === 0;
+  const whereRead = (forced: number): string => {
+    const reads = "That happens when code reads an element's size right after changing styles";
+    const handlerOrListener = `code outside React, such as the ${kind} handler or a library's listener`;
+    if (noRender) return `${reads}. React did not render, so here it was ${handlerOrListener}.`;
+    if (!commitTimed) return `${reads}, often in a layout effect.`;
+    // React 17, and a commit with no useEffect, report no effects, so only the commit is said to be timed.
+    const effectsTimed = r.commits.some((x) => x.effectsEndedAt !== null);
+    const inReact = committing + effects;
+    if (inReact >= FORCED_LAYOUT_IN_REACT_SHARE * forced) {
+      return `${reads}, here ${HEDGE} in a layout effect${effectsTimed ? ', a ref callback or an effect' : ' or a ref callback'}: React spent ${ms(inReact)} committing${effectsTimed ? ' and running effects' : ''}.`;
+    }
+    const where = renderTotal < FORCED_LAYOUT_IN_REACT_SHARE * forced ? handlerOrListener : "React's render or code outside React";
+    return `${reads}. Not in a layout effect here: React's commit${effectsTimed ? ' and effects' : ''} took ${underOr(inReact)} in all, so it was ${where}.`;
+  };
   /** Where a commit's effects figure holds renders it could not take out: ", one more render included". */
   const includedN = (n: number) => (n === 0 ? '' : `, ${n === 1 ? 'one more render' : `${n} more renders`} included`);
   const included = (x: CommitSummary) => includedN(rendersInside.get(x) ?? 0);
@@ -1701,7 +1727,7 @@ function explain(r: InteractionReport): Explanation {
     const reactSure = !!named && (!hasDurations || measuredFrom(named) === 'measured');
     const maybe = reactSure ? '' : `${HEDGE} `;
     const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React was ${maybe}${renderPhrase(c)}`}.` : '';
-    cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo}${rendered} That happens when code reads an element's size right after changing styles, often in a layout effect.`;
+    cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo}${rendered} ${whereRead(forcedWhileHandling)}`;
     // Nothing names the read that forced the layout. What is held is where it happened: the subtree
     // of the commit this interaction joined, or, failing that, the script the browser charged it to
     // — and that only while one script holds nearly all of it, since `ms` is the whole total and a
@@ -1908,7 +1934,7 @@ function explain(r: InteractionReport): Explanation {
   const walked = [...r.commits, ...r.followUps];
   if (namesLookMinified(walked)) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
-    notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
+    notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout during the same script. ${whereRead(forcedAfterInput)}`);
   }
   // The wait INP leaves out is what the note is for, so a render outside the entries goes first. INP
   // did time a render the release made inside its own entry, so for that one the note says where it ran.
