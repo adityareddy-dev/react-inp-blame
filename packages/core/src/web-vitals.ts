@@ -101,11 +101,13 @@ export type { Blame, RenderedComponent } from './types.js';
  * It reads the fiber React stored on the node, so it needs neither `install()` nor any React
  * internals beyond that one property. A text node gives the path of the element holding it, and a
  * node with no fiber of its own, like an element the app added outside React, is placed by the
- * nearest element that has one. It never throws. A node with no fiber on it or on any element above
- * it returns undefined, which is web-vitals' signal to fall back to its own CSS selector: a node on a
- * page with no React, say, or an element React removed, which loses its fiber once the commit's
- * effects have run. So does a node whose properties cannot be read, and an element whose enclosing
- * components have no names worth printing.
+ * nearest element that has one. An icon (an `<svg>`, `<img>` or `<picture>`, or anything inside
+ * one) is named the way reports name a clicked icon, with the icon library's components left out.
+ * It never throws. A node with no fiber on it or on any element above it returns undefined, which
+ * is web-vitals' signal to fall back to its own CSS selector: a node on a page with no React, say,
+ * or an element React removed, which loses its fiber once the commit's effects have run. So does a
+ * node whose properties cannot be read, and an element whose enclosing components have no names
+ * worth printing.
  *
  * Under a production build without the `displayName` transform (`react-inp-blame/next`,
  * `react-inp-blame/vite` or `react-inp-blame/display-names-loader`) the minifier has renamed the
