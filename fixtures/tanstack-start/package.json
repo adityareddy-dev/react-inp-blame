@@ -21,7 +21,7 @@
     "react-inp-blame": "^0.2.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.59.1",
+    "@playwright/test": "1.63.0",
     "@tanstack/router-cli": "^1.132.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
