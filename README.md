@@ -724,7 +724,7 @@ interface InteractionReport {
   reactStatus: 'reading' | 'waiting' | 'installed-late' | 'unreadable'; // stats().react as it was built
   start: number; end: number; duration: number; holdMs: number;             // ms, performance.now() clock
   inputDelay: number; processing: number; walkMs: number; presentation: number; // add up to duration
-  nextInput: { type: string; pointerType: string | null; start: number } | null; // came before its paint
+  nextInput: { type: string; pointerType: string | null; start: number; endedAt: number | null } | null; // next press before the paint
   target: TargetInfo | null; entries: EventEntrySummary[]; // target: selector, label, component, owners, handler
   hydration: { kind: 'waited' | 'not-hydrated'; scope: 'root' | 'boundary';   // server-rendered HTML the click
                owner: string | null; ms: number | null } | null;            // landed on before React hydrated it
@@ -782,7 +782,11 @@ changes meaning. **`verdict`, `cause`, `notes`, `headline`, `where` and the phas
 display text that may change between versions**; the blame, the rating, the phases' `ms` and the report's
 numbers are the data. `confidence` is `'measured'` when the blame follows from this interaction's own timings,
 and `'inferred'` when it rests on render counts, a clock too coarse to time one component, a commit that only
-overlapped, a walk cut short, or no Long Animation Frames to rule other scripts out.
+overlapped, a walk cut short, or no Long Animation Frames to rule other scripts out. A screen update blamed
+with "the frame waited on the next key press" is still the screen update's own time, measured. That clause
+rests on the next press's timings instead (`nextInput`), so it is only said where the page worked on that
+press before the paint for half the screen update or more, and it says "most likely" unless a long animation
+frame over this interaction recorded a script from the press on that shows it, the way a wait's is named.
 
 ## Clicks that land before hydration
 
