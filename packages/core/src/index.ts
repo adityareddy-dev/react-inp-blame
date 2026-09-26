@@ -397,7 +397,11 @@ export function mountOverlay(opts: OverlayOptions = {}): Promise<OverlayHandle |
   return shown.then(
     (handle) =>
       handle && {
-        ...handle,
+        // A disposed handle does nothing more, so it cannot open or close the panel another handle holds.
+        open: () => disposed || handle.open(),
+        close: () => disposed || handle.close(),
+        toggle: () => disposed || handle.toggle(),
+        refresh: () => disposed || handle.refresh(),
         // A handle disposed twice lets go once, and one left from before the badge was hidden or
         // replaced lets go of nothing that is showing now.
         dispose: () => {
