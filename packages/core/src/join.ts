@@ -314,6 +314,16 @@ function entryTarget(entries: readonly InteractionTiming[]): Node | null {
   return null;
 }
 
+/**
+ * What a keypress entry's event reached, as the ring read it at dispatch onto its keydown's record, since
+ * a keypress has none of its own and Enter's submit is in its entry. Undefined for any other entry, and
+ * where the ring read nothing.
+ */
+function keypressReached(inputs: readonly InputRecord[], e: InteractionTiming): string | null | undefined {
+  if (e.name !== 'keypress') return undefined;
+  return inputs.find((i) => i.type === 'keydown' && i.keypressHandler !== undefined && near(i.ts, e.startTime))?.keypressHandler;
+}
+
 /** The input in the ring that one of these entries is, by its timestamp and type. */
 function ringInput(inputs: readonly InputRecord[], stamps: readonly Stamp[]): InputRecord | null {
   return inputs.find((i) => stamps.some((s) => isInput(s, i.ts, i.type))) ?? null;
@@ -477,13 +487,17 @@ export function buildReport(
     for (const e of byWork(sorted)) {
       // The handler React ran is the one the ring read as the event was dispatched. By the time the entry
       // comes, the event's own render can have put another on the element: `onClick={editing ? save : edit}`
-      // does on every click. Only the record of the entry's own node is taken, since two fingers on two
-      // buttons in one frame are two records under a millisecond apart. The element is read now only for an
-      // event the ring has no record of, and for one on server HTML, which had no handler to read until
+      // does on every click, and `onSubmit={step < 2 ? goNext : finish}` on Enter, whose keypress is read
+      // onto its keydown's record. Only the record of the entry's own node is taken, since two fingers on
+      // two buttons in one frame are two records under a millisecond apart. The element is read now only for
+      // an event the ring has no reading of, and for one on server HTML, which had no handler to read until
       // React hydrated it to run the event.
       const own = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime) && (!e.target || i.target === e.target));
+      const reached = keypressReached(inputs, e);
       if (own && !own.dehydrated) {
         handler = own.handler;
+      } else if (reached !== undefined) {
+        handler = reached;
       } else {
         // An Event Timing entry does not say which key was pressed; the ring entry for the same event
         // does, and which key it was decides whether the press could have submitted a form.
@@ -496,7 +510,7 @@ export function buildReport(
   } else if (ring) {
     owners = ring.owners;
     for (const e of byWork(sorted)) {
-      handler = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime))?.handler ?? null;
+      handler = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime))?.handler ?? keypressReached(inputs, e) ?? null;
       if (handler) break;
     }
   }

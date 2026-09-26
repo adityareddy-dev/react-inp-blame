@@ -110,11 +110,17 @@ export interface InputRecord extends InputStamp {
   /** The React handler prop for this input's type on the target chain at dispatch, read then for the same reason. */
   readonly handler: string | null;
   /**
+   * For a keydown, the handler prop its keypress reached, read as the keypress was dispatched
+   * (`noteKeypress`), since a keypress has no record of its own. Undefined until one comes, for a key that
+   * fires none, and for a keypress on server HTML React had not hydrated.
+   */
+  keypressHandler?: string | null;
+  /**
    * Server-rendered HTML enclosing the target that React had not hydrated when the input was
    * dispatched; null when React had hydrated it, and on a page with no React root above the target.
    */
   readonly dehydrated: HydrationBoundary | null;
-  /** What React did about this input. The hook keeps it current as commits arrive; the record itself does not change. */
+  /** What React did about this input. The hook keeps it current as commits arrive; the rest of the record is read at dispatch, `keypressHandler` at the keypress's, and does not change. */
   readonly work: InputWork;
 }
 
@@ -329,6 +335,22 @@ export function recentInputs(): InputRecord[] {
 export function noteInput(e: Event): void {
   if (!e.isTrusted || INPUT_TYPES.indexOf(e.type) < 0) return;
   record(e);
+}
+
+/**
+ * Capture-phase listener for `keypress`: reads the handler it reaches onto its keydown's record, before
+ * React runs it. Enter in a field submits the form from the keypress, so its entry is where Chromium puts
+ * the submit's work, and the submit's own render can give the form another onSubmit before that entry
+ * comes: `onSubmit={step < 2 ? goNext : finish}` does on the first step. Read when the entry came, the
+ * form named the step after. Server HTML React has not hydrated has no handler to read yet, and the form
+ * is read when the entry comes.
+ */
+export function noteKeypress(e: Event): void {
+  const last = newestInput();
+  const code = (e as DispatchedInput).code;
+  if (!e.isTrusted || !last || last.type !== 'keydown' || last.press !== code || last.keypressHandler !== undefined) return;
+  const target = e.target as Node | null;
+  if (dehydratedAround(target) === null) last.keypressHandler = handlerOf(fiberFromNode(target), 'keypress', code);
 }
 
 /** The events that close the newest input's later renders when a script dispatches one (`noteCloser`). */

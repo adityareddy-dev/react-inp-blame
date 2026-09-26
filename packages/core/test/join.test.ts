@@ -3169,6 +3169,31 @@ test("Enter's work in the keypress entry is named by the form's onSubmit, from t
   assert.equal(report(press, [], [], other).target?.handler, null);
 });
 
+test("Enter's submit is named by the onSubmit its keypress reached at dispatch, where the submit's own render gave the form another", () => {
+  // `onSubmit={step < 2 ? goNext : finish}`: Enter on the first step ran goNext from the keypress, and the submit's
+  // render put finish on the form before the entries came. The keypress has no record of its own; what it reached
+  // was read onto its keydown's as it was dispatched.
+  function goNext() {}
+  function finish() {}
+  function Wizard() {}
+  const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null }) as Record<string, unknown>;
+  const form = fiberOf(5, 'form', fiberOf(0, Wizard, null), { onSubmit: goNext });
+  form.stateNode = Object.assign(element('form', []), { __reactFiber$k1: form, __reactProps$k1: { onSubmit: finish } });
+  const field = fiberOf(5, 'input', form, { type: 'text', name: 'email' });
+  const target = Object.assign(element('input', [], { name: 'email' }), { __reactFiber$k1: field }) as unknown as Node;
+  const press = [entry('keydown', 0, 140, 1, 3, { target }), entry('keypress', 0, 140, 3, 123, { target })];
+  const keydown = (extra: Partial<InputRecord>) => [input(0, 'keydown', { target, press: 'Enter', owners: ['Wizard'], ...extra })];
+  assert.equal(report(press, [], [], keydown({ keypressHandler: 'goNext' })).target?.handler, 'goNext');
+  // Where the keypress reached nothing at dispatch, nothing ran, whatever the form has now.
+  assert.equal(report(press, [], [], keydown({ keypressHandler: null })).target?.handler, null);
+  // With no reading, as for a keypress on server HTML React had not hydrated, the form is read now.
+  assert.equal(report(press, [], [], keydown({})).target?.handler, 'finish');
+  // A form the submit took off the page: the entries have no target, and the reading still names it.
+  const gone = press.map((e) => ({ ...e, target: null }));
+  assert.equal(report(gone, [], [], keydown({ keypressHandler: 'goNext' })).target?.handler, 'goNext');
+});
+
 test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {
   // A row that selects itself on click, holding a menu button that opens on pointerdown, as Radix's
   // DropdownMenu does: the pointerdown's handlers ran for 90 ms, the pointerup's and the click's for none.

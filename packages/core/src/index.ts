@@ -1,6 +1,6 @@
 import { MINIFIED_NAMES_CONSOLE, namesLookMinified } from './commits.js';
 import { createTimeline } from './devtools.js';
-import { checkHookReplaced, clearCommits, CLOSER_TYPES, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteCloser, noteInput, noteResize, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
+import { checkHookReplaced, clearCommits, CLOSER_TYPES, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteCloser, noteInput, noteKeypress, noteResize, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
 import { labelOf, type LabelSource } from './join.js';
@@ -276,6 +276,7 @@ function installNow(opts: InstallOptions): Api {
   installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit, label: (control) => labelOf(control, labels()) });
   for (const t of INPUT_TYPES) window.addEventListener(t, noteInput, { capture: true, passive: true });
   for (const t of CLOSER_TYPES) window.addEventListener(t, noteCloser, { capture: true, passive: true });
+  window.addEventListener('keypress', noteKeypress, { capture: true, passive: true });
   window.addEventListener('resize', noteResize, { capture: true, passive: true });
   window.addEventListener('pageshow', onPageShow, { capture: true });
   window.addEventListener('visibilitychange', onVisibilityChange, { capture: true });
@@ -339,6 +340,7 @@ function installNow(opts: InstallOptions): Api {
       stopRouterNavigations();
       for (const t of INPUT_TYPES) window.removeEventListener(t, noteInput, { capture: true });
       for (const t of CLOSER_TYPES) window.removeEventListener(t, noteCloser, { capture: true });
+      window.removeEventListener('keypress', noteKeypress, { capture: true });
       window.removeEventListener('resize', noteResize, { capture: true });
       window.removeEventListener('pageshow', onPageShow, { capture: true });
       window.removeEventListener('visibilitychange', onVisibilityChange, { capture: true });
