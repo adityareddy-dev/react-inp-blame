@@ -6,6 +6,10 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Fixed
+
+
+
 ## [0.14.0] - 2026-09-26
 
 ### Added
