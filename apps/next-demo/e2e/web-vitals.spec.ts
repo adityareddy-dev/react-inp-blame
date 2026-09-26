@@ -5,7 +5,7 @@ import type { ReactAttribution } from 'react-inp-blame/web-vitals';
 const prod = process.env.INP_MODE === 'prod';
 const run = prod ? 'prod' : 'dev';
 
-// app/vitals is the README's Next.js snippet: useReportWebVitals, with attributeINP adding the React side.
+// app/vitals is the Next.js snippet in docs/web-vitals.md: useReportWebVitals, with attributeINP adding the React side.
 // The web-vitals Next.js vendors reports INP only once the page is hidden, so the test hides it the way
 // web-vitals' own tests do, by answering `hidden` and dispatching the event.
 //

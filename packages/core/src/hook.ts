@@ -810,7 +810,7 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
  * whose updates get that same priority. A finger hovers over nothing, so after a touch the priority says
  * nothing about whose the work is, and neither does it inside the input's own task. Production builds pass
  * no priority, React 18 and 19.0 pass the commit's moment's (normal, in that task) and React 17 its own
- * numbers, so there only the first two apply (README, Known limits).
+ * numbers, so there only the first two apply (docs/known-limits.md).
  */
 function notTheInputs(input: InputRecord, renderer: Renderer, priority: number | undefined): boolean {
   if (state.inTask === null && inAmbientEvent()) return true;

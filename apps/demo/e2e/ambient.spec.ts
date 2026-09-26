@@ -45,7 +45,7 @@ test('a render at a breakpoint, from a media query and from resize, is not the l
 /**
  * Whether this page's React says whose a hover's or a scroll's render is. React 17 renders inside the
  * event, in any build. React 18 and 19 render it in a task of their own, where only the development and
- * profiling builds of React 19.1 and later say, by the priority they commit it with (README, Known limits).
+ * profiling builds of React 19.1 and later say, by the priority they commit it with (docs/known-limits.md).
  */
 async function tellsHovers(page: Page): Promise<boolean> {
   await page.goto('/#ambient');

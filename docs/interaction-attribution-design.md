@@ -1442,7 +1442,7 @@ What needs help:
   `filter` and `join`. Most of those are not components, which is why that list is not a to-do: telling
   the ones that are from the ones that are not needs a scope analysis rather than a wider pattern.
 
-  What is still open, and is stated in the root README's Known limits. A naming HOC that sets a
+  What is still open, and is stated in [Known limits](known-limits.md). A naming HOC that sets a
   `displayName` keeps it, since the stamp does not replace a name that is there, but one that names a
   component some other way, on a prototype or through a wrapper it returns, can still be overwritten. A
   file that begins with a hashbang, and a file whose last line is a `sourceMappingURL` comment rather
@@ -1536,7 +1536,7 @@ builds, and holds `attributeINP(metric).react.blame` against the library's own r
 interaction.
 
 Under Next.js's `useReportWebVitals`, which runs the web-vitals Next.js vendors (4.2.1 in 16.3) and reports
-INP only once the page is hidden, `apps/next-demo/e2e/web-vitals.spec.ts` runs the README's snippet on
+INP only once the page is hidden, `apps/next-demo/e2e/web-vitals.spec.ts` runs the snippet in [With web-vitals](web-vitals.md) on
 `app/vitals` under `next dev` and both production bundlers. A slow click is followed by a quicker key
 press that is reported too, the spec hides the page, and the metric's `react` must be the click's: its
 `interactionId`, its `blame`, and `VitalsPage > Rows` as the path, so the join is on the interaction
