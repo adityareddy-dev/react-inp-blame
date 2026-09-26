@@ -566,9 +566,10 @@ no stand-in for its props either: React caches it once, when it makes the elemen
 fibers take turns being current, so after every other render it holds the render before. With
 `onClick={editing ? save : startEdit}` every click on Save was named startEdit. For the same reason the
 report names the handler the ring read at dispatch wherever the ring has the event: read when the entry
-arrives, the element already holds what the event's own render gave it. The element is read then only
-for an event the ring has no record of (a keypress) and for one on server HTML, which had no handler to
-read until React hydrated it to run the event.
+arrives, the element already holds what the event's own render gave it. It takes the record of the
+entry's own node, since two fingers on two buttons in one frame are two records under a millisecond
+apart. The element is read then only for an event the ring has no record of (a keypress) and for one on
+server HTML, which had no handler to read until React hydrated it to run the event.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every

@@ -216,6 +216,13 @@ test("the handler is the one the ring read at dispatch, where the click's own re
   assert.equal(clickOn(button(addToCart), { handler: null, dehydrated: { scope: 'boundary', owner: 'ProductPage' } }), 'addToCart');
   // So is an event the ring has no record of.
   assert.equal(report([entry('click', 0, 120, 3, 100, { target: edited })], [], []).target?.handler, 'startEdit');
+  // Two fingers on two buttons in one frame: each report takes the record of its own button, not the first at its time.
+  const other = button(addToCart);
+  const both = [input(0, 'click', { target: edited, handler: 'save' }), input(0.5, 'click', { target: other, handler: 'addToCart' })];
+  const named = (target: Node) => report([entry('click', 0, 120, 3, 100, { target })], [], [], both).target?.handler;
+  assert.deepEqual([named(edited), named(other)], ['save', 'addToCart']);
+  // With only the other button's record, the element is read now.
+  assert.equal(report([entry('click', 0, 120, 3, 100, { target: edited })], [], [], both.slice(1)).target?.handler, 'startEdit');
 });
 
 test('a late entry of a long press makes the next revision, rebuilt from every entry, and leaves the one before as it was', () => {

@@ -477,9 +477,11 @@ export function buildReport(
     for (const e of byWork(sorted)) {
       // The handler React ran is the one the ring read as the event was dispatched. By the time the entry
       // comes, the event's own render can have put another on the element: `onClick={editing ? save : edit}`
-      // does on every click. The element is read now only for an event the ring has no record of, and for
-      // one on server HTML, which had no handler to read until React hydrated it to run the event.
-      const own = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime));
+      // does on every click. Only the record of the entry's own node is taken, since two fingers on two
+      // buttons in one frame are two records under a millisecond apart. The element is read now only for an
+      // event the ring has no record of, and for one on server HTML, which had no handler to read until
+      // React hydrated it to run the event.
+      const own = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime) && (!e.target || i.target === e.target));
       if (own && !own.dehydrated) {
         handler = own.handler;
       } else {
