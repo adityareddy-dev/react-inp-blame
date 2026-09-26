@@ -72,7 +72,7 @@ async function traceSlowClick(browser: Browser, page: Page, file?: string): Prom
 
 const ours = (entries: TrackEntry[]) => entries.filter((e) => e.group === 'react-inp-blame');
 
-// The track group, the track names and the colours are what the README tells people to look for, so
+// The track group, the track names and the colours are what docs/api.md tells people to look for, so
 // they are checked exactly. Entry names and tooltips are display text like the verdict: they are only
 // checked for the component and the track they have to name.
 

@@ -308,7 +308,7 @@ test("a styling library's wrapper is named the way the library names an unlabell
 });
 
 test('the owners a target reads are the eight innermost components, nearest first', () => {
-  // As the README says of `target.owners`: a chain deeper than eight keeps its innermost eight.
+  // As docs/api.md says of `target.owners`: a chain deeper than eight keeps its innermost eight.
   const levels = Array.from({ length: 12 }, (_, i) => Object.defineProperty(function () {}, 'name', { value: `Level${i + 1}` }) as () => void);
   const inside = element('li', text());
   let node = inside;

@@ -14,7 +14,7 @@ we can agree on the approach before you spend time on it.
 - `scripts/react-matrix.mjs`: generates the copies of the demo pinned to React 19.2, 19.1, 18.3, 18.2
   and 17.
 - `scripts/pack-smoke.mjs`: installs the packed tarball into throwaway apps and checks it there.
-- `fixtures/vite-react-ts`: the app `npm create vite` makes, with the README's Vite config and one slow
+- `fixtures/vite-react-ts`: the app `npm create vite` makes, with the Vite config from docs/install.md and one slow
   component. `scripts/vite-app.mjs` installs the packed tarball into a copy of it and runs its specs.
 - `fixtures/react-router` and `fixtures/tanstack-start`: the apps `npx create-react-router@8.4.0` and
   `npx @tanstack/cli@0.71.0 create --framework React --blank` make, each with its README setup and the
@@ -135,7 +135,7 @@ On Windows, run the second command with npm's default script shell rather than G
 launcher of that package points at a placeholder file there, and only its `.cmd` one finds `node.exe`.
 
 `npm run test:vite-app` starts where a user starts. `fixtures/vite-react-ts` is what
-`npm create vite@9.2.1 -- --template react-ts` makes, with one slow component added and the README's Vite
+`npm create vite@9.2.1 -- --template react-ts` makes, with one slow component added and docs/install.md's Vite
 config as its `vite.config.ts`. The script copies it into the temp directory, where nothing resolves
 through this repo. There it installs the locked dependencies, with the packed tarball in place of the
 registry's react-inp-blame, and builds the app. Its specs then check the blame on the dev server (a Fast
@@ -154,13 +154,13 @@ works as it does for `test:pack`, and anything after `--` goes to Playwright. Th
     node scripts/vite-app.mjs -- --project=dev
     npm run test:vite-app -- -- --project=dev
 
-The fixture's `vite.config.ts` is the README's "Install with Vite" block, and the script fails until the
+The fixture's `vite.config.ts` is the "Install with Vite" block in docs/install.md, and the script fails until the
 two match, so a change to one is a change to both. Its `@playwright/test` pin follows `apps/demo`'s. After
 changing its `package.json`, refresh its lock with `npm install --package-lock-only` in that folder.
 
 `--fixture react-router`, `--fixture react-router-7`, `--fixture remix`, `--fixture tanstack-start` and
 `--fixture astro` run the same steps on the other apps, with no Fast Refresh edit, and their setup files are
-held to the README's blocks the same way: `vite.config.ts` for all but Astro, `src/client.tsx` as well for
+held to docs/install.md's blocks the same way: `vite.config.ts` for all but Astro, `src/client.tsx` as well for
 TanStack Start, and `astro.config.mjs` for Astro, whose type check is `astro check`. The React Router and
 Remix apps drop the template's Google Fonts links, since a font request that fails would fail their specs.
 
