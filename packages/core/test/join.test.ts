@@ -2963,16 +2963,32 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   assert.equal(timer.explanation.blame.kind, 'waiting');
   assert.match(timer.explanation.cause, / A script \(TimerHandler:setTimeout, app\.js\) ran for 30 ms of it, and the rest was most likely the browser recalculating styles and layout/);
 
-  // A script that filled it is what ran, and it is not the handler, which had finished before it started.
+  // A script that filled it is what the keyup waited behind, as a wait before the handlers would be, and it is
+  // not the handler, which had finished before it started.
   const filled = enter([frame(10, 147, [script('TimerHandler:setTimeout', 20, 120)], 157)], 10.4, [input(0, 'keydown', { handler: 'onSwitch' })]);
-  assert.equal(filled.explanation.blame.kind, 'script');
-  assert.equal(filled.explanation.blame.name, 'TimerHandler:setTimeout');
-  assert.match(filled.explanation.cause, /a script \(TimerHandler:setTimeout, app\.js\) ran for 120 ms\.$/);
+  assert.deepEqual([filled.explanation.blame.kind, filled.explanation.blame.name], ['waiting', 'TimerHandler:setTimeout']);
+  assert.match(filled.explanation.cause, /keyup's\. A script \(TimerHandler:setTimeout, app\.js\) ran for 120 ms of it\. That time counts/);
+  // Beside a handler that did less, too: the handler's listener is never the script in the gap.
+  const beside = report(
+    [entry('keydown', 0, 176, 10, 70), entry('keyup', 1, 176, 170, 170.5)],
+    [commit(69, 0, { total: 0.3, rendered: 2 })],
+    [frame(10, 161, [script('DOCUMENT.onkeydown', 10, 60), script('TimerHandler:setTimeout', 72, 95)], 171)],
+    [input(0, 'keydown')],
+  );
+  assert.deepEqual([beside.explanation.blame.kind, beside.explanation.blame.name, beside.explanation.blame.detail], ['waiting', 'TimerHandler:setTimeout', 'between keydown and keyup']);
+  // A React render in it is weighed as a render, not as the wait.
+  const renderedIn = enter([frame(10, 147, [script('MessagePort.onmessage', 20, 120)], 157)], 10.4, [input(0, 'keydown')], [commit(10.9, 0, { total: 0.3, rendered: 2 }), commit(139, 0, { total: 115, rendered: 300 })]);
+  assert.equal(renderedIn.explanation.blame.kind, 'render');
+  // Where no long frame covered it, the main thread may have sat idle, a key held down, and nothing is put on it.
+  assert.notEqual(enter([]).explanation.blame.kind, 'waiting');
 
   // Without Long Animation Frames only React's part in it is known.
   assert.match(enter(null).explanation.cause, / React did not render in it, and this browser does not record what else ran, so it was most likely /);
   const smallRender = enter(null, 10.4, [input(0, 'keydown')], [commit(80, 0, { total: 0.2, rendered: 1 })]);
   assert.match(smallRender.explanation.cause, / React rendered for under 1 ms of it, and /);
+  // A production build says React rendered, and nothing of how long.
+  const unTimed = enter(null, 10.4, [input(0, 'keydown')], [commit(80, 0, { total: 0, hasDurations: false, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] })]);
+  assert.match(unTimed.explanation.cause, / React rendered in it, and this browser does not record what else ran/);
   // And where React is not read at all, not even that, so nothing is put on the wait.
   const late = report(
     [entry('keydown', 0, 168, 10, 10.4), entry('click', 0, 168, 10.4, 11.1), entry('keyup', 1, 168, 158, 158.2)],
@@ -3034,6 +3050,16 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   );
   assert.deepEqual([delayed.explanation.blame.kind, delayed.explanation.blame.detail], ['waiting', null]);
   assert.match(gapNote(delayed), /^88 ms of the working time also went by between the click's handlers and the keyup's/);
+  // A wait before the handlers longer than the handlers themselves is the verdict, whatever the working time
+  // held between them.
+  const shortHandlers = report(
+    [entry('keydown', 0, 128, 60, 65), entry('keyup', 1, 128, 120, 125)],
+    [commit(64, 0, { total: 0.3, rendered: 2 })],
+    [frame(0, 126, [], null)],
+    [input(0, 'keydown')],
+  );
+  assert.deepEqual([shortHandlers.explanation.blame.kind, shortHandlers.explanation.blame.detail, shortHandlers.explanation.blame.ms], ['waiting', null, 60]);
+  assert.match(gapNote(shortHandlers), /^55 ms of the working time also went by between the keydown's handlers and the keyup's/);
   // Where the wait is the verdict, it is not said twice.
   assert.equal(gapNote(quiet), '');
 });

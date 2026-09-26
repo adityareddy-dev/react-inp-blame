@@ -265,7 +265,7 @@ test('restyle storm: the browser restyling the page is what a click waits on, an
   // restyle is a wait between the keydown's handlers and the keyup's, inside the working time.
   const click = await interact(page, 'restyle-storm', () => page.click('[data-test=trigger]'));
   expect(click.explanation.blame, click.verdict).toMatchObject({ kind: 'painting', name: null, confidence: 'measured' });
-  expect(click.explanation.cause).toMatch(/the browser's own work on the main thread, most likely recalculating styles and layout|mostly the browser recalculating styles and layout for the frame/);
+  expect(click.explanation.cause).toMatch(/the browser's own work on the main thread, most likely recalculating styles and layout|mostly the browser recalculating styles and layout and painting the frame/);
   expect(click.commits.map((c) => c.rendered)).toEqual([1]);
 
   await clearReports(page);

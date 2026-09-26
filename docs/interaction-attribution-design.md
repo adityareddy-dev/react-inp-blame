@@ -1017,8 +1017,10 @@ web-vitals counts it. A wait like that between one event's handlers and the next
 is left out of what the handlers are said to have run for. From 50 ms it is the verdict, a `waiting` one with
 `detail` "between click and keyup", where it outweighs the handlers, React and any forced layout, is at least
 the wait before the first handler, and the screen update does not outrank the working time; where only those
-last two stop it, it is a note. A script Long Animation Frames recorded in it counts against it and is never
-called the handler. Only entries whose handlers ran inside the working time count: a keyup released after the
+last two stop it, it is a note. It is what long frames covered of that time: where none did, the thread may
+have sat idle with a key held down, and nothing is put on it. A script Long Animation Frames recorded there is
+part of the wait, named when it holds half of it, as one the input waited behind is, and never called the
+handler; a React render there is weighed as a render. Only entries whose handlers ran inside the working time count: a keyup released after the
 key press painted is in a frame of its own. The hot path follows a
 child carrying 60% of its parent's work (`fiber.ts`). Where React timed each component and one of them,
 rendered once, spent 25 ms and half of the render or more in its own render, the sentence says so
