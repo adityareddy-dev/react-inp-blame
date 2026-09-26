@@ -43,6 +43,9 @@ function input(ts: number, type: string, extra: Partial<InputRecord> = {}): Inpu
   return { ts, type, gestureTs: ts, press: undefined, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] }, ...extra };
 }
 
+/** An input whose own dispatch rendered, ending at `until`: what the hook sets `ownEndedAt` to. */
+const worked = (until: number): Partial<InputRecord> => ({ work: { endedAt: until, ownEndedAt: until, unjoined: [] } });
+
 /** A detached DOM element as the label reads it. Its textContent throws: a label must never need all of it. */
 function element(tag: string, children: Record<string, unknown>[], attributes: Record<string, string> = {}): Record<string, unknown> {
   const el: Record<string, unknown> = {
@@ -416,7 +419,8 @@ test("a keyup whose frame waited on the next key press does not take that key's 
   for (const next of [1100.6, 1101]) {
     const a = [entry('keydown', 1000, 16, 1001, 1003), entry('keypress', 1000, 16, 1003, 1005), entry('keyup', 1100, 104, 1101, 1103)];
     const b = [entry('keydown', next, 104, 1103.5, 1190, { interactionId: 8 }), entry('keypress', next, 104, 1104, 1190, { interactionId: 8 })];
-    const ring = [input(1000, 'keydown'), input(1100, 'keyup', { gestureTs: 1000 }), input(next, 'keydown'), input(1260, 'keyup', { gestureTs: next })];
+    // The next key's render ends inside its own dispatch at 1190, before the keyup's paint at 1204.
+    const ring = [input(1000, 'keydown'), input(1100, 'keyup', { gestureTs: 1000 }), input(next, 'keydown', worked(1190)), input(1260, 'keyup', { gestureTs: next })];
     const render = commit(1185, next, { inputType: 'keydown', rendered: 1000, total: 70 });
     // Its keyup's render lands after the paint, stamped with the next key's press.
     const release = commit(1300, 1260, { inputType: 'keyup', gestureTs: next, total: 20 });
@@ -425,19 +429,167 @@ test("a keyup whose frame waited on the next key press does not take that key's 
     assert.deepEqual(keyup.commits, [], `next key at ${next}`);
     assert.deepEqual(keyup.followUps, [], `next key at ${next}`);
     assert.equal(isLaterRender(keyup, release, ring), false);
-    assert.deepEqual(keyup.nextInput, { type: 'keydown', pointerType: null, start: next });
-    assert.equal(keyup.explanation.blame.kind, 'painting');
-    assert.match(keyup.verdict, /^104 ms key press\. After the key press was handled, the screen took another 101 ms to update: the frame waited on the next key press, which the page handled first\. /);
-    // The next key's handler is the longest script in that time, and names the blame as it does any painting blame.
-    const framed = report(a, [render, release], [frame(1100, 104, [script('DIV#root.oninput', 1104, 80)])], ring);
+    assert.deepEqual(keyup.nextInput, { type: 'keydown', pointerType: null, start: next, endedAt: 1190 });
+    assert.deepEqual(keyup.explanation.blame, { kind: 'painting', name: null, detail: null, ms: 101, confidence: 'measured' });
+    // The render's end says when the next key's work finished, not when it began, so on it alone the clause is hedged.
+    assert.match(keyup.verdict, /^104 ms key press\. After the key press was handled, /);
+    assert.equal(keyup.explanation.cause, 'After the key press was handled, the screen took another 101 ms to update: the frame most likely waited on the next key press, which the page handled first.');
+    // A script the browser recorded from the next key on times that work, and the clause is not hedged. It is
+    // the longest script in that time, and names the blame as it does any painting blame.
+    const oninput = [frame(1100, 104, [script('DIV#root.oninput', 1104, 80)])];
+    const framed = report(a, [render, release], oninput, ring);
     assert.equal(framed.explanation.blame.name, 'DIV#root.oninput');
-    assert.match(framed.verdict, /handled first\. The longest script the browser recorded in that time was DIV#root\.oninput \(app\.js\), 80 ms\./);
+    assert.equal(
+      framed.explanation.cause,
+      'After the key press was handled, the screen took another 101 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was DIV#root.oninput (app.js), 80 ms.',
+    );
+    // The script alone is enough where React rendered nothing in that key's dispatch.
+    const unrendered = report(a, [render, release], oninput, [ring[0]!, ring[1]!, input(next, 'keydown'), ring[3]!]);
+    assert.equal(unrendered.nextInput?.endedAt, null);
+    assert.match(unrendered.explanation.cause, /: the frame waited on the next key press, which the page handled first\. /);
 
     const key = report(b, [render, release], [], ring);
     assert.deepEqual(key.commits, [joinedAs(render, 'exact')], `next key at ${next}`);
     assert.equal(key.nextInput, null);
     assert.equal(key.explanation.blame.kind, 'render');
   }
+});
+
+test('a keyup is said to have waited on the next key press only where the page worked on that press for half its screen update before the paint', () => {
+  // The keyup above: handled by 1103 and painted at 1204, 101 ms of screen update, with the next key down at 1100.6.
+  const a = [entry('keydown', 1000, 16, 1001, 1003), entry('keypress', 1000, 16, 1003, 1005), entry('keyup', 1100, 104, 1101, 1103)];
+  const cause = (next: Partial<InputRecord>, frames: FrameSummary[] = [], at = 1100.6) =>
+    report(a, [], frames, [input(1000, 'keydown'), input(1100, 'keyup', { gestureTs: 1000 }), input(at, 'keydown', next)]).explanation.cause;
+  const plain = 'After the key press was handled, the screen took another 101 ms to update.';
+  const waited = /: the frame most likely waited on the next key press, which the page handled first\.$/;
+  // Pressed before the paint, with nothing to show the page did anything for it.
+  assert.equal(cause({}), plain);
+  // React's render in its dispatch ended 37 ms after the keyup's handlers, short of half the 101 ms; at 51 ms it is half.
+  assert.equal(cause(worked(1140)), plain);
+  assert.match(cause(worked(1154)), waited);
+  // A render that ended past the paint, beyond the 8 ms the paint time is rounded to, ran after the frame.
+  assert.equal(cause(worked(1260)), plain);
+  assert.match(cause(worked(1210)), waited);
+  // And it counts up to the paint only: a key down at 1160 whose render ended at 1211 had 44 ms of it before 1204.
+  assert.equal(cause(worked(1211), [], 1160), plain);
+  // A script counts from the press on. One that began before it is something else the frame waited for.
+  const before = cause({}, [frame(1090, 120, [script('TimerHandler:setTimeout', 1095, 100)])]);
+  assert.match(before, /^After the key press was handled, the screen took another 101 ms to update, mostly because /);
+  assert.doesNotMatch(before, /waited on/);
+  // One from the press on has to cover half the screen update too.
+  assert.doesNotMatch(cause({}, [frame(1100, 104, [script('DIV#root.oninput', 1104, 40)])]), /waited on/);
+  assert.match(cause({}, [frame(1100, 104, [script('DIV#root.oninput', 1104, 60)])]), /: the frame waited on the next key press, which the page handled first\. /);
+});
+
+test('the frame is said to wait on the next key press only where the screen update is the larger part of the interaction, under a long task as well', () => {
+  const ring = (at: number, until: number) => [input(1000, 'keydown'), input(1100, 'keyup', { gestureTs: 1000 }), input(at, 'keydown', worked(until))];
+  // 60 ms of handlers and 43 ms of screen update, which the next key's render filled from the end of the handlers.
+  const handled = report([entry('keyup', 1100, 104, 1101, 1161)], [], [], ring(1150, 1200));
+  assert.equal(handled.nextInput?.start, 1150);
+  assert.equal(handled.explanation.blame.kind, 'none');
+  assert.doesNotMatch(handled.explanation.cause, /waited on/);
+  // A 45 ms wait before the handlers and 38 ms of screen update.
+  const waitedLonger = report([entry('keyup', 1100, 88, 1145, 1150)], [], [], ring(1150.5, 1185));
+  assert.equal(waitedLonger.explanation.blame.kind, 'none');
+  assert.doesNotMatch(waitedLonger.explanation.cause, /waited on/);
+  // 2 ms of handlers and 37 ms of screen update: under a long task, and still the answer.
+  const short = report([entry('keyup', 1100, 40, 1101, 1103)], [], [], ring(1101, 1135));
+  assert.deepEqual(short.explanation.blame, { kind: 'painting', name: null, detail: null, ms: 37, confidence: 'measured' });
+  assert.equal(short.explanation.cause, 'After the key press was handled, the screen took another 37 ms to update: the frame most likely waited on the next key press, which the page handled first.');
+});
+
+test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {
+  const entries = [entry('pointerup', 1000, 150, 1001, 1008), entry('click', 1000, 150, 1008, 1010)];
+  const mouse = { pointerType: 'mouse', press: 1 };
+  const ring = [input(930, 'pointerdown', mouse), input(1000, 'pointerup', { ...mouse, gestureTs: 930 }), input(1000.3, 'click', { ...mouse, gestureTs: 930 })];
+  const c = commit(1009, 1000.3, { gestureTs: 930, rendered: 400, total: 6 });
+  const r = report(entries, [c], [], [...ring, input(1080, 'pointerdown', mouse)]);
+  // The click 0.3 ms after the pointerup is this interaction's own, not the next.
+  assert.deepEqual(r.nextInput, { type: 'pointerdown', pointerType: 'mouse', start: 1080, endedAt: null });
+  assert.equal(r.explanation.cause, 'After the click was handled, the screen took another 140 ms to update.');
+  // Where the second press rendered before the paint for half the 140 ms, the frame most likely waited on it.
+  const rendered = report(entries, [c], [], [...ring, input(1080, 'pointerdown', { ...mouse, ...worked(1150) })]);
+  assert.match(rendered.explanation.cause, /: the frame most likely waited on the next click, which the page handled first\.$/);
+});
+
+test('a release is never the next press: a modifier let go, or a keystroke\'s own keyup under an input method, before the paint', () => {
+  // Cmd+K opening a palette: K handled in 10 ms, the palette's styles and layout hold the frame to 1136, and Meta comes up at 1070.
+  const cmdK = report(
+    [entry('keydown', 1000, 136, 1002, 1012), entry('keypress', 1000, 136, 1012, 1012)],
+    [commit(1010, 1000, { inputType: 'keydown', rendered: 12, total: 4 })],
+    [],
+    [input(900, 'keydown', { press: 'MetaLeft' }), input(1000, 'keydown', { press: 'KeyK' }), input(1060, 'keyup', { press: 'KeyK', gestureTs: 1000 }), input(1070, 'keyup', { press: 'MetaLeft', gestureTs: 900 })],
+  );
+  assert.equal(cmdK.nextInput, null);
+  assert.equal(cmdK.explanation.cause, 'After the key press was handled, the screen took another 124 ms to update.');
+  // Shift+click selecting a range, with Shift let go at 1040.
+  const mouse = { pointerType: 'mouse', press: 1 };
+  const shiftClick = report(
+    [entry('pointerdown', 990, 16, 991, 992), entry('pointerup', 1000, 120, 1001, 1010), entry('click', 1000, 120, 1010, 1015)],
+    [commit(1014, 1000, { gestureTs: 990, rendered: 40, total: 3 })],
+    [],
+    [input(800, 'keydown', { press: 'ShiftLeft' }), input(990, 'pointerdown', mouse), input(1000, 'pointerup', { ...mouse, gestureTs: 990 }), input(1000, 'click', { ...mouse, gestureTs: 990 }), input(1040, 'keyup', { press: 'ShiftLeft', gestureTs: 800 })],
+  );
+  assert.equal(shiftClick.nextInput, null);
+  assert.equal(shiftClick.explanation.cause, 'After the click was handled, the screen took another 105 ms to update.');
+  // An input method composing: the `input` entry heads the interaction and owns nothing in the ring by type.
+  const composed = report([entry('input', 1000, 120, 1001, 1030)], [], [], [input(995, 'keydown', { press: 'KeyA' }), input(1050, 'keyup', { press: 'KeyA', gestureTs: 995 })]);
+  assert.equal(composed.nextInput, null);
+  assert.equal(composed.explanation.cause, 'After the typing was handled, the screen took another 90 ms to update.');
+});
+
+test('a pointerup whose click was too quick for an entry still owns that click, and the render it set off after the paint', () => {
+  const mouse = { pointerType: 'mouse', press: 1 };
+  const ring = [input(930, 'pointerdown', mouse), input(1000, 'pointerup', { ...mouse, gestureTs: 930 }), input(1002, 'click', { ...mouse, gestureTs: 930 })];
+  const later = commit(1200, 1002, { gestureTs: 930, rendered: 200, total: 40 });
+  const r = report([entry('pointerup', 1000, 120, 1001, 1100)], [later], [], ring);
+  assert.deepEqual(r.followUps, [joinedAs(later, 'exact')]);
+  assert.equal(isLaterRender(r, later, ring), true);
+  // The click 2 ms after the pointerup is this interaction's, not the next.
+  assert.equal(r.nextInput, null);
+});
+
+test("a keypress entry stands for its keydown: the next key's report does not take the last key's keyup render 0.6 ms before it", () => {
+  // The mirror of the keyup above. The last key comes up at 1000 and the next goes down at 1000.6, and the keyup's
+  // handler renders at 1002, before the keydown's handlers run.
+  const entries = [entry('keydown', 1000.6, 104, 1003.5, 1090), entry('keypress', 1000.6, 104, 1090, 1091)];
+  const ring = [input(900, 'keydown'), input(1000, 'keyup', { gestureTs: 900 }), input(1000.6, 'keydown')];
+  const keyupRender = commit(1002, 1000, { inputType: 'keyup', gestureTs: 900, total: 20 });
+  const own = commit(1080, 1000.6, { inputType: 'keydown', total: 60 });
+  assert.deepEqual(report(entries, [keyupRender, own], [], ring).commits, [joinedAs(own, 'exact')]);
+});
+
+test('a mousedown or mouseup entry stands for its pointer event, not for any input at its time', () => {
+  const mouse = { pointerType: 'mouse', press: 1 };
+  // A press held on a mousedown entry: a key released 0.5 ms before it renders just after.
+  const down = [entry('mousedown', 1000, 104, 1003, 1010)];
+  const keyupRender = commit(1001.5, 999.5, { inputType: 'keyup', gestureTs: 900, total: 20 });
+  const pressRender = commit(1008, 1000, { inputType: 'pointerdown', total: 30 });
+  const downRing = [input(900, 'keydown'), input(999.5, 'keyup', { gestureTs: 900 }), input(1000, 'pointerdown', mouse)];
+  assert.deepEqual(report(down, [keyupRender, pressRender], [], downRing).commits, [joinedAs(pressRender, 'exact')]);
+  // A release on a mouseup entry: a key pressed during the click and released 0.4 ms before it renders just after.
+  const up = [entry('mouseup', 1080, 104, 1082, 1090)];
+  const keyupRender2 = commit(1081, 1079.6, { inputType: 'keyup', gestureTs: 1050, total: 20 });
+  const releaseRender = commit(1088, 1080, { inputType: 'pointerup', gestureTs: 1000, total: 30 });
+  const upRing = [input(1000, 'pointerdown', mouse), input(1050, 'keydown'), input(1079.6, 'keyup', { gestureTs: 1050 }), input(1080, 'pointerup', { ...mouse, gestureTs: 1000 })];
+  assert.deepEqual(report(up, [keyupRender2, releaseRender], [], upRing).commits, [joinedAs(releaseRender, 'exact')]);
+});
+
+test('a render stamped with a click the ring has let go is not claimed by a keydown within a millisecond of that click', () => {
+  // The pointerup is the only entry, and by the time the report is built the ring holds none of the click's inputs,
+  // only a key that went down 0.5 ms after the click. The render stamped with the click ran in its handlers, and joins
+  // by overlap: the keydown is not the input its stamp names.
+  const render = commit(1050, 1000.5, { gestureTs: 930, rendered: 200, total: 40 });
+  const r = report([entry('pointerup', 1000, 120, 1001, 1100)], [render], [], [input(1001, 'keydown')]);
+  assert.deepEqual(r.commits, [joinedAs(render, 'overlap')]);
+});
+
+test("the press a release carries matches only a press, where that press had no entry of its own", () => {
+  // The key went down at 1000 too quickly for an entry, and its keyup heads the report. Another key came up 0.4 ms
+  // after it went down, and a render stamped with that keyup lands at 1099.5, before this keyup's handlers ran.
+  const ring = [input(950, 'keydown'), input(1000, 'keydown'), input(1000.4, 'keyup', { gestureTs: 950 }), input(1100, 'keyup', { gestureTs: 1000 })];
+  const other = commit(1099.5, 1000.4, { inputType: 'keyup', gestureTs: 950, total: 20 });
+  assert.deepEqual(report([entry('keyup', 1100, 104, 1101, 1103)], [other], [], ring).commits, []);
 });
 
 test('a render after an input or change a script dispatched past the paint is not a later render of the input before it', () => {

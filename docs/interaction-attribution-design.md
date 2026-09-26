@@ -513,14 +513,22 @@ belongs to (pointerup and click by `pointerId`, keyup by key code, and a click m
 keyboard, whose `pointerId` is -1 in Chrome, by the key whose task it came in), so a render after a cheap
 click still finds the pointerdown that was slow enough to be observed. A commit belongs to
 an interaction when its input matches an entry of the same type whose `startTime` is within 1 ms
-(a keypress stands for its keydown), or the press it carries matches a pointerdown or keydown entry: the
+(a keypress stands for its keydown, and a mousedown or mouseup for its pointer event), or when the press
+it carries matches a pointerdown or keydown entry. Either one is enough, and both go by time: the
 Event Timing spec says `startTime` is the event's `timeStamp`, the same clock React's own
 Blocking track keys on. That is why 150 ms of input delay changes nothing and two
 overlapping interactions cannot both claim one commit at full cost. The type matters when typing at full
 speed: the next key goes down under a millisecond after the last one comes up, before the frame that
 keyup paints in, and by time alone the next key's render was the keyup's as well. The keyup's report now
-holds no render, and says its frame waited on the next key press, which the page handled first
-(`nextInput`). A commit no stamp
+holds no render. It keeps the next press that came before its paint (`nextInput`), a keydown, pointerdown
+or click and never a release, and says its frame waited on that press, which the page handled first,
+only where the page worked on it before the paint for half the screen update or more: a script a long
+animation frame recorded from the press on, or React's render in the press's own dispatch ending by the
+paint. A press alone is not enough, and a release never counts: a Cmd+K whose Meta comes up before the
+palette's slow paint, a Shift+click with Shift let go, and the second click of a double click that does
+nothing before the paint all have another input in that time, and none of them waited on it. The
+render's end says when the work finished and not when it began, so on it alone the clause says "most
+likely"; the blame is the screen update's own time either way, and `measured`. A commit no stamp
 explains, landing between an interaction's handlers and its paint, is still taken and
 flagged `joinedBy: 'overlap'`; one that ran during the input delay is what delayed the
 interaction, not part of it. Before or after the paint is decided against the paint that
@@ -990,7 +998,9 @@ window it was counted across, and never over a longer wait before the handlers,
 with one script having to hold nine tenths of a window's forced layout before its name is used for
 all of it; a Long Animation
 Frames script from 20 ms; waiting, painting and
-working time known only by counts from 50 ms, the length of a long task. The hot path follows a
+working time known only by counts from 50 ms, the length of a long task, with painting blamed under that
+only where the frame waited on the next interaction's press, as above, and the screen update was the
+larger part of the interaction. The hot path follows a
 child carrying 60% of its parent's work (`fiber.ts`). Where React timed each component and one of them,
 rendered once, spent 25 ms and half of the render or more in its own render, the sentence says so
 rather than leaving the reader with the count: sorting TanStack Table's 200,000 rows reads "re-rendering

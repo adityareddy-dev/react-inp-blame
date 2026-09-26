@@ -30,12 +30,14 @@ it changes when a field is removed or changes meaning, which a minor release may
   task, and false outside any dispatch and in an `input` or `change` from a later task. Whether a quick
   interaction is published, and what the note on a later render says, read it (under Changed). It is
   additive, so `schemaVersion` stays at 3.
-- **A report says which input its frame waited on.** `InteractionReport.nextInput` is another
-  interaction's input that came after this one's and before its paint, as `{ type, pointerType, start }`,
-  from the ring of recent inputs. The page handled it before painting, so the wait for it is in
-  `presentation`. Typing fast does it, the next key's keydown coming before the frame the last keyup paints
-  in. Null when no input came in that time, or the ring has let it go. The explanation reads it (under
-  Changed). It is additive, so `schemaVersion` stays at 3.
+- **A report says which press came before its paint.** `InteractionReport.nextInput` is the first press of
+  another interaction, a keydown, pointerdown or click and never a release, that came after this one's input
+  and before its paint, as `{ type, pointerType, start, endedAt }`, from the ring of recent inputs. `endedAt`
+  is when React finished what it rendered in that press's own dispatch, null where it rendered nothing
+  there. A press in that time does not by itself mean the frame waited on it; typing fast, the next key's
+  keydown and its render do come before the frame the last keyup paints in, and then that wait is in
+  `presentation`. Null when no press came in that time, or the ring has let it go. The explanation reads it
+  (under Changed). It is additive, so `schemaVersion` stays at 3.
 
 ### Changed
 
@@ -227,20 +229,26 @@ it changes when a field is removed or changes meaning, which a minor release may
   finishes a lane the listeners left pending; outside any dispatch such a commit is still theirs and not
   read. Every keystroke now has its commit and its report blames the render or the handler. The kept
   commit counts the listener's components beside the input's (README, Known limits).
-- **A commit joins an entry of its own input's type, and a release's press is matched against presses
-  only.** Typing at full speed, the next key can go down under a millisecond after the last one came up,
-  before the frame that keyup paints in, so the keyup's entry runs to the paint after the next key's
-  render. A commit's stamp matched any entry within 1 ms, and that render was exact in both reports. Now
-  the input it is stamped with has to match an entry of the same type, a keypress standing for its
-  keydown, and the press it carries (`gestureTs`) a pointerdown or keydown entry. An entry of a type the
-  ring never records still matches by time alone. The same test decides which inputs in the ring are the
-  interaction's own, and a click whose entry was too quick to arrive is still its pointerup's. The keyup's
-  report no longer holds the render, and where the frame waited on the next input (`nextInput`, under
-  Added) and nothing of its own explains the time, it reads "After the key press was handled, the screen
-  took another 111 ms to update: the frame waited on the next key press, which the page handled first.",
-  with the longest script the browser recorded in that time after it. The blame is 'painting', named by
-  that script as a painting blame is, where it could be the next key's render or, with that render gone,
-  a script or nothing.
+- **A commit joins an entry of its own input's type, and a release's press is matched against presses only.**
+  Typing at full speed, the next key can go down under a millisecond after the last one came up, before the
+  frame that keyup paints in, so the keyup's entry runs to the paint after the next key's render. A commit's
+  stamp matched any entry within 1 ms, and that render was exact in both reports. Now a commit matches where
+  the input it is stamped with is an entry of the same type at its time, a keypress standing for its keydown
+  and a mousedown or mouseup for its pointer event, or where the press it carries (`gestureTs`) is a
+  pointerdown or keydown entry at its time. Either one is enough. An entry of a type the ring never records
+  still matches by time alone. The same test decides which inputs in the ring are the interaction's own, and a
+  click whose entry was too quick to arrive is still its pointerup's. The keyup's report no longer holds the
+  render. Where its frame waited on the next press (`nextInput`, under Added) and nothing of its own explains
+  the time, it reads "After the key press was handled, the screen took another 111 ms to update: the frame
+  waited on the next key press, which the page handled first.", with the longest script the browser recorded
+  in that time after it. That is said only where the page worked on the press before the paint for half the
+  screen update or more: a script a long animation frame recorded from the press on, or React's render in the
+  press's own dispatch ending by the paint, and on that render alone it says "the frame most likely waited". A
+  press with no such work, like the second click of a double click, and a modifier let go before the paint
+  leave the screen update's sentence as it was. The blame is 'painting' and `measured`, the screen update's
+  own time, named by that script as a painting blame is, where it could be the next key's render or, with that
+  render gone, a script or nothing. With the frame waiting on the next press it is blamed under 50 ms of
+  screen update too, where the screen update is the larger part of the interaction.
 
 ## [0.12.0] - 2026-09-25
 

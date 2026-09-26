@@ -490,9 +490,10 @@ export function buildReport(
   for (const c of inWindow) walkMs += Math.max(0, Math.min(c.at + c.walkMs, processingEnd) - Math.max(c.at, processingStart));
   // Placed by its first input: a click that starts a navigation happened on the page it left.
   const navigation = navigationAt(navigations, first);
-  // Another interaction's input that came before this one's paint was handled first, and the frame waited on it.
+  // Another interaction's press that came before this one's paint, which the page may have handled first
+  // (`explain` says so only on evidence). A release sets nothing off: a modifier let go before the paint.
   const own = ringInputs(inputs, stamps);
-  const next = inputs.find((i) => i.ts > start && i.ts < end && !own.includes(i));
+  const next = inputs.find((i) => (PRESSES.includes(i.type) || i.type === 'click') && i.ts > start && i.ts < end && !own.includes(i));
 
   return {
     schemaVersion: 3,
@@ -509,7 +510,7 @@ export function buildReport(
     processing: processingEnd - processingStart - walkMs,
     walkMs,
     presentation: end - processingEnd,
-    nextInput: next ? Object.freeze({ type: next.type, pointerType: next.pointerType || null, start: next.ts }) : null,
+    nextInput: next ? Object.freeze({ type: next.type, pointerType: next.pointerType || null, start: next.ts, endedAt: next.work.ownEndedAt > next.ts ? next.work.ownEndedAt : null }) : null,
     // A node that left the page has no control above it any more; the one found at dispatch labels it.
     // Labelled as it read at dispatch where the ring has that node: a handler can change the text.
     target: targetNode ? describeTarget(targetNode, owners, handler, labels, live ?? ring?.control ?? targetNode, ring && (!live || ring.target === live) ? ring.label : null) : null,
@@ -1326,20 +1327,31 @@ function explain(r: InteractionReport): Explanation {
    * It is also what keeps two interactions of the same shape from getting opposite verdicts on the
    * strength of a component count: paging a calendar forward and toggling a theme were both 88 ms
    * with 5 ms of working time and 82 of the screen updating, and only one of them came back a
-   * render. Under a long task the screen update is never blamed at all, so nothing gives way to it
-   * there.
+   * render. Under a long task the screen update is blamed only where its frame waited on the next
+   * interaction's press (`waitedOnNext`), a rung below every one this test closes, so nothing gives way
+   * to it there either.
    */
   const screenOutranks = r.presentation > LONG_TASK_MS && r.presentation > r.processing;
   /**
-   * The next interaction's input, where the frame this one painted in waited on it: it came before the
-   * paint, and from it (or from the end of the handlers, where it came during them) to the paint is most
-   * of the screen update. Only where the screen update is the larger part of the interaction, as for
+   * The next interaction's press, where the frame this one painted in waited on it: typing fast, the next
+   * key's keydown and its render come before the frame the last keyup paints in. A press coming before
+   * the paint is not enough (the second click of a double click delays nothing), so the page has to
+   * have worked on it before the paint for half the screen update or more, counted from the press or from
+   * the end of the handlers where it came during them. A script Long Animation Frames recorded from the
+   * press on shows that work, timed, and so does React's render in the press's own dispatch where it
+   * ended by the paint. That end says when the work finished and not when it began, so on it alone the
+   * sentence is hedged. Only where the screen update is the larger part of the interaction, as for
    * `screenOutranks`, but without the long-task bar: what the next key keeps the last keyup's frame
    * waiting for can be under one.
    */
   const next = r.nextInput;
+  const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
+  const nextScriptMs = next ? scriptParts(frames, nextFrom, r.end).reduce((a, p) => (p.script.start >= next.start - STAMP_TOLERANCE ? Math.max(a, p.ms) : a), 0) : 0;
+  // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
+  const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;
+  const nextShare = WAITED_BEHIND_MIN_SHARE * r.presentation;
   const waitedOnNext =
-    next && r.presentation > r.processing && r.presentation >= r.inputDelay && r.end - Math.max(next.start, processingEnd) >= WAITED_BEHIND_MIN_SHARE * r.presentation ? next : null;
+    next && Math.max(nextScriptMs, nextRenderMs) >= nextShare && r.presentation > r.processing && r.presentation >= r.inputDelay ? next : null;
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
@@ -1557,11 +1569,13 @@ function explain(r: InteractionReport): Explanation {
     const named = behind && behind.ms >= WAITED_BEHIND_MIN_SHARE * r.inputDelay ? scriptName(behind.script) : null;
     blame = { kind: 'waiting', name: named, detail: null, ms: r.inputDelay, confidence: 'measured' };
   } else if (waitedOnNext) {
-    // The frame waited on the next input, which the page handled first: typing fast, the next key's
-    // keydown and its render come before the frame the last keyup paints in. That render is the next
-    // report's, so there is nothing of this interaction's own to blame, and the wait is the answer.
+    // The frame waited on the next press, which the page handled first. What it did for that press is the
+    // next report's, so there is nothing of this interaction's own to blame, and the wait is the answer.
+    // The blame is the screen update, this interaction's own phase, and stays measured; the clause about
+    // the press is hedged where only its render's end says so.
     const nextKind = kindOf(waitedOnNext.type, waitedOnNext.pointerType);
-    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update: the frame waited on the next ${nextKind}, which the page handled first.${longestSaid(lateScript)}`;
+    const hedge = nextScriptMs >= nextShare ? '' : `${HEDGE} `;
+    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update: the frame ${hedge}waited on the next ${nextKind}, which the page handled first.${longestSaid(lateScript)}`;
     blame = { kind: 'painting', name: lateScript ? scriptName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (screenOutranks) {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot

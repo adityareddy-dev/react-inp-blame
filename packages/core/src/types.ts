@@ -405,7 +405,11 @@ export interface Blame {
    * 'measured': the blame follows from timings of this interaction. A render or handler blame
    * rests on React's render durations for commits joined by their exact input stamp and walked in
    * full; waiting and painting on the browser's own phases; a script on its Long Animation Frames
-   * entry; 'none' on Long Animation Frames showing no long script.
+   * entry; 'none' on Long Animation Frames showing no long script. A painting blame whose cause says
+   * the frame waited on the next press (`InteractionReport.nextInput`) is still the screen update's own
+   * time. The clause about the press rests on that press's timings, which are not this interaction's,
+   * so it says "most likely" unless a long animation frame over this interaction recorded a script
+   * from the press on that shows the work, the way it records the script a wait was behind.
    *
    * 'inferred': it is the likeliest reading of weaker evidence. Render counts without durations
    * (production builds, or a clock too coarse to time components), a commit that only overlapped
@@ -512,13 +516,17 @@ export interface InteractionReport {
   readonly walkMs: number;
   readonly presentation: number;
   /**
-   * Another interaction's input that came after this one's and before its paint: its event `type`,
-   * `pointerType` as for this report, and `start`, its `timeStamp`. The page handled it before painting,
-   * so the frame this interaction painted in waited on it, and that wait is in `presentation`. Typing
-   * fast does it, the next key's keydown coming before the frame the last keyup paints in. Null when no
-   * input came in that time, or when the library no longer holds the one that did.
+   * The first press of another interaction (a keydown, pointerdown or click) that came after this one's
+   * input and before its paint: its event `type`, `pointerType` as for this report, `start`, its
+   * `timeStamp`, and `endedAt`, when React finished what it rendered in that press's own dispatch, null
+   * where it rendered nothing there. A press coming then does not by itself mean the frame waited on it.
+   * Typing fast, the next key's keydown and its render come before the frame the last keyup paints in, and
+   * that wait is in `presentation`; the explanation says the frame waited only where the page worked on
+   * the press before the paint for half the screen update or more, going by that render or by a script
+   * Long Animation Frames recorded from the press on. Null when no press came in that time, or when the
+   * library no longer holds the one that did.
    */
-  readonly nextInput: { readonly type: string; readonly pointerType: string | null; readonly start: number } | null;
+  readonly nextInput: { readonly type: string; readonly pointerType: string | null; readonly start: number; readonly endedAt: number | null } | null;
   readonly target: TargetInfo | null;
   /**
    * Server-rendered HTML the interaction landed on before React had hydrated it; null when it landed

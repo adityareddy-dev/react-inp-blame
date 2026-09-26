@@ -39,7 +39,7 @@ async function quiet(page: Page): Promise<void> {
  * What is wrong with the reports of a run: every keystroke has one report and one commit stamped with its
  * keydown, a commit is exact in one report at most and there matches an entry of its own type, and each
  * report blames what took its time. A keyup whose paint came after the next key press's render heads its
- * report, and that report holds no render of its own.
+ * report, and that report holds no render of its own and says its frame waited on that key press.
  */
 function problemsOf(reports: InteractionReport[], commits: CommitSummary[], keydowns: Keydown[]): string[] {
   const problems: string[] = [];
@@ -63,6 +63,8 @@ function problemsOf(reports: InteractionReport[], commits: CommitSummary[], keyd
     if (headline(r).name === 'keyup') {
       if (blame.kind === 'none' || blame.kind === 'script') problems.push(`${at} blames ${blame.kind}`);
       if (exact(r).length) problems.push(`${at} holds ${exact(r).length} exact commits`);
+      // The next key's handler ran before the paint, so the frame waited on it, and the report says so.
+      if (!/: the frame (most likely )?waited on the next key press, which the page handled first\./.test(r.explanation.cause)) problems.push(`${at} says ${r.explanation.cause}`);
     } else if (fieldOf(r) === 'email') {
       if (blame.kind !== 'render' || blame.name !== 'FeedPreview') problems.push(`${at} blames ${blame.kind} ${blame.name}`);
       if (!exact(r).some((c) => c.rendered >= 1000)) problems.push(`${at} holds no render of 1000 components`);
