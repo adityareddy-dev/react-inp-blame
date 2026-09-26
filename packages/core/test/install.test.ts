@@ -5,6 +5,7 @@ import path from 'node:path';
 import { beforeEach, test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, mountOverlay, onInteraction } from '../src/index.ts';
+import { page as installState } from '../src/install-state.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 import { attributeINP } from '../src/web-vitals.ts';
 
@@ -362,6 +363,61 @@ test('a badge that could not be shown is tried again at the next mountOverlay()'
     assert.equal(hosts(), 1);
     api.dispose();
   });
+});
+
+test("the badge shows only where overlay: 'query' and the URL or localStorage ask for it, never on a page that did not", async (t) => {
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
+    else delete (globalThis as Record<string, unknown>).localStorage;
+  });
+  const cases: [overlay: InstallOptions['overlay'], url: string, stored: string | null, shown: boolean][] = [
+    ['query', PAGE_URL, null, false],
+    ['query', `${PAGE_URL}?inp-blame`, null, true],
+    ['query', `${PAGE_URL}?sort=price&inp-blame=1`, null, true],
+    ['query', `${PAGE_URL}#inp-blame`, null, true],
+    ['query', `${PAGE_URL}?inp-blamed`, null, false],
+    ['query', `${PAGE_URL}?ref=inp-blame`, null, false],
+    ['query', PAGE_URL, 'overlay', true],
+    ['query', PAGE_URL, 'panel', false],
+    [undefined, `${PAGE_URL}?inp-blame`, 'overlay', false],
+    [false, `${PAGE_URL}?inp-blame`, 'overlay', false],
+  ];
+  for (const [overlay, url, stored, shown] of cases) {
+    await inBrowser(async () => {
+      const { search, hash } = new URL(url);
+      Object.defineProperty(globalThis, 'location', { value: { href: url, search, hash }, configurable: true, writable: true });
+      Object.defineProperty(globalThis, 'localStorage', { value: { getItem: (key: string) => (key === 'react-inp-blame' ? stored : null), setItem() {} }, configurable: true, writable: true });
+      const { hosts } = badgeDocument();
+      const api = install({ overlay });
+      await installState.overlay;
+      assert.equal(hosts(), shown ? 1 : 0, `overlay: ${overlay} on ${url}${stored ? ` with ${stored} in localStorage` : ''}`);
+      api.dispose();
+    });
+  }
+});
+
+test("a browser without Event Timing shows the badge that says so only where it was asked for, and install() or 'query' alone never loads it", async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const cases: [overlay: InstallOptions['overlay'], shown: boolean][] = [
+    [undefined, false],
+    ['query', false],
+    [true, true],
+  ];
+  for (const [overlay, shown] of cases) {
+    await inBrowser(
+      async () => {
+        const { hosts } = badgeDocument();
+        const api = install({ overlay });
+        await installState.overlay;
+        assert.equal(hosts(), shown ? 1 : 0, `overlay: ${overlay}`);
+        api.dispose();
+        await nextTask();
+        assert.equal(hosts(), 0);
+      },
+      { entryTypes: ['first-input'] },
+    );
+  }
 });
 
 /** A document whose elements, in document order, are `elements`, walked the way the renderer check walks it. */
