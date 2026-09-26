@@ -707,6 +707,23 @@ test('listeners hear a report in a task after the one that published it, never i
   });
 });
 
+test('reports waiting to be heard when the page is hidden are heard before its visibilitychange handler returns, since a closing tab runs no later task', async () => {
+  await inBrowser(async (page) => {
+    const api = install({ devtoolsTrack: false });
+    const heard: number[] = [];
+    onInteraction((r) => heard.push(r.interactionId));
+    // One published before the hide in the same task, and one from an entry the hide takes.
+    page.paint([click(7, 1000, 300)]);
+    page.queue([click(14, 2000, 200)]);
+    page.hide();
+    assert.deepEqual(heard, [7, 14]);
+    await nextTask();
+    await nextTask();
+    assert.deepEqual(heard, [7, 14], 'a report was heard twice');
+    api.dispose();
+  });
+});
+
 test('a render that a report listener causes is never read, so a panel showing reports never joins the report it shows', async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {

@@ -163,7 +163,8 @@ function installNow(opts: InstallOptions): Api {
 
   // Reports reach listeners in a task of their own. A later render revises a report inside React's
   // commit, and a listener that set state there would render inside that commit. The renders the
-  // listeners cause by hearing reports are kept out of every report (see hearingReports).
+  // listeners cause by hearing reports are kept out of every report (see hearingReports). The one
+  // exception is the page being hidden, below.
   const undelivered: InteractionReport[] = [];
   let delivery: ReturnType<typeof setTimeout> | null = null;
   const deliver = () => {
@@ -250,6 +251,12 @@ function installNow(opts: InstallOptions): Api {
     frameObserver.flush();
     eventObserver.flush();
     lifecycle.onHidden();
+    // What waits to be heard is heard now: a tab that closes runs no later task. A visibilitychange
+    // handler never runs inside a React commit.
+    if (delivery !== null) {
+      clearTimeout(delivery);
+      deliver();
+    }
   };
   // The App Router announces a navigation from inside the handler that starts it, so the input
   // being dispatched, if any, is the one that started it.
@@ -371,9 +378,9 @@ export function mountOverlay(opts: OverlayOptions = {}): Promise<OverlayHandle |
 
 /**
  * Calls `fn` with each report once it is published, and again with every later revision of it, in a
- * task after the one that published it. An update `fn` makes while it runs is never read as part of an
- * interaction; one it schedules for later, with setTimeout or an await, is an ordinary render.
- * Returns the unsubscribe.
+ * task after the one that published it, or inside the `visibilitychange` that hides the page for what
+ * is still waiting then. An update `fn` makes while it runs is never read as part of an interaction;
+ * one it schedules for later, with setTimeout or an await, is an ordinary render. Returns the unsubscribe.
  */
 export function onInteraction(fn: Listener): () => void {
   // A server renders no interactions, and a listener added during a render there would outlive the request.
