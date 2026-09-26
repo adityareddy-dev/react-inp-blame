@@ -231,10 +231,6 @@ interface Stamp {
 /** The inputs that begin a press. A release's `gestureTs` is one of these. */
 const PRESSES: readonly string[] = ['pointerdown', 'keydown'];
 
-/**
- * An entry as a stamp. A keypress is fired by its keydown and has that keydown's time, and so do a
- * mousedown and a mouseup their pointer events', so each stands for the input the ring recorded.
- */
 /** Whether `a` comes after `b`, compared element by element. */
 function isAfter(a: readonly number[], b: readonly number[]): boolean {
   for (let i = 0; i < a.length; i++) {
@@ -244,6 +240,10 @@ function isAfter(a: readonly number[], b: readonly number[]): boolean {
   return false;
 }
 
+/**
+ * An entry as a stamp. A keypress is fired by its keydown and has that keydown's time, and so do a
+ * mousedown and a mouseup their pointer events', so each stands for the input the ring recorded.
+ */
 function stampOf(e: Pick<EventEntrySummary, 'name' | 'startTime'>): Stamp {
   const type = e.name === 'keypress' ? 'keydown' : e.name === 'mousedown' ? 'pointerdown' : e.name === 'mouseup' ? 'pointerup' : e.name;
   return { at: e.startTime, types: INPUT_TYPES.includes(type) ? [type] : null };
@@ -1449,7 +1449,7 @@ function explain(r: InteractionReport): Explanation {
   // that began last and, of two that began together, ends first, since Chromium dispatches the click a key sets off
   // inside that key's own handlers. A script starting where an event's handlers ended is not that event's, and a
   // commit stamped where an event's handlers began is the event's already running, where one is: the new event's
-  // listeners had not run yet.
+  // listeners most likely had not run yet.
   const handlingAt = (t: number, stamp: boolean) => {
     const rank = (e: EventEntrySummary) => [stamp && e.processingStart < t ? 1 : 0, e.processingStart, -e.processingEnd];
     let at: EventEntrySummary | null = null;
