@@ -1361,12 +1361,14 @@ function explain(r: InteractionReport): Explanation {
   const spans = r.commits
     .flatMap((x, order) => {
       const began = x.startedAt;
-      if (began === null || !inOneHandler(began, x.at)) return [];
+      // A commit the screen update's clause gave to its script is that script's, and outside the working time.
+      if (began === null || insideLate.includes(x) || !inOneHandler(began, x.at)) return [];
       const from = Math.max(began, processingStart);
       const to = Math.min(x.at, processingEnd);
       // The working time ends at the paint the duration's 8 ms rounding gives, which can be before the handlers' own
-      // end: a commit that ended past it is timed all the same, with none of it in the working time.
-      return to > from || x.at > processingEnd ? [{ commit: x, order, from, to: Math.max(from, to) }] : [];
+      // end: a commit that ended past it is timed all the same, with none of it in the working time. So is one that
+      // began and ended on the same step of a 0.1 ms clock.
+      return to >= from || x.at > processingEnd ?[{ commit: x, order, from, to: Math.max(from, to) }] : [];
     })
     .sort((a, b) => a.from - b.from);
   /**

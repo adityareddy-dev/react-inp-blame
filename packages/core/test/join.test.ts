@@ -1223,6 +1223,15 @@ test('the forced layout sentence says a layout effect only where a commit ran in
     rounded.cause,
   );
   assert.deepEqual([rounded.blame.name, rounded.blame.detail], ['measureThing', null]);
+  // On the 0.1 ms clock a tiny commit can begin and end on the same step, and is timed all the same.
+  const oneStep = report(
+    [entry('click', 746.3, 72, 747, 810.9)],
+    [commit(800, 746.3, { total: 0.05, startedAt: 800, rendered: 3, components: [{ name: 'Row', count: 3, self: 0.05, total: 0.05 }] })],
+    [frame(746.3, 72, [script('DIV#root.onclick', 747, 63.9, 62.8)])],
+    [input(746.3, 'click', named)],
+  ).explanation;
+  assert.match(oneStep.cause, /React's commit took under 1 ms in all/);
+  assert.deepEqual([oneStep.blame.name, oneStep.blame.detail], ['measureThing', null]);
 
   // The layout charged to a listener no commit ran in, React's own script holding the commit and forcing
   // nothing: in no layout effect, in any build, however long React's commit took. The blame is the
@@ -3210,6 +3219,22 @@ test('a render that committed inside the script the screen update waited on is s
   // A render that committed after the script ended is not tied to it, and a script with none inside keeps the clause as it was.
   const after = report([entry('click', 0, 368, 2, 171)], [handled, commit(360, 0, { ...rows, total: 5 })], frames, [input(0, 'click')]);
   assert.match(after.explanation.cause, /before the next frame\.$/);
+
+  // The script's render, begun and committed inside a later event's handlers, is not taken back out of the working
+  // time's React time: it was never in it.
+  const tap = report(
+    [entry('pointerdown', 0, 200, 2, 62), entry('pointerup', 100, 120, 101, 140)],
+    [
+      commit(30, 0, { inputType: 'pointerdown', total: 5, startedAt: 25, effectsStartedAt: 30, effectsEndedAt: 58 }),
+      commit(138, 100, { inputType: 'pointerup', total: 30, startedAt: 105 }),
+    ],
+    [frame(0, 200, [script('DIV.onpointerdown', 2, 60), script('DIV.onpointerup', 101, 39)])],
+    [input(0, 'pointerdown'), input(100, 'pointerup')],
+  );
+  assert.match(tap.explanation.cause, /DIV\.onpointerup.*React rendered inside it: 30 ms /);
+  assert.deepEqual(tap.explanation.notes, [
+    'React still spent 5 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) and 28 ms running its useEffect callbacks in the 60 ms of working time before that.',
+  ]);
 });
 
 test('a screen update no script took is put on the browser recalculating styles and layout, timed where the frame timed it', () => {
