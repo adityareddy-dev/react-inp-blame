@@ -1,6 +1,6 @@
 import { heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
-import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
+import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { warnOnce } from './warn.js';
@@ -226,7 +226,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   function row(g: Group): HTMLElement {
     const r = slowest(g.reports);
     const total = Math.max(r.duration, 1);
-    const later = laterRender(r);
+    const later = laterRenderOf(r);
     const n = g.reports.length;
     const isExpanded = expanded.has(r.interactionId);
     return h(
@@ -250,7 +250,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     // Only a render with real work gets a component list; a status pill updating does not.
     const main = r.commits.length ? heaviest(r.commits) : null;
     const before = main && carriesWork(main) ? main : null;
-    const later = laterRender(r);
+    const later = laterRenderOf(r);
     const legend = x.phases.flatMap((p, i) => [swatch(`p${i}`, p), ...(p.parts ?? []).map((part) => swatch('ph', part))]);
     return h(
       'div',
@@ -415,11 +415,6 @@ function slowest(reports: InteractionReport[]): InteractionReport {
 function median(values: number[]): number {
   const s = values.slice().sort((a, b) => a - b);
   return s[Math.floor(s.length / 2)] ?? 0;
-}
-
-/** The heaviest later render. A report only takes later renders with real work in them, so any one is worth a line. */
-function laterRender(r: InteractionReport): CommitSummary | null {
-  return r.followUps.length ? heaviest(r.followUps) : null;
 }
 
 /** "1.2 ms", and "under 0.1 ms" rather than a 0.0 that reads as free. */

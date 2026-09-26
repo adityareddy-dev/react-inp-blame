@@ -1037,15 +1037,24 @@ another of the interaction's own entries is not one of those. A pointerdown held
 interaction with its release, and the render the pointerup makes in its own dispatch lands after the
 press's paint but inside the pointerup's entry, which INP counts. Until 2026-09-25 that render
 published a 32 ms pointerdown on excalidraw's canvas, with a note saying INP didn't count it; now it
-keeps the press quiet, and where the report is published anyway the note says the render came on the
-release and says nothing about INP. The pointerup's entry can be under the 16 ms floor, and a report
-is explained when it is read, by which time the ring may have let the input go, so the hook marks a
-commit it made in the dispatch of the input it is stamped with (`CommitSummary.inDispatch`). Under the floor there is
-nothing to hold back: the browser sends no `event` entry for an interaction that paints in
-less than 16 ms, so a render its effect sets off after the paint has no report to attach to,
-however heavy. The page's first input is the exception. The browser also reports it as a
-`first-input` entry at any duration, carrying its interactionId, so the observer takes that
-entry too, as web-vitals' onINP does, and drops it when the `event` entry exists as well. For
+keeps the press quiet. Where the report is published anyway, the note is about a render INP left out
+if the report holds one, and otherwise says the render came on the release and says nothing about
+INP. A render that began after the pointerup came and committed while it waited for its handlers is
+inside the entry too, since INP counts that wait. The pointerup's entry can be under the 16 ms floor,
+and a report is explained when it is read, by which time the ring may have let the input go, so the
+hook marks a commit it made in the dispatch of the input it is stamped with
+(`CommitSummary.inDispatch`). A render React made in a task of its own can still land before the
+release paints, and the release's entry only comes after that paint. So a render stamped with a
+release that came after every entry's paint, less than `threshold` after it, waits for that entry
+before it can publish the press (`awaitsEntry`). A newer interaction's entry ends the wait, since it
+never comes first, and so does the page being hidden: a release under the floor sends none. A render
+`threshold` or more after the release does not wait, as an entry holding it would publish the press
+on its own, and neither does one after a tap, whose click came before the pointerdown painted and was
+presented with it. Under the floor there is nothing to hold back: the browser sends no `event` entry
+for an interaction that paints in less than 16 ms, so a render its effect sets off after the paint has
+no report to attach to, however heavy. The page's first input is the exception. The browser also
+reports it as a `first-input` entry at any duration, carrying its interactionId, so the observer takes
+that entry too, as web-vitals' onINP does, and drops it when the `event` entry exists as well. For
 every later interaction under 16 ms the render stays unreported: its stamp still names the
 input exactly, but with no entry there is no latency to headline and no paint to place the
 render after, and making either up would be a guess. Found 2026-09-14 on the React 17 variant

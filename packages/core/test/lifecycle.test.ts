@@ -133,6 +133,51 @@ test("a quick press is not published for the render its own release made, which 
   assert.deepEqual(published[0]?.followUps.map((c) => c.at), [7070, 7400]);
 });
 
+test('a render stamped with a release whose entry has not come waits for it before it publishes a quick press', () => {
+  // A 32 ms keydown, its keyup at 7100, 68 ms after the keydown painted, and a render React made in a task
+  // of its own 5 ms after the keyup, before the keyup painted.
+  const { life, published, render } = lifecycle();
+  const released = (at: number) => ({ ...commit(at, 7100), gestureTs: 7000, inputType: 'keyup', inDispatch: false });
+  life.onEntries([entry(7, 'keydown', 32)]);
+  render(released(7105));
+  assert.deepEqual(published, []);
+  // The keyup's entry holds it, so INP counted it.
+  life.onEntries([entry(7, 'keyup', 24, { startTime: 7100, processingStart: 7101, processingEnd: 7102 })]);
+  assert.deepEqual(published, []);
+  // One after the keyup painted is a render INP left out.
+  render(released(7400));
+  assert.equal(published.length, 1);
+  assert.deepEqual(published[0]?.followUps.map((c) => c.at), [7105, 7400]);
+});
+
+test("a render waits for a release's entry only while one can still come and could hold it", () => {
+  // The keyup painted under the 16 ms floor and sends no entry. A newer interaction's entry, which never
+  // comes before it, says so, and so does the page being hidden.
+  const waiting = () => {
+    const l = lifecycle();
+    l.life.onEntries([entry(7, 'keydown', 32)]);
+    l.render({ ...commit(7120, 7100), gestureTs: 7000, inputType: 'keyup', inDispatch: false });
+    assert.deepEqual(l.published, []);
+    return l;
+  };
+  const next = waiting();
+  next.life.onEntries([entry(14, 'click', 24)]);
+  assert.deepEqual(next.published.map((r) => r.interactionId), [7]);
+  const hidden = waiting();
+  hidden.life.onHidden();
+  assert.deepEqual(hidden.published.map((r) => r.interactionId), [7]);
+  // 40 ms or more after the release nothing waits: an entry holding that render would publish the press.
+  const late = lifecycle();
+  late.life.onEntries([entry(7, 'keydown', 32)]);
+  late.render({ ...commit(7150, 7100), gestureTs: 7000, inputType: 'keyup', inDispatch: false });
+  assert.equal(late.published.length, 1);
+  // Nor for a tap's click, which came before the pointerdown painted and was presented with it.
+  const tap = lifecycle();
+  tap.life.onEntries([entry(7, 'pointerdown', 24)]);
+  tap.render({ ...commit(7030, 7010), gestureTs: 7000 });
+  assert.equal(tap.published.length, 1);
+});
+
 test('a late entry publishes the next revision as a new report, and the revision before stays as it was', () => {
   const { life, published } = lifecycle();
   // A press held down: the pointerdown painted on its own, quick enough to stay quiet.

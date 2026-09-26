@@ -449,6 +449,20 @@ test("the render a held press's release made inside its own entry is not said to
   assert.match(note(report(pressed, [heavyRelease, effect], [], ring)), /^A second React render landed 368 ms after the screen updated: 40 ms .* INP doesn't count it, but people still wait for it\.$/);
 });
 
+test("a render that began after the release came and committed before its handlers ran is inside the release's entry", () => {
+  // The pointerup came at 40 and waited until 60 for its handlers, and React committed a render in that
+  // wait, still stamped with the press since the pointerup had not been dispatched. INP counts the wait.
+  const pressed = [entry('pointerdown', 0, 32, 2, 24), entry('pointerup', 40, 28, 60, 62)];
+  const ring = [input(0, 'pointerdown'), input(40, 'pointerup', { gestureTs: 0, work: { endedAt: 62, ownEndedAt: 62, unjoined: [] } })];
+  const note = (r: InteractionReport) => r.explanation.notes.find((n) => n.startsWith('A second React render')) ?? '';
+  const inWait = note(report(pressed, [commit(58, 0, { inputType: 'pointerdown', startedAt: 45, total: 12 })], [], ring));
+  assert.match(inWait, /^A second React render landed 26 ms after the screen updated, on the release: 12 ms /);
+  assert.doesNotMatch(inWait, /INP/);
+  // One that began before the pointerup came is not inside its entry.
+  const before = note(report(pressed, [commit(58, 0, { inputType: 'pointerdown', startedAt: 20, total: 12 })], [], ring));
+  assert.match(before, /^A second React render landed 26 ms after the screen updated: 12 ms .* INP doesn't count it/);
+});
+
 test('a follow-up window is measured from the paint, so a slow interaction still gets the render that followed it', () => {
   // A 2.5 s interaction painting at 2503 ms, with its own follow-up 200 ms later. Measured from the
   // start of the interaction the follow-up is 2.7 s old and would be thrown away.

@@ -186,11 +186,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   people still wait for it." That render ran inside the pointerup's own Event Timing entry, part of the
   same interaction, so INP does count it: a slower release would have raised the interaction's latency. A
   render made in the dispatch of the input it is stamped with (`CommitSummary.inDispatch`, under Added),
-  or landing inside one of the interaction's entries, no longer makes an interaction under `threshold`
-  worth publishing. A later one outside them still does, and the report then holds both. Where a report
-  with such a render is published on its own duration, the note is about a render INP left out if it has
-  one, and otherwise reads "A second React render landed 37 ms after the screen updated, on the release:"
-  and what the render did, with nothing about INP. `followUps` keeps the render and no blame changes.
+  or landing inside one of the interaction's entries before its paint, no longer makes an interaction
+  under `threshold` worth publishing. That takes in a render that began after the entry's input and
+  committed before its handlers ran, in the wait INP counts. A later one outside them still does, and the
+  report then holds both. A render stamped with a release whose entry has not come, less than `threshold`
+  after it, waits for that entry before it publishes the press, since the entry may hold it. A newer
+  interaction's entry ends the wait, and so does the page being hidden, as a release under 16 ms sends
+  none. Where a report with such a render is published on its own duration, the note is about a render
+  INP left out if it has one, and otherwise reads "A second React render landed 37 ms after the screen
+  updated, on the release:" and what the render did, with nothing about INP. The panel's line for a later
+  render and its "Rendered after the paint" list now name that same render, where they took the heaviest
+  of all. `followUps` keeps the render and no blame changes.
 - **A long animation frame is folded into every published report it overlaps, not only the newest.** On
   an undo in excalidraw, Control pressed 8 ms before z, z's handler ran for about 59 ms in the frame both
   key presses painted in, and only z's report, the newer one, took the frame when it arrived. Control's

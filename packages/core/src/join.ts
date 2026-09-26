@@ -599,12 +599,35 @@ function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[
 
 /**
  * Whether INP timed a later render: React made it in the dispatch of the input it is stamped with
- * (`CommitSummary.inDispatch`), or it landed inside one of the interaction's entries, between the
- * handlers and the paint. A press held past its paint is one interaction with its release, and the
- * render the release makes lands after the press's paint but inside the release's own entry.
+ * (`CommitSummary.inDispatch`), or it landed inside one of the interaction's entries before the paint,
+ * a render that began after the entry's input or committed during its handlers. A press held past its
+ * paint is one interaction with its release, and the render the release makes lands after the press's
+ * paint but inside the release's own entry. So does one React drained while the release waited for its
+ * handlers, which the wait INP counts holds.
  */
 export const timed = (c: CommitSummary, entries: readonly EventEntrySummary[]): boolean =>
-  c.inDispatch === true || entries.some((e) => c.at >= e.processingStart - STAMP_TOLERANCE && c.at <= Math.max(e.startTime + e.duration, e.processingEnd) + STAMP_TOLERANCE);
+  c.inDispatch === true ||
+  entries.some(
+    (e) =>
+      c.at <= Math.max(e.startTime + e.duration, e.processingEnd) + STAMP_TOLERANCE &&
+      (c.at >= e.processingStart - STAMP_TOLERANCE || (c.startedAt !== null && c.startedAt >= e.startTime - STAMP_TOLERANCE)),
+  );
+
+/**
+ * Whether a later render may yet turn out to be inside an entry that has not come: it is stamped with an
+ * input of the interaction that has no entry, and that input came after the paint of every entry there
+ * is, as a keyup does or the release of a press held past its paint. An input before one of those paints
+ * was presented with it, so its entry, if it has one, came in the same batch.
+ */
+export const awaitsEntry = (c: CommitSummary, entries: readonly EventEntrySummary[]): boolean =>
+  entries.every((e) => !near(e.startTime, c.inputTs) && c.inputTs > e.startTime + e.duration);
+
+/** The later render a report speaks of, in its note and on the panel: the heaviest INP left out, else the heaviest. */
+export function laterRenderOf(r: Pick<ReportData, 'followUps' | 'entries'>): CommitSummary | null {
+  if (!r.followUps.length) return null;
+  const untimed = r.followUps.filter((c) => !timed(c, r.entries));
+  return heaviest(untimed.length ? untimed : r.followUps);
+}
 
 /**
  * Where a later render's window runs from. The paint, as a rule, not the input: an interaction that took
@@ -1575,15 +1598,14 @@ function explain(r: InteractionReport): Explanation {
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
     notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
   }
-  if (r.followUps.length) {
-    // The wait INP leaves out is what the note is for, so a render outside the entries goes first. INP
-    // did time a render the release made inside its own entry, so for that one the note says where it ran.
-    const untimed = r.followUps.filter((x) => !timed(x, r.entries));
-    const f = heaviest(untimed.length ? untimed : r.followUps);
+  // The wait INP leaves out is what the note is for, so a render outside the entries goes first. INP
+  // did time a render the release made inside its own entry, so for that one the note says where it ran.
+  const f = laterRenderOf(r);
+  if (f) {
     const what = f.hasDurations ? `${ms(f.total)} ${renderPhrase(f)}` : renderPhrase(f);
     const laterForced = r.laterFrames ? r.laterFrames.reduce((a, x) => a + x.forcedLayout, 0) : 0;
     const layout = laterForced >= FORCED_LAYOUT_MIN_MS ? `, and it made the browser recalculate styles and layout for ${ms(laterForced)} on the way` : '';
-    const uncounted = untimed.length > 0;
+    const uncounted = !timed(f, r.entries);
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
   if (r.presentation > PRESENTATION_NOTE_MS && r.presentation > r.processing && blame.kind !== 'painting') {
