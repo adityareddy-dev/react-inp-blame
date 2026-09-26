@@ -147,6 +147,13 @@ export interface InputWork {
    * what the render belonged to.
    */
   unjoined: number[];
+  /**
+   * The times of the first few `input`, `change` and `submit` events a script dispatched while this was
+   * the newest input, once its task had ended. None of them is an interaction, but a render after one can
+   * be its work rather than this input's, so a report takes no later render past one that came after its
+   * paint (`noteCloser`). Absent until one arrives.
+   */
+  closers?: number[];
 }
 
 export interface HookOptions {
@@ -298,6 +305,29 @@ export function recentInputs(): InputRecord[] {
 export function noteInput(e: Event): void {
   if (!e.isTrusted || INPUT_TYPES.indexOf(e.type) < 0) return;
   record(e);
+}
+
+/** The events that close the newest input's later renders when a script dispatches one (`noteCloser`). */
+export const CLOSER_TYPES = ['input', 'change', 'submit'];
+
+/**
+ * Capture-phase listener for CLOSER_TYPES. One a script dispatched outside any input's task has no Event
+ * Timing entry and no place in the ring, yet it is something new happening on the page, and a render
+ * after it can be its work rather than the newest input's. Sorting a table by a click and then changing
+ * its page size through Playwright's `selectOption`, which fires `input` and `change` from script, put
+ * the page-size render on the sort as its later render. The time is kept on the newest input
+ * (`InputWork.closers`), where `join.ts` reads it. One the browser fires is left alone: it comes in the
+ * task of the key or click that caused it, or carries on what that input began (an option picked from
+ * the select it opened, a file chosen, text dictated into the field it focused), which `dispatchedInput`
+ * hands to the input within `inputWindow`.
+ */
+export function noteCloser(e: Event): void {
+  const last = newestInput();
+  if (e.isTrusted || state.inTask !== null || !last) return;
+  // The first few are enough: only the first after the report's paint closes anything, and at most a
+  // handful come between the end of the input's task and its paint.
+  const closers = (last.work.closers ??= []);
+  if (closers.length < MAX_UNJOINED) closers.push(e.timeStamp);
 }
 
 function record(e: DispatchedInput): InputRecord {
@@ -727,9 +757,12 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
     if (dropped.length > MAX_UNJOINED) dropped.shift();
     return;
   }
+  // In the input's own task the commit is inside that input's Event Timing entry, so INP timed it, even
+  // after the paint of an earlier entry of the same interaction. A derived event from a later task is not.
+  const inDispatch = dispatched !== null && (dispatched === state.inTask || !inDerivedEvent());
   const t0 = performance.now();
   const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true, hydratedTarget: creditHydration(input) });
-  const summary: CommitSummary = Object.freeze({ ...walk, walkMs: performance.now() - t0 });
+  const summary: CommitSummary = Object.freeze({ ...walk, walkMs: performance.now() - t0, inDispatch });
   state.walkTotalMs += summary.walkMs;
   state.walks++;
   // Only the dispatch extends the window. Were a joined follow-up to extend it too, one commit every
@@ -738,7 +771,7 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
     input.work.endedAt = performance.now();
     // A derived event from a later task is held to the window from the input's own work, which it does
     // not move, or each one would open the window again for the next.
-    if (dispatched === state.inTask || !inDerivedEvent()) input.work.ownEndedAt = input.work.endedAt;
+    if (inDispatch) input.work.ownEndedAt = input.work.endedAt;
   }
   if (summary.hydrated && !dispatched) return;
   if (state.commits.length >= MAX_COMMITS) state.commits.shift();

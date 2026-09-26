@@ -82,7 +82,7 @@ export interface ReactAttribution {
   readonly components: readonly RenderedComponent[];
   /** React's commits between the input and the paint INP measured. */
   readonly commits: ReactRenderSummary;
-  /** Commits that landed after that paint but still belong to the interaction. INP does not count them; people still wait for them. */
+  /** Commits that landed after that paint but still belong to the interaction. INP does not count them, except the release's render of a press held past the paint; people still wait for them. */
   readonly followUps: ReactRenderSummary;
 }
 

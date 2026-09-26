@@ -857,7 +857,8 @@ a little late, by a render that is taken out as its span. A root made with `Reac
 commits get no effects' time. React 17 makes no call at all, so nothing changes there.
 
 **Follow-ups.** Commits that land after the paint but within `inputWindow` (1.5 s by default) of it,
-stamped with the same input, with no newer input in between. Effects, transitions and data-driven
+stamped with the same input, with no newer input in between and no `input`, `change` or `submit` a
+script dispatched after the paint. Effects, transitions and data-driven
 re-renders show up here. The window runs from the paint, not from the input, so an interaction that took
 three seconds still gets the render its effects schedule a moment after it. Where the commit's own input
 is a later one of the same interaction whose work ended after that paint, the click that releases a
@@ -886,10 +887,23 @@ second after its paint, when the page-size change had done it. So when an input 
 this interaction's own arrived after all of them and before the commit, the commit is attached to
 nothing: the library cannot tell whose it is, and a wrong attachment reads as a finding. The ring is
 the whole of that evidence, which bounds the check: an update with no user input behind it at all, a
-timer firing, a message from a socket, or a test script setting a select's value and dispatching
-`change` itself, is invisible to it and is still read as this interaction's follow-up render. The
-harness's `page-size-50` step is the third of those, which is why the `tt-fuzzy` sort click still
-collects that render.
+timer firing or a message from a socket, is invisible to it and is still read as this interaction's
+follow-up render. So, until 2026-09-25, was a test script setting a select's value and dispatching
+`change` itself. The harness's `page-size-50` step does that through Playwright's `selectOption`, and
+the `tt-fuzzy` sort click collected the page-size render 1017 ms after its paint.
+
+Since then a capture listener on the window hears `input`, `change` and `submit` too. One a script
+dispatched outside any input's task is noted on the newest input (`InputWork.closers`, the first 16),
+and a commit after one that came after the interaction's paint is attached to nothing, as after a
+newer input. It is not an input: it has no Event Timing entry, never enters the ring and never starts
+a report. One the browser fires is left alone. It comes in the task of the key or pointer that caused
+it, or carries on what that input began (an option picked from the native select the click opened, a
+file chosen, text dictated into the field it focused), which `dispatchedInput` hands to that input
+within `inputWindow`; and a person picking a page size presses something first, which the ring already
+holds. A script's `click()` does not count either, as no untrusted input does. The price is a page
+whose own code dispatches one of those events after the paint, from a timer or from an effect React
+runs in a task of its own (React 17 runs every effect that way): the interaction loses its later
+renders from there, the one that event's own handler causes included.
 
 A run on the shadcn/ui documentation site on 2026-09-20 produced a fourth: resizing the viewport. A
 theme toggle was credited with a second render of 441 components inside `SidebarContent` 982 ms after
@@ -1017,8 +1031,16 @@ number, so it still equals what web-vitals reports for the interaction.
 
 **Quiet interactions.** The observer runs at the browser's 16 ms floor; interactions under
 the reporting threshold (40 ms by default) are held back, not dropped, and surface only if a
-heavy later render attaches to them. A 24 ms click that triggers an 85 ms render after the
-paint is worth a sentence even though INP alone would never flag it. Under the floor there is
+heavy later render that INP leaves out attaches to them. A 24 ms click that triggers an 85 ms render
+after the paint is worth a sentence even though INP alone would never flag it. A render inside
+another of the interaction's own entries is not one of those. A pointerdown held past its paint is one
+interaction with its release, and the render the pointerup makes in its own dispatch lands after the
+press's paint but inside the pointerup's entry, which INP counts. Until 2026-09-25 that render
+published a 32 ms pointerdown on excalidraw's canvas, with a note saying INP didn't count it; now it
+keeps the press quiet, and where the report is published anyway the note says the render came on the
+release and says nothing about INP. The pointerup's entry can be under the 16 ms floor, and a report
+is explained when it is read, by which time the ring may have let the input go, so the hook marks a
+commit it made in the dispatch of the input it is stamped with (`CommitSummary.inDispatch`). Under the floor there is
 nothing to hold back: the browser sends no `event` entry for an interaction that paints in
 less than 16 ms, so a render its effect sets off after the paint has no report to attach to,
 however heavy. The page's first input is the exception. The browser also reports it as a
@@ -1036,7 +1058,8 @@ round down in 20 runs.
 
 **Late arrivals.** A profile that renders 500 ms after the click, once the server answers,
 lands long after the report was first emitted. Such renders attach to the existing report
-(same input stamp, no newer input since, within `inputWindow`), and listeners receive the next
+(same input stamp, no newer input since and no scripted `input`, `change` or `submit` since the
+paint, within `inputWindow`), and listeners receive the next
 revision: a new frozen report with `revision` bumped and its own explanation, the earlier one
 left as it was (before 0.1.0 the same object was changed and handed over again). Long animation
 frames that
@@ -1435,9 +1458,9 @@ matches nothing rather than being matched on a start time.
 **Limits.**
 
 - `react` is `null` when nothing is installed on the page, and when the library has no report for the
-  interaction web-vitals picked: one that stayed under `threshold` and set off no later render, or one
-  already pushed out of the 50 reports a page keeps (`MAX_REPORTS`), which the INP estimate's report and
-  the ten slowest never are. It is never a guess.
+  interaction web-vitals picked: one that stayed under `threshold` and set off no later render INP
+  leaves out, or one already pushed out of the 50 reports a page keeps (`MAX_REPORTS`), which the INP
+  estimate's report and the ten slowest never are. It is never a guess.
 - `generateTarget` needs no installation, only React's fiber expando, so it works in a page that never
   calls `install()`. `attributeINP` needs one, though not from the same copy of the library: the
   installation lives on `globalThis` (`session.ts`), so any copy of a compatible version sees it.

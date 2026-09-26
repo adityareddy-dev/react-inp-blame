@@ -116,6 +116,23 @@ test('a quiet mouse click is not published for the render of a click Enter made 
   assert.deepEqual(published, []);
 });
 
+test("a quick press is not published for the render its own release made, which INP timed, but is for one after it", () => {
+  // A 32 ms pointerdown on excalidraw's canvas, then the pointerup that ends the stroke, rendering inside
+  // its own dispatch 38 ms after the press painted. That render is inside the pointerup's entry.
+  const input = (ts: number, type: string) => ({ ts, type, gestureTs: 7000, press: 1, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, ownEndedAt: ts, unjoined: [] } });
+  const ring = [input(7000, 'pointerdown'), input(7060, 'pointerup')];
+  const { life, published, render } = lifecycle({ inputs: () => ring });
+  life.onEntries([entry(7, 'pointerdown', 32)]);
+  render({ ...commit(7070, 7060), gestureTs: 7000, inputType: 'pointerup', inDispatch: true });
+  assert.deepEqual(published, []);
+  life.onEntries([entry(7, 'pointerup', 24, { startTime: 7060, processingStart: 7061, processingEnd: 7072 })]);
+  assert.deepEqual(published, []);
+  // A render its effects make after the release painted is one INP left out.
+  render({ ...commit(7400, 7060), gestureTs: 7000, inputType: 'pointerup' });
+  assert.equal(published.length, 1);
+  assert.deepEqual(published[0]?.followUps.map((c) => c.at), [7070, 7400]);
+});
+
 test('a late entry publishes the next revision as a new report, and the revision before stays as it was', () => {
   const { life, published } = lifecycle();
   // A press held down: the pointerdown painted on its own, quick enough to stay quiet.

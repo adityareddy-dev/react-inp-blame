@@ -301,12 +301,17 @@ function commitStamps(inputs: readonly InputRecord[], stamps: number[]): number[
  * the page-size change was what had done it.
  *
  * The ring is the evidence: an input that is not one of this interaction's own, that arrived after all
- * of them and before the commit, means something newer was under way. With nothing newer in the ring
- * the commit belongs where its stamp says.
+ * of them and before the commit, means something newer was under way. So does an `input`, `change` or
+ * `submit` a script dispatched between the paint and the commit (`InputWork.closers`), which the ring
+ * never holds: Playwright's `selectOption` changes a select that way, so a page size changed through it
+ * still put its render on the sort click. With nothing newer the commit belongs where its stamp says.
  */
-function newerInputBefore(inputs: readonly InputRecord[], stamps: number[], at: number): boolean {
-  const last = ringInputs(inputs, stamps).reduce((a, i) => Math.max(a, i.ts), Math.max(...stamps));
-  return inputs.some((i) => !ownInput(i, stamps) && i.ts > last + STAMP_TOLERANCE && i.ts <= at);
+function newerInputBefore(inputs: readonly InputRecord[], stamps: number[], end: number, at: number): boolean {
+  const own = ringInputs(inputs, stamps);
+  const last = own.reduce((a, i) => Math.max(a, i.ts), Math.max(...stamps));
+  if (inputs.some((i) => !ownInput(i, stamps) && i.ts > last + STAMP_TOLERANCE && i.ts <= at)) return true;
+  const from = Math.max(last, end) + STAMP_TOLERANCE;
+  return own.some((i) => i.work.closers?.some((t) => t > from && t <= at));
 }
 
 /**
@@ -589,8 +594,17 @@ export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): R
  * gets the renders it pays to walk and one that sets it shorter keeps the ones it walked.
  */
 function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: number[], inputWindow: number): boolean {
-  return c.at - followUpFrom(c, end, inputs, stamps) <= inputWindow && worthMentioning(c) && !newerInputBefore(inputs, stamps, c.at);
+  return c.at - followUpFrom(c, end, inputs, stamps) <= inputWindow && worthMentioning(c) && !newerInputBefore(inputs, stamps, end, c.at);
 }
+
+/**
+ * Whether INP timed a later render: React made it in the dispatch of the input it is stamped with
+ * (`CommitSummary.inDispatch`), or it landed inside one of the interaction's entries, between the
+ * handlers and the paint. A press held past its paint is one interaction with its release, and the
+ * render the release makes lands after the press's paint but inside the release's own entry.
+ */
+export const timed = (c: CommitSummary, entries: readonly EventEntrySummary[]): boolean =>
+  c.inDispatch === true || entries.some((e) => c.at >= e.processingStart - STAMP_TOLERANCE && c.at <= Math.max(e.startTime + e.duration, e.processingEnd) + STAMP_TOLERANCE);
 
 /**
  * Where a later render's window runs from. The paint, as a rule, not the input: an interaction that took
@@ -1562,11 +1576,15 @@ function explain(r: InteractionReport): Explanation {
     notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
   }
   if (r.followUps.length) {
-    const f = heaviest(r.followUps);
+    // The wait INP leaves out is what the note is for, so a render outside the entries goes first. INP
+    // did time a render the release made inside its own entry, so for that one the note says where it ran.
+    const untimed = r.followUps.filter((x) => !timed(x, r.entries));
+    const f = heaviest(untimed.length ? untimed : r.followUps);
     const what = f.hasDurations ? `${ms(f.total)} ${renderPhrase(f)}` : renderPhrase(f);
     const laterForced = r.laterFrames ? r.laterFrames.reduce((a, x) => a + x.forcedLayout, 0) : 0;
     const layout = laterForced >= FORCED_LAYOUT_MIN_MS ? `, and it made the browser recalculate styles and layout for ${ms(laterForced)} on the way` : '';
-    notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated: ${what}${layout}. INP doesn't count it, but people still wait for it.`);
+    const uncounted = untimed.length > 0;
+    notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
   if (r.presentation > PRESENTATION_NOTE_MS && r.presentation > r.processing && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`);

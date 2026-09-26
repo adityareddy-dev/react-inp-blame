@@ -409,6 +409,46 @@ test('a render that came after a newer interaction had started is not a follow-u
   assert.equal(pressOnly.followUps.length, 1);
 });
 
+test('a render after an input or change a script dispatched past the paint is not a later render of the input before it', () => {
+  // The same sort, then the page size picked with Playwright's selectOption: an `input` and a `change` from
+  // script and no pointer or key going down, so the ring's newest input was still the sort click, and the
+  // page-size render joined it as its later render.
+  const sortClick = [entry('click', 0, 120, 3, 100)];
+  const pageSizeRender = commit(1100, 0, { total: 400, rendered: 417 });
+  const picked = [input(0, 'click', { work: { endedAt: 100, ownEndedAt: 100, unjoined: [], closers: [1000, 1000] } })];
+  assert.deepEqual(buildReport(sortClick, [pageSizeRender], [], picked).followUps, []);
+  assert.equal(isLaterRender(buildReport(sortClick, [], [], picked), pageSizeRender, picked), false);
+  // A render before it is still the click's.
+  const own = commit(900, 0, { total: 40 });
+  assert.deepEqual(buildReport(sortClick, [own], [], picked).followUps, [joinedAs(own, 'exact')]);
+  // One dispatched before the click painted closes nothing.
+  const early = [input(0, 'click', { work: { endedAt: 100, ownEndedAt: 100, unjoined: [], closers: [110] } })];
+  assert.deepEqual(buildReport(sortClick, [pageSizeRender], [], early).followUps, [joinedAs(pageSizeRender, 'exact')]);
+});
+
+test("the render a held press's release made inside its own entry is not said to be left out of INP", () => {
+  // A 32 ms pointerdown on excalidraw's canvas painted, and the pointerup that ended the stroke rendered
+  // in its own dispatch 38 ms later. INP timed that render: it is inside the pointerup's entry.
+  const pressed = [entry('pointerdown', 0, 32, 2, 24), entry('pointerup', 60, 24, 61, 72)];
+  const ring = [input(0, 'pointerdown'), input(60, 'pointerup', { gestureTs: 0, work: { endedAt: 72, ownEndedAt: 72, unjoined: [] } })];
+  const release = commit(70, 60, { gestureTs: 0, inputType: 'pointerup', total: 12 });
+  const note = (r: InteractionReport) => r.explanation.notes.find((n) => n.startsWith('A second React render')) ?? '';
+  const observed = report(pressed, [release], [], ring);
+  assert.deepEqual(observed.followUps.map((c) => c.at), [70]);
+  assert.match(note(observed), /^A second React render landed 38 ms after the screen updated, on the release: 12 ms /);
+  assert.doesNotMatch(note(observed), /INP/);
+  // A pointerup under 16 ms has no entry, and then the hook says the render ran in its dispatch.
+  const unobserved = report(pressed.slice(0, 1), [{ ...release, inDispatch: true }], [], ring);
+  assert.deepEqual(unobserved.followUps.map((c) => c.at), [70]);
+  assert.match(note(unobserved), /, on the release: /);
+  assert.doesNotMatch(note(unobserved), /INP/);
+  // A render after the release painted is one INP left out, and the note is about that one, however much
+  // heavier the release's own was.
+  const heavyRelease = commit(70, 60, { gestureTs: 0, inputType: 'pointerup', total: 60 });
+  const effect = commit(400, 60, { gestureTs: 0, inputType: 'pointerup', total: 40 });
+  assert.match(note(report(pressed, [heavyRelease, effect], [], ring)), /^A second React render landed 368 ms after the screen updated: 40 ms .* INP doesn't count it, but people still wait for it\.$/);
+});
+
 test('a follow-up window is measured from the paint, so a slow interaction still gets the render that followed it', () => {
   // A 2.5 s interaction painting at 2503 ms, with its own follow-up 200 ms later. Measured from the
   // start of the interaction the follow-up is 2.7 s old and would be thrown away.

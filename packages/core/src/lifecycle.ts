@@ -1,6 +1,6 @@
 import type { InputRecord } from './hook.js';
 import { createInpTracker, rateInp, type InpEstimate } from './inp.js';
-import { attachLaterRender, buildReport, interactionTarget, isLaterRender, refreshFrames, refreshReport, sealReport, type LabelSource, type ReportData } from './join.js';
+import { attachLaterRender, buildReport, interactionTarget, isLaterRender, refreshFrames, refreshReport, sealReport, timed, type LabelSource, type ReportData } from './join.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import { inOverlay } from './overlay-host.js';
@@ -29,7 +29,7 @@ export const MAX_QUIET = 20;
 export const MAX_ENTRY_SETS = 100;
 
 export interface LifecycleOptions {
-  /** Interactions at or above this duration (ms) are published at once; shorter ones when a later render joins them. */
+  /** Interactions at or above this duration (ms) are published at once; shorter ones when a later render INP left out joins them. */
   threshold: number;
   /** How long after the paint a render can still join an interaction as its later render, ms (`InstallOptions.inputWindow`). */
   inputWindow: number;
@@ -111,7 +111,9 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     held.report = report;
     return held;
   };
-  const worthPublishing = (data: ReportData) => data.duration >= threshold || data.followUps.length > 0;
+  // Only a later render INP left out makes a quick interaction worth publishing. INP timed the one a
+  // press's release made inside its own entry.
+  const worthPublishing = (data: ReportData) => data.duration >= threshold || data.followUps.some((c) => !timed(c, data.entries));
   const keep = (held: Held) => {
     published.push(held);
     if (published.length <= MAX_REPORTS) return;
@@ -200,14 +202,17 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
         return;
       }
       // A short interaction (a 24 ms click) followed by a heavy render after the paint is worth
-      // reporting even though INP alone would not flag it.
+      // reporting even though INP alone would not flag it. The render a press's own release made is not:
+      // it stays quiet with the render held, and a later one INP left out can still publish it.
       for (let i = quiet.length - 1; i >= 0; i--) {
         const held = quiet[i];
         if (!held || !isLaterRender(held.data, c, inputs, inputWindow)) continue;
         const next = attachLaterRender(held.data, c, frames);
         if (!next) break;
+        revise(held, next, started);
+        if (!worthPublishing(held.data)) return;
         quiet.splice(i, 1);
-        keep(revise(held, next, started));
+        keep(held);
         publish(held.report);
         return;
       }
