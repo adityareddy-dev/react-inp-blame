@@ -822,9 +822,12 @@ where one holds nearly all of it, rather than the subtree React rendered. Where 
 script, a development or profiling build times it (`startedAt` to `at`, less the render) and, on React 18 and
 19, its effects, and a layout effect's read sits inside that time. Where they hold less than half of the
 layout, the sentence says at most that much of it was a layout effect's, and the rest was the handler's or a
-library's, or React's render where the render could have held it. Otherwise, and in a production build, it
-says "often in a layout effect". This is asked of the working time only: after it, a commit another input made
-can run in the same script, and that commit is not in the report.
+library's, or React's render where the render could have held it, which is any render of 1 ms or more, since a
+render body can read a size too. Where it could, the blame keeps the subtree; where it could not, the script,
+as above. Otherwise, and in a production build, it says "often in a layout effect". So does a layout charged to
+React's scheduler task with no commit in it: that task can hold a transition's render slice, which is React's
+even though nothing committed there. This is asked of the working time only: after it, a commit another input
+made can run in the same script, and that commit is not in the report.
 
 Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are

@@ -300,9 +300,11 @@ Left as they are, and known:
 
 - twenty's route changes, through React Router's data router, weren't recognised as soft navigations, so
   every report there carries the URL the page loaded on.
-- "Often in a layout effect" is a generic hint. Here it is right: Radix's `Presence` reads `animationName` in
-  a layout effect, and cmdk scrolls the selected item into view from one. (Corrected 2026-09-26: this said the
-  reads on cmdk and the tabs were not in layout effects. Their source says they are.)
+- "Often in a layout effect" is a generic hint. Here it is right for two of the reads: Radix's `Presence`
+  reads `animationName` in a layout effect, and cmdk scrolls the selected item into view from one.
+  `DismissableLayer`'s `pointer-events` and `FocusScope`'s focus run from plain effects. (Corrected 2026-09-26:
+  this said the reads on cmdk and the tabs were not in layout effects. Their source, read in cal-diy's copy of
+  Radix and cmdk, says two are.)
 - The same step can read as style work at 4x and screen update unthrottled when the two are close: the
   command menu's jump to Calendar did.
 
