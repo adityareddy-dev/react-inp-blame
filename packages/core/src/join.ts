@@ -1118,12 +1118,14 @@ function explain(r: InteractionReport): Explanation {
    * leaves what the rest was unknown.
    */
   // Kept whole, a keyup with no listener included: its handlers start and end at once, and that start is
-  // still where its wait ended. Handlers within a stamp of each other ran back to back. An entry painted in
-  // a later frame (a keyup released after the key press's paint) is outside the window and no part of it.
+  // still where its wait ended. Handlers within a stamp of each other ran back to back. The entries are the
+  // ones painted in this frame, as the working time's are: a keyup released after the key press's paint is
+  // in a frame of its own. One painted in this frame can start its handlers just past the working time,
+  // which web-vitals ends at the paint the durations' 8 ms rounding gives, so it is clamped to that end.
   const handling: { from: number; to: number; first: string; last: string }[] = [];
-  const inWindow = r.entries.filter((e) => e.processingStart <= processingEnd && e.processingEnd >= processingStart);
+  const inWindow = r.entries.filter((e) => Math.abs(e.startTime + e.duration - r.end) <= RENDER_GROUP_MS && e.processingEnd >= processingStart);
   for (const e of inWindow.sort((a, b) => a.processingStart - b.processingStart)) {
-    const from = Math.max(e.processingStart, processingStart);
+    const from = Math.min(Math.max(e.processingStart, processingStart), processingEnd);
     const to = Math.max(from, Math.min(e.processingEnd, processingEnd));
     const last = handling[handling.length - 1];
     if (last && from <= last.to + STAMP_TOLERANCE) {

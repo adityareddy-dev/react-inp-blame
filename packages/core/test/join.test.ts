@@ -3002,6 +3002,16 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   );
   assert.equal(late.explanation.blame.kind, 'none');
 
+  // Painted in the same frame, a keyup can start its handler past the end web-vitals gives the working time,
+  // the paint as the 8 ms rounded durations put it (React 19.0 in Chromium, in CI): it still ends the wait.
+  const pastTheEnd = report(
+    [entry('keydown', 0, 168, 8.1, 9.6), entry('keypress', 0, 168, 9.6, 13), entry('click', 0, 168, 10.2, 13), entry('keyup', 14, 160, 170.4, 170.5)],
+    [commit(12.5, 0, { total: 0.5, startedAt: 10.6, rendered: 1 })],
+    [frame(8.1, 156.9, [], 13.1)],
+    [input(0, 'keydown')],
+  );
+  assert.deepEqual([pastTheEnd.explanation.blame.kind, pastTheEnd.explanation.blame.detail], ['waiting', 'between click and keyup']);
+
   // A keyup released after the key press painted is in a frame of its own, and leaves no wait in this one.
   const typed = report(
     [entry('keydown', 0, 112, 0.1, 0.1), entry('keypress', 0, 112, 0.1, 111), entry('keyup', 173, 112, 173.2, 173.3)],
