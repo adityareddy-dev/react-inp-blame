@@ -1636,6 +1636,8 @@ matches nothing rather than being matched on a start time.
   the layout rather than the component that renders what was clicked; over the character cap the
   outermost go first for the same reason. What is left after the components is the element's budget,
   rather than the joined string being sliced, so a long id is shortened and never leaves a bracket open.
+  The cut goes back to the last whole escape, so a backslash is never left to escape the bracket after
+  it and a code point is never cut short into another character.
 - Neither export throws. `generateTarget` returns `undefined` for a node it cannot read, which is
   web-vitals' own signal to fall back to its CSS selector, and `attributeINP` returns `react: null` for
   a metric it cannot read. Both run inside somebody else's analytics callback, which is no place to

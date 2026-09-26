@@ -122,7 +122,7 @@ export function generateTarget(node: Node | null): string | undefined {
     const path = (readable.length ? readable : owners).slice(0, MAX_OWNERS).reverse();
     if (!path.length) return undefined;
     const element = selector(node);
-    const described = element ? ` (${element.slice(0, MAX_SELECTOR_CHARS)})` : '';
+    const described = element ? ` (${shortened(element, MAX_SELECTOR_CHARS)})` : '';
     // Over the cap the outermost components go first: the nearest ones say the most about the element.
     while (path.length > 1 && path.join(SEPARATOR).length + described.length > MAX_TARGET_CHARS) path.shift();
     const components = path.join(SEPARATOR).slice(0, MAX_TARGET_CHARS);
@@ -130,11 +130,20 @@ export function generateTarget(node: Node | null): string | undefined {
     // off the end, so a long id is shortened and never leaves a bracket hanging open.
     const room = Math.min(MAX_TARGET_CHARS - components.length - WRAPPER_CHARS, MAX_SELECTOR_CHARS);
     if (!element || room < 1) return components;
-    return `${components} (${element.slice(0, room)})`;
+    return `${components} (${shortened(element, room)})`;
   } catch {
     // Reading a node this library was handed is never worth breaking the page's metric over.
     return undefined;
   }
+}
+
+/**
+ * The first `max` characters of a selector, less an escape the cut went through: a backslash left at
+ * the end would escape the bracket after it, and a code point cut short would be another character.
+ * Backslashes in a row pair up, as an escaped backslash does, so only an odd run ends in an escape.
+ */
+function shortened(element: string, max: number): string {
+  return element.slice(0, max).replace(/(^|[^\\])((?:\\\\)*)\\[\da-f]*$/, '$1$2');
 }
 
 /**

@@ -153,6 +153,25 @@ test('a deep tree and a long id are capped, keeping the components nearest the e
   assert.equal(only?.includes('('), false, only);
 });
 
+test('a long escaped id is shortened to its last whole escape, never cut inside one', () => {
+  // Each colon of React 18's useId is written as two characters, and the room left for the element runs
+  // from 55 to 60, so a slice would end two of these on a backslash that escapes the bracket after it.
+  for (let length = 57; length <= 62; length++) {
+    const target = generateTarget(asNode(element('button', { id: ':r1:'.repeat(20), fiber: owners('B'.repeat(length)) })));
+    assert.match(target?.slice(length) ?? '', /^ \(button#(\\:|r|1)+\)$/, target);
+  }
+  // A leading digit is written as its code point and a space, four characters kept or dropped together.
+  for (let length = 109; length <= 114; length++) {
+    const target = generateTarget(asNode(element('tr', { id: '1st-place', fiber: owners('C'.repeat(length)) })));
+    assert.match(target?.slice(length) ?? '', /^ \(tr#(\\31 s?)?\)$/, target);
+  }
+  // A backslash in a test attribute's value is written as two, and a pair the cut ends on is kept whole.
+  for (let length = 57; length <= 62; length++) {
+    const target = generateTarget(asNode(element('td', { attributes: { 'data-test': 'C:\\'.repeat(20) }, fiber: owners('D'.repeat(length)) })));
+    assert.match(target?.slice(length) ?? '', /^ \(td\[data-test="(C|:|\\\\)+\)$/, target);
+  }
+});
+
 // Event Timing entries of one slow click, as the observer hands them over: a click at 100 ms that
 // took 240 ms, its handlers running from 104 to 330.
 const CLICK = [{ name: 'click', interactionId: 7, startTime: 100, duration: 240, processingStart: 104, processingEnd: 330, target: null }];
