@@ -724,12 +724,21 @@ function handlerName(fn: Function, key: string): string {
   return name.length > MINIFIED_NAME_LENGTH && !NAMELESS_HANDLER.test(name) ? name : key;
 }
 
-/** The first of `props` set on `fiber` or an ancestor, as a name. `stop` is the last fiber looked at. */
+/**
+ * The props React runs a fiber's handlers from, or null for a fiber that is not a DOM element. React's
+ * getListener reads only the elements on the chain, so a component's props are never a handler: a card
+ * that hands its onClick to the one button inside runs nothing for a click on its photo.
+ */
+function listenerProps(f: Fiber): Record<string, unknown> | null {
+  return typeof f.type === 'string' ? f.memoizedProps : null;
+}
+
+/** The first of `props` set on `fiber` or an element above it, as a name. `stop` is the last fiber looked at. */
 function firstHandler(fiber: Fiber | null, props: readonly string[], stop: Fiber | null): string | null {
   let f = fiber;
   let hops = 0;
   while (f && hops++ < MAX_HOPS) {
-    const p = f.memoizedProps;
+    const p = listenerProps(f);
     if (p) {
       for (const key of props) {
         const fn = p[key];

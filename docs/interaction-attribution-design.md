@@ -553,6 +553,12 @@ checkbox in a label reported the first one's handler, and a label with its own `
 checkbox's `onChange`. A label whose control is elsewhere on the page through `htmlFor` has nothing to
 forward to and is left where it is.
 
+The props are read where React reads them to dispatch. Its `getListener` takes them off each DOM element
+on the chain and never off a component. Until 2026-09-26 the walk read `memoizedProps` on every fiber it
+climbed, so a `<Card onClick={openCard}>` that hands onClick to its Open button alone was named for a
+click on the card's photo, which ran nothing, and typing in a field inside `<Tabs onChange={setTab}>`
+named setTab.
+
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every
 commit is stamped with the input being dispatched when it ran: `window.event`, which is

@@ -687,6 +687,27 @@ test('a click that is not on one of those controls does not reach an onChange up
   assert.equal(handlerOf(text as any, 'change'), 'onChange');
 });
 
+test("a component's props are never the handler: React dispatches only from the elements on the chain", () => {
+  // <Card onClick={openCard}> hands onClick to its Open button alone, so a click on the card's photo runs
+  // nothing, and a field inside <Tabs onChange={setTab}> does not fire setTab when it is typed in.
+  function openCard() {}
+  function selectRow() {}
+  function setTab() {}
+  function Card() {}
+  function Tabs() {}
+  const component = (type: () => void, props: Record<string, unknown>, parent?: Record<string, unknown>) => ({ ...fiber(0, type), memoizedProps: props, return: parent ?? null });
+  const card = host('div', {}, component(Card, { onClick: openCard }));
+  assert.equal(handlerOf(host('img', {}, card) as any, 'click'), null);
+  assert.equal(handlerOf(host('button', { onClick: openCard }, card) as any, 'click'), 'openCard');
+  // The same card in a row that selects itself: the row's handler is the one that ran.
+  const inRow = host('div', {}, component(Card, { onClick: openCard }, host('li', { onClick: selectRow })));
+  assert.equal(handlerOf(host('img', {}, inRow) as any, 'click'), 'selectRow');
+  // An element's handler still bubbles up to it through the components in between.
+  assert.equal(handlerOf(host('span', {}, component(Card, {}, host('div', { onClick: selectRow }))) as any, 'click'), 'selectRow');
+  const field = host('input', { type: 'text' }, host('div', {}, component(Tabs, { onChange: setTab })));
+  assert.equal(handlerOf(field as any, 'input'), null);
+});
+
 test('a select, a file input and a textarea are named by the event React reads each of them from', () => {
   assert.equal(handlerOf(host('select', { onChange: anon() }) as any, 'change'), 'onChange');
   assert.equal(handlerOf(host('input', { type: 'file', onChange: anon() }) as any, 'change'), 'onChange');
