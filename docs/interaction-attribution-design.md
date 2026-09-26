@@ -1339,7 +1339,10 @@ the components that rendered before and after the paint. It is plain DOM in a sh
 (no React, so it renders while React is busy and never adds a commit), about 3 ms of work per
 report, and the page's own clicks on it are dropped before they become reports. Its code
 arrives by dynamic `import()` after `install()` has returned, so a page that never shows it
-never downloads it, and `mountOverlay()` returns a promise of its handle. The blame
+never downloads it, and `mountOverlay()` returns a promise of a handle of the caller's own.
+The badge goes when the last of those is disposed, so a component can show it from an
+effect under StrictMode, whose cleanup runs between two mounts, and a load that failed is
+tried again at the next call. The blame
 line comes from `explanation.blame`, a data twin of the cause sentence decided in the same
 branch, so the short and the long form never disagree. Page INP, on the badge, in the panel
 head and from `api.inp()`, is the web-vitals estimate computed in-library, with no web-vitals

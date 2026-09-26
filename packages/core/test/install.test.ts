@@ -231,6 +231,139 @@ test('a browser without Event Timing interactionId gets nothing installed, one w
   assert.deepEqual(await Promise.all(overlays), [null, null]);
 });
 
+/**
+ * Gives the stand-in browser a document with what the badge and panel are drawn with: elements that keep
+ * their children and their parent, and a body. `hosts()` counts the elements in the body that the badge
+ * and panel live in.
+ */
+function badgeDocument() {
+  const element = (tagName: string): Record<string, any> => {
+    const el: Record<string, any> = {
+      tagName,
+      id: '',
+      dataset: {},
+      style: {},
+      hidden: false,
+      parentNode: null,
+      childNodes: [],
+      get isConnected() {
+        return el.parentNode !== null;
+      },
+      setAttribute() {},
+      addEventListener() {},
+      attachShadow: () => element('#shadow-root'),
+      append: (...nodes: unknown[]) => el.childNodes.push(...nodes),
+      prepend: (...nodes: unknown[]) => el.childNodes.unshift(...nodes),
+      replaceChildren: (...nodes: unknown[]) => (el.childNodes = nodes),
+      appendChild: (node: Record<string, any>) => {
+        node.parentNode = el;
+        el.childNodes.push(node);
+      },
+      remove: () => {
+        el.parentNode?.childNodes.splice(el.parentNode.childNodes.indexOf(el), 1);
+        el.parentNode = null;
+      },
+    };
+    return el;
+  };
+  const body = element('BODY');
+  const document = { body, createElement: element, addEventListener() {}, removeEventListener() {} };
+  Object.defineProperty(globalThis, 'document', { value: document, configurable: true, writable: true });
+  return { hosts: () => body.childNodes.filter((node: { id: string }) => node.id === 'react-inp-blame').length };
+}
+
+test('mountOverlay() after its handle was disposed shows the badge and panel again, with a handle of its own', async () => {
+  await inBrowser(async () => {
+    const { hosts } = badgeDocument();
+    const api = install();
+    const first = await mountOverlay();
+    assert.equal(hosts(), 1);
+    first?.dispose();
+    assert.equal(hosts(), 0, 'the badge stayed up after its only handle was disposed');
+    const second = await mountOverlay();
+    assert.notEqual(second, first, 'the disposed handle came back');
+    assert.equal(hosts(), 1);
+    api.dispose();
+    await nextTask();
+    assert.equal(hosts(), 0);
+  });
+});
+
+test('a component that shows the badge from an effect keeps it under StrictMode, which mounts, cleans up and mounts again', async () => {
+  await inBrowser(async () => {
+    const { hosts } = badgeDocument();
+    const api = install();
+    const shown: Promise<unknown>[] = [];
+    // useEffect(() => { const p = mountOverlay(); return () => { p.then((h) => h?.dispose()); }; }, [])
+    const effect = () => {
+      const p = mountOverlay();
+      shown.push(p);
+      return () => {
+        p.then((handle) => handle?.dispose());
+      };
+    };
+    effect()();
+    effect();
+    await Promise.all(shown);
+    await nextTask();
+    assert.equal(hosts(), 1, 'the cleanup hid the badge the second mount asked for');
+    api.dispose();
+  });
+});
+
+test('the badge and panel stay while any handle mountOverlay() gave is left, and go with the last one', async () => {
+  await inBrowser(async () => {
+    const { hosts } = badgeDocument();
+    const api = install();
+    const [a, b] = await Promise.all([mountOverlay(), mountOverlay()]);
+    assert.notEqual(a, b);
+    a?.dispose();
+    a?.dispose();
+    await nextTask();
+    assert.equal(hosts(), 1, 'disposing one handle twice let go of the other one');
+    b?.dispose();
+    assert.equal(hosts(), 0);
+    api.dispose();
+  });
+});
+
+test("dispose() takes down the badge install({ overlay: true }) showed, and a handle from before it leaves the next one's alone", async () => {
+  await inBrowser(async () => {
+    const { hosts } = badgeDocument();
+    const api = install({ overlay: true });
+    const before = await mountOverlay();
+    assert.equal(hosts(), 1);
+    api.dispose();
+    await nextTask();
+    assert.equal(hosts(), 0);
+
+    const again = install({ overlay: true });
+    const after = await mountOverlay();
+    before?.dispose();
+    await nextTask();
+    assert.equal(hosts(), 1, 'a handle from before dispose() hid the badge a new install() showed');
+    again.dispose();
+    await nextTask();
+    assert.equal(hosts(), 0, 'a handle from before dispose() lost the badge a new install() showed, which outlived its dispose()');
+    after?.dispose();
+  });
+});
+
+test('a badge that could not be shown is tried again at the next mountOverlay()', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser(async () => {
+    // The stand-in document has no createElement.
+    const api = install();
+    assert.equal(await mountOverlay(), null);
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /the badge and panel could not be shown/);
+    const { hosts } = badgeDocument();
+    assert.notEqual(await mountOverlay(), null);
+    assert.equal(hosts(), 1);
+    api.dispose();
+  });
+});
+
 /** A document whose elements, in document order, are `elements`, walked the way the renderer check walks it. */
 function documentOf(elements: object[], own: object = {}) {
   return Object.assign(own, {
