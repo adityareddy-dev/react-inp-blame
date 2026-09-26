@@ -57,7 +57,8 @@ const OWN_RENDER_MIN_SHARE = 0.5;
 // scripts from 5 ms, and one under 20 did not make its frame long by itself (a long frame is over 50 ms).
 const SCRIPT_MIN_MS = 20;
 // Waiting, the screen update, and working time without durations are blamed from 50 ms, the length
-// of a long task: the least the browser itself calls long.
+// of a long task: the least the browser itself calls long. A render known only by its counts is
+// working time without durations, and is held to it (see `countEarns`).
 const LONG_TASK_MS = 50;
 // A script the input waited behind gives a waiting blame its name from half of the wait. Under that
 // the wait was mostly something the browser did not list (another frame's work, rendering, garbage
@@ -1147,7 +1148,17 @@ function explain(r: InteractionReport): Explanation {
   const countExplains = (x: CommitSummary) =>
     x.rendered >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER &&
     ((mostlyComponent(x)?.count ?? 0) >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER || r.processing <= RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * x.rendered);
-  const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : handlerName ? countExplains(c) : c.rendered >= RENDER_MIN_COMPONENTS));
+  // A count says what React rendered and nothing about how long it took, so a render known by its count
+  // alone is held to the working time it sat in: a long task, the bar the handler is held to without
+  // durations (below) and the one LONG_TASK_MS promises. Under it the count is not a slow render, however
+  // large. excalidraw finishing a rectangle re-rendered 149 components in 2.8 ms of working time, with 34
+  // of the click's 40 ms on the screen update, and closing a shadcn/ui Sheet re-rendered 56 in 17 ms of
+  // working time, most of it one style recalculation that no frame under 50 ms reports; both read as the
+  // render. The same bar keeps a render out of the blame where its working time was the smaller part of
+  // the interaction: a screen update longer than 50 ms of working time is over a long task itself, and
+  // `screenOutranks` gives it the verdict.
+  const countEarns = (x: CommitSummary) => r.processing >= LONG_TASK_MS && (handlerName ? countExplains(x) : x.rendered >= RENDER_MIN_COMPONENTS);
+  const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : countEarns(c)));
   // The commit a render blame names is the one React spent longest on, committing and effects included,
   // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
   // no commit has a span this is the heaviest render, as everywhere else. Committing and effects only
@@ -1384,12 +1395,14 @@ function explain(r: InteractionReport): Explanation {
   } else if (c && rc && renderMatters && !screenOutranks) {
     const confidence = measuredFrom(rc);
     // Without durations the blame rests on the component count alone, which is why it is a reading:
-    // 600 cheap components can outrank the one expensive component that actually took the time.
+    // 600 cheap components can outrank the one expensive component that actually took the time. The
+    // working time is what the count is read against, so the sentence gives it: 55 ms hung on a render of
+    // 161 components is a claim the reader can weigh, and the same render in 7 ms elsewhere is not.
     const likely = hasDurations
       ? // The measured render is the claim; the working time is context. Saying React spent all of it
         // rendering and then that other code ran for a third of it was two claims that cannot both hold.
         `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}.`
-      : `React was ${HEDGE} ${renderPhrase(rc)}. This React build records no render durations, so that is read from the component counts, not measured.`;
+      : `React was ${HEDGE} ${renderPhrase(rc)} in the ${ms(r.processing)} of working time. This React build records no render durations, so that is read from the component counts, not measured.`;
     // A production build times the effects but not the render, so there the effects lead.
     cause =
       !hasDurations && effectsFigure >= 1
@@ -1463,9 +1476,19 @@ function explain(r: InteractionReport): Explanation {
     cause = say(confidence, `${small}; ${ran}.`, `${small}; ${HEDGE} ${ran}.`);
     blame = { kind: 'script', name: scriptBlameName(anyScript.script), detail: ranAsHandler(anyScript.script) ? component : null, ms: anyScript.ms, confidence };
   } else if (r.frames) {
-    cause = c
-      ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
-      : `${renderedNothing} and no long task was recorded, so the time went to waiting and painting.`;
+    // Long Animation Frames lists frames of 50 ms and up, so no frame over the interaction says its frame
+    // was under one, and that what the browser spent in it recalculating styles and layout was never
+    // measured. Without durations that is where a count used to name a render: opening a shadcn/ui Sheet
+    // on a phone forces four whole-document style recalculations inside 31 ms of working time, no frame
+    // reported them, and the report read "re-rendering 59 components inside DismissableLayer". The sentence
+    // says what is known instead, and that the working time is under a long task, which is why nothing in
+    // it is blamed. A frame that did overlap, with no script long enough to name, reads as it did.
+    const unmeasured = c && !hasDurations && r.processing < LONG_TASK_MS && r.frames.length === 0;
+    cause = unmeasured
+      ? `React was ${renderPhrase(c)} in ${ms(r.processing)} of working time, short of a long task; the rest went to waiting and painting. No long animation frame covered the ${kind}, so the styles and layout it forced went unmeasured.`
+      : c
+        ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
+        : `${renderedNothing} and no long task was recorded, so the time went to waiting and painting.`;
     // Nothing is named, so there is nothing to hedge; the confidence says whether the absence of a
     // long task was itself observed or merely assumed.
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: unsure ? 'inferred' : 'measured' };

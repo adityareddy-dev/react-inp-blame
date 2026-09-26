@@ -553,8 +553,10 @@ function blameText(blame: Blame, rendered: string): Child[] {
       return [`screen took${ms} to update`, ...named];
     case 'script':
       return [b(name ?? 'a script'), ` ran${ms}`];
+    // The cause under the row says where the time went: waiting and painting, or working time short of a
+    // long task whose styles and layout no frame measured.
     default:
-      return ['nothing stood out; the time went to waiting and painting'];
+      return ['nothing stood out'];
   }
 }
 
