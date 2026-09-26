@@ -1027,11 +1027,20 @@ to 150 ms, and a timer the keydown left running through it is. Nothing is guesse
 from the next event's handlers starting late (a 7 ms task at the release says nothing of the 99 ms before it),
 and not from a frame's blocking time, which does not say when in the frame it fell. So without the frames,
 before they arrive or in a browser without them, a timer that ran while a key was held is not counted, and only
-the time after the release is. A render with no durations is timed by the script it committed in, where a frame
-recorded one, and weighed as a render, not as a wait on React's scheduler task. Where the part nothing placed is
-a tenth of the gap or more, the sentence says the key or pointer was still down for that long with nothing on
-record running, and what the wait was; the two figures add up to the gap as printed, and the blame carries the
-wait. Where long animation frames cover most of the wait the sentence says what ran, and where they do not yet,
+the time after the release is. A timed render is placed for its own length up to its commit, not from where it
+started: a transition suspended on data, or a commit held back for a stylesheet, leaves the thread idle in
+between. A render with no durations is timed by React's scheduler tasks up to its commit, each task being the
+first commit's at or after its start (a commit cannot come before its own task), so a transition time-sliced
+into fifteen tasks is all render. It is weighed as a render: taken off the wait, set against it the way a timed
+render's length is, and never the script the wait is named after. Only where it rendered enough to have taken
+that time, though: a 2-component render did not take 80 ms, and that task is weighed as a script. A commit in
+any other script, a store update at the end of a timer's, says nothing of how much of that script was React's,
+so the script stays in the wait. Where the part nothing placed is a tenth of the gap or more, the sentence says
+what the wait was, and the two figures add up to the gap as printed. Before a release (a keyup, or a pointerup,
+mouseup, touchend, click or auxclick), and with long animation frames recorded, it says the key or pointer was
+still down for that long with nothing on record running; before any other event, that nothing on record ran
+then; and with no frames, that no long animation frame says what ran then. The blame carries the wait where
+the sentence gives it, and the whole gap otherwise. Where long animation frames cover most of the wait the sentence says what ran, and where they do not yet,
 it says no frame that says what else ran has been recorded yet; they can reach a report after it is built (it is
 revised when they do), so they change how much of the time before an input they place, but never whether the
 time after it was a wait. The wait once took only the covered part, which made a 147 ms wait lose to a 100 ms render with half of it

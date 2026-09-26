@@ -1143,11 +1143,13 @@ function explain(r: InteractionReport): Explanation {
   // on record places there: a script or a frame's own style and layout Long Animation Frames recorded, or a
   // React render that kept its durations. A key held down while a paint held up off the thread kept both events
   // in one frame, with the thread idle until the key came up, and that is no wait; a timer that ran while it was
-  // held is. What nothing places, a browser without those frames included, is not counted.
+  // held is. What nothing places, a browser without those frames included, is not counted. A render is placed
+  // for its own length up to its commit, not from where it started: a transition suspended on data, or a commit
+  // held back for a stylesheet, leaves the thread idle in between.
   const busyBefore = (from: number, h: { from: number; input: number }): Interval[] => {
     const until = Math.min(h.input, h.from);
     const clip = (x: Interval): Interval[] => (x.from < until && x.to > from ? [{ from: Math.max(x.from, from), to: Math.min(x.to, until) }] : []);
-    const placed: Interval[] = r.commits.filter((x) => x.hasDurations).map((x) => ({ from: x.startedAt ?? x.at - x.total, to: x.at }));
+    const placed: Interval[] = r.commits.filter((x) => x.hasDurations).map((x) => ({ from: x.at - x.total, to: x.at }));
     for (const f of r.frames ?? []) {
       placed.push(...f.scripts.map((x) => ({ from: x.start, to: x.start + x.duration })));
       if (f.styleAndLayoutStart !== null) placed.push({ from: f.styleAndLayoutStart, to: f.start + f.duration });
@@ -1181,10 +1183,17 @@ function explain(r: InteractionReport): Explanation {
   const framesSay = !!r.frames && framedWaited >= FRAMES_COVER_SHARE * waitedBetween;
   const renderedBetween = r.commits.filter((x) => inAGap(x.at));
   const renderedBetweenMs = renderedBetween.reduce((a, x) => a + (x.hasDurations ? x.total : 0), 0);
-  // A render that kept no durations is timed by the script it committed in, where a long frame recorded one.
-  const untimedIn = partsBetween.filter((p) =>
-    renderedBetween.some((x) => !x.hasDurations && x.at >= p.script.start - STAMP_TOLERANCE && x.at <= p.script.start + p.script.duration + STAMP_TOLERANCE),
-  );
+  // React's scheduler tasks up to a commit in a gap are that commit's render, time-sliced or not: each task is
+  // the first commit's at or after its start, since a commit cannot come before its own task. So a render that
+  // kept no durations is timed by them, where long frames recorded them, if it rendered enough to have taken
+  // them: a 2-component render did not take 80 ms. A commit in any other script, a store update at the end of a
+  // timer's, says nothing of how much of that script was React's, and those are weighed as scripts.
+  const commitFrom = (t: number) => r.commits.reduce<CommitSummary | null>((a, x) => (x.at >= t && (!a || x.at < a.at) ? x : a), null);
+  const untimedIn = partsBetween.filter((p) => {
+    const x = p.script.invoker === REACT_TASK ? commitFrom(p.script.start) : null;
+    return !!x && !x.hasDurations && carriesWork(x) && renderedBetween.includes(x);
+  });
+  const untimedMs = untimedIn.reduce((a, p) => a + p.ms, 0);
   /**
    * The time between handlers the next event waited on the main thread, React's renders aside, which are
    * weighed as renders; a script that ran there is part of it, the way a script the input waited behind is
@@ -1194,7 +1203,7 @@ function explain(r: InteractionReport): Explanation {
   const waitBetween =
     !framesSay && (blind || renderedBetween.some((x) => !x.hasDurations && carriesWork(x)))
       ? 0
-      : Math.max(0, waitedBetween - renderedBetweenMs - untimedIn.reduce((a, p) => a + p.ms, 0));
+      : Math.max(0, waitedBetween - renderedBetweenMs - untimedMs);
   const onlyGap = gaps.length === 1 ? gaps[0]! : null;
   const whereBetween = !onlyGap
     ? "between one event's handlers and the next's"
@@ -1519,7 +1528,8 @@ function explain(r: InteractionReport): Explanation {
   // build, where a render the library only counted used to outrank a layout it had timed.
   // A wait between the events' handlers is no handler's and no render's, so it is weighed against both.
   // Where the wait before the first handler or the screen update is larger, it is a note.
-  const betweenMatters = waitBetween >= LONG_TASK_MS && waitBetween > outside && waitBetween > reactTime && waitBetween > forcedWhileHandling;
+  const betweenMatters =
+    waitBetween >= LONG_TASK_MS && waitBetween > outside && waitBetween > reactTime && waitBetween > untimedMs && waitBetween > forcedWhileHandling;
   const betweenWins = betweenMatters && waitBetween >= r.inputDelay && !screenOutranks;
   const layoutMatters =
     forcedWhileHandling >= (hasDurations ? LONG_TASK_MS : FORCED_LAYOUT_MIN_MS_NO_DURATIONS) &&
@@ -1597,13 +1607,21 @@ function explain(r: InteractionReport): Explanation {
     // handlers before it had changed, which a frame records as time no script took.
     const handled = r.processing - between;
     const restyle = 'the browser recalculating styles and layout for what the handlers before it changed';
-    const longest = longestPart(partsBetween);
-    // Where the key or the pointer was still down for part of it, what follows is said of the rest, the wait.
+    // React's own render is never the script the wait is named after.
+    const longest = longestPart(partsBetween.filter((p) => !untimedIn.includes(p)));
+    // Where part of it was before an input with nothing on record running, what follows is said of the rest, the
+    // wait. The figures add up as printed, the wait's being the one the blame carries. A key or a pointer is said
+    // to be still down only before its release, and only where long frames could have said what ran.
     const it = heldGap ? 'the wait' : 'it';
-    // The figures add up as printed, the wait's being the one the blame carries.
-    const heldSaid = heldGap
-      ? ` The ${/^(pointer|mouse|touch|click)/.test(heldGap.before) ? 'pointer' : 'key'} was still down for ${ms(Math.round(between) - Math.round(waitedBetween))} of it with nothing on record running, so the wait was the other ${ms(waitedBetween)}.`
-      : '';
+    const held = heldGap ? ms(Math.round(between) - Math.round(waitedBetween)) : '';
+    const released = heldGap?.before === 'keyup' ? 'key' : /^(pointerup|mouseup|touchend|click|auxclick)$/.test(heldGap?.before ?? '') ? 'pointer' : null;
+    const heldSaid = !heldGap
+      ? ''
+      : !r.frames?.length
+        ? ` No long animation frame says what ran in ${held} of it, before the ${heldGap.before} came, so the wait counted is the other ${ms(waitedBetween)}.`
+        : released
+          ? ` The ${released} was still down for ${held} of it with nothing on record running, so the wait was the other ${ms(waitedBetween)}.`
+          : ` Nothing on record ran in ${held} of it, before the ${heldGap.before} came, so the wait was the other ${ms(waitedBetween)}.`;
     const scriptsSaid =
       partsBetween.length === 1
         ? `${cap(aScript(partsBetween[0]!.script))} ran for ${underOr(partsBetween[0]!.ms)} of ${it}`

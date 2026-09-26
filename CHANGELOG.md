@@ -27,12 +27,16 @@ it changes when a field is removed or changes meaning, which a minor release may
   wait before the handlers or the screen update is larger, that time is a note instead. A handler is never
   said to have run through it. A script that ran in it is part of that wait, named the way a script the input
   waited behind is, and never as the handler. Before the next event's own input, only time something on record
-  places there counts, a script or style work a long animation frame recorded or a React render that kept its
-  durations, so a key held down with the thread idle is no wait and a timer running while it was held still is.
-  Where the idle part is a tenth or more, the sentence says so: "The key was still down for 99 ms of it with
-  nothing on record running, so the wait was the other 70 ms." Without long animation frames (browsers other
-  than Chromium, or a report built before its frame arrives), only a timed render places anything before the
-  input, so a timer that ran while a key was held is not counted there.
+  places there counts: a script or style work a long animation frame recorded, or a React render that kept its
+  durations, for its own length up to its commit. So a key held down with the thread idle is no wait, and a
+  timer a long animation frame recorded while it was held still is. A production render there is timed by
+  React's scheduler tasks up to its commit, time-sliced or not, and weighed as a render, never as a wait on
+  those tasks. Where the part nothing places is a tenth or more, the sentence says so: "The key was still down
+  for 99 ms of it with nothing on record running, so the wait was the other 70 ms." Without long animation
+  frames (browsers other than Chromium, or a report built before its frame arrives), only a timed render places
+  anything before the input, so a timer that ran while a key was held is not counted there, and the sentence
+  says "No long animation frame says what ran in 54 ms of it, before the keyup came, so the wait counted is the
+  other 90 ms."
 - **A render a script forced after the handlers is said to be what that script did.** On TanStack Table's
   virtualized rows at 4x, a checkbox's screen update waited 174 ms on react-virtual's scroll listener, which
   re-rendered the rows through `flushSync`. The sentence named the listener and not the render, and counted
