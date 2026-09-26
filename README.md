@@ -1301,11 +1301,15 @@ other options keep the first call's values. Call `dispose()` first if you mean t
 means the library is installed twice, for example by a plugin and by your own `install()` call.
 
 <a id="hook-disabled"></a>
+<a id="hook-locked"></a>
 #### The page's DevTools hook turns React's developer tools support off
 
 Something on the page set `__REACT_DEVTOOLS_GLOBAL_HOOK__` with `isDisabled`, or without `supportsFiber`,
 before the library loaded. Packages that disable React DevTools in production do this. React then reports to
 no hook, so reports come without components. Remove that script where you want blame.
+
+Some freeze the hook instead, or give its methods only a getter. The library cannot wrap a hook like that,
+so it leaves it as it was, and reports come without components the same way.
 
 <a id="shim-over-hook"></a>
 #### hook: 'shim' found a React DevTools hook already installed

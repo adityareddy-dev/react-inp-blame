@@ -282,7 +282,10 @@ silenced React's "Download the React DevTools" message. `dispose()` puts a chain
 `onCommitFiberRoot` and `onPostCommitFiberRoot` back, removing the last of those when the hook had none.
 A hook the page has switched off (`isDisabled`, or no `supportsFiber`) is not chained onto at all,
 because React registers with nothing there: `stats().mode` is `'unsupported'` with
-`kind: 'hook-disabled'`, and Event Timing reports carry on without components.
+`kind: 'hook-disabled'`, and Event Timing reports carry on without components. A hook the page has
+locked against developer tools, frozen or with a method that has only a getter, cannot be wrapped. The
+methods already wrapped are put back, and the page is `'unsupported'` with the same kind and its own
+warning, where before `install()` threw into the page's entry module.
 
 React DevTools never installs over an existing hook: its `installHook` returns as soon as
 `window` has the property, reading and writing nothing. So a shim that loads before it locks

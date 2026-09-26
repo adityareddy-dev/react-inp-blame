@@ -704,6 +704,57 @@ test("a page whose DevTools hook turns React's support off still gets reports, w
   });
 });
 
+/**
+ * Installs over a hook the page locked to keep developer tools out, which `lock` does to it and returns.
+ * The install must not throw into the page's entry module, and must leave the hook the way the page made it.
+ */
+async function overLockedHook(t: TestContext, lock: (hook: ReturnType<typeof existingHook>) => object): Promise<void> {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const locked = existingHook();
+    const { inject, onCommitFiberRoot } = locked;
+    page.window[HOOK] = lock(locked);
+    const api = install({ devtoolsTrack: false });
+    assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+    assert.equal(locked.inject, inject, 'the locked hook was left wrapped');
+    assert.equal(locked.onCommitFiberRoot, onCommitFiberRoot, 'the locked hook was left wrapped');
+    assert.equal('onPostCommitFiberRoot' in locked, false, 'the locked hook was left wrapped');
+    page.paint([slowClick(120)]);
+    assert.equal(api.last()?.duration, 120);
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /cannot be wrapped/);
+    api.dispose();
+
+    page.window[HOOK] = existingHook();
+    const again = install({ devtoolsTrack: false });
+    assert.deepEqual({ mode: again.stats().mode, reason: again.stats().unsupportedReason }, { mode: 'chained', reason: null });
+    again.dispose();
+  });
+}
+
+test('a page whose DevTools hook is frozen still gets reports, without components, and install() does not throw', async (t) => {
+  await overLockedHook(t, (hook) => Object.freeze(hook));
+});
+
+test('a page whose DevTools hook has a getter for onCommitFiberRoot still gets reports, and its inject is put back', async (t) => {
+  // inject is wrapped first, so the throw comes after the hook was already half wrapped.
+  await overLockedHook(t, (hook) => {
+    const { onCommitFiberRoot } = hook;
+    return Object.defineProperty(hook, 'onCommitFiberRoot', { get: () => onCommitFiberRoot, enumerable: true, configurable: true });
+  });
+});
+
+test('a frozen hook that replaces the shim before React registers is not followed, and the assignment does not throw', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    page.window[HOOK] = Object.freeze(existingHook());
+    assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+    assert.equal(warn.mock.callCount(), 1);
+    api.dispose();
+  });
+});
+
 test('stats() and debug.hook() only read: a tool that redefines the global over the shim is noticed at the next Event Timing batch', async () => {
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false });
