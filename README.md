@@ -563,7 +563,7 @@ above it, which is web-vitals' signal to fall back to its own selector, and it n
 hotPath, components, commits, followUps }`, frozen, from this library's own report for that interaction.
 It is `null` when nothing is installed on the page, and when there is no report for the interaction:
 one that stayed under `threshold` and set off no later render INP leaves out, or one already pushed out
-of the 50 reports a page keeps, which the INP estimate's report and the ten slowest never are. It never
+of the 50 reports a page keeps, which the ten slowest and those INP can still point at never are. It never
 guesses, and like `generateTarget` it never throws: a metric it cannot
 read gives `react: null` rather than an exception inside your analytics callback. web-vitals keeps
 everything else it owns: which interaction is
@@ -703,7 +703,7 @@ their first value, with a warning, until `dispose()`.
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
 
 The API has `reports()` (up to 50 published, oldest first, at their latest revision; past 50 the oldest
-goes, but never the INP estimate's report or one of the ten slowest), `last()`, `inp()`
+goes, but never one of the ten slowest or one INP can still point at), `last()`, `inp()`
 (`{ value, rating, interactionId, interactionCount, report }` for this navigation, or null), `onInteraction(fn)`,
 `clear()` (drops reports and commits, and starts the INP estimate over), `dispose()` and `stats()`: `mode`
 (`'shim'`, `'chained'`, `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `react` (`'reading'`,
