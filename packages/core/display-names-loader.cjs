@@ -667,12 +667,13 @@ function stamp(code) {
 /**
  * `stamp`, or with `helper` what the loader writes. A function component's stamp written out repeats
  * the whole check, and a minifier can shorten only the name in it: after Next.js's minifier it comes
- * to 106 bytes whatever the component is called. So where a module has two or more of them, the check
- * is written once, as a function the module declares after its code, and each stamp calls it: 75 bytes
- * a stamp with two components, 42 with five, 26 with twenty. A lone stamp stays written out, since the
- * helper and its one call come to as much or more. What this saves is mostly bytes the browser parses.
- * gzip had found much of the repetition already: gzipped, the stamps of two components come to about
- * the same, of five 17% less and of twenty 43% less.
+ * to about 106 bytes for a twelve-letter name, and a byte less for each letter fewer. So where a
+ * module has two or more of them, the check is written once, as a function the module declares after
+ * its code, and each stamp calls it: with names that long, 75 bytes a stamp with two components, 42
+ * with five, 26 with twenty. A lone stamp stays written out, since the helper and its one call come to
+ * as much or more. What this saves is mostly bytes the browser parses. gzip had found much of the
+ * repetition already: gzipped, the stamps of two components come to about the same, of five 17% less
+ * and of twenty 43% less.
  *
  * The `typeof` stays at each call. It is what makes a name that does not exist a no-op rather than a
  * ReferenceError, and passing such a name to a helper would throw before the helper ran.

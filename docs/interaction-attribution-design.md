@@ -1567,15 +1567,16 @@ What needs help:
   typeof Foo === "function" && __reactInpBlameName(Foo, "Foo");
   ```
 
-  That comes to 75 bytes a stamp with two components, 42 with five and 26 with twenty, and under
-  Rolldown's minifier to 40 against 120 with twenty. Gzipped, two come to about the same, five to 17% less
-  and twenty to 43% less, so what it saves is mostly bytes the browser parses rather than bytes sent. A
-  lone stamp stays written out, since the helper and its one call come to as much or more. The `typeof`
-  stays at each call, because passing a name that does not exist to the helper would throw before the
-  helper ran. `memo` and `forwardRef` stamps stay written out however many there are: through a helper,
-  two of them came to more under Rolldown's minifier (40 bytes a stamp against 34), and most counts to
-  more gzipped. On `apps/next-demo`'s own files, 25 stamps in 11 of them with 6 that call the helper,
-  the stamps went from 2,539 bytes to 1,473 after Next.js's minifier, and from 805 to 733 gzipped.
+  That comes to 75 bytes a stamp with two components, 42 with five and 26 with twenty, and gzipped after
+  the same minifier, two come to about the same, five to 17% less and twenty to 43% less, so what it
+  saves is mostly bytes the browser parses rather than bytes sent. Under Rolldown's minifier, twenty
+  come to 40 bytes a stamp against 120. A lone stamp stays written out, since the helper and its one
+  call come to as much or more. The `typeof` stays at each call, because passing a name that does not
+  exist to the helper would throw before the helper ran. `memo` and `forwardRef` stamps stay written out
+  however many there are: through a helper, two of them came to more under Rolldown's minifier (40 bytes
+  a stamp against 34), and most counts to more gzipped. On `apps/next-demo`'s own files, 25 stamps in 11
+  of them with 6 that call the helper, the stamps went from 2,539 bytes to 1,473 after Next.js's
+  minifier, and from 805 to 733 gzipped.
 
   The helper costs Rollup its tree shaking. On a module of seven exported function components with one
   imported, Rollup keeps all seven where the stamps call a helper, against the one it keeps where they
