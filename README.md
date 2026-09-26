@@ -1014,10 +1014,12 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
 - **A render your report listener causes is recognised by the lane React put it on**, and React has one lane
   for each priority. An update of the app's own that lands on the same lane before React commits is rendered
   in that same commit and left out with it, which for an otherwise quiet interaction can mean no report.
-  A commit inside an input's dispatch is kept even so. React 19.3 renders sync, continuous and default
+  A commit inside an input's dispatch is kept even so. React 19 renders sync, continuous and default
   updates in one pass, so a key pressed before React's own task for your listener's update renders that
   update along with its own, and that commit is the key's. Its counts then take in your listener's
-  components beside the key's.
+  components beside the key's, and where the key's own render is small, those components can be the render
+  the blame names. The commit is not marked as your listener's either, so an update its components make in
+  `useEffect` reads as the key's later render, on React 18 and 19 as well.
 - Production React records no durations, so blame there rests on render counts and is `'inferred'`
   (`react-dom/profiling` gives durations), and minified handlers are named by their prop. An inferred blame
   says "most likely" in its sentence and in the overlay; take it as the likeliest reading, not a measurement.
