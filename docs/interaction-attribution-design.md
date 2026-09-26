@@ -1081,6 +1081,20 @@ delivered yet, which this estimate sees only when they are delivered. And Next.j
 counting every interaction since the page loaded (its base is only ever set to 0), so past 50
 interactions before a restore that copy and this estimate can point at different interactions.
 
+**Production builds and small renders.** Without durations, a 10-component render can win
+the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
+is large (50 components when a handler is named, 10 otherwise), and a named handler with a
+small render is blamed as "most likely", with the note that a profiling build would give exact
+numbers; its `confidence` is `'inferred'`. LoAF cannot separate the two: the handler and React's
+sync render run inside the same script entry. It can separate out the forced layout inside that
+script, which is measured whatever the build records, so since 2026-09-20 a large forced layout
+outranks a render the build never timed and stays `'measured'` there. It is the only blame about
+React's own work that does; the phase blames (`waiting`, `painting`) and `script` come from the
+browser and never depended on the build at all, though `script` turns `inferred` when a commit could
+not be tied to the interaction, which has nothing to do with which build is running.
+A minified handler keeps only the name of the prop
+it was found on, so production sentences say "the onClick handler".
+
 
 
 ## The demo
