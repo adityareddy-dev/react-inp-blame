@@ -962,7 +962,8 @@ Supported: react-dom 17, 18 and 19; only react-dom commits are walked. CI runs t
 in development and production builds, its attribution, input-delay and ambient specs on React 19.2.8, 19.1.9,
 19.0.0, 18.3.1, 18.2.0 and 17.0.2 (legacy root), and the Next.js check on 16.3.5 under `next dev` and both production bundlers,
 on 16.2.12, 15.5.26 and 15.3.9 through the `instrumentation-client` line, and on `next@canary`, whose App Router
-brings a React canary, on every push and once a day, in a job allowed to fail. It also installs the package as
+brings a React canary, on every push and once a day, in a job that fails the daily run when it breaks but
+never a push or a pull request. It also installs the package as
 packed for npm into apps with no peers, with Next.js 15, with Next.js 16.3.5 and with Vite 5, on Node 20.19, the
 oldest its `engines` allows, and imports and requires every subpath there; the canary job installs it beside
 `next@canary` as well. No job runs `react@canary` alone. One more

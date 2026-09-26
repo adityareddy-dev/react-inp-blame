@@ -141,7 +141,8 @@ through this repo. There it installs the locked dependencies, with the packed ta
 registry's react-inp-blame, and builds the app. Its specs then check the blame on the dev server (a Fast
 Refresh edit included) and on `vite preview` of the build. `--fresh` drops the lockfile first, so every
 dependency comes as npm resolves it that day within the ranges in its `package.json`, which never takes a
-new major. CI runs it that way too, in a job of its own that goes red without failing the run. `--tarball`
+new major. CI runs it that way too, in a job of its own that fails the daily run when it breaks but never
+a push or a pull request. `--tarball`
 works as it does for `test:pack`, and anything after `--` goes to Playwright. Through npm that is a second
 `--`, after npm's own, as in the last line below. A failed run leaves the copy in place and prints its path.
 
@@ -169,7 +170,7 @@ Two things the demo's suite leaves out of a normal run:
 - `npm run build`, `npm run typecheck`, `npm run test:unit` and the Playwright suites the change can
   affect pass locally, and `npm run test:pack` when the change touches what is published:
   `packages/core/package.json` or a file it lists. CI runs all of them on every push and pull request
-  and once a day, plus a job against `next@canary` that is allowed to fail and one that runs the
+  and once a day, plus a job against `next@canary` that can fail only the daily run and one that runs the
   Next.js suites on 16.2, 15.5 and 15.3. To repeat that one:
   `npm install next@15.5.26 -w apps/next-demo`, put the line `withInpBlame` prints in
   `apps/next-demo/instrumentation-client.ts`, run `npm test` and `npm run test:prod` with
