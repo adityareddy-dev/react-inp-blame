@@ -283,10 +283,14 @@ silenced React's "Download the React DevTools" message. `dispose()` puts a chain
 A hook the page has switched off (`isDisabled`, or no `supportsFiber`) is not chained onto at all,
 because React registers with nothing there: `stats().mode` is `'unsupported'` with
 `kind: 'hook-disabled'`, and Event Timing reports carry on without components. A hook the page has
-locked against developer tools, frozen or sealed, or with a method that has only a getter or a setter
-that drops what it is given, cannot be wrapped: each method is read back after it is assigned. The
-methods already wrapped are put back, and the page is `'unsupported'` with the same kind and its own
-warning, where before `install()` threw into the page's entry module, or read no commits at all.
+locked against developer tools, frozen, sealed without `onPostCommitFiberRoot`, or with a method that has
+only a getter or a setter that drops what it is given, cannot be wrapped: each method is read back after
+it is assigned, and one that still reads as the page's own did not take. The methods already wrapped are
+put back, and the page is `'unsupported'` with the same kind and its own warning, where before `install()`
+threw into the page's entry module, or read no commits at all. A page that holds the global empty where it
+cannot be redefined is `'unsupported'` the same way, since React finds no hook there either. On a hook the
+page locks after `install()`, `dispose()` puts back what it still can, and a method it cannot put back only
+passes calls on.
 
 React DevTools never installs over an existing hook: its `installHook` returns as soon as
 `window` has the property, reading and writing nothing. So a shim that loads before it locks
