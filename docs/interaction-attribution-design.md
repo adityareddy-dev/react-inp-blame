@@ -924,23 +924,7 @@ so the join did not cause it. React 18 showed the same timing (the scheduler tas
 details started 14.0 ms after the press, median, against 13.8 on React 17) and simply did not
 round down in 20 runs.
 
-**Late arrivals.** A profile that renders 500 ms after the click, once the server answers,
-lands long after the report was first emitted. Such renders attach to the existing report
-(same input stamp, no newer input since, within `inputWindow`), and listeners receive the next
-revision: a new frozen report with `revision` bumped and its own explanation, the earlier one
-left as it was (before 0.1.0 the same object was changed and handed over again). Long animation
-frames that
-arrive for those later renders fold in the same way, and a report keeps the frames it has joined even
-once the page's store of the last 60 has let them go: until 2026-09-15 the newest report was rebuilt
-from that store on every frame, so after a minute of scrolling it lost its own frames and its verdict
-fell back to "no long task was recorded". So do late Event Timing entries: an
-interaction's entries arrive with the paint that presented them, the pointerdown in one
-frame and the pointerup and click in a later one when the pointer was held, a keydown before
-its keyup. There is no settle timer any more (a 150 ms one used to split a long press into
-two reports): the report is built from the first batch, rebuilt as its next revision when the
-rest arrive, and a quiet 30 ms tap that turns out to be a 100 ms click
-is published at that point. Waiting for an interaction to be "complete" was never possible
-anyway, because entries under the observer's 16 ms floor never arrive at all.
+
 
 **Navigations.** Every report carries `navigationURL` and `navigationType`, with web-vitals' names
 and values, so it lines up with the INP web-vitals reports for the same navigation. The page's
@@ -975,10 +959,7 @@ Next.js suite, and `fixtures/next-14` has a Pages Router page beside its App Rou
 click's report, the reset and a report on the page it opened, under `next dev` and both production
 builds.
 
-All of this, from quiet interactions and publishing to late entries, late frames, later renders
-and the limits (50 published reports, 20 quiet ones, the entries of the 100 interactions heard
-from most recently), lives in `lifecycle.ts`. It reads no browser globals and its transitions are
-unit-tested one by one; `install()` only wires it to the observers, the DevTools hook and the page.
+
 
 **Output.** An `InteractionReport` object, a listener API, and entries the Chrome Performance
 panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's own
@@ -1297,7 +1278,8 @@ matches nothing rather than being matched on a start time.
 
 - `react` is `null` when nothing is installed on the page, and when the library has no report for the
   interaction web-vitals picked: one that stayed under `threshold` and set off no later render, or one
-  already pushed out of the 50 reports a page keeps (`MAX_REPORTS`). It is never a guess.
+  already pushed out of the 50 reports a page keeps (`MAX_REPORTS`), which the INP estimate's report and
+  the ten slowest never are. It is never a guess.
 - `generateTarget` needs no installation, only React's fiber expando, so it works in a page that never
   calls `install()`. `attributeINP` needs one, though not from the same copy of the library: the
   installation lives on `globalThis` (`session.ts`), so any copy of a compatible version sees it.

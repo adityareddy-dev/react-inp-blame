@@ -55,6 +55,8 @@ it changes when a field is removed or changes meaning, which a minor release may
   layout blame, the note beside another blame, the note on a later render and the panel's row now say styles
   and layout. `blame.kind` is still `'layout'` and no field changes name, so `schemaVersion` stays at 3.
 
+
+
 ## [0.12.0] - 2026-09-25
 
 0.4.0 to 0.11.0 were version numbers on `main` that never went to npm. 0.12.0 is the first release after 0.3.0,
