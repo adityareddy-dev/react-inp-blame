@@ -17,7 +17,7 @@
     "react-inp-blame": "^0.3.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.59.1",
+    "@playwright/test": "1.63.0",
     "@types/node": "^24.13.3",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
