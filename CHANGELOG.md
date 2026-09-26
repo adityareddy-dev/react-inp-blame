@@ -210,6 +210,17 @@ it changes when a field is removed or changes meaning, which a minor release may
   script ran 20 ms or more in the interaction's window, or 'layout' where the frame shows the handlers
   forcing enough styles and layout. A 'waiting' blame can gain the name of the script it waited behind,
   and a 'none' loses "No long animation frame covered the ..." once a frame does.
+- **A key pressed before React has rendered what a report listener set keeps its own render.** Typing
+  "ada@example.com" and "Hunter2!" into the demo as fast as Playwright can, 9 of the 23 keystrokes in a
+  development build and 10 in a production build had no commit, and their reports put the time on the
+  field's handler as a script, `onEmailChange` or `onChange`, where the email's render of 1000 tiles took
+  it. The demo's panel sets state when it hears a report, and the next key often came before React's own
+  task for that update. React 19.3 renders sync, continuous and default updates in one pass, so the key's
+  render took the panel's update along and finished its lane, and the hook read the whole commit as the
+  listener's work and dropped it. A commit inside an input's dispatch is now the input's even where it
+  finishes a lane the listeners left pending; outside any dispatch such a commit is still theirs and not
+  read. Every keystroke now has its commit and its report blames the render or the handler. The kept
+  commit counts the listener's components beside the input's (README, Known limits).
 
 ## [0.12.0] - 2026-09-25
 

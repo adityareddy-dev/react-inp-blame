@@ -735,9 +735,9 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   awaiting.push(place);
   if (awaiting.length > MAX_AWAITING_EFFECTS) awaiting.shift();
   placed = place;
-  if (causedByListeners(root)) return;
-  const now = performance.now();
   const dispatched = dispatchedInput();
+  if (causedByListeners(root, dispatched !== null)) return;
+  const now = performance.now();
   // A root's first commit mounts it, or hydrates its server-rendered HTML: the page starting up, not an
   // input's work, unless React ran it inside that input's dispatch (a click that opens a dialog in a root
   // of its own, or React hydrating so that it can handle the click). A Suspense boundary hydrating is the
@@ -904,10 +904,17 @@ function takeNewLanes(root: FiberRoot, work: ListenerWork): void {
  * Whether this commit is the listeners' work: it ran while they did, or it finished a lane they left
  * pending. What such a commit's render and layout effects schedule is set by the time React calls the
  * hook, so it is theirs too; what its passive effects schedule is taken when React says they ran.
+ *
+ * Not a commit inside an input's dispatch (`inInput`) that finished such a lane: that is the input's work
+ * with theirs rendered along. React 19.3 renders sync, continuous and default updates in one pass, so a key
+ * pressed before React's own task for a listener's update renders that update with the key's. Typing at
+ * full speed in the demo, 9 of 23 keystrokes had their commit read as the panel's render and dropped, and
+ * their reports said the handler's script took the time. Kept, the commit counts the listener's components
+ * beside the input's, which is the lesser error.
  */
-function causedByListeners(root: FiberRoot): boolean {
+function causedByListeners(root: FiberRoot, inInput: boolean): boolean {
   const work = listenerWorkOf(root);
-  const theirs = state.hearing || (work.lanes & ~root.pendingLanes) !== 0;
+  const theirs = state.hearing || (!inInput && (work.lanes & ~root.pendingLanes) !== 0);
   // The lanes this commit finished are done with; the ones still pending stay theirs.
   work.lanes &= root.pendingLanes;
   if (theirs) takeNewLanes(root, work);
