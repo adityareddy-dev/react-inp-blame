@@ -221,8 +221,8 @@ interface HookState {
   /** Every root that committed while installed, held weakly so that an unmounted root is not kept alive by this list. */
   roots: WeakRef<FiberRoot>[];
   /**
-   * The length at which `roots` next lets go of the roots React has dropped (`listenerWorkOf`). Absent where
-   * a copy of an earlier version made the state, or since the last dispose().
+   * The length at which `roots` next lets go of the roots React has dropped (`listenerWorkOf`). Absent until
+   * the list first reaches `MIN_PRUNE_AT`, where a copy of an earlier version made the state, and after dispose().
    */
   pruneAt?: number;
   /** What the page's report listeners caused on each root in `roots`. */
