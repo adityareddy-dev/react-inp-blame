@@ -1442,19 +1442,20 @@ test('a page that keeps creating React roots and dropping them holds on to the d
   });
 });
 
-test('a page that keeps many React roots mounted looks at each only a few times as it records new ones', async (t) => {
+test('a page that keeps many React roots mounted looks at each only a few times as it records new ones, and starts over after dispose()', async (t) => {
   // A root per map marker, all of them kept. Looking through every root each time a new one commits would
   // take time that grows with the square of the roots, inside React's commit; looking again only once the
   // list has doubled keeps it to a few looks for each root.
   let looks = 0;
+  const dropped = new WeakSet<object>();
   class CountedRef<T extends object> {
     target: T;
     constructor(target: T) {
       this.target = target;
     }
-    deref(): T {
+    deref(): T | undefined {
       looks++;
-      return this.target;
+      return dropped.has(this.target) ? undefined : this.target;
     }
   }
   const { WeakRef } = globalThis;
@@ -1472,6 +1473,17 @@ test('a page that keeps many React roots mounted looks at each only a few times 
     assert.equal(heldRoots().length, markers);
     assert.ok(looks <= 4 * markers, `${looks} looks at ${markers} roots`);
     api.dispose();
+
+    // The markers put off the next look to twice their number. An install after dispose() looks from the
+    // fewest roots again, so the ones it drops are let go of as soon as on a page that never had many.
+    const again = install({ hook: 'chain', devtoolsTrack: false });
+    for (let i = 0; i < 2000; i++) {
+      const root = mountedRoot(0b11, 4);
+      existing.onCommitFiberRoot(id, root);
+      dropped.add(root);
+    }
+    assert.ok(heldRoots().length <= 128, `${heldRoots().length} roots held after dispose() and another install`);
+    again.dispose();
   });
 });
 
