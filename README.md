@@ -1308,8 +1308,9 @@ Something on the page set `__REACT_DEVTOOLS_GLOBAL_HOOK__` with `isDisabled`, or
 before the library loaded. Packages that disable React DevTools in production do this. React then reports to
 no hook, so reports come without components. Remove that script where you want blame.
 
-Some freeze the hook instead, or give its methods only a getter. The library cannot wrap a hook like that,
-so it leaves it as it was, and reports come without components the same way.
+Some freeze or seal the hook instead, or give its methods only a getter, or a setter that drops what it is
+given. The library cannot wrap a hook like that, so it leaves it as it was, and reports come without
+components the same way.
 
 <a id="shim-over-hook"></a>
 #### hook: 'shim' found a React DevTools hook already installed

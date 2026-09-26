@@ -744,6 +744,18 @@ test('a page whose DevTools hook has a getter for onCommitFiberRoot still gets r
   });
 });
 
+test("a page whose DevTools hook drops what is assigned to onCommitFiberRoot is unsupported, not read as React rendering nothing", async (t) => {
+  // Nothing throws, so only reading the methods back shows that React's commits would never come here.
+  await overLockedHook(t, (hook) => {
+    const { onCommitFiberRoot } = hook;
+    return Object.defineProperty(hook, 'onCommitFiberRoot', { get: () => onCommitFiberRoot, set: () => {}, enumerable: true, configurable: true });
+  });
+});
+
+test('a page whose DevTools hook is sealed without onPostCommitFiberRoot still gets reports, and the two methods wrapped are put back', async (t) => {
+  await overLockedHook(t, (hook) => Object.seal(hook));
+});
+
 test('a frozen hook that replaces the shim before React registers is not followed, and the assignment does not throw', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
