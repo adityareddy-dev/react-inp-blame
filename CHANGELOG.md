@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-26
+
 ### Added
 
 - **A screen update no script held is put on the browser.** Where the screen took longer to update than the
@@ -14,7 +16,7 @@ it changes when a field is removed or changes meaning, which a minor release may
   and paint where the frame timed them (its `styleAndLayoutStart`, now on `FrameSummary`), else "No script ran for
   long in that time: 212 ms of it was the browser's own work on the main thread, most likely recalculating
   styles and layout for what changed." The Vite demo has an eighth slow scenario for it, the restyle storm: one class
-  on 30,000 cells.
+  on 30,000 cells. The new field is additive, so `schemaVersion` stays at 3.
 
 ### Fixed
 
@@ -1156,7 +1158,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.3.0...v0.12.0
