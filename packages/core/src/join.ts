@@ -475,11 +475,20 @@ export function buildReport(
     // node itself, which is where a handler on the icon would be.
     owners = ownersOf(namingFiber(live));
     for (const e of byWork(sorted)) {
-      // An Event Timing entry does not say which key was pressed; the ring entry for the same event
-      // does, and which key it was decides whether the press could have submitted a form.
-      // A keypress has no ring entry of its own and shares its keydown's key.
-      const pressed = inputs.find((i) => (i.type === e.name || (e.name === 'keypress' && i.type === 'keydown')) && near(i.ts, e.startTime))?.press;
-      handler = handlerOf(fiber, e.name, typeof pressed === 'string' ? pressed : null);
+      // The handler React ran is the one the ring read as the event was dispatched. By the time the entry
+      // comes, the event's own render can have put another on the element: `onClick={editing ? save : edit}`
+      // does on every click. The element is read now only for an event the ring has no record of, and for
+      // one on server HTML, which had no handler to read until React hydrated it to run the event.
+      const own = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime));
+      if (own && !own.dehydrated) {
+        handler = own.handler;
+      } else {
+        // An Event Timing entry does not say which key was pressed; the ring entry for the same event
+        // does, and which key it was decides whether the press could have submitted a form.
+        // A keypress has no ring entry of its own and shares its keydown's key.
+        const pressed = inputs.find((i) => (i.type === e.name || (e.name === 'keypress' && i.type === 'keydown')) && near(i.ts, e.startTime))?.press;
+        handler = handlerOf(fiber, e.name, typeof pressed === 'string' ? pressed : null);
+      }
       if (handler) break;
     }
   } else if (ring) {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { leafName, startName } from '../src/commits.ts';
-import { dehydratedAround, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, rootShapeProblem, walkCommit, type FiberRoot } from '../src/fiber.ts';
+import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, rootShapeProblem, walkCommit, type FiberRoot } from '../src/fiber.ts';
 import type { CommitSummary } from '../src/types.ts';
 
 // The HostRoot fiber React 17, 18 and 19 hand the hook as `root.current`, in a development build.
@@ -706,6 +706,26 @@ test("a component's props are never the handler: React dispatches only from the 
   assert.equal(handlerOf(host('span', {}, component(Card, {}, host('div', { onClick: selectRow }))) as any, 'click'), 'selectRow');
   const field = host('input', { type: 'text' }, host('div', {}, component(Tabs, { onChange: setTab })));
   assert.equal(handlerOf(field as any, 'input'), null);
+});
+
+test('the handler is read from the props React keeps on the element, not from the fiber cached there, which can be a render behind', () => {
+  // React caches a fiber on an element once, when it makes it, and on each update writes only the new
+  // props to the element. The element's two fibers take turns being current, so the cached one can hold
+  // the render before: with `onClick={editing ? save : edit}` a click on Save read edit, and React ran save.
+  function edit() {}
+  function save() {}
+  const cached = host('button', { onClick: edit });
+  const current = host('button', { onClick: save });
+  const button = { __reactFiber$k7: cached, __reactProps$k7: { onClick: save }, parentNode: null };
+  Object.assign(cached, { alternate: current, stateNode: button });
+  Object.assign(current, { alternate: cached, stateNode: button });
+  assert.equal(handlerOf(fiberFromNode(button as any), 'click'), 'save');
+  // So is an element's up the chain.
+  const row = { __reactFiber$k7: host('li', { onClick: edit }), __reactProps$k7: { onClick: save }, parentNode: null };
+  Object.assign(row.__reactFiber$k7, { stateNode: row });
+  assert.equal(handlerOf(host('span', {}, row.__reactFiber$k7) as any, 'click'), 'save');
+  // An element with no props of React's on it has only its fiber's to go on.
+  assert.equal(handlerOf(Object.assign(host('button', { onClick: edit }), { stateNode: { parentNode: null } }) as any, 'click'), 'edit');
 });
 
 test('a select, a file input and a textarea are named by the event React reads each of them from', () => {

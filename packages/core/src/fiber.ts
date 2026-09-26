@@ -215,8 +215,8 @@ function containerFiberOn(node: Node): Fiber | null {
  */
 const expandoKeys: Record<string, string | undefined> = {};
 
-function expando(node: Node, prefix: string): Fiber | null {
-  const o = node as unknown as Record<string, Fiber | undefined>;
+function expando<T = Fiber>(node: Node, prefix: string): T | null {
+  const o = node as unknown as Record<string, T | undefined>;
   const known = expandoKeys[prefix];
   if (known !== undefined && known in o) return o[known] ?? null;
   for (const k of Object.keys(node)) {
@@ -727,10 +727,15 @@ function handlerName(fn: Function, key: string): string {
 /**
  * The props React runs a fiber's handlers from, or null for a fiber that is not a DOM element. React's
  * getListener reads only the elements on the chain, so a component's props are never a handler: a card
- * that hands its onClick to the one button inside runs nothing for a click on its photo.
+ * that hands its onClick to the one button inside runs nothing for a click on its photo. They are read off
+ * the element, where React writes each render's props. The fiber cached there is the one the element was
+ * made with, and an element's two fibers take turns being current, so after every other render it holds
+ * the render before.
  */
 function listenerProps(f: Fiber): Record<string, unknown> | null {
-  return typeof f.type === 'string' ? f.memoizedProps : null;
+  if (typeof f.type !== 'string') return null;
+  const el = f.stateNode as Node | null | undefined;
+  return (el && expando<Record<string, unknown>>(el, '__reactProps$')) || f.memoizedProps;
 }
 
 /** The first of `props` set on `fiber` or an element above it, as a name. `stop` is the last fiber looked at. */

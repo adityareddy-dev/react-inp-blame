@@ -554,10 +554,17 @@ checkbox's `onChange`. A label whose control is elsewhere on the page through `h
 forward to and is left where it is.
 
 The props are read where React reads them to dispatch. Its `getListener` takes them off each DOM element
-on the chain and never off a component. Until 2026-09-26 the walk read `memoizedProps` on every fiber it
-climbed, so a `<Card onClick={openCard}>` that hands onClick to its Open button alone was named for a
-click on the card's photo, which ran nothing, and typing in a field inside `<Tabs onChange={setTab}>`
-named setTab.
+on the chain, from the `__reactProps$` key it writes every render's props to, and never off a component.
+Until 2026-09-26 the walk read `memoizedProps` on every fiber it climbed, so a `<Card onClick={openCard}>`
+that hands onClick to its Open button alone was named for a click on the card's photo, which ran nothing,
+and typing in a field inside `<Tabs onChange={setTab}>` named setTab. The fiber cached on the element is
+no stand-in for its props either: React caches it once, when it makes the element, and an element's two
+fibers take turns being current, so after every other render it holds the render before. With
+`onClick={editing ? save : startEdit}` every click on Save was named startEdit. For the same reason the
+report names the handler the ring read at dispatch wherever the ring has the event: read when the entry
+arrives, the element already holds what the event's own render gave it. The element is read then only
+for an event the ring has no record of (a keypress) and for one on server HTML, which had no handler to
+read until React hydrated it to run the event.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every
@@ -733,8 +740,11 @@ inside the combined literal `134221824` the compiled build writes at the two pla
 a boundary; `commitReconciliationEffects` strips it in the mutation phase, before `onCommitFiberRoot` is
 called, so a commit handed to the hook never carries it and it is only ever read live, off the page.
 Markers on the DOM: `internalInstanceKey` is
-`'__reactFiber$' + randomKey`, `internalContainerInstanceKey` is `'__reactContainer$' + randomKey`, and
-`getClosestInstanceFromNode` finds a boundary for unhydrated HTML through `getParentHydrationBoundary`,
+`'__reactFiber$' + randomKey`, `internalContainerInstanceKey` is `'__reactContainer$' + randomKey`,
+`internalPropsKey` is `'__reactProps$' + randomKey` (`createInstance` writes it beside the fiber, and
+`commitUpdate` writes it alone on every update after; `getListener` reads it off the `stateNode` of each
+fiber tagged 5, 26 or 27 on the chain), and `getClosestInstanceFromNode` finds a boundary for unhydrated
+HTML through `getParentHydrationBoundary`,
 which walks back over the siblings counting five opening markers (`$`, `$?`, `$!`, `$~` and `&` for an
 Activity boundary) against two closing ones (`/$` and `/&`), and reads the boundary's fiber off the
 opening comment. This library counts the same seven, because counting fewer gets the depth wrong and
