@@ -2822,3 +2822,94 @@ test("a minifier's name the report gives, in a build whose names are otherwise r
   assert.ok(minified.notes.some((n) => n.startsWith('Most component names')));
   assert.ok(!odd(minified), minified.notes.join('\n'));
 });
+
+test('a render that committed inside the script the screen update waited on is said to be what that script did', () => {
+  // TanStack Table's virtualized rows at 4x: a checkbox click whose handlers rendered the rows, then a frame that
+  // waited on react-virtual's scroll listener, which rendered them again through flushSync.
+  const rows = { rendered: 721, hotPath: ['App', 'TableBody'], components: [{ name: 'TableBodyRow', count: 36, self: 60, total: 60 }] };
+  const handled = commit(165, 0, { ...rows, total: 160 });
+  const forced = commit(340, 0, { ...rows, total: 150 });
+  const frames = [frame(0, 368, [script('INPUT.onclick', 2, 169), script('DIV.onscroll', 175, 174)])];
+  const r = report([entry('click', 0, 368, 2, 171)], [handled, forced], frames, [input(0, 'click')]);
+  assert.deepEqual(r.explanation.blame, { kind: 'painting', name: 'DIV.onscroll', detail: null, ms: 197, confidence: 'measured' });
+  assert.equal(
+    r.explanation.cause,
+    'After the click was handled, the screen took another 197 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 174 ms before the next frame, and React rendered inside it: 150 ms re-rendering 721 components inside TableBody.',
+  );
+  // The handlers' own render is still said, and the second render is not put down to an effect: the script set it off.
+  assert.deepEqual(r.explanation.notes, ['React still spent 160 ms re-rendering 721 components inside TableBody in the 169 ms of working time before that.']);
+
+  // Where the forced render is the heavier, the handlers' own is still the one said to be in the working time.
+  const heavier = report([entry('click', 0, 368, 2, 171)], [handled, { ...forced, total: 170 }], frames, [input(0, 'click')]);
+  assert.match(heavier.explanation.cause, /React rendered inside it: 170 ms /);
+  assert.deepEqual(heavier.explanation.notes, ['React still spent 160 ms re-rendering 721 components inside TableBody in the 169 ms of working time before that.']);
+
+  // A render that began before the script, or took longer than it ran, was not all inside it.
+  for (const outside of [{ ...forced, startedAt: 120 }, { ...forced, total: 190 }]) {
+    const x = report([entry('click', 0, 368, 2, 171)], [handled, outside], frames, [input(0, 'click')]);
+    assert.match(x.explanation.cause, /before the next frame\.$/);
+  }
+
+  // React's own task, for an update an effect scheduled, is tied to the render it ran, and the render still counts
+  // as a second one: that is what the effect note is for.
+  const scheduled = report(
+    [entry('click', 0, 368, 2, 171)],
+    [handled, { ...forced, priority: 3 }],
+    [frame(0, 368, [script('INPUT.onclick', 2, 169), script('MessagePort.onmessage', 175, 174)])],
+    [input(0, 'click')],
+  );
+  assert.match(scheduled.explanation.cause, /MessagePort\.onmessage.*React rendered inside it: 150 ms /);
+  assert.ok(scheduled.explanation.notes.some((n) => n.startsWith('React rendered 2 times')), scheduled.explanation.notes.join(' | '));
+
+  // React 17 gives every commit priority 99, so there the task a render ran in is what says an effect set it off.
+  const legacy = (invoker: string) =>
+    report(
+      [entry('click', 0, 368, 2, 171)],
+      [{ ...handled, priority: 99 }, { ...forced, priority: 99 }],
+      [frame(0, 368, [script('INPUT.onclick', 2, 169), script(invoker, 175, 174)])],
+      [input(0, 'click')],
+    ).explanation.notes;
+  assert.ok(legacy('MessagePort.onmessage').some((n) => n.startsWith('React rendered 2 times')));
+  assert.ok(!legacy('DIV.onscroll').some((n) => n.startsWith('React rendered')));
+
+  // Two renders inside the script: the clause says how many, and neither is put down to an effect.
+  const twice = report([entry('click', 0, 368, 2, 171)], [handled, forced, commit(345, 0, { rendered: 40, total: 20, hotPath: ['App'] })], frames, [
+    input(0, 'click'),
+  ]);
+  assert.match(twice.explanation.cause, /React rendered inside it 2 times, the heaviest 150 ms re-rendering 721 components inside TableBody\.$/);
+  assert.deepEqual(twice.explanation.notes, ['React still spent 160 ms re-rendering 721 components inside TableBody in the 169 ms of working time before that.']);
+
+  // A hydration keeps its own sentence, and is not tied to the script.
+  const hydrated = report(
+    [entry('click', 0, 368, 2, 171)],
+    [handled, { ...forced, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' } }],
+    frames,
+    [input(0, 'click')],
+  );
+  assert.doesNotMatch(hydrated.explanation.cause, /React rendered inside it/);
+
+  // Where every render was the script's, the working time is still said to have been the handlers'.
+  const onlyForced = report([entry('click', 0, 368, 2, 171)], [forced], frames, [input(0, 'click')]);
+  assert.match(onlyForced.explanation.cause, /React rendered inside it: 150 ms /);
+  assert.deepEqual(onlyForced.explanation.notes, ['Code outside React (the click handler or other scripts) still ran for about 169 ms of the 169 ms of working time before that.']);
+
+  // A production build: no render times and no priority, and the script's render still left out of the count.
+  const prod = (x: CommitSummary) => ({ ...x, hasDurations: false, total: 0, priority: undefined, components: [{ name: 'TableBodyRow', count: 36, self: 0, total: 0 }] });
+  const production = report([entry('click', 0, 368, 2, 171)], [prod(handled), prod(forced)], frames, [input(0, 'click')]);
+  assert.deepEqual(
+    [production.explanation.cause, ...production.explanation.notes],
+    [
+      'After the click was handled, the screen took another 197 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 174 ms before the next frame, and React rendered inside it: re-rendering 721 components inside TableBody.',
+      'React was most likely still re-rendering 721 components inside TableBody, in the 169 ms of working time before that.',
+    ],
+  );
+
+  // Where the handler outran React in the working time, that is still said beside the forced render.
+  const handler = report([entry('click', 0, 368, 2, 171)], [{ ...handled, total: 10, rendered: 12 }, forced], frames, [input(0, 'click')]);
+  assert.match(handler.explanation.cause, /React rendered inside it: 150 ms /);
+  assert.deepEqual(handler.explanation.notes, ['Code outside React (the click handler or other scripts) still ran for about 159 ms of the 169 ms of working time before that.']);
+
+  // A render that committed after the script ended is not tied to it, and a script with none inside keeps the clause as it was.
+  const after = report([entry('click', 0, 368, 2, 171)], [handled, commit(360, 0, { ...rows, total: 5 })], frames, [input(0, 'click')]);
+  assert.match(after.explanation.cause, /before the next frame\.$/);
+});

@@ -93,6 +93,8 @@ const FORCED_LAYOUT_MIN_MS_NO_DURATIONS = HANDLER_MIN_MS;
 const FORCED_LAYOUT_ONE_SCRIPT_SHARE = 0.9;
 // The screen update gets a note of its own from 100 ms, half of INP's 200 ms budget for "good".
 const PRESENTATION_NOTE_MS = 100;
+// React's scheduler runs its work from a MessageChannel, so Long Animation Frames names its tasks after the port.
+const REACT_TASK = 'MessagePort.onmessage';
 // A press held around the interaction is worth a note from 100 ms; an ordinary click is shorter.
 const HOLD_NOTE_MS = 100;
 // A later render without durations is given a frame's length, to find the long animation frames it ran in.
@@ -1116,11 +1118,78 @@ function explain(r: InteractionReport): Explanation {
   const forcedAfterInput = forcedLayoutOf(scriptParts(frames, processingStart, r.end));
   const lateScript = longestPart(scriptParts(frames, processingEnd, r.end));
   const anyScript = longestPart(scriptParts(frames, r.start, r.end));
-  const lateScriptClause = lateScript ? `, mostly because ${scriptPhrase(lateScript.script)} ran for ${ms(lateScript.ms)} before the next frame.` : '.';
+  /**
+   * Does the screen update outrank everything the working time holds? Nothing that happened in
+   * there can account for more of the interaction than the working time it ran in, so that is what
+   * the screen update is measured against — one comparison for the whole ladder, not one per rung
+   * against whatever that rung happened to claim. Two things follow. A render or a layout is no
+   * longer unseated by a screen update that beats it but not the time it sat in; and because this
+   * is the *same* test the screen update's own rung asks, a rung it closes is one the screen update
+   * is open to take. A longer wait before the handler can still take the verdict first, since that
+   * rung sits above the screen update's. What cannot happen is a verdict refused here landing below
+   * the screen update, which is where it turns into `script` or into nothing at all.
+   *
+   * It is also what keeps two interactions of the same shape from getting opposite verdicts on the
+   * strength of a component count: paging a calendar forward and toggling a theme were both 88 ms
+   * with 5 ms of working time and 82 of the screen updating, and only one of them came back a
+   * render. Under a long task the screen update is blamed only where its frame waited on the next
+   * interaction's press (`waitedOnNext`), a rung below every one this test closes, so nothing gives way
+   * to it there either.
+   */
+  const screenOutranks = r.presentation > LONG_TASK_MS && r.presentation > r.processing;
+  /**
+   * The next interaction's press, where the frame this one painted in waited on it: typing fast, the next
+   * key's keydown and its render come before the frame the last keyup paints in. A press coming before
+   * the paint is not enough (the second click of a double click delays nothing), so the page has to
+   * have worked on it before the paint for half the screen update or more, counted from the press or from
+   * the end of the handlers where it came during them. A script Long Animation Frames recorded from the
+   * press on shows that work, timed, and so does React's render in the press's own dispatch where it
+   * ended by the paint. That end says when the work finished and not when it began, so on it alone the
+   * sentence is hedged. Only where the screen update is the larger part of the interaction, as for
+   * `screenOutranks`, but without the long-task bar: what the next key keeps the last keyup's frame
+   * waiting for can be under one.
+   */
+  const next = r.nextInput;
+  const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
+  const nextScriptMs = next ? scriptParts(frames, nextFrom, r.end).reduce((a, p) => (p.script.start >= next.start - STAMP_TOLERANCE ? Math.max(a, p.ms) : a), 0) : 0;
+  // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
+  const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;
+  const nextShare = WAITED_BEHIND_MIN_SHARE * r.presentation;
+  const waitedOnNext =
+    next && Math.max(nextScriptMs, nextRenderMs) >= nextShare && r.presentation > r.processing && r.presentation >= r.inputDelay ? next : null;
+  /**
+   * React's renders that committed inside that script, after the handlers, where the screen update's
+   * clause is said, as its blame or as the note below: what a virtualizer's scroll listener spends its time
+   * on when it calls flushSync, or React's own task for an update it scheduled. On TanStack Table's
+   * virtualized rows at 4x a checkbox's frame waited on `DIV.onscroll` for 174 ms, a render of the 721 rows
+   * it forced, which the report held and the sentence never tied to the script. Where the build keeps when a
+   * render began, it has to have begun inside the script too, and a render duration longer than the script
+   * cannot have been in it. A hydration is left where it was: it has a sentence of its own.
+   */
+  const ranInside = (x: CommitSummary, s: ScriptSummary) =>
+    carriesWork(x) &&
+    x.hydratedTarget == null &&
+    x.at > processingEnd + STAMP_TOLERANCE &&
+    x.at >= s.start - STAMP_TOLERANCE &&
+    x.at <= s.start + s.duration + STAMP_TOLERANCE &&
+    (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
+    (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
+  const insideLate = lateScript && screenOutranks && !waitedOnNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  const lateRender = insideLate.length ? heaviest(insideLate) : null;
+  const lateRenderSaid = !lateRender
+    ? ''
+    : insideLate.length === 1
+      ? `, and React rendered inside it: ${lateRender.hasDurations ? `${ms(lateRender.total)} ` : ''}${renderPhrase(lateRender)}`
+      : `, and React rendered inside it ${insideLate.length} times, the ${lateRender.hasDurations ? `heaviest ${ms(lateRender.total)}` : 'largest'} ${renderPhrase(lateRender)}`;
+  const lateScriptClause = lateScript ? `, mostly because ${scriptPhrase(lateScript.script)} ran for ${ms(lateScript.ms)} before the next frame${lateRenderSaid}.` : '.';
 
-  const c = r.commits.length ? heaviest(r.commits) : null;
-  const renderTotal = r.commits.reduce((a, x) => a + x.total, 0);
-  const hasDurations = !!c && c.hasDurations;
+  // The commits of the working time. One the screen update's clause ties to the script it ran in is that
+  // script's, or the same render is said twice, once as the script's and once as the handlers'.
+  const inWorkingTime = insideLate.length ? r.commits.filter((x) => !insideLate.includes(x)) : r.commits;
+  const c = inWorkingTime.length ? heaviest(inWorkingTime) : null;
+  const renderTotal = inWorkingTime.reduce((a, x) => a + x.total, 0);
+  // What the build records, which a report whose every commit was the late script's still says.
+  const hasDurations = (c ?? r.commits[0])?.hasDurations ?? false;
   /**
    * The window the scripts, and so the forced layout, were counted across. It runs to the end of the
    * library's own walk, because the walk happens inside the same script the handlers did, and
@@ -1271,7 +1340,7 @@ function explain(r: InteractionReport): Explanation {
   // hears about is named over a 30 ms render. Without durations a commit is only named over the one
   // with the most components when its effects are what earned the blame.
   const own = (x: CommitSummary) => x.total + (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
-  const rc = c && (hasDurations ? committingMatters : effectsEarn) ? r.commits.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
+  const rc = c && (hasDurations ? committingMatters : effectsEarn) ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
   const rcCommitting = rc ? (committingOf.get(rc) ?? 0) : 0;
   const rcEffects = rc ? (effectsOf.get(rc) ?? 0) : 0;
   // Of a committing figure and an effects figure, which to say: each that would be worth saying alone,
@@ -1320,45 +1389,6 @@ function explain(r: InteractionReport): Explanation {
   // The handler is the blame where it outruns all of React's time, or where React's time, whatever it
   // is, would not be the blame anyway: a 28 ms handler beside a 4 ms render and 24 ms of effects.
   const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
-  /**
-   * Does the screen update outrank everything the working time holds? Nothing that happened in
-   * there can account for more of the interaction than the working time it ran in, so that is what
-   * the screen update is measured against — one comparison for the whole ladder, not one per rung
-   * against whatever that rung happened to claim. Two things follow. A render or a layout is no
-   * longer unseated by a screen update that beats it but not the time it sat in; and because this
-   * is the *same* test the screen update's own rung asks, a rung it closes is one the screen update
-   * is open to take. A longer wait before the handler can still take the verdict first, since that
-   * rung sits above the screen update's. What cannot happen is a verdict refused here landing below
-   * the screen update, which is where it turns into `script` or into nothing at all.
-   *
-   * It is also what keeps two interactions of the same shape from getting opposite verdicts on the
-   * strength of a component count: paging a calendar forward and toggling a theme were both 88 ms
-   * with 5 ms of working time and 82 of the screen updating, and only one of them came back a
-   * render. Under a long task the screen update is blamed only where its frame waited on the next
-   * interaction's press (`waitedOnNext`), a rung below every one this test closes, so nothing gives way
-   * to it there either.
-   */
-  const screenOutranks = r.presentation > LONG_TASK_MS && r.presentation > r.processing;
-  /**
-   * The next interaction's press, where the frame this one painted in waited on it: typing fast, the next
-   * key's keydown and its render come before the frame the last keyup paints in. A press coming before
-   * the paint is not enough (the second click of a double click delays nothing), so the page has to
-   * have worked on it before the paint for half the screen update or more, counted from the press or from
-   * the end of the handlers where it came during them. A script Long Animation Frames recorded from the
-   * press on shows that work, timed, and so does React's render in the press's own dispatch where it
-   * ended by the paint. That end says when the work finished and not when it began, so on it alone the
-   * sentence is hedged. Only where the screen update is the larger part of the interaction, as for
-   * `screenOutranks`, but without the long-task bar: what the next key keeps the last keyup's frame
-   * waiting for can be under one.
-   */
-  const next = r.nextInput;
-  const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
-  const nextScriptMs = next ? scriptParts(frames, nextFrom, r.end).reduce((a, p) => (p.script.start >= next.start - STAMP_TOLERANCE ? Math.max(a, p.ms) : a), 0) : 0;
-  // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
-  const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;
-  const nextShare = WAITED_BEHIND_MIN_SHARE * r.presentation;
-  const waitedOnNext =
-    next && Math.max(nextScriptMs, nextRenderMs) >= nextShare && r.presentation > r.processing && r.presentation >= r.inputDelay ? next : null;
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
@@ -1389,16 +1419,15 @@ function explain(r: InteractionReport): Explanation {
    * milliseconds as a leftover would say them twice. A `waiting` verdict can take the blame with a
    * rung closed, and there the note is dropped: known, and it wants its own phrasing, not this one.
    */
-  const closedByTheScreen: string | null =
-    !screenOutranks || !c || !rc
-      ? null
-      : handlerWins
+  const closedByTheScreen: string | null = !screenOutranks
+    ? null
+    : handlerWins
         ? say(
-            measuredFrom(...r.commits),
+            measuredFrom(...inWorkingTime),
             `${cap(outsideName)} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time before that.`,
             `${cap(outsideName)} ${HEDGE} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time before that.`,
           )
-        : renderMatters
+        : c && rc && renderMatters
           ? say(
               measuredFrom(rc),
               `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time before that.`,
@@ -1499,7 +1528,7 @@ function explain(r: InteractionReport): Explanation {
       confidence,
     };
   } else if (c && handlerWins && !screenOutranks) {
-    const confidence = measuredFrom(...r.commits);
+    const confidence = measuredFrom(...inWorkingTime);
     const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
     // Committing and effects React spent beside it, where they would be worth saying. They are the
     // totals, since the render named here need not be the commit that spent them.
@@ -1675,11 +1704,18 @@ function explain(r: InteractionReport): Explanation {
   if (ownBlamed) {
     notes.push(`Time in ${ownBlamed.name}'s own render is usually work it does as it renders, like a sort or a filter, which memoising the components under it does not speed up.`);
   }
+  // A hydration is not a re-render: it is the first render of that HTML on the client, and counting it
+  // here would tell every click that waited for one to go looking for an effect that updates state. Nor
+  // are the renders the screen update's clause says a script forced: the script set them off, not an effect.
+  // Forced means rendered synchronously (Scheduler priority 1, React 17's 99, or a build that does not say)
+  // in a script that is not React's own task, which Long Animation Frames names `MessagePort.onmessage`: an
+  // update an effect made renders there, and on React 17 at 99 as well.
+  const forcedByScript = lateScript && lateScript.script.invoker !== REACT_TASK
+    ? insideLate.filter((x) => x.priority === undefined || x.priority === 1 || x.priority === 99)
+    : [];
+  const real = r.commits.filter((x) => carriesWork(x) && x.hydratedTarget == null && !forcedByScript.includes(x)).length;
+  if (real > 1) notes.push(`React rendered ${real} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
   if (c) {
-    // A hydration is not a re-render: it is the first render of that HTML on the client, and counting
-    // it here would tell every click that waited for one to go looking for an effect that updates state.
-    const real = r.commits.filter((x) => carriesWork(x) && x.hydratedTarget == null).length;
-    if (real > 1) notes.push(`React rendered ${real} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
     if (r.inputDelay > LONG_TASK_MS && renderMatters) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
     if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   }
@@ -1698,7 +1734,9 @@ function explain(r: InteractionReport): Explanation {
     const uncounted = !timed(f, r.entries);
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
-  if (r.presentation > PRESENTATION_NOTE_MS && r.presentation > r.processing && blame.kind !== 'painting') {
+  // A render the clause ties to the script is said there and nowhere else, so the note is kept for it
+  // under PRESENTATION_NOTE_MS too.
+  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && r.presentation > r.processing && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`);
   }
   // The other half of that note: where the screen update did take the blame, the work it outranked

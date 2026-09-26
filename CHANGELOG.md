@@ -6,6 +6,17 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Fixed
+
+- **A render a script forced after the handlers is said to be what that script did.** On TanStack Table's
+  virtualized rows at 4x, a checkbox's screen update waited 174 ms on react-virtual's scroll listener, which
+  re-rendered the rows through `flushSync`. The sentence named the listener and not the render, and counted
+  that render in the working time before it. It now reads "... ran for 174 ms before the next frame, and React
+  rendered inside it: 150 ms re-rendering 721 components inside TableBody", the handlers' own render or code
+  is still said beside it, and the render no longer counts toward "React rendered N times", which points at an
+  effect. A render in React's own scheduler task, where an effect's update runs, still counts. It is only tied
+  to the script where it committed inside it, and began inside it where the build says when a render began.
+
 ## [0.14.0] - 2026-09-26
 
 ### Added

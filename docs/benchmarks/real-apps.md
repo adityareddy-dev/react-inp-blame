@@ -288,11 +288,13 @@ Most of the 31 misses come from a few defects, and one miss often has two of the
   no measured render time and little working time, the screen update keeps the blame.
 - **A later render put in the wrong report, the slowest report evicted, a key chord split in two.** The fuzzy
   table's page size render, Excalidraw's 50-report limit and its Control+z. Fixed in 0.13.0 ([#31](https://github.com/adityareddy-dev/react-inp-blame/pull/31)).
+- **A render a script forced, left out of the sentence about that script.** The virtualized table's checkbox:
+  the screen update is blamed on react-virtual's scroll listener, and the render of the rows it forced with
+  `flushSync` was in the report, not in the sentence. Fixed after 0.14.0 ([#41](https://github.com/adityareddy-dev/react-inp-blame/pull/41)): the sentence says React rendered
+  inside that script and what, and that render is no longer counted in the working time before it.
 
 Left as they are, and known:
 
-- A script that forced a React render is blamed as the screen update after it (the virtualized table's
-  checkbox). The render is in the report; the sentence doesn't join them.
 - A screen update with no script named says nothing about why (twenty's command menu at 4x, a column drop).
 - twenty's route changes, through React Router's data router, weren't recognised as soft navigations, so
   every report there carries the URL the page loaded on.
