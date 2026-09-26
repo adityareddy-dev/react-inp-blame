@@ -43,6 +43,7 @@ const slowFrame: FrameSummary = Object.freeze({
   blocking: 90,
   forcedLayout: 30,
   scripts: Object.freeze([Object.freeze({ invoker: 'BUTTON.onclick', name: '', source: '', start: 7002, duration: 110, forcedLayout: 30 })]),
+  styleAndLayoutStart: null,
 });
 
 /** A lifecycle at the default 40 ms threshold and 1500 ms input window on a stopped clock, with every report it publishes recorded in order. */
@@ -234,6 +235,7 @@ test('a long animation frame is folded into every published report it overlaps, 
     blocking: 26,
     forcedLayout: 0,
     scripts: Object.freeze([Object.freeze({ invoker: 'DOCUMENT.onkeydown', name: '', source: '', start: 7009, duration: 59, forcedLayout: 0 })]),
+    styleAndLayoutStart: null,
   });
   const frames: FrameSummary[] = [];
   const { life, published } = lifecycle({ frames });
@@ -261,7 +263,7 @@ test("a report keeps its long animation frames once the page's store of recent f
   assert.deepEqual(published[0]?.frames, [slowFrame]);
   // Minutes later, 60 unrelated long frames have pushed it out of the store, which keeps the newest 60.
   for (let i = 0; i < 60; i++) {
-    frames.push(Object.freeze({ start: 60_000 + i * 5_000, duration: 60, blocking: 10, forcedLayout: 0, scripts: Object.freeze([]) }));
+    frames.push(Object.freeze({ start: 60_000 + i * 5_000, duration: 60, blocking: 10, forcedLayout: 0, scripts: Object.freeze([]), styleAndLayoutStart: null }));
     frames.splice(0, frames.length - 60);
     life.onFrame();
   }

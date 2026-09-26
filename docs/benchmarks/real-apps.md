@@ -292,10 +292,12 @@ Most of the 31 misses come from a few defects, and one miss often has two of the
   the screen update is blamed on react-virtual's scroll listener, and the render of the rows it forced with
   `flushSync` was in the report, not in the sentence. Fixed after 0.14.0 ([#41](https://github.com/adityareddy-dev/react-inp-blame/pull/41)): the sentence says React rendered
   inside that script and what, and that render is no longer counted in the working time before it.
+- **A screen update with no script named said nothing about why.** twenty's command menu at 4x, a column
+  drop. Fixed after 0.14.0 ([#42](https://github.com/adityareddy-dev/react-inp-blame/pull/42)): where long animation frames saw at least half of it, the
+  sentence says it was the browser's own work, from the frame's style and layout where the frame timed them.
 
 Left as they are, and known:
 
-- A screen update with no script named says nothing about why (twenty's command menu at 4x, a column drop).
 - twenty's route changes, through React Router's data router, weren't recognised as soft navigations, so
   every report there carries the URL the page loaded on.
 - "Often in a layout effect" is a generic hint. On the Radix pieces above the reads are in layout effects, on

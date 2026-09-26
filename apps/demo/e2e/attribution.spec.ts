@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { CommitSummary, HookInfo, InteractionReport, Stats } from 'react-inp-blame';
-import { clearReports, interact, settle, testAttribute, waitForFrames } from './page';
+import { clearReports, interact, lastReport, settle, testAttribute, waitForFrames } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
 // A render blamed from React's durations is measured; production builds have only counts to go on.
@@ -256,4 +256,27 @@ test('control: the well-built version stays cheap', async ({ page }) => {
   expect(commit.rendered).toBeLessThanOrEqual(3);
   const r: InteractionReport | null = await page.evaluate(() => window.__REACT_INP_BLAME__.last());
   if (r) expect(r.duration, r.verdict).toBeLessThan(100);
+});
+
+test('restyle storm: the browser restyling the page is what a click waits on, and what the keyup after Enter waits on', async ({ page }) => {
+  // React renders one component; the class it changes reaches 30,000 cells, and restyling them holds up the
+  // frame. A click's style and layout comes before the frame renders, for the pointer's hit test, so it is
+  // only frame time no script ran in. From Enter the keyup is handled after it, in the same frame, so the
+  // restyle is a wait between the keydown's handlers and the keyup's, inside the working time.
+  // What filled the time is read from the long animation frame, which can reach the report after it is built.
+  await interact(page, 'restyle-storm', () => page.click('[data-test=trigger]'));
+  await waitForFrames(page);
+  const click = await lastReport(page);
+  expect(click.explanation.blame, click.verdict).toMatchObject({ kind: 'painting', name: null, confidence: 'measured' });
+  expect(click.explanation.cause).toMatch(/the browser's own work on the main thread, most likely recalculating styles and layout|mostly the browser recalculating styles and layout and painting the frame/);
+  expect(click.commits.map((c) => c.rendered)).toEqual([1]);
+
+  await clearReports(page);
+  await page.focus('[data-test=trigger]');
+  await page.keyboard.press('Enter');
+  await waitForFrames(page);
+  const key = await lastReport(page);
+  expect(key.explanation.blame, key.verdict).toMatchObject({ kind: 'waiting', name: null, confidence: 'measured' });
+  expect(key.explanation.blame.detail).toBe('between click and keyup');
+  expect(key.explanation.cause).toMatch(/^The handlers took .+ in all, but \d+ ms went by between the click's handlers and the keyup's\. No script ran in that time/);
 });

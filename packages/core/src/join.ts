@@ -93,6 +93,9 @@ const FORCED_LAYOUT_MIN_MS_NO_DURATIONS = HANDLER_MIN_MS;
 const FORCED_LAYOUT_ONE_SCRIPT_SHARE = 0.9;
 // The screen update gets a note of its own from 100 ms, half of INP's 200 ms budget for "good".
 const PRESENTATION_NOTE_MS = 100;
+// A screen update with no script in it is put on the browser's own work from half of it, the share that
+// lets a script name a wait.
+const BROWSER_WORK_MIN_SHARE = 0.5;
 // React's scheduler runs its work from a MessageChannel, so Long Animation Frames names its tasks after the port.
 const REACT_TASK = 'MessagePort.onmessage';
 // A press held around the interaction is worth a note from 100 ms; an ordinary click is shorter.
@@ -812,6 +815,8 @@ function nextNode(node: Node, root: Node): Node | null {
 }
 
 export const ms = (n: number): string => `${Math.round(n)} ms`;
+/** A figure that rounds to nothing reads "under 1 ms". */
+const underOr = (n: number): string => (n < 0.5 ? 'under 1 ms' : ms(n));
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 interface Interval {
@@ -1104,16 +1109,73 @@ function explain(r: InteractionReport): Explanation {
 
   const processingStart = r.start + r.inputDelay;
   const processingEnd = processingStart + r.processing + r.walkMs;
+  /**
+   * Working time no entry's handlers ran in. The entries painted in one frame are one working window, as
+   * web-vitals counts them, so an event of the interaction that waited behind the one before it has that
+   * wait inside the window: from Enter on a button that changed a class on 30,000 cells, the keydown's
+   * handlers took 1 ms and the keyup waited 157 ms for the browser before its own. That time is no handler's.
+   * Scripts Long Animation Frames recorded in it are theirs; without it, a React render that committed in it
+   * leaves what the rest was unknown.
+   */
+  // Kept whole, a keyup with no listener included: its handlers start and end at once, and that start is
+  // still where its wait ended. Handlers within a stamp of each other ran back to back. The entries are the
+  // ones painted in this frame, as the working time's are: a keyup released after the key press's paint is
+  // in a frame of its own. One painted in this frame can start its handlers just past the working time,
+  // which web-vitals ends at the paint the durations' 8 ms rounding gives, so it is clamped to that end.
+  const handling: { from: number; to: number; first: string; last: string }[] = [];
+  const inWindow = r.entries.filter((e) => Math.abs(e.startTime + e.duration - r.end) <= RENDER_GROUP_MS && e.processingEnd >= processingStart);
+  for (const e of inWindow.sort((a, b) => a.processingStart - b.processingStart)) {
+    const from = Math.min(Math.max(e.processingStart, processingStart), processingEnd);
+    const to = Math.max(from, Math.min(e.processingEnd, processingEnd));
+    const last = handling[handling.length - 1];
+    if (last && from <= last.to + STAMP_TOLERANCE) {
+      last.to = Math.max(last.to, to);
+      last.last = e.name;
+    } else handling.push({ from, to, first: e.name, last: e.name });
+  }
+  const gaps = handling.slice(1).map((h, i) => ({ from: handling[i]!.to, to: h.from, after: handling[i]!.last, before: h.first }));
+  const between = gaps.reduce((a, g) => a + g.to - g.from, 0);
+  const inAGap = (t: number) => gaps.some((g) => t > g.from + STAMP_TOLERANCE && t < g.to - STAMP_TOLERANCE);
+  const partsBetween = gaps.flatMap((g) => scriptParts(r.frames ?? [], g.from, g.to));
+  const scriptedBetween = partsBetween.reduce((a, p) => a + p.ms, 0);
+  // Every entry here painted in one frame, so the main thread did not sit idle between their handlers: an idle
+  // thread paints, and a keyup after that is in a frame of its own. A long frame over the gap says what kept
+  // it busy. Where none covers most of it, the frame is not on record, most often not delivered yet (a report
+  // is built from the entries in hand and revised when its frames arrive), and the gap is taken as a browser
+  // without Long Animation Frames takes it.
+  const framedBetween = gaps.reduce((a, g) => a + coverage((r.frames ?? []).map((f) => ({ from: Math.max(g.from, f.start), to: Math.min(g.to, f.start + f.duration) }))), 0);
+  const renderedBetween = r.commits.filter((x) => inAGap(x.at));
+  const renderedBetweenMs = renderedBetween.reduce((a, x) => a + (x.hasDurations ? x.total : 0), 0);
+  const framesSay = !!r.frames && framedBetween >= between / 2;
+  /**
+   * The time between handlers the next event waited on the main thread, React's renders aside, which are
+   * weighed as renders: with Long Animation Frames, what long frames covered of it, a script that ran there
+   * included, the way a script the input waited behind is part of the wait before the handlers; without,
+   * all of it. Where React is not read, or rendered without durations, and no frame says what ran, it is
+   * unknown and taken as none.
+   */
+  const waitBetween = framesSay
+    ? Math.max(0, framedBetween - renderedBetweenMs)
+    : blind || renderedBetween.some((x) => !x.hasDurations && carriesWork(x))
+      ? 0
+      : between - renderedBetweenMs;
+  const onlyGap = gaps.length === 1 ? gaps[0]! : null;
+  const whereBetween = !onlyGap
+    ? "between one event's handlers and the next's"
+    : onlyGap.after === onlyGap.before
+      ? `between one ${onlyGap.after}'s handlers and the next's`
+      : `between the ${onlyGap.after}'s handlers and the ${onlyGap.before}'s`;
   // A script is the handler only when it started while the input's handlers ran. One that was already
   // running when the input came (the task the input waited behind), or that ran after the handlers, is
   // named by what the browser says ran it.
-  const ranAsHandler = (s: ScriptSummary) => s.start >= processingStart - STAMP_TOLERANCE && s.start <= processingEnd;
+  const ranAsHandler = (s: ScriptSummary) => s.start >= processingStart - STAMP_TOLERANCE && s.start <= processingEnd && !inAGap(s.start);
   const scriptPhrase = (s: ScriptSummary) => (handler && ranAsHandler(s) ? handler : aScript(s));
   const scriptBlameName = (s: ScriptSummary) => (handlerName && ranAsHandler(s) ? handlerName : scriptName(s));
 
   // A script counts for its part inside each window, and so does its forced layout.
   const frames = r.frames ?? [];
-  const whileHandling = scriptParts(frames, processingStart, processingEnd);
+  // A script that started between one event's handlers and the next's is no handler's.
+  const whileHandling = scriptParts(frames, processingStart, processingEnd).filter((p) => !inAGap(p.script.start));
   const forcedWhileHandling = forcedLayoutOf(whileHandling);
   const forcedAfterInput = forcedLayoutOf(scriptParts(frames, processingStart, r.end));
   const lateScript = longestPart(scriptParts(frames, processingEnd, r.end));
@@ -1181,7 +1243,31 @@ function explain(r: InteractionReport): Explanation {
     : insideLate.length === 1
       ? `, and React rendered inside it: ${lateRender.hasDurations ? `${ms(lateRender.total)} ` : ''}${renderPhrase(lateRender)}`
       : `, and React rendered inside it ${insideLate.length} times, the ${lateRender.hasDurations ? `heaviest ${ms(lateRender.total)}` : 'largest'} ${renderPhrase(lateRender)}`;
-  const lateScriptClause = lateScript ? `, mostly because ${scriptPhrase(lateScript.script)} ran for ${ms(lateScript.ms)} before the next frame${lateRenderSaid}.` : '.';
+  /**
+   * Where no script took the screen update, the browser's own work on the main thread did, where Long
+   * Animation Frames saw it. A key press's style and layout is timed as the frame's own, from its
+   * `styleAndLayoutStart`. A click's is mostly done before the frame starts rendering, for the pointer's hit
+   * test, and shows only as frame time no script ran in: in Chromium, a click that changed a class on 40,000
+   * elements spent 213 of its 231 ms there, and the same change from Enter 211 ms timed as the frame's own.
+   */
+  const afterHandlers = (from: number, to: number) => Math.max(0, Math.min(to, r.end) - Math.max(from, processingEnd));
+  // What a frame ran after its style and layout began, ResizeObserver callbacks say, is not the browser's.
+  const frameLayout = frames.reduce((a, f) => {
+    const from = f.styleAndLayoutStart;
+    if (from === null) return a;
+    const scripted = scriptParts([f], Math.max(from, processingEnd), Math.min(f.start + f.duration, r.end)).reduce((b, p) => b + Math.max(0, p.ms), 0);
+    return a + Math.max(0, afterHandlers(from, f.start + f.duration) - scripted);
+  }, 0);
+  const unscripted =
+    frames.reduce((a, f) => a + afterHandlers(f.start, f.start + f.duration), 0) - scriptParts(frames, processingEnd, r.end).reduce((a, p) => a + p.ms, 0);
+  const browserShare = BROWSER_WORK_MIN_SHARE * r.presentation;
+  const browserClause =
+    frameLayout >= browserShare
+      ? `, mostly the browser recalculating styles and layout and painting the frame: ${ms(frameLayout)}.`
+      : unscripted >= browserShare
+        ? `. No script ran for long in that time: ${ms(unscripted)} of it was the browser's own work on the main thread, ${HEDGE} recalculating styles and layout for what changed.`
+        : '.';
+  const lateScriptClause = lateScript ? `, mostly because ${scriptPhrase(lateScript.script)} ran for ${ms(lateScript.ms)} before the next frame${lateRenderSaid}.` : browserClause;
 
   // The commits of the working time. One the screen update's clause ties to the script it ran in is that
   // script's, or the same render is said twice, once as the script's and once as the handlers'.
@@ -1194,9 +1280,10 @@ function explain(r: InteractionReport): Explanation {
    * The window the scripts, and so the forced layout, were counted across. It runs to the end of the
    * library's own walk, because the walk happens inside the same script the handlers did, and
    * `processing` has that walk taken back out of it. Anything printed against the forced layout is
-   * printed against this, or it reads as "110 ms of the 100 ms of working time".
+   * printed against this, or it reads as "110 ms of the 100 ms of working time". Time between one event's
+   * handlers and the next's is left out, as its scripts are.
    */
-  const handledWindow = r.processing + r.walkMs;
+  const handledWindow = r.processing + r.walkMs - between;
   /**
    * React's own time while the input was handled, where the build keeps when each render began: from
    * that start to the end of its commit, so committing is in it, the DOM changes, ref callbacks and
@@ -1301,7 +1388,9 @@ function explain(r: InteractionReport): Explanation {
   // does, forced layout inside React's commit is in both figures, so the larger of the two is taken
   // rather than their sum. The walk is taken out too, by starting from `processing` rather than the
   // window above: it is this library's time, not the app's.
-  const outside = Math.max(0, r.processing - Math.max(reactWhileHandling, renderTotal + forcedWhileHandling));
+  // Nor can it be more than the handlers' own time, which leaves out what ran between one event's handlers
+  // and the next's.
+  const outside = Math.max(0, r.processing - between - Math.max(0, Math.max(reactWhileHandling, renderTotal + forcedWhileHandling) - renderedBetweenMs));
   const outsideMatters = hasDurations && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler
@@ -1392,6 +1481,10 @@ function explain(r: InteractionReport): Explanation {
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
+  // A wait between the events' handlers is no handler's and no render's, so it is weighed against both.
+  // Where the wait before the first handler or the screen update is larger, it is a note.
+  const betweenMatters = waitBetween >= LONG_TASK_MS && waitBetween > outside && waitBetween > reactTime && waitBetween > forcedWhileHandling;
+  const betweenWins = betweenMatters && waitBetween >= r.inputDelay && !screenOutranks;
   const layoutMatters =
     forcedWhileHandling >= (hasDurations ? LONG_TASK_MS : FORCED_LAYOUT_MIN_MS_NO_DURATIONS) &&
     forcedWhileHandling >= FORCED_LAYOUT_MIN_SHARE * handledWindow &&
@@ -1463,6 +1556,34 @@ function explain(r: InteractionReport): Explanation {
         : say(confidence, `${first}: ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.`, `${first}, ${HEDGE} ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.${profiling}`);
     // Named after the boundary or the page, which holds every component hydrated, so the count is the whole.
     blame = { kind: 'hydration', name: boundaryPhrase(boundary), detail: mostlyOf(commit, false), ms: boundary.ms, confidence };
+  } else if (betweenWins) {
+    // Nothing the page wrote runs in that time unless a frame says so: the browser was working out what the
+    // handlers before it had changed, which a frame records as time no script took.
+    const handled = r.processing - between;
+    const restyle = 'the browser recalculating styles and layout for what the handlers before it changed';
+    const longest = longestPart(partsBetween);
+    const scriptsSaid =
+      partsBetween.length === 1
+        ? `${cap(aScript(partsBetween[0]!.script))} ran for ${underOr(partsBetween[0]!.ms)} of it`
+        : `Scripts ran for ${underOr(scriptedBetween)} of it${longest ? `, the longest ${aScript(longest.script)} for ${ms(longest.ms)}` : ''}`;
+    // A build that records no durations says React rendered, and nothing of how long.
+    const reactSaid = !renderedBetween.length
+      ? 'React did not render in it'
+      : renderedBetween.every((x) => x.hasDurations)
+        ? `React rendered for ${underOr(renderedBetweenMs)} of it`
+        : 'React rendered in it';
+    const filled = framesSay
+      ? scriptedBetween < 1
+        ? ` No script ran in that time, so it was ${HEDGE} ${restyle}.`
+        : scriptedBetween >= WAITED_BEHIND_MIN_SHARE * between
+          ? ` ${scriptsSaid}.`
+          : ` ${scriptsSaid}, and the rest was ${HEDGE} ${restyle}.`
+      : r.frames
+        ? ` ${reactSaid}, and no long animation frame that says what else ran has been recorded yet, so it was ${HEDGE} ${restyle}.`
+        : ` ${reactSaid}, and this browser does not record what else ran, so it was ${HEDGE} ${restyle}.`;
+    cause = `The handlers took ${underOr(handled)} in all, but ${ms(between)} went by ${whereBetween}.${filled} That time counts as working time, which runs from the first handler to the last.`;
+    const named = longest && longest.ms >= WAITED_BEHIND_MIN_SHARE * between ? scriptName(longest.script) : null;
+    blame = { kind: 'waiting', name: named, detail: onlyGap ? `between ${onlyGap.after} and ${onlyGap.before}` : 'between handlers', ms: between, confidence: 'measured' };
   } else if (layoutMatters) {
     // The number is the browser's and nothing React did changes it, so the confidence is about the
     // measurement alone: whether any of the total had to be apportioned across the edge of the window.
@@ -1583,11 +1704,11 @@ function explain(r: InteractionReport): Explanation {
           ? `React ${renderedVerb(c)} only ${plural(c.rendered, 'component')}`
           : `React ${renderedVerb(c)} ${renderedWhere(c)}, none of them ${RENDER_MIN_COMPONENTS_BESIDE_HANDLER} times over, and ${ms(r.processing)} is more than ${RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER} ms for each of them`;
     // The effects are measured in every build, so they come off what the handler is said to have taken.
-    const took = effects >= 1 ? `about ${ms(r.processing - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
+    const took = effects >= 1 || between >= 1 ? `about ${ms(r.processing - between - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
     const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';
     cause = `${cap(handler)} ${HEDGE} took ${took}: ${howLittle}${ranEffects}.${profiling}`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
-  } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing && r.inputDelay >= r.presentation) {
+  } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing - between && r.inputDelay >= r.presentation) {
     // What the input waited behind is usually on record: the long animation frame that was open when
     // it came lists its scripts, and the one that filled the wait is the thing to go and look at. It is
     // counted for its part inside the wait only, since what it did before the input came delayed nobody.
@@ -1743,6 +1864,7 @@ function explain(r: InteractionReport): Explanation {
   // is what this report would otherwise never mention. Only where it took it, though — a rung above
   // the comparison that won anyway had nothing closed off, and its own time is already in the cause.
   if (closedByTheScreen && blame.kind === 'painting') notes.push(closedByTheScreen);
+  if (betweenMatters && !betweenWins) notes.push(`${cap(ms(between))} of the working time also went by ${whereBetween}, with no handler running.`);
   if (r.holdMs >= HOLD_NOTE_MS) {
     notes.push(`The whole ${kind}, from press to release, spanned ${ms(r.duration + r.holdMs)}; INP counts only its slowest part, so the rest is left out of the headline.`);
   }

@@ -1004,7 +1004,29 @@ all of it; a Long Animation
 Frames script from 20 ms; waiting, painting and
 working time known only by counts from 50 ms, the length of a long task, with painting blamed under that
 only where the frame waited on the next interaction's press, as above, and the screen update was the
-larger part of the interaction. The hot path follows a
+larger part of the interaction. The screen update's sentence says what held it where a long animation frame
+saw it: the longest script after the handlers, from 20 ms, with any React render that committed inside it and
+began there (a render react-virtual's scroll listener forced with `flushSync`, which is then not counted in the
+working time before it); or, with no such script, the browser's own work from half the screen update. That is
+the frame's style, layout and paint where the frame timed them, from its `styleAndLayoutStart` less any
+ResizeObserver callbacks, as it does after a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a click
+Chromium does most of that work for the pointer's hit test, before the frame starts rendering. After Enter the
+same work lands inside the working time instead: the keydown's handlers and the click's took 1 ms, then the keyup
+waited 157 ms for the browser before its own, and the working time runs from the first handler to the last, as
+web-vitals counts it. A wait like that between one event's handlers and the next's is no handler's time, so it
+is left out of what the handlers are said to have run for. From 50 ms it is the verdict, a `waiting` one with
+`detail` "between click and keyup", where it outweighs the handlers, React and any forced layout, is at least
+the wait before the first handler, and the screen update does not outrank the working time; where only those
+last two stop it, it is a note. Only entries painted within 8 ms of the headline paint count: a keyup released
+after the key press painted is in a frame of its own, and one whose handlers start just past the working time's
+rounded end is clamped to it. Since they all painted in one frame, the thread was busy between their handlers
+(an idle thread paints first), and the wait is what long frames covered of that time. Where none covers most of
+it, the frame is not on record, most often not delivered yet: a report is built from the entries in hand and
+revised when its frames arrive. Then the gap is taken as a browser without Long Animation Frames takes it, and
+the sentence says no frame that says what else ran has been recorded yet. Before this, that first revision
+went to the handler, "about 2 ms of the 420 ms", in CI on React 19.2's production build. A script Long
+Animation Frames recorded there is part of the wait, named when it holds half of it, as one the input waited
+behind is, and never called the handler; a React render there is weighed as a render. The hot path follows a
 child carrying 60% of its parent's work (`fiber.ts`). Where React timed each component and one of them,
 rendered once, spent 25 ms and half of the render or more in its own render, the sentence says so
 rather than leaving the reader with the count: sorting TanStack Table's 200,000 rows reads "re-rendering
