@@ -54,10 +54,10 @@ Next.js 14.2 reads no `next.config.ts`, since that came in 15, so there the same
 
 React Router in framework mode, Remix, TanStack Start and Astro write their own HTML, which this
 plugin never sees on its own, so each has a setup of its own:
-[React Router](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router),
-[Remix](https://github.com/adityareddy-dev/react-inp-blame#install-with-remix),
-[TanStack Start](https://github.com/adityareddy-dev/react-inp-blame#install-with-tanstack-start),
-[Astro](https://github.com/adityareddy-dev/react-inp-blame#install-with-astro).
+[React Router](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router),
+[Remix](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-remix),
+[TanStack Start](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-tanstack-start),
+[Astro](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-astro).
 
 **What you will see.** Reload the page. A small dark badge sits in the corner, bottom-right by
 default, and reads `INP —` until you interact. Click something slow and it shows the page's INP so far
@@ -96,7 +96,7 @@ the slow interaction. It carries the page's URL and the label of the element you
 through before you paste it.
 
 Each warning the library prints ends with a link to its entry under
-[Troubleshooting](https://github.com/adityareddy-dev/react-inp-blame#troubleshooting) in the repository.
+[Troubleshooting](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/troubleshooting.md) in the repository.
 
 # Reference
 
@@ -203,7 +203,7 @@ in the URL.
 
 CI runs this on React Router 8.4, on React Router 7.18 with React 18.3, on Remix 2.17 and on
 TanStack Start 1.168, each under its dev server and a production build. The
-[repository README](https://github.com/adityareddy-dev/react-inp-blame#install-with-react-router)
+[repository README](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router)
 has each app's whole config.
 
 A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put this library
