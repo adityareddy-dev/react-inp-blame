@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { HookInfo, InteractionReport, Stats } from 'react-inp-blame';
-import { clearReports, lastReport } from './page';
+import { clearReports, interact, lastReport, waitForFrames } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
 
@@ -34,17 +34,71 @@ test('reports name the component in any browser, with frames null where Long Ani
 
   // Firefox and WebKit step performance.now() by 1 ms on a page without cross-origin isolation, so a
   // development build reads each of the 800 line items as a whole number of milliseconds. Those
-  // per-component times are left out, and the blame on the commit's total is inferred.
+  // per-component times are left out, and the blame on the commit's total is inferred, as it is in a
+  // production build, which has only counts to go on.
   const coarse = !prod && browserName !== 'chromium';
   expect(c.coarseClock).toBe(coarse);
   expect(c.hasDurations).toBe(!prod);
+  expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'OrderSummary', detail: 'LineItem ×800', confidence: prod || coarse ? 'inferred' : 'measured' });
   if (coarse) {
     expect(c.components[0]).toMatchObject({ name: 'LineItem', self: null, total: null });
-    expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'OrderSummary', confidence: 'inferred' });
-    // The commit's time in all: its render, and whatever committing it and its effects took.
+    // The commit's time in all: its render, and whatever committing it and its effects took. A
+    // production build times no render, so there the blame has no milliseconds to check.
     expect(r.explanation.blame.ms!).toBeGreaterThanOrEqual(c.total);
     expect(r.explanation.blame.ms!).toBeLessThanOrEqual(r.processing);
   }
+});
+
+// The desktop scenarios attribution.spec.ts clicks, again in all three browsers and both builds.
+// Firefox and WebKit have no Long Animation Frames to see a forced layout or a handler's script by,
+// so where Chromium blames either, they blame the render React reported, or nothing where it had none.
+test('layout thrash: the click is blamed on LayoutThrash and its 400 PriceTicker rows', async ({ page, browserName }) => {
+  const r = await interact(page, 'layout-thrash', async () => {
+    await page.click('[data-test=trigger]');
+    if (browserName !== 'chromium') return;
+    // As in attribution.spec.ts, the frame carrying the forced layout can revise the report after it is published.
+    await page
+      .waitForFunction(() => (window.__REACT_INP_BLAME__.last()?.frames ?? []).reduce((a, f) => a + f.forcedLayout, 0) > 4, null, { timeout: 5_000 })
+      .catch(() => {});
+  });
+  expect(r.commits[0]?.components.map((x) => x.name)).toContain('PriceTicker');
+  if (browserName === 'chromium') {
+    expect(r.explanation.blame).toMatchObject({ kind: 'layout', name: 'LayoutThrash', detail: 'PriceTicker ×400', confidence: 'measured' });
+  } else {
+    // The forced layout is unknown, and the same rows carry the blame as a render.
+    expect(r.frames).toBeNull();
+    expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'LayoutThrash', detail: 'PriceTicker ×400', confidence: 'inferred' });
+  }
+});
+
+test('handler hog: no React render, and the click is the handler that ran', async ({ page, browserName }) => {
+  const r = await interact(page, 'handler-hog', async () => {
+    await page.click('[data-test=trigger]');
+    if (browserName === 'chromium') await waitForFrames(page);
+  });
+  expect(r.commits.length).toBe(0);
+  if (prod) expect(r.target?.handler).toBeTruthy();
+  else expect(r.target?.handler).toBe('computeChecksum');
+  if (browserName === 'chromium') {
+    expect(r.explanation.blame).toMatchObject({ kind: 'script', name: r.target?.handler, confidence: 'measured' });
+    expect(r.explanation.blame.ms).toBeGreaterThanOrEqual(60);
+  } else {
+    // Nothing timed the script and React rendered nothing, so nothing is blamed.
+    expect(r.frames).toBeNull();
+    expect(r.explanation.blame).toMatchObject({ kind: 'none', name: null });
+  }
+});
+
+test('slow render: a click that spends 2.5 seconds inside React is blamed on the render', async ({ page }) => {
+  const r = await interact(page, 'slow-render', () => page.click('[data-test=trigger]', { timeout: 30_000 }));
+  expect(r.commits.length, r.verdict).toBeGreaterThanOrEqual(1);
+  expect(r.unjoinedCommits).toBe(0);
+  expect(r.commits[0].components[0]).toMatchObject({ name: 'Section' });
+  expect(r.target?.component).toBe('SlowRender');
+  // Each section renders for 10 ms, which a clock in whole milliseconds times well enough, so a
+  // development build's blame is measured in every browser.
+  expect(r.commits[0].coarseClock).toBe(false);
+  expect(r.explanation.blame).toMatchObject({ kind: 'render', name: 'SlowRender', detail: 'Section ×250', confidence: prod ? 'inferred' : 'measured' });
 });
 
 test('a browser that reports no event entries gets nothing installed, and a badge that says so', async ({ page }) => {
