@@ -21,14 +21,22 @@ class Observer {
   static supportedEntryTypes: string[] = [];
   static live = new Set<Observer>();
   callback: (list: { getEntries(): any[] }) => void;
+  /** The entry types it observes. */
+  types = new Set<string>();
+  /** Entries the browser has queued for this observer and not delivered yet: its next callback gets them, unless takeRecords() took them first. */
+  queued: any[] = [];
   constructor(callback: (list: { getEntries(): any[] }) => void) {
     this.callback = callback;
   }
-  observe(): void {
+  observe(options: { type: string }): void {
+    this.types.add(options.type);
     Observer.live.add(this);
   }
   disconnect(): void {
     Observer.live.delete(this);
+  }
+  takeRecords(): any[] {
+    return this.queued.splice(0);
   }
 }
 
@@ -47,8 +55,12 @@ interface Page {
   listening: ReadonlyMap<string, (event: unknown) => void>;
   /** Hands `event` to the window's listener for `type`. */
   fire(type: string, event: Record<string, unknown>): void;
-  /** Hands a batch of Event Timing entries to every connected observer. */
+  /** Hands a batch of Event Timing entries to every connected observer, after any it had queued. */
   paint(entries: any[]): void;
+  /** Queues entries on each connected observer of their type without delivering them, as the browser does until it next runs the observers' callbacks. */
+  queue(entries: any[]): void;
+  /** Hides the page: `document.visibilityState` turns 'hidden' and the window's visibilitychange listener runs. */
+  hide(): void;
   /** Runs `inside` in a click's dispatch, where React's sync commit and a router's navigation run: `window.event` is the click. Returns the click's timeStamp. */
   duringClick(inside: () => void): number;
 }
@@ -75,7 +87,17 @@ async function inBrowser(body: (page: Page) => void | Promise<void>, { entryType
       listening,
       fire: (type, event) => listening.get(type)?.(event),
       paint: (entries) => {
-        for (const o of [...Observer.live]) o.callback({ getEntries: () => entries });
+        for (const o of [...Observer.live]) {
+          const delivered = o.queued.splice(0).concat(entries);
+          o.callback({ getEntries: () => delivered });
+        }
+      },
+      queue: (entries) => {
+        for (const o of Observer.live) o.queued.push(...entries.filter((e) => o.types.has(e.entryType)));
+      },
+      hide: () => {
+        (globalThis as any).document.visibilityState = 'hidden';
+        listening.get('visibilitychange')?.({ type: 'visibilitychange' });
       },
       duringClick: (inside) => {
         const timeStamp = performance.now();
@@ -611,6 +633,48 @@ test('a page restored from the back/forward cache starts its INP over, and its r
     assert.equal(api.inp()?.interactionId, 14);
     api.dispose();
   });
+});
+
+test('a slow click whose entry is still queued when the page is hidden has its report by the time web-vitals reports INP', async () => {
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    // Hidden before the browser ran the observers' callbacks: web-vitals takes its own observer's entries
+    // in its hide handler, which runs after this one, and reports the click as INP.
+    page.queue([click(7, 1000, 300)]);
+    page.hide();
+    assert.deepEqual(
+      api.reports().map((r) => r.interactionId),
+      [7],
+    );
+    assert.equal(api.inp()?.interactionId, 7);
+    assert.equal(attributeINP({ entries: [{ interactionId: 7 }] }).react?.interactionId, 7);
+
+    // The taken entry is never delivered again, and the same entry delivered again adds nothing.
+    page.paint([click(7, 1000, 300)]);
+    assert.equal(api.reports().length, 1);
+    assert.equal(api.last()?.revision, 0);
+    api.dispose();
+  });
+});
+
+test('a long animation frame still queued when the page is hidden is taken before the entries, so the report built then already holds it', async () => {
+  await inBrowser(
+    (page) => {
+      const api = install({ devtoolsTrack: false });
+      const frame = { entryType: 'long-animation-frame', startTime: 1010, duration: 280, blockingDuration: 230, styleAndLayoutStart: 1270, scripts: [] };
+      page.queue([click(7, 1000, 300), frame]);
+      page.hide();
+      const r = api.last();
+      assert.equal(r?.interactionId, 7);
+      assert.deepEqual(
+        r?.frames?.map((f) => f.start),
+        [1010],
+      );
+      assert.equal(r?.revision, 0, 'the report was built without its frame and revised at once');
+      api.dispose();
+    },
+    { entryTypes: ['event', 'first-input', 'long-animation-frame'] },
+  );
 });
 
 test('listeners hear a report in a task after the one that published it, never inside the React commit that revised it', async (t) => {
