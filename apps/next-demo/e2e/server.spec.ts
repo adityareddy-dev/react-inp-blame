@@ -35,8 +35,9 @@ for (const [button, owner, how] of [
     const [r] = reports;
     await test.info().attach(`${run}: verdict`, { body: r!.verdict, contentType: 'text/plain' });
     expect(r!.target?.component).toBe(owner);
-    // Quick in itself: the report is published for the heavy render that joined it, which INP leaves out.
-    expect(r!.explanation.blame.kind).not.toBe('render');
+    // Quick in itself: the report is published for the heavy render that joined it, which INP leaves out. The
+    // click's own blame can still be a render: under `next dev` on 15.3 the dev overlay's Toast re-renders in it.
+    expect(r!.explanation.rating).toBe('good');
     const later = r!.followUps.find((c) => c.hotPath.at(-1) === 'Rows');
     expect(later, 'the rows are a follow-up of the click').toBeTruthy();
     expect(later!.hotPath.slice(-2)).toEqual([owner, 'Rows']);
