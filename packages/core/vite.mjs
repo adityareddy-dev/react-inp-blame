@@ -19,6 +19,7 @@ const INSTALL_MODULE = 'virtual:react-inp-blame/install';
 const RESOLVED_INSTALL_MODULE = `\0${INSTALL_MODULE}`;
 const COMPONENT_FILE = /\.[jt]sx$/;
 const hoistDefaultExport = loader[Symbol.for('react-inp-blame.hoistDefaultExport')];
+const stampWithHelper = loader[Symbol.for('react-inp-blame.stampWithHelper')];
 const ENABLED = ['development', 'production', true, false];
 const OPTION_KEYS = ['enabled', 'runtime', 'pages', 'entry'];
 // install()'s own options, which belong under `runtime`. Listed so that `{ overlay: true }` at the top
@@ -657,7 +658,10 @@ export function inpBlame(options = {}) {
     apply,
     transform(code, id) {
       if (!appComponentFile(id)) return null;
-      const stamped = loader.stamp(code);
+      // Rollup (Vite 7 and before) drops a written-out stamp along with the component nobody imported,
+      // and keeps every component a helper is called on. Rolldown (Vite 8) keeps them all either way, so
+      // there the stamps go through the loader's helper, which is smaller.
+      const stamped = this?.meta?.rolldownVersion ? stampWithHelper(code) : loader.stamp(code);
       return stamped === code ? null : { code: stamped, map: null };
     },
   });

@@ -516,6 +516,8 @@ function componentEntries(code) {
   }
   const consts = countBy(masked, CONST_DECLARATION);
   const stamped = countBy(masked, DISPLAY_NAME);
+  // A name the loader already handed to its helper, in a module that reached it twice.
+  if (masked.includes(HELPER)) for (const name of countBy(masked, HELPER_CALL).keys()) stamped.set(name, 1);
   const imported = importedNames(masked);
   const entries = [];
   for (const [name, { kind, declarations, defaultExport }] of found) {
@@ -554,6 +556,10 @@ const ASSIGNED = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*(?:(?:\*\*|&&|\|\||\?\?|<<|>>>
 const DESTRUCTURED = /[[{]([^[\]{}=]*)[\]}]\s*=(?![=>])/g;
 const CONST_DECLARATION = /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\b/gm;
 const DISPLAY_NAME = /(?<![.\w$])([A-Za-z_$][\w$]*)\s*\.\s*displayName/g;
+// The name of the helper the loader's stamps can call, and a call to it, whose first argument is the
+// name it stamps. See `stampWith`.
+const HELPER = '__reactInpBlameName';
+const HELPER_CALL = /(?<![.\w$])__reactInpBlameName\d*\s*\(\s*([A-Za-z_$][\w$]*)\s*,/g;
 // An import statement's clause, up to the module it comes from. `export … from` is not one: it binds
 // nothing in this module. It runs on the masked copy, so a comment in the clause is spaces by now and a
 // string name, `{ 'row-card' as Card }`, is its quotes around spaces; a quoted name counts only in
@@ -650,19 +656,57 @@ function braceDepths(code) {
  * for the property descriptor, because React defines `displayName` on a memo object in development as
  * an accessor that starts out undefined: the descriptor is there from the start, so asking for it
  * would mean never naming a memo component in a development build.
+ *
+ * Every stamp here is written out in full. The loader, and the Vite plugin under Rolldown, call a
+ * helper for a module's function components instead where it has two or more: see `stampWith`.
  */
 function stamp(code) {
+  return stampWith(code, false);
+}
+
+/**
+ * `stamp`, or with `helper` what the loader writes. A function component's stamp written out repeats
+ * the whole check, and a minifier can shorten only the name in it: after Next.js's minifier it comes
+ * to 106 bytes whatever the component is called. So where a module has two or more of them, the check
+ * is written once, as a function the module declares after its code, and each stamp calls it: 75 bytes
+ * a stamp with two components, 42 with five, 26 with twenty. A lone stamp stays written out, since the
+ * helper and its one call come to as much or more. What this saves is mostly bytes the browser parses.
+ * gzip had found much of the repetition already: gzipped, the stamps of two components come to about
+ * the same, of five 17% less and of twenty 43% less.
+ *
+ * The `typeof` stays at each call. It is what makes a name that does not exist a no-op rather than a
+ * ReferenceError, and passing such a name to a helper would throw before the helper ran.
+ *
+ * A memo or forwardRef stamp stays written out however many the module has. Its check is short, and
+ * through a helper two of them came to more under Rolldown's minifier (40 bytes a stamp against 34)
+ * and most counts to more gzipped.
+ *
+ * The helper costs Rollup its tree shaking: a written-out stamp goes with the component nobody
+ * imported, and a call to a helper keeps it. Rolldown keeps a stamped component either way, and so do
+ * SWC and terser under webpack and Turbopack, so the loader uses the helper and `stamp` does not. Its
+ * name is long so that no helper a compiler adds later, `_jsx` or `_define_property`, can be the same,
+ * and the minifier shortens it anyway. Where the module mentions it already, even in a comment, a
+ * number goes after it.
+ */
+function stampWith(code, helper) {
   const entries = componentEntries(code);
   if (!entries.length) return code;
-  const tail = entries
-    .map(({ name, kind }) => {
-      const value = JSON.stringify(name);
-      return kind === 'wrapper'
-        ? `\ntry { if (${name}.displayName == null) ${name}.displayName = ${value}; } catch (e) {}`
-        : `\ntypeof ${name} === "function" && Object.isExtensible(${name}) && !Object.getOwnPropertyDescriptor(${name}, "displayName") && (${name}.displayName = ${value});`;
-    })
-    .join('');
+  const named = helper && entries.filter((entry) => entry.kind === 'function').length > 1 ? helperName(code) : null;
+  let tail = named ? `\nfunction ${named}(f, n) { Object.isExtensible(f) && !Object.getOwnPropertyDescriptor(f, "displayName") && (f.displayName = n); }` : '';
+  for (const { name, kind } of entries) {
+    const value = JSON.stringify(name);
+    if (kind === 'wrapper') tail += `\ntry { if (${name}.displayName == null) ${name}.displayName = ${value}; } catch (e) {}`;
+    else if (named) tail += `\ntypeof ${name} === "function" && ${named}(${name}, ${value});`;
+    else tail += `\ntypeof ${name} === "function" && Object.isExtensible(${name}) && !Object.getOwnPropertyDescriptor(${name}, "displayName") && (${name}.displayName = ${value});`;
+  }
   return code + tail;
+}
+
+/** `__reactInpBlameName`, or the same with the first number after it that nowhere in the module has. */
+function helperName(code) {
+  let name = HELPER;
+  for (let n = 1; code.includes(name); n++) name = `${HELPER}${n}`;
+  return name;
 }
 
 /**
@@ -704,11 +748,12 @@ function hoistDefaultExport(code) {
 function loader(source) {
   const file = (this && this.resourcePath) || '';
   if (file.includes('node_modules')) return source;
-  return stamp(typeof source === 'string' ? source : String(source));
+  return stampWith(typeof source === 'string' ? source : String(source), true);
 }
 
 module.exports = loader;
 module.exports.stamp = stamp;
-// Not one of the loader's names, which are the loader and `stamp`: a symbol, which no import can name,
+// Not among the loader's names, which are the loader and `stamp`: symbols, which no import can name,
 // for the Vite plugin in this package alone.
 module.exports[Symbol.for('react-inp-blame.hoistDefaultExport')] = hoistDefaultExport;
+module.exports[Symbol.for('react-inp-blame.stampWithHelper')] = (code) => stampWith(code, true);
