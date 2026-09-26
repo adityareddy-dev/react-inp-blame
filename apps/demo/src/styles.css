@@ -1,4 +1,4 @@
-:root { --bg:#fafafa; --card:#fff; --line:#dbdbdb; --line2:#efefef; --text:#262626; --muted:#8e8e8e; --blue:#0095f6; --good:#1a9c5b; --warn:#d98a06; --poor:#d9342b; }
+:root { --bg:#fafafa; --card:#fff; --line:#dbdbdb; --line2:#efefef; --text:#262626; --muted:#8e8e8e; --blue:#2f6fde; --good:#1a9c5b; --warn:#d98a06; --poor:#d9342b; }
 * { box-sizing: border-box; }
 body { margin: 0; font: 14px/1.5 -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--text); background: var(--bg); }
 a { color: var(--blue); text-decoration: none; }
@@ -11,18 +11,15 @@ a { color: var(--blue); text-decoration: none; }
 .login { display: flex; gap: 32px; align-items: center; }
 .phone { width: 340px; height: 560px; border-radius: 38px; background: #111; padding: 12px; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.22); }
 .screen { background: #fff; border-radius: 28px; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
-.screen .top { padding: 12px 16px 8px; font-family: "Snell Roundhand", "Brush Script MT", cursive; font-size: 24px; border-bottom: 1px solid var(--line2); }
+.screen .top { padding: 14px 16px 10px; font-size: 16px; font-weight: 600; border-bottom: 1px solid var(--line2); }
 .feed { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; overflow: hidden; flex: 1; }
 .post, .photo { aspect-ratio: 1; background: linear-gradient(135deg, hsl(var(--h) 70% 78%), hsl(calc(var(--h) + 50) 70% 58%)); }
-.card-ig { width: 350px; background: #fff; border: 1px solid var(--line); padding: 36px 40px 20px; text-align: center; }
-.card-ig.small { margin-top: 10px; padding: 20px; }
-.wordmark { font-family: "Snell Roundhand", "Brush Script MT", cursive; font-size: 46px; font-weight: 400; margin: 0 0 26px; }
-.field { display: block; width: 100%; margin: 0 0 6px; padding: 9px 8px; font: inherit; font-size: 12px; background: #fafafa; border: 1px solid var(--line); border-radius: 3px; }
-.field:focus { outline: none; border-color: #a8a8a8; }
-.btn { width: 100%; margin-top: 8px; padding: 8px; background: var(--blue); color: #fff; font: inherit; font-weight: 600; border: 0; border-radius: 8px; cursor: pointer; }
+.signin { width: 320px; }
+.signin h1 { margin: 0 0 16px; font-size: 20px; font-weight: 600; }
+.field { display: block; width: 100%; margin: 0 0 8px; padding: 9px 12px; font: inherit; background: #fff; border: 1px solid var(--line); border-radius: 8px; }
+.field:focus { outline: none; border-color: var(--blue); }
+.btn { width: 100%; margin-top: 8px; padding: 9px; background: var(--blue); color: #fff; font: inherit; font-weight: 600; border: 0; border-radius: 8px; cursor: pointer; }
 .btn[disabled] { opacity: 0.4; cursor: default; }
-.or { display: flex; align-items: center; gap: 18px; margin: 18px 0 14px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .strength { height: 4px; background: var(--line2); border-radius: 2px; margin: 4px 0 6px; overflow: hidden; }
 .strength i { display: block; height: 100%; background: var(--good); transition: width 0.15s; }
 .hint { font-size: 11px; color: var(--muted); text-align: left; margin: 0 0 6px; min-height: 16px; }
@@ -30,12 +27,12 @@ a { color: var(--blue); text-decoration: none; }
 /* profile page */
 .profile { width: 740px; }
 .profile-head { display: flex; gap: 48px; align-items: center; padding: 10px 0 34px; border-bottom: 1px solid var(--line); }
-.avatar { width: 150px; height: 150px; border-radius: 50%; background: linear-gradient(135deg, #f9ce34, #ee2a7b, #6228d7); padding: 4px; flex: none; }
+.avatar { width: 150px; height: 150px; border-radius: 50%; background: var(--line); padding: 3px; flex: none; }
 .avatar div { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #fff; background: linear-gradient(135deg, #ffd6e7, #c8d8ff); }
 .profile-head h2 { font-weight: 400; font-size: 22px; margin: 0 0 12px; }
 .stats { display: flex; gap: 40px; margin: 0 0 12px; }
 .stats b { font-weight: 600; }
-.grid-ig { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 24px; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 24px; }
 .linkbtn { background: none; border: 0; color: var(--blue); font: inherit; cursor: pointer; padding: 0; }
 
 /* lab */

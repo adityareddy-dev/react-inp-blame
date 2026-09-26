@@ -72,7 +72,7 @@ async function quietFirstClick(page: Page): Promise<{ quiet: Inp; firstInput: nu
   // period and painted two frames, none of 120 did.
   await page.waitForSelector('#react-inp-blame .badge');
   await page.evaluate(() => new Promise<void>((resolve) => requestIdleCallback(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())), { timeout: 1000 })));
-  const quiet = await interaction(page, 'quiet first click', () => page.click('.wordmark'));
+  const quiet = await interaction(page, 'quiet first click', () => page.click('.signin h1'));
   return { quiet, firstInput: await page.evaluate(() => (window as any).__inpCheck.firstInput) };
 }
 

@@ -1172,8 +1172,8 @@ it was found on, so production sentences say "the onClick handler".
 
 ## The demo
 
-Two demos in one Vite app. The default page is a sign-in flow, an Instagram-style layout
-under its own name (Framely), with four mistakes real apps make: the email field's state
+Two demos in one Vite app. The default page is a sign-in flow for a made-up photo app,
+Framely, in a plain look of its own, with four mistakes real apps make: the email field's state
 sits in the page, so each keystroke re-renders a phone preview of 1000 tiles; the password
 field scores strength synchronously in its change handler; the login click hashes the
 password on the main thread before the request; and the profile grid's tiles each measure
