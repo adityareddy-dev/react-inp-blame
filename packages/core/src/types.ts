@@ -295,7 +295,7 @@ export interface FrameSummary {
 }
 
 export interface TargetInfo {
-  /** A CSS selector for the element: its tag, its id if it has one, then its `data-test` or `data-testid` attribute, or else up to two of its classes. */
+  /** A CSS selector for the element: its tag, its id if it has one, then its `data-test` or `data-testid` attribute, or else up to two of its classes, the id and classes escaped as `CSS.escape` escapes them. */
   readonly selector: string | null;
   /**
    * Human label for the element: its tag and a name of at most 40 characters, from what `InstallOptions.labels` allows. e.g. 'button "Add to cart"' or 'input "filter rows"'.

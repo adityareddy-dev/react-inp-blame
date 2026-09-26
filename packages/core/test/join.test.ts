@@ -296,6 +296,26 @@ test('a selector names the test attribute it was built from, with its value quot
   assert.equal(selectorOf(element('input', [], { 'data-test': 'say "hi"' })), 'input[data-test="say \\"hi\\""]');
 });
 
+test('a selector escapes an id or a class the way CSS.escape does, so it still parses as one', () => {
+  const selectorOf = (target: Record<string, unknown>) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], []).target?.selector;
+  const named = (tag: string, id: string, classes: string[] = [], attributes: Record<string, string> = {}) => Object.assign(element(tag, [], attributes), { id, classList: classes });
+  // React 18's useId, which Radix, Headless UI and React Aria put on their triggers, and Tailwind's variants and fractions.
+  assert.equal(selectorOf(named('input', ':r1:')), 'input#\\:r1\\:');
+  assert.equal(selectorOf(named('button', 'radix-:r1:')), 'button#radix-\\:r1\\:');
+  assert.equal(selectorOf(named('div', '', ['md:flex', 'w-1/2', 'p-4'])), 'div.md\\:flex.w-1\\/2');
+  assert.equal(selectorOf(named('div', '', ['hover:bg-red-500', 'w-[200px]'])), 'div.hover\\:bg-red-500.w-\\[200px\\]');
+  assert.equal(selectorOf(named('button', 'radix-:r1:', [], { 'data-test': 'menu' })), 'button#radix-\\:r1\\:[data-test="menu"]');
+  // A digit that starts the name, or follows a hyphen that does, is written as its code point, and a lone hyphen is escaped.
+  assert.equal(selectorOf(named('tr', '1st')), 'tr#\\31 st');
+  assert.equal(selectorOf(named('div', '-2', ['-'])), 'div#-\\32 .\\-');
+  // A control character is written as its code point too, and NUL as the replacement character.
+  assert.equal(selectorOf(named('div', 'a\tb\x7f\0')), 'div#a\\9 b\\7f \ufffd');
+  // Past ASCII a name needs nothing, so React 19.1's useId reads as it is.
+  assert.equal(selectorOf(named('div', '«r1»', ['café'])), 'div#«r1».café');
+  // And an id or a class that needed nothing comes out as it was.
+  assert.equal(selectorOf(named('button', 'save', ['btn', 'primary_2', 'x'])), 'button#save.btn.primary_2');
+});
+
 /** What a click on a button the ring saw inside `owners` reports as its component and its `where`. */
 function clickedInside(owners: string[]): { component: string | null; owners: readonly string[]; where: string | null } {
   const ring = [input(0, 'click', { target: element('button', []) as unknown as Node, owners })];
