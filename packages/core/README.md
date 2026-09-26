@@ -391,9 +391,12 @@ and so can `blame.name`, which for a script can be its URL, or the page's for an
   it), `devtoolsTrack` (true), `debugGlobal` (false; set it to `true` to put the API on
   `window.__REACT_INP_BLAME__`, or to a string to name the property).
 - `onInteraction(fn)` hears each report, and each later revision of it, in a task after the one that
-  published it, and returns the unsubscribe. It is the one way to hear reports. A panel that renders
-  what it hears is safe: the update your listener makes while it runs is never read as part of an
-  interaction. One it schedules for later, with setTimeout or an await, is an ordinary render.
+  published it, and returns the unsubscribe. What is still waiting when the page is hidden is heard
+  inside that `visibilitychange` instead, so a page that sends what it heard on `visibilitychange`
+  sends it all; one that sends on `pagehide`, which comes first, can miss the last. It is the one way
+  to hear reports. A panel that renders what it hears is safe: the update your listener makes while it
+  runs is never read as part of an interaction. One it schedules for later, with setTimeout or an
+  await, is an ordinary render.
 - The API: `reports()` (up to 50, keeping the ten slowest and those INP can still point at past that),
   `last()`, `inp()` (the INP of the navigation the page is on, estimated the
   way web-vitals does, chosen again when the page is hidden; it starts over at each soft navigation

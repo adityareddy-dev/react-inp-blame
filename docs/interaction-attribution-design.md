@@ -344,6 +344,13 @@ click gave 54 listener calls and 53 wrong "second React render" notes blaming th
 19 (111 on React 17 in development, 22,045 in a production build, with the main thread held for 1.4 s);
 after the fix, one call and no follow-ups on all three, in both builds.
 
+The page being hidden is the one exception. What is still waiting then, with the reports the hide itself
+publishes, is heard inside that `visibilitychange`. A tab that closes fires `pagehide`,
+`visibilitychange` and `unload` and is discarded before any later task runs, so a page that sent what it
+heard on `visibilitychange` lost the last reports. A `visibilitychange` handler never runs inside a
+React commit, and the listeners are still called through the hook, so what they render stays out of
+every report. A page that sends on `pagehide` can still miss them, since that event comes first.
+
 Durations come from `ProfileMode` on the root, which is what makes React fill `actualDuration`:
 bit 8 on React 17, bit 2 on 18 and 19, chosen by the version react-dom hands `inject()`. React
 17 and 18 development builds, and 19 profiling builds, set it when a hook existed as react-dom
@@ -1275,7 +1282,8 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   Each commit a report holds is a frozen copy stamped with how it joined that report
   (`joinedBy`), so a commit in two reports no longer carries whichever join came last.
   `onInteraction` is the one way to hear reports, and each report reaches it in a task after the one
-  that published it; the `onReport` option was deprecated at 0.1.0 and is now gone. What is there for debugging (every commit walked, the hook's owner, its
+  that published it, or inside the `visibilitychange` that hides the page; the `onReport` option was
+  deprecated at 0.1.0 and is now gone. What is there for debugging (every commit walked, the hook's owner, its
   renderers and the lockout flag) is under `api.debug`, outside the contract, while `stats()`
   keeps the mode, why a page is unsupported and the costs. `debugGlobal: true` puts the API on
   `window.__REACT_INP_BLAME__`.
