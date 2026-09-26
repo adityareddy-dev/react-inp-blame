@@ -1952,7 +1952,7 @@ build as well as on the dev server.
 
 What is left is the list above: look at the Performance panel tracks by eye, and run the library
 against Next.js's own bench apps. The frameworks that render their own HTML, other than React Router,
-Remix, TanStack Start and Astro, need a setup as well, and get no warning. The
-`react-inp-blame/web-vitals` entry landed on 2026-09-19 and has its own section, which now includes a
-run under Next.js's `useReportWebVitals`. The hydration verdict landed on 2026-09-19 and has its own
-section above.
+Remix, TanStack Start and Astro, need a setup as well, and get no warning unless their build's inputs
+are all scripts. The `react-inp-blame/web-vitals` entry landed on 2026-09-19 and has its own section,
+which now includes a run under Next.js's `useReportWebVitals`. The hydration verdict landed on
+2026-09-19 and has its own section above.
