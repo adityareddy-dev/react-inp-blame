@@ -7,8 +7,9 @@ on:
   pull_request:
   # Called by publish.yml, so a release runs the whole suite before it publishes.
   workflow_call:
-  # Daily as well, so the next@canary job goes red the day a Next.js or React canary breaks something,
-  # not at the next push. vite-app-fresh gets its daily run from this too.
+  # Daily as well, so the next@canary job fails the run the day a Next.js or React canary breaks
+  # something, not at the next push. vite-app-fresh gets its daily run from this too. This run is the only
+  # one either of them can fail: on a push or a pull request they are allowed to.
   schedule:
     - cron: '23 5 * * *'
 
@@ -97,8 +98,10 @@ jobs:
     name: create-vite app, dependencies resolved today
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Goes red on the first run after a release in those ranges breaks the app, without failing the run.
-    continue-on-error: true
+    # A push or a pull request is not to blame for a release in those ranges, so there the job cannot fail
+    # the run. It fails the daily run instead, the first one after such a release breaks the app. publish.yml
+    # runs this workflow on a tag push, which is a push as well, so a release does not wait on it.
+    continue-on-error: ${{ github.event_name != 'schedule' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -255,9 +258,10 @@ jobs:
     name: Next.js canary
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Goes red the day a Next.js canary, or the React canary it vendors for the App Router, changes
-    # something the library relies on, without failing the run.
-    continue-on-error: true
+    # Fails the daily run the day a Next.js canary, or the React canary it vendors for the App Router,
+    # changes something the library relies on. On a push or a pull request, a release's tag push included,
+    # it is allowed to fail, since a canary's break is not the change's.
+    continue-on-error: ${{ github.event_name != 'schedule' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
