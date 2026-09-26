@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         If the console printed a warning, it ends with a link to its entry under
-        [Troubleshooting](https://github.com/adityareddy-dev/react-inp-blame#troubleshooting). Read that first.
+        [Troubleshooting](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/troubleshooting.md). Read that first.
 
         Two quick checks first. `stats()` says whether the library installed at all and why not:
         turn on `debugGlobal: true` and read `__REACT_INP_BLAME__.stats()`. And with Next.js,

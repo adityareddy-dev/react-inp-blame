@@ -20,7 +20,7 @@ function report(metric: Reported): void {
 }
 
 /**
- * The README's Next.js snippet, sending to `window.__INP_METRICS__` instead of an endpoint.
+ * The Next.js snippet in docs/web-vitals.md, sending to `window.__INP_METRICS__` instead of an endpoint.
  * `data-vitals` on the body tells e2e/web-vitals.spec.ts that web-vitals is listening.
  */
 export function WebVitals() {

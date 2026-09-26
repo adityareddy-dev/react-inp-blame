@@ -6,19 +6,19 @@ import { fileURLToPath } from 'node:url';
 import { warnOnce } from '../src/warn.js';
 
 // Every warning ends with a link to the README on GitHub, by anchor. These tests read the anchors out of
-// the source and check that each one is in README.md, so a renamed heading or a new warning cannot leave
-// a link pointing nowhere.
+// the source and check that each one is in README.md, where a line links on to the answer in docs/, and that
+// the answer is there, so a renamed heading or a new warning cannot leave a link pointing nowhere.
 
 const core = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file: string) => fs.readFileSync(path.join(core, file), 'utf8');
 const HELP = 'https://github.com/adityareddy-dev/react-inp-blame#';
 
-/** The anchors README.md has: each `<a id>` and each heading, slugged the way GitHub does it. */
-function readmeAnchors(): Set<string> {
+/** The anchors a markdown file has: each `<a id>` and each heading, slugged the way GitHub does it. */
+function anchorsOf(file: string): Set<string> {
   const anchors = new Set<string>();
   const seen = new Map<string, number>();
   let fenced = false;
-  for (const line of read('../../README.md').split('\n')) {
+  for (const line of read(file).split('\n')) {
     if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
     if (fenced) continue;
     for (const match of line.matchAll(/<a\s+id="([^"]+)"/g)) anchors.add(match[1]!);
@@ -88,8 +88,13 @@ test('a warning in the browser ends with a link to its anchor in the README', (t
   assert.equal(warn.mock.calls[1]!.arguments[0], `[react-inp-blame] something else happened. See ${HELP}another-anchor`);
 });
 
-test('every anchor a warning links to is in README.md', () => {
+const readmeAnchors = () => anchorsOf('../../README.md');
+/** Where the answers are: troubleshooting, and the setups a build-time warning sends people to. */
+const docsAnchors = () => new Set([...anchorsOf('../../docs/troubleshooting.md'), ...anchorsOf('../../docs/install.md')]);
+
+test('every anchor a warning links to is in README.md, and its answer in docs/', () => {
   const readme = readmeAnchors();
+  const docs = docsAnchors();
   const linked = { runtime: runtimeAnchors(), next: nextAnchors(), vite: viteAnchors(), astro: astroAnchors() };
   // Enough found that a regex gone stale would show.
   assert.ok(linked.runtime.length >= 14, linked.runtime.join(', '));
@@ -99,12 +104,14 @@ test('every anchor a warning links to is in README.md', () => {
   for (const [where, anchors] of Object.entries(linked)) {
     const missing = anchors.filter((anchor) => !readme.has(anchor));
     assert.deepEqual(missing, [], `${where} warnings link to anchors README.md does not have`);
+    const unanswered = anchors.filter((anchor) => !docs.has(anchor));
+    assert.deepEqual(unanswered, [], `${where} warnings link to anchors docs/troubleshooting.md and docs/install.md do not have`);
   }
 });
 
 test('the README slugs headings the way GitHub does', () => {
   const readme = readmeAnchors();
-  for (const anchor of ['install-with-vite', 'installoptions', 'install-with-nextjs-142-or-later', 'troubleshooting', 'late-install']) {
+  for (const anchor of ['start-with-vite', 'start-with-nextjs-142-or-later', 'when-the-blame-is-wrong', 'troubleshooting', 'late-install']) {
     assert.ok(readme.has(anchor), anchor);
   }
 });

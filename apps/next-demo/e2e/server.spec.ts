@@ -7,7 +7,7 @@ const run = process.env.INP_MODE === 'prod' ? 'prod' : 'dev';
 // render 300 slow rows with what came back. The click paints at once with its pending text, so it is quick
 // and INP does not count the wait; the rows are a later render. Within inputWindow (1.5 s from the paint) the
 // report carries that render as a follow-up and says how long after the paint it landed; past it, nothing
-// holds the render, as the README's Known limits say.
+// holds the render, as docs/known-limits.md says.
 
 async function open(page: Page): Promise<void> {
   // A route handler compiles on its first request under `next dev`, which would add seconds to the first wait.
