@@ -535,6 +535,50 @@ test('the frame is said to wait on the next key press only where the screen upda
   assert.equal(short.explanation.cause, 'After the key press was handled, the screen took another 37 ms to update: the frame most likely waited on the next key press, which the page handled first.');
 });
 
+test("where the working time was longer, the screen update's note says the frame waited on the next key press, and does not put it on that key's handler", () => {
+  // Typing fast: a keydown rendered for 170 ms, then the next key went down at 1100 and its handler ran from
+  // 1185 to 1290, before this key's paint at 1304. 181 ms of working time, then 122 ms of the screen updating.
+  const typed = (frames: FrameSummary[], ring: InputRecord[], entries = [entry('keydown', 1000, 304, 1001, 1180), entry('keyup', 1060, 244, 1181, 1182)]) =>
+    report(entries, [commit(1175, 1000, { inputType: 'keydown', total: 170, startedAt: 1005, rendered: 900, roots: ['Editor'], hotPath: ['Editor'] })], frames, ring).explanation;
+  const ring = [input(1000, 'keydown'), input(1060, 'keyup', { gestureTs: 1000 }), input(1100, 'keydown', worked(1290))];
+  const next = script('DIV#root.onkeydown', 1185, 105);
+  const fast = typed([frame(1000, 304, [script('DIV#root.onkeydown', 1001, 179), next], 1292)], ring);
+  assert.equal(fast.blame.kind, 'render');
+  assert.deepEqual(fast.notes, [
+    'After the handler finished, the screen took another 122 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 105 ms.',
+  ]);
+  // A render no stamp explains, inside the next key's handler, is not taken out as that script's and then
+  // left unsaid: it stays this report's, as it does under the verdict.
+  const overlapped = report(
+    [entry('keydown', 1000, 304, 1001, 1180), entry('keyup', 1060, 244, 1181, 1182)],
+    [
+      commit(1175, 1000, { inputType: 'keydown', total: 170, startedAt: 1005, rendered: 900, roots: ['Editor'], hotPath: ['Editor'] }),
+      commit(1250, 950, { inputType: 'keydown', total: 40, startedAt: 1200, rendered: 12, roots: ['Caret'], hotPath: ['Caret'] }),
+    ],
+    [frame(1000, 304, [script('DIV#root.onkeydown', 1001, 179), next], 1292)],
+    ring,
+  ).explanation;
+  assert.deepEqual(overlapped.notes, [
+    'React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.',
+    fast.notes[0],
+  ]);
+  // With only the next key's render to show it, most likely, as the verdict says it.
+  assert.deepEqual(typed([frame(1000, 304, [script('DIV#root.onkeydown', 1001, 179)], 1292)], ring).notes, [
+    'After the handler finished, the screen took another 122 ms to update: the frame most likely waited on the next key press, which the page handled first.',
+  ]);
+  // And where a longer wait before the handlers took the verdict instead.
+  const waited = typed(
+    [frame(1000, 304, [script('TimerHandler:setTimeout', 990, 140), script('DIV#root.onkeydown', 1131, 51), next], 1292)],
+    [input(1000, 'keydown'), input(1100, 'keydown', worked(1290))],
+    [entry('keydown', 1000, 304, 1130, 1182)],
+  );
+  assert.equal(waited.blame.kind, 'waiting');
+  assert.equal(
+    waited.notes.find((n) => n.startsWith('After the handler finished')),
+    'After the handler finished, the screen took another 122 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 105 ms.',
+  );
+});
+
 test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {
   const entries = [entry('pointerup', 1000, 150, 1001, 1008), entry('click', 1000, 150, 1008, 1010)];
   const mouse = { pointerType: 'mouse', press: 1 };
