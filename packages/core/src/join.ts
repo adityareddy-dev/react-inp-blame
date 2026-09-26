@@ -88,7 +88,7 @@ const FORCED_LAYOUT_MIN_MS_NO_DURATIONS = HANDLER_MIN_MS;
 // a reader following it optimises whichever one the library happened to sort first. The sentence
 // still names the largest and says how much of the total it holds, because that much is a fact.
 const FORCED_LAYOUT_ONE_SCRIPT_SHARE = 0.9;
-// The screen update gets a note of its own from 100 ms, half of INP's 200 ms budget for "good".
+// The screen update gets a note of its own over 100 ms, half of INP's 200 ms budget for "good".
 const PRESENTATION_NOTE_MS = 100;
 // A screen update with no script in it is put on the browser's own work from half of it, the share that
 // lets a script name a wait.
