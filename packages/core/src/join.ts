@@ -1184,11 +1184,14 @@ function explain(r: InteractionReport): Explanation {
   const renderedBetween = r.commits.filter((x) => inAGap(x.at));
   const renderedBetweenMs = renderedBetween.reduce((a, x) => a + (x.hasDurations ? x.total : 0), 0);
   // React's scheduler tasks up to a commit in a gap are that commit's render, time-sliced or not: each task is
-  // the first commit's at or after its start, since a commit cannot come before its own task. So a render that
-  // kept no durations is timed by them, where long frames recorded them, if it rendered enough to have taken
-  // them: a 2-component render did not take 80 ms. A commit in any other script, a store update at the end of a
-  // timer's, says nothing of how much of that script was React's, and those are weighed as scripts.
-  const commitFrom = (t: number) => r.commits.reduce<CommitSummary | null>((a, x) => (x.at >= t && (!a || x.at < a.at) ? x : a), null);
+  // the first commit's at or after its start, since a commit cannot come before its own task. A commit inside
+  // any other script a long frame recorded, a store update at the end of a timer's, was rendered there, so it
+  // is no task's, and says nothing of how much of that script was React's: those are weighed as scripts. So a
+  // render that kept no durations is timed by React's tasks before it, where long frames recorded them, if it
+  // rendered enough components to count as a render at all. (A page's own MessagePort messages look the same.)
+  const renderedElsewhere = (x: CommitSummary) =>
+    (r.frames ?? []).some((f) => f.scripts.some((s) => s.invoker !== REACT_TASK && x.at >= s.start && x.at <= s.start + s.duration));
+  const commitFrom = (t: number) => r.commits.reduce<CommitSummary | null>((a, x) => (x.at >= t && !renderedElsewhere(x) && (!a || x.at < a.at) ? x : a), null);
   const untimedIn = partsBetween.filter((p) => {
     const x = p.script.invoker === REACT_TASK ? commitFrom(p.script.start) : null;
     return !!x && !x.hasDurations && carriesWork(x) && renderedBetween.includes(x);

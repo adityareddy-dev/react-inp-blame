@@ -3125,7 +3125,32 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   ).explanation;
   assert.equal(outlasts.blame.kind, 'waiting');
   assert.match(outlasts.cause, /, the longest a script \(TimerHandler:setTimeout, app\.js\) for 65 ms\./);
-  // A 2-component render did not take 80 ms, so the task it committed in is weighed as a script.
+  // React's first task after a commit, the effects it left, is no render of a commit a timer's store update made
+  // later: that commit was rendered in the timer (React 17's legacy root, the keydown committed in its handler).
+  const effectsThenTimer = report(
+    [entry('keydown', 0, 176, 0.2, 1.2), entry('keyup', 100, 76, 100.1, 100.3)],
+    [commit(1, 0, { total: 0, hasDurations: false, rendered: 30 }), commit(79.9, 0, { total: 0, hasDurations: false, rendered: 30 })],
+    [frame(0.2, 175, [script('MessagePort.onmessage', 1.5, 70), script('TimerHandler:setTimeout', 72, 8)], 170)],
+    [input(0, 'keydown')],
+  ).explanation;
+  assert.deepEqual([effectsThenTimer.blame.kind, effectsThenTimer.blame.name], ['waiting', 'MessagePort.onmessage']);
+  // Each task is the first commit's after it: a 60 ms task that committed 2 components, then React's 38 ms render
+  // of 300, leaves the first a wait. And a task with commits only in the handlers, none in the gap, is no render.
+  const twoTasks = report(
+    [entry('keydown', 0, 176, 0.2, 1.2), entry('keyup', 100, 76, 100.1, 100.3)],
+    [commit(61, 0, { total: 0, hasDurations: false, rendered: 2 }), commit(99.8, 0, { total: 0, hasDurations: false, rendered: 300 })],
+    [frame(0.2, 175, [script('MessagePort.onmessage', 1.3, 60), script('MessagePort.onmessage', 62, 38)], 170)],
+    [input(0, 'keydown')],
+  ).explanation;
+  assert.deepEqual([twoTasks.blame.kind, twoTasks.blame.name], ['waiting', 'MessagePort.onmessage']);
+  const inHandlers = report(
+    [entry('keydown', 0, 176, 0.2, 1.2), entry('keyup', 100, 76, 100.1, 100.3)],
+    [commit(1, 0, { total: 0, hasDurations: false, rendered: 300 }), commit(100.25, 0, { total: 0, hasDurations: false, rendered: 300 })],
+    [frame(0.2, 175, [script('MessagePort.onmessage', 1.5, 80)], 170)],
+    [input(0, 'keydown')],
+  ).explanation;
+  assert.deepEqual([inHandlers.blame.kind, inHandlers.blame.name], ['waiting', 'MessagePort.onmessage']);
+  // A 2-component render does not count as one, so the task it committed in is weighed as a script.
   assert.deepEqual([nextToTimer(2).blame.kind, nextToTimer(2).blame.name], ['waiting', 'MessagePort.onmessage']);
   // A commit in any other script says nothing of how much of it was React's: a store update at the end of a timer
   // leaves the timer the wait, however much it rendered.
@@ -3202,9 +3227,9 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   const heldThen = (first: string, next: string) =>
     report([entry(first, 0, 176, 0.2, 1.2), entry(next, 100, 76, 170, 170.2)], [], [frame(100, 72, [script('TimerHandler:setTimeout', 100.1, 69.5)], 171)], [input(0, first)])
       .explanation.cause;
-  for (const next of ['pointerup', 'mouseup', 'touchend', 'click']) assert.match(heldThen('pointerdown', next), /\. The pointer was still down for 99 ms of it/);
+  for (const next of ['pointerup', 'mouseup', 'touchend', 'click', 'auxclick']) assert.match(heldThen('pointerdown', next), /\. The pointer was still down for 99 ms of it/);
   assert.match(heldThen('pointerdown', 'contextmenu'), /\. Nothing on record ran in 99 ms of it, before the contextmenu came, so the wait was the other 70 ms\./);
-  assert.match(heldThen('keydown', 'input'), /\. Nothing on record ran in 99 ms of it, before the input came/);
+  for (const next of ['input', 'keypress', 'keydown']) assert.match(heldThen('keydown', next), new RegExp(`\\. Nothing on record ran in 99 ms of it, before the ${next} came`));
   // A render that committed just before the keyup's handlers began is in the time between, however close.
   const close = enter(null, 10.4, [input(0, 'keydown')], [commit(10.9, 0, { total: 0.3, rendered: 2 }), commit(157.4, 0, { total: 130, startedAt: 12, rendered: 300 })]);
   assert.equal(close.explanation.blame.kind, 'render');

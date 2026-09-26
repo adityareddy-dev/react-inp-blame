@@ -1029,13 +1029,17 @@ and not from a frame's blocking time, which does not say when in the frame it fe
 before they arrive or in a browser without them, a timer that ran while a key was held is not counted, and only
 the time after the release is. A timed render is placed for its own length up to its commit, not from where it
 started: a transition suspended on data, or a commit held back for a stylesheet, leaves the thread idle in
-between. A render with no durations is timed by React's scheduler tasks up to its commit, each task being the
-first commit's at or after its start (a commit cannot come before its own task), so a transition time-sliced
-into fifteen tasks is all render. It is weighed as a render: taken off the wait, set against it the way a timed
-render's length is, and never the script the wait is named after. Only where it rendered enough to have taken
-that time, though: a 2-component render did not take 80 ms, and that task is weighed as a script. A commit in
-any other script, a store update at the end of a timer's, says nothing of how much of that script was React's,
-so the script stays in the wait. Where the part nothing placed is a tenth of the gap or more, the sentence says
+between. A render with no durations that commits in the gap is timed by React's scheduler tasks up to its
+commit, each task being the first commit's at or after its start (a commit cannot come before its own task), so
+a transition time-sliced into fifteen tasks is all render. A commit inside any other script a long frame
+recorded, a store update at the end of a timer's, was rendered in that script, so it is no task's, and it says
+nothing of how much of that script was React's: the script stays in the wait, and React's task of effects before
+it stays a wait too. The tasks are known only by their name, `MessagePort.onmessage`, which a page's own
+MessagePort messages share. A render timed this way is taken off the wait and set against it the way a timed
+render's length is, and is never the script the wait is named after, though the sentence still counts its task
+among the scripts that ran. Only where it rendered 10 components or more, the bar a render counts from
+anywhere else: under that, its task is weighed as a script. A render still time-slicing when the next event
+comes, committing after its handlers, is not in the gap, and its slices before them are a wait. Where the part nothing placed is a tenth of the gap or more, the sentence says
 what the wait was, and the two figures add up to the gap as printed. Before a release (a keyup, or a pointerup,
 mouseup, touchend, click or auxclick), and with long animation frames recorded, it says the key or pointer was
 still down for that long with nothing on record running; before any other event, that nothing on record ran
