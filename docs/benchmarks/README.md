@@ -1,5 +1,8 @@
 # What react-inp-blame costs on real apps
 
+A second run, on five apps with 0.12.0 from npm and with every blame checked against the apps' source, is
+[real-apps.md](real-apps.md).
+
 Measured overnight on 2026-09-23 on the 0.3.0 candidate: PR #5 (`fixes-before-0.3.0`, `d780ca2`)
 with #6 (`4fdebd8`), #7 (`f0505e3`) and #8 (`389d802`) on top, packed into one tarball, sha256
 `d474cc3b10941cf7ece05e526c205831bbd4f3bd0e596f368d8529f1bec859ef`. Its `package.json` still says
