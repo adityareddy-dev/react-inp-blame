@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-26
+
 ### Added
 
 - **The Next.js demo waits on the server.** A Server Action and a route handler, each at 400 ms and at 2 s, then
@@ -1097,7 +1099,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.3.0...v0.12.0
 [0.11.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/215a9f2...0c8d148
