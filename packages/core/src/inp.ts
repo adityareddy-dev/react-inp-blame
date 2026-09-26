@@ -138,6 +138,10 @@ export function createInpTracker(nativeCount: (() => number) | null) {
     estimate(): { id: number | null; value: number; interactionCount: number } | null {
       return current && { ...current };
     },
+    /** The interactionIds of the candidates, slowest first: those INP can move to as more interactions are counted. */
+    candidates(): (number | null)[] {
+      return list.map((c) => c.id);
+    },
     /**
      * Forgets the candidates; the count keeps running from here. At a navigation, the way web-vitals
      * starts over after a back/forward cache restore or a soft navigation; at `clear()`, which web-vitals

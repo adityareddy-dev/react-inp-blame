@@ -264,19 +264,21 @@ test(`past ${MAX_REPORTS} published reports the oldest goes first, but never one
   assert.equal(life.last()?.interactionId, 7 * (MAX_REPORTS + 11));
 });
 
-test("past the limit the report of the page's INP is kept too, though it is neither new nor among the slowest", () => {
-  const { life } = lifecycle({ interactionCount: () => 1 });
-  // Ten slow clicks before a navigation, then the INP of the page it went to, and quick clicks after it.
+test('past the limit every report INP can still point at is kept too, though it is neither new nor among the slowest', () => {
+  const { life } = lifecycle();
+  // Ten slow clicks before a navigation, then two on the page it went to, and quick clicks after them.
   for (let k = 1; k <= KEPT_SLOWEST; k++) life.onEntries([entry(7 * k, 'click', 304)]);
   life.onNavigation(7000 * KEPT_SLOWEST + 500);
-  const inpId = 7 * (KEPT_SLOWEST + 1);
-  life.onEntries([entry(inpId, 'click', 104)]);
-  for (let k = KEPT_SLOWEST + 2; k <= MAX_REPORTS + 30; k++) life.onEntries([entry(7 * k, 'click', 48)]);
-  assert.equal(life.inp()?.interactionId, inpId);
-  const kept = life.reports().map((r) => r.interactionId);
-  assert.equal(kept.length, MAX_REPORTS);
-  assert.ok(kept.includes(inpId));
-  assert.equal(life.inp()?.report?.interactionId, inpId);
+  life.onEntries([entry(77, 'click', 104)]);
+  life.onEntries([entry(84, 'click', 96)]);
+  for (let k = 13; k <= 59; k++) life.onEntries([entry(7 * k, 'click', 48)]);
+  assert.equal(life.inp()?.report?.interactionId, 77);
+  // The fiftieth interaction since the navigation moves INP down to the second slowest. Kept for the
+  // estimate alone, its report was the first to go, at the 51st.
+  for (let k = 60; k <= 62; k++) life.onEntries([entry(7 * k, 'click', 48)]);
+  assert.equal(life.inp()?.interactionId, 84);
+  assert.equal(life.inp()?.report?.interactionId, 84);
+  assert.equal(life.reports().length, MAX_REPORTS);
 });
 
 test(`only the newest ${MAX_QUIET} quiet interactions wait for a later render`, () => {

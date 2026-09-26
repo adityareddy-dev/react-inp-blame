@@ -149,8 +149,8 @@ export function generateTarget(node: Node | null): string | undefined {
  *
  * `react` is null when this library installed nothing on the page, and when it has no report for
  * that interaction: one under `install({ threshold })` that no later render made worth publishing,
- * or one the page has since pushed out of the 50 reports it keeps, which the INP estimate's report and
- * the ten slowest never are. It is never a guess.
+ * or one the page has since pushed out of the 50 reports it keeps, which the ten slowest and those INP
+ * can still point at never are. It is never a guess.
  *
  * It never throws. A metric missing its entries, or one whose getters throw, gives `react: null`
  * rather than an exception inside the page's own analytics callback.

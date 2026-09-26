@@ -15,12 +15,18 @@ import type { CommitSummary, FrameSummary, InteractionReport, ReactStatus } from
  * page's navigations, and hands it a clock.
  */
 
-/** Published reports kept. Past it the oldest goes first, unless it is the INP estimate's or one of the `KEPT_SLOWEST`. */
+/**
+ * Published reports kept. Past it the oldest goes first, unless it is one of the `KEPT_SLOWEST` or INP can
+ * still point at it: the estimate's report, and those of the candidates it moves down to as more
+ * interactions are counted. The estimate's alone was not enough: 50 interactions after a navigation it
+ * moved to a report already gone.
+ */
 export const MAX_REPORTS = 50;
 /**
  * The slowest published reports, kept however old they are: as many as web-vitals keeps candidates for
  * INP. Kept first in, first out, the reports of sixty quick rectangles drawn in excalidraw pushed out the
- * key press that was the page's INP.
+ * key press that was the page's INP. They outlive a soft navigation too, where the estimate starts over
+ * and web-vitals, unless asked to report soft navigations, does not.
  */
 export const KEPT_SLOWEST = 10;
 /** Interactions under the threshold kept in case a later render makes them worth publishing. */
@@ -117,10 +123,10 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
   const keep = (held: Held) => {
     published.push(held);
     if (published.length <= MAX_REPORTS) return;
-    const inpId = inp.estimate()?.id;
+    const inpIds = [inp.estimate()?.id, ...inp.candidates()];
     // A stable sort, so of equal durations the older is kept.
     const slowest = published.slice().sort((a, b) => b.data.duration - a.data.duration).slice(0, KEPT_SLOWEST);
-    published.splice(published.findIndex((h) => h.data.interactionId !== inpId && !slowest.includes(h)), 1);
+    published.splice(published.findIndex((h) => !inpIds.includes(h.data.interactionId) && !slowest.includes(h)), 1);
   };
   const holdBack = (held: Held) => {
     quiet.push(held);

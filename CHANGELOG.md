@@ -172,12 +172,13 @@ it changes when a field is removed or changes meaning, which a minor release may
   select or dictated text did. The sort click now has no later render and no note. `followUps` loses the
   render and no blame changes, since a blame never rests on a later render. A page whose own code
   dispatches one of those events after the paint loses the renders after it too (README, Known limits).
-- **Past 50 published reports, the INP estimate's report and the ten slowest are kept.** `reports()` let
-  the oldest go first, whatever it was, and drawing sixty rectangles in excalidraw pushed out the 64 ms key
-  press that was the page's INP: `inp().report` came back null, and `attributeINP` gave `react: null` for
-  the one interaction INP named. The oldest still goes first unless it is the report the INP estimate
-  points at or one of the ten slowest, as many as web-vitals keeps candidates for INP. `reports()` still
-  returns 50 at most, oldest first, and no report changes.
+- **Past 50 published reports, the ten slowest and every report INP can still point at are kept.**
+  `reports()` let the oldest go first, whatever it was, and drawing sixty rectangles in excalidraw pushed
+  out the 64 ms key press that was the page's INP: `inp().report` came back null, and `attributeINP` gave
+  `react: null` for the one interaction INP named. The oldest still goes first unless it is one of the ten
+  slowest, as many as web-vitals keeps candidates for INP, or one INP can still point at: the estimate's,
+  and those of the candidates it moves down to every 50 interactions. `reports()` still returns 50 at
+  most, oldest first, and no report changes.
 - **A quick press is not published for the render its own release made, and the note on that render no
   longer says INP leaves it out.** A 32 ms pointerdown on excalidraw's canvas was published only because
   the pointerup that ended the stroke rendered in its own dispatch, 37 ms after the press painted, and the
@@ -195,9 +196,13 @@ it changes when a field is removed or changes meaning, which a minor release may
   key presses painted in, and only z's report, the newer one, took the frame when it arrived. Control's
   report read "After the key press was handled, the screen took another 64 ms to update." with
   `blame.name` null. Every report the frame overlaps, in its window or its later renders, now takes it as
-  a new revision. A painting blame like Control's gains ", mostly because a script (...) ran for N ms
-  before the next frame." where a script ran 20 ms or more of the screen update, and `blame.name` becomes
-  that script's name where it was null. `blame.kind` does not change.
+  a new revision. A painting blame like Control's stays painting and gains ", mostly because a script
+  (...) ran for N ms before the next frame." where a script ran 20 ms or more of the screen update, and
+  `blame.name` becomes that script's name where it was null. Any other blame is worked out again with the
+  frame, as the newest report's always was, so it can change kind: a 'none' becomes 'script' where a
+  script ran 20 ms or more in the interaction's window, or 'layout' where the frame shows the handlers
+  forcing enough styles and layout. A 'waiting' blame can gain the name of the script it waited behind,
+  and a 'none' loses "No long animation frame covered the ..." once a frame does.
 
 ## [0.12.0] - 2026-09-25
 

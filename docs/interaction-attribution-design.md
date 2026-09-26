@@ -1115,10 +1115,15 @@ All of this, from quiet interactions and publishing to late entries, late frames
 and the limits (50 published reports, 20 quiet ones, the entries of the 100 interactions heard
 from most recently), lives in `lifecycle.ts`. It reads no browser globals and its transitions are
 unit-tested one by one; `install()` only wires it to the observers, the DevTools hook and the page.
-Past 50 the oldest report goes first, but never the one the INP estimate points at or one of the ten
-slowest (`KEPT_SLOWEST`, as many as web-vitals keeps candidates for INP). Until 2026-09-25 they went
-first in, first out, and drawing sixty rectangles in excalidraw pushed out the key press that was the
-page's INP, so `inp().report` came back null, and so did the `react` field `attributeINP` adds.
+Past 50 the oldest report goes first, but never one of the ten slowest (`KEPT_SLOWEST`, as many as
+web-vitals keeps candidates for INP) or one INP can still point at: the estimate's, and those of the
+candidates it moves down to every 50 interactions. Until 2026-09-25 reports went first in, first out,
+and drawing sixty rectangles in excalidraw pushed out the key press that was the page's INP, so
+`inp().report` came back null, and so did the `react` field `attributeINP` adds. Keeping the estimate's
+report alone was not enough either: after a navigation, ten slow clicks on the page before it filled the
+ten slowest, and by the time the fiftieth interaction moved the estimate to the second slowest click
+since, its report had gone. The ten slowest outlive a soft navigation, where the estimate starts over,
+because web-vitals does not start over there unless asked to report soft navigations.
 
 **Output.** An `InteractionReport` object, a listener API, and entries the Chrome Performance
 panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's own
@@ -1459,8 +1464,8 @@ matches nothing rather than being matched on a start time.
 
 - `react` is `null` when nothing is installed on the page, and when the library has no report for the
   interaction web-vitals picked: one that stayed under `threshold` and set off no later render INP
-  leaves out, or one already pushed out of the 50 reports a page keeps (`MAX_REPORTS`), which the INP
-  estimate's report and the ten slowest never are. It is never a guess.
+  leaves out, or one already pushed out of the 50 reports a page keeps (`MAX_REPORTS`), which the ten
+  slowest and those INP can still point at never are. It is never a guess.
 - `generateTarget` needs no installation, only React's fiber expando, so it works in a page that never
   calls `install()`. `attributeINP` needs one, though not from the same copy of the library: the
   installation lives on `globalThis` (`session.ts`), so any copy of a compatible version sees it.

@@ -230,7 +230,7 @@ export interface HookInfo {
 export interface Api {
   /**
    * Published reports, oldest first, each at its latest revision. At most 50: past that the oldest goes,
-   * except the INP estimate's report and the ten slowest.
+   * except the ten slowest and those INP can still point at.
    */
   reports(): InteractionReport[];
   /** The newest published report, at its latest revision. */
