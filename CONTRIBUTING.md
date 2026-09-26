@@ -6,7 +6,7 @@ we can agree on the approach before you spend time on it.
 ## Layout
 
 - `packages/core`: the library, the `react-inp-blame` package. Source in `src`, unit tests in `test`.
-- `apps/demo`: a Vite app with a sign-in flow, seven slow scenarios and a control, checked by the
+- `apps/demo`: a Vite app with a sign-in flow, eight slow scenarios and a control, checked by the
   Playwright specs in `apps/demo/e2e`.
 - `apps/next-demo`: the Next.js checks in `e2e/` (load order, hydration, `useReportWebVitals`, a Pages
   Router page), run
