@@ -2043,9 +2043,8 @@ function explain(r: InteractionReport): Explanation {
     const uncounted = !timed(f, r.entries);
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
-  // A render the clause ties to the script is said there and nowhere else, so the note is kept for it
-  // under PRESENTATION_NOTE_MS too.
-  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && r.presentation > r.processing && blame.kind !== 'painting') {
+
+  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`);
   }
   // The other half of that note: where the screen update did take the blame, the work it outranked
