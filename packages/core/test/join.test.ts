@@ -3390,6 +3390,42 @@ test('a screen update of 100 ms or more gets its note under another verdict wher
   assert.equal(rendered(304).blame.kind, 'render');
   assert.deepEqual(rendered(304).notes, ['After the handler finished, the screen took another 104 ms to update, mostly the browser recalculating styles and layout and painting the frame: 94 ms.']);
   assert.deepEqual(rendered(296).notes, []);
+
+  // TanStack Virtual's checkbox at 4x: the handler rendered the table for 129 ms, then the frame waited on the
+  // scroll listener, which forced a second render of it. That render is the script's, said with it, and not an
+  // effect's, even where the 143 ms of working time was longer than the 142 ms of the screen updating.
+  const checkbox = (end: number) =>
+    report(
+      [entry('click', 0, end, 3, 146)],
+      [
+        commit(140, 0, { total: 129, rendered: 737, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 8 }),
+        commit(260, 0, { total: 89, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 150 }),
+      ],
+      [frame(0, end, [script('INPUT.onclick', 3, 143), script('DIV.onscroll', 148, 130)], 280)],
+      [input(0, 'click')],
+    ).explanation;
+  const onscroll = checkbox(288);
+  assert.equal(onscroll.cause, 'React spent 129 ms re-rendering 737 components inside TableBody.');
+  assert.deepEqual(onscroll.notes, [
+    'After the handler finished, the screen took another 142 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 130 ms before the next frame, and React rendered inside it: 89 ms re-rendering 721 components inside TableBody.',
+  ]);
+  // The same click with the screen update the longer part says it in the same words, as the verdict.
+  assert.equal(
+    checkbox(296).cause,
+    'After the click was handled, the screen took another 150 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 130 ms before the next frame, and React rendered inside it: 89 ms re-rendering 721 components inside TableBody.',
+  );
+  // Where the handler rendered nothing and the script's render was the only one, the verdict does not say
+  // React rendered nothing at all.
+  const scrolled = report(
+    [entry('click', 0, 296, 3, 153)],
+    [commit(270, 0, { total: 100, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 160 })],
+    [frame(0, 296, [script('INPUT.onclick', 3, 150), script('DIV.onscroll', 155, 130)], 290)],
+    [input(0, 'click')],
+  ).explanation;
+  assert.equal(scrolled.cause, "React didn't render anything in the working time; a script (INPUT.onclick, app.js) ran for 150 ms.");
+  assert.deepEqual(scrolled.notes, [
+    'After the handler finished, the screen took another 143 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 130 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
+  ]);
 });
 
 test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {

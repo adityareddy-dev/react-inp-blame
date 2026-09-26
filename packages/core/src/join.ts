@@ -1282,13 +1282,14 @@ function explain(r: InteractionReport): Explanation {
   const waitedOnNext =
     next && Math.max(nextScriptMs, nextRenderMs) >= nextShare && r.presentation > r.processing && r.presentation >= r.inputDelay ? next : null;
   /**
-   * React's renders that committed inside that script, after the handlers, where the screen update's
-   * clause is said, as its blame or as the note below: what a virtualizer's scroll listener spends its time
-   * on when it calls flushSync, or React's own task for an update it scheduled. On TanStack Table's
-   * virtualized rows at 4x a checkbox's frame waited on `DIV.onscroll` for 174 ms, a render of the 721 rows
-   * it forced, which the report held and the sentence never tied to the script. Where the build keeps when a
-   * render began, it has to have begun inside the script too, and a render duration longer than the script
-   * cannot have been in it. A hydration is left where it was: it has a sentence of its own.
+   * React's renders that committed inside that script, after the handlers, wherever the screen update's
+   * clause can be said: as its blame or in the note below where the screen update outranks the working time,
+   * and in that note over PRESENTATION_NOTE_MS where it does not. That is what a virtualizer's scroll
+   * listener spends its time on when it calls flushSync, or React's own task for an update it scheduled. On
+   * TanStack Table's virtualized rows at 4x a checkbox's frame waited on `DIV.onscroll` for 174 ms, a render
+   * of the 721 rows it forced, which the report held and the sentence never tied to the script. Where the
+   * build keeps when a render began, it has to have begun inside the script too, and a render duration longer
+   * than the script cannot have been in it. A hydration is left where it was: it has a sentence of its own.
    */
   const ranInside = (x: CommitSummary, s: ScriptSummary) =>
     carriesWork(x) &&
@@ -1298,7 +1299,8 @@ function explain(r: InteractionReport): Explanation {
     x.at <= s.start + s.duration + STAMP_TOLERANCE &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
-  const insideLate = lateScript && screenOutranks && !waitedOnNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  const insideLate =
+    lateScript && (screenOutranks || r.presentation > PRESENTATION_NOTE_MS) && !waitedOnNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
   const lateRender = insideLate.length ? heaviest(insideLate) : null;
   const lateRenderSaid = !lateRender
     ? ''
@@ -1964,7 +1966,10 @@ function explain(r: InteractionReport): Explanation {
     // React's render as well (the blind rung above says why), so where the count would have named that
     // render but for the bar, the script is not measured in its place: nothing under the bar is blamed.
     const confidence = unsure ? 'inferred' : 'measured';
-    const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : renderedNothing);
+    // Where every render ran in the script after the handlers, the screen update's note says it: React did
+    // render, just not in the working time.
+    const noneWorking = insideLate.length && !unjoined ? "React didn't render anything in the working time" : renderedNothing;
+    const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(anyScript.ms) < Math.round(anyScript.script.duration) ? ' of it' : '';
     const ran = `${scriptPhrase(anyScript.script)} ran for ${ms(anyScript.ms)}${ofIt}`;
@@ -2074,7 +2079,8 @@ function explain(r: InteractionReport): Explanation {
   // A render the clause ties to the script is said there and nowhere else, so the note is kept for it
   // under PRESENTATION_NOTE_MS too. From PRESENTATION_NOTE_MS it is kept where the working time was longer
   // as well, the way closedByTheScreen keeps a render the screen update outranked: on twenty's select-all,
-  // 762 ms of the screen updating went unsaid behind 947 ms of rendering.
+  // 762 ms of the screen updating went unsaid behind 947 ms of rendering. A render the script forced is
+  // tied to it there too, as insideLate says, and not left in the working time as an effect's.
   if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`);
   }
