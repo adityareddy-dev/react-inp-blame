@@ -156,8 +156,9 @@ test('the helper takes a name nothing in the module has, and a module that reach
   assert.match(stamped, /\nfunction __reactInpBlameName2\(f, n\) \{/);
   assert.match(stamped, /\ntypeof Row === "function" && __reactInpBlameName2\(Row, "Row"\);/);
   // withInpBlame's rule and an app's own can both run it on one file. A name handed to the helper counts
-  // as named, as a written-out stamp's `Foo.displayName` does.
-  const twice = 'export function Cart() {}\nexport function Row() {}\nconst Badge = memo(() => null);\n';
+  // as named, as a written-out stamp's `Foo.displayName` does, whatever number went after the helper's.
+  assert.equal(load(stamped), stamped);
+  const twice ='export function Cart() {}\nexport function Row() {}\nconst Badge = memo(() => null);\n';
   assert.equal(load(load(twice)), load(twice));
   assert.equal(stamp(stamp(twice)), stamp(twice));
 });
