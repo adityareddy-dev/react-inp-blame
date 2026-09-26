@@ -808,6 +808,51 @@ test('a hook that wraps what is assigned to onCommitFiberRoot and is sealed with
   });
 });
 
+test('a page that freezes its DevTools hook after install() can still dispose(), and what stays wrapped only passes calls on', async (t) => {
+  // The library is the first import, so a script in the app that locks the hook runs after it has wrapped it.
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    Object.freeze(existing);
+    api.dispose();
+
+    const again = install({ hook: 'chain', devtoolsTrack: false });
+    assert.notEqual(again, api, 'install() after dispose() returned the API it disposed');
+    assert.equal(again.stats().mode, 'unsupported');
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /cannot be wrapped/);
+    page.duringClick(() => existing.onCommitFiberRoot(id, mountedRoot(0b11, 4), 1, false));
+    assert.deepEqual(existing.calls, [id], "the page's own hook stopped hearing about commits");
+    assert.equal(again.debug.commits().length, 0);
+    again.dispose();
+  });
+});
+
+test('a page that seals its DevTools hook after install() gets its methods back on dispose(), and the next install() wraps it again', async () => {
+  await inBrowser((page) => {
+    const existing = existingHook();
+    const { inject, onCommitFiberRoot } = existing;
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    Object.seal(existing);
+    api.dispose();
+    assert.equal(existing.inject, inject);
+    assert.equal(existing.onCommitFiberRoot, onCommitFiberRoot);
+    // A sealed hook keeps the property the library added, but React calls it only when it is a function.
+    assert.equal((existing as { onPostCommitFiberRoot?: unknown }).onPostCommitFiberRoot, undefined);
+
+    const again = install({ hook: 'chain', devtoolsTrack: false });
+    assert.equal(again.stats().mode, 'chained');
+    page.duringClick(() => existing.onCommitFiberRoot(id, mountedRoot(0b11, 4), 1, false));
+    assert.equal(again.debug.commits().length, 1);
+    again.dispose();
+  });
+});
+
 test('a frozen hook that replaces the shim before React registers is not followed, and the assignment does not throw', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
