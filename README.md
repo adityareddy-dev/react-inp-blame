@@ -972,7 +972,8 @@ job puts the packed package into an app made the way `npm create vite` makes one
 that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. Three
 more check the same click, with no Fast Refresh edit, in the apps `npx create-react-router`, TanStack
 Start's CLI and `npm create astro` make, each with its setup above, and a fifth in React Router 7's app
-moved to React 18.
+moved to React 18. The create-vite app, and a Next.js 14.2 app with both routers, are installed with pnpm
+as well, into the isolated `node_modules` pnpm makes by default, and checked the same way.
 
 For component libraries, CI builds the Vite app with styled-components, @emotion/styled, lucide-react and
 Radix's DropdownMenu, on the dev server and in production. That covers the Radix primitives shadcn/ui's Radix

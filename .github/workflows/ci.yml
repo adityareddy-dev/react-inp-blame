@@ -164,6 +164,41 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node scripts/vite-app.mjs --fixture ${{ matrix.fixture }} --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
+  # Two of the apps above, installed with pnpm instead of npm, as many users install. pnpm's default
+  # node_modules is isolated: the app's folder holds only what its package.json names, and each package
+  # finds only what it declares, so an import the package never declared, or one made by name from inside
+  # another package's folder, fails here where npm's flat node_modules lets it through. The create-vite app
+  # is the Vite plugin's case, and Next.js 14.2 is withInpBlame's, which adds the install to webpack's
+  # client entries by the package's name. The versions are each fixture's npm lockfile, through `pnpm import`.
+  # pnpm itself is pinned to the release last checked, so that a release, which waits for this job, does
+  # not turn on what npm serves that day.
+  pnpm-app:
+    name: ${{ matrix.name }} app from the packed tarball, installed with pnpm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fixture: vite-react-ts
+            name: create-vite
+          - fixture: next-14
+            name: Next.js 14.2
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/${{ matrix.fixture }}/package-lock.json
+      - run: npm ci
+      - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
+      - run: npx playwright install --with-deps chromium
+      - run: npm install --global pnpm@12.6.0
+      - run: node scripts/vite-app.mjs --pnpm --fixture ${{ matrix.fixture }} --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
+
   e2e:
     name: Vite demo, React 17 to 19.2, Next.js
     runs-on: ubuntu-latest

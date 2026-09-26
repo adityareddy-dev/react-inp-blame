@@ -142,11 +142,15 @@ registry's react-inp-blame, and builds the app. Its specs then check the blame o
 Refresh edit included) and on `vite preview` of the build. `--fresh` drops the lockfile first, so every
 dependency comes as npm resolves it that day within the ranges in its `package.json`, which never takes a
 new major. CI runs it that way too, in a job of its own that fails the daily run when it breaks but never
-a push or a pull request. `--tarball`
+a push or a pull request. `--pnpm` installs the app with the pnpm on your `PATH` instead, into the
+isolated `node_modules` pnpm makes by default, from the same locked versions through `pnpm import`, and
+checks that the app's `node_modules` holds only what its `package.json` names. CI runs it that way in a job
+of its own, for this app and for `--fixture next-14`, on the pnpm version the workflow pins. `--tarball`
 works as it does for `test:pack`, and anything after `--` goes to Playwright. Through npm that is a second
 `--`, after npm's own, as in the last line below. A failed run leaves the copy in place and prints its path.
 
     npm run test:vite-app -- --fresh
+    npm run test:vite-app -- --pnpm
     node scripts/vite-app.mjs -- --project=dev
     npm run test:vite-app -- -- --project=dev
 
