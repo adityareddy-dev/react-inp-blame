@@ -29,9 +29,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   waited behind is, and never as the handler. Before the next event's own input, only time something on record
   places there counts: a script or style work a long animation frame recorded, or a React render that kept its
   durations, for its own length up to its commit. So a key held down with the thread idle is no wait, and a
-  timer a long animation frame recorded while it was held still is. A production render there is timed by
-  React's scheduler tasks up to its commit, time-sliced or not, and weighed as a render, never as a wait on
-  those tasks. Where the part nothing places is a tenth or more, the sentence says so: "The key was still down
+  timer a long animation frame recorded while it was held still is. A production render that commits there is
+  timed by React's scheduler tasks up to its commit, time-sliced or not, set against the wait as a render and
+  never named as what the wait was on; a commit inside a timer's script, a store update's, leaves the timer the
+  wait. Where the part nothing places is a tenth or more, the sentence says so: "The key was still down
   for 99 ms of it with nothing on record running, so the wait was the other 70 ms." Without long animation
   frames (browsers other than Chromium, or a report built before its frame arrives), only a timed render places
   anything before the input, so a timer that ran while a key was held is not counted there, and the sentence
