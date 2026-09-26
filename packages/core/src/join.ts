@@ -1,7 +1,7 @@
 import { dominantComponent, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
-import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
+import { DEFAULT_INPUT_WINDOW, INPUT_TYPES, joinWindow, type InputRecord } from './hook.js';
 import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
@@ -204,10 +204,43 @@ function paintGroupOf(entries: readonly InteractionTiming[], entry: InteractionT
 
 const near = (a: number, b: number) => Math.abs(a - b) <= STAMP_TOLERANCE;
 
-/** Does this input stamp, a commit's or a navigation's (or the press that input released), match one of these entry start times? */
-function stampMatches(c: Pick<CommitSummary, 'inputTs' | 'gestureTs'>, stamps: number[]): boolean {
-  for (const s of stamps) if (near(s, c.inputTs) || near(s, c.gestureTs)) return true;
-  return false;
+/**
+ * An input of the interaction: an entry's `startTime`, and the types of input the ring can record it
+ * as (`InputRecord.type`); null where it is none the ring records, an `input` while an input method
+ * composes, which is matched by its time alone.
+ */
+interface Stamp {
+  readonly at: number;
+  readonly types: readonly string[] | null;
+}
+
+/** The inputs that begin a press. A release's `gestureTs` is one of these. */
+const PRESSES: readonly string[] = ['pointerdown', 'keydown'];
+
+/**
+ * An entry as a stamp. A keypress is fired by its keydown and has that keydown's time, and so do a
+ * mousedown and a mouseup their pointer events', so each stands for the input the ring recorded.
+ */
+function stampOf(e: Pick<EventEntrySummary, 'name' | 'startTime'>): Stamp {
+  const type = e.name === 'keypress' ? 'keydown' : e.name === 'mousedown' ? 'pointerdown' : e.name === 'mouseup' ? 'pointerup' : e.name;
+  return { at: e.startTime, types: INPUT_TYPES.includes(type) ? [type] : null };
+}
+
+const stampsOf = (entries: readonly Pick<EventEntrySummary, 'name' | 'startTime'>[]): Stamp[] => entries.map(stampOf);
+
+/**
+ * Is this stamp the input the ring recorded at `ts` as `type`? By type as well as time: typing fast,
+ * the next key's keydown can come under a millisecond after the last keyup, and a render stamped with
+ * that keydown is not the keyup's.
+ */
+const isInput = (s: Stamp, ts: number, type: string) => near(s.at, ts) && (!s.types || s.types.includes(type));
+
+/** Is this stamp the press, a pointerdown or a keydown, that began a gesture at `ts`? A release's press is only ever one of those. */
+const isPress = (s: Stamp, ts: number) => near(s.at, ts) && (!s.types || s.types.some((t) => PRESSES.includes(t)));
+
+/** Does this input stamp, a commit's or a navigation's (or the press that input released), match one of these stamps? */
+function stampMatches(c: Pick<CommitSummary, 'inputTs' | 'inputType' | 'gestureTs'>, stamps: readonly Stamp[]): boolean {
+  return stamps.some((s) => isInput(s, c.inputTs, c.inputType) || isPress(s, c.gestureTs));
 }
 
 const rank = (name: string) => {
@@ -257,37 +290,45 @@ function entryTarget(entries: readonly InteractionTiming[]): Node | null {
   return null;
 }
 
-/** The input in the ring that one of these entries is, by its timestamp. */
-function ringInput(inputs: readonly InputRecord[], stamps: number[]): InputRecord | null {
-  return inputs.find((i) => stamps.some((s) => near(s, i.ts))) ?? null;
+/** The input in the ring that one of these entries is, by its timestamp and type. */
+function ringInput(inputs: readonly InputRecord[], stamps: readonly Stamp[]): InputRecord | null {
+  return inputs.find((i) => stamps.some((s) => isInput(s, i.ts, i.type))) ?? null;
 }
 
+/** An entry is this input, or the press it released. */
+const hasEntry = (i: InputRecord, stamps: readonly Stamp[]) => stamps.some((s) => isInput(s, i.ts, i.type) || isPress(s, i.gestureTs));
+
 /**
- * Is this input one of the interaction's own? Its own timestamp matching an entry is the plain case.
- * The press it released matching one is the other: a click is a pointerdown, a pointerup and a click,
+ * Is this input one of the interaction's own? An entry of its own type at its time is the plain case.
+ * The press it released matching one is the next: a click is a pointerdown, a pointerup and a click,
  * and only the entries slow enough to be observed arrive, so a gesture whose pointerdown was the only
- * entry still owns the pointerup and the click that finished it.
+ * entry still owns the pointerup and the click that finished it. The last is another input of the same
+ * press having an entry: a pointerup whose click was too quick for one still owns that click.
  */
-function ownInput(i: InputRecord, stamps: number[]): boolean {
-  return stamps.some((s) => near(s, i.ts) || near(s, i.gestureTs));
+function ownInput(i: InputRecord, stamps: readonly Stamp[], inputs: readonly InputRecord[]): boolean {
+  return hasEntry(i, stamps) || inputs.some((o) => o !== i && o.gestureTs === i.gestureTs && hasEntry(o, stamps));
 }
 
 /** Every input of this interaction the ring still holds, oldest first. A click is a pointerdown, a pointerup and a click. */
-function ringInputs(inputs: readonly InputRecord[], stamps: number[]): InputRecord[] {
-  return inputs.filter((i) => ownInput(i, stamps));
+function ringInputs(inputs: readonly InputRecord[], stamps: readonly Stamp[]): InputRecord[] {
+  return inputs.filter((i) => ownInput(i, stamps, inputs));
 }
 
 /**
- * The stamps a commit of this interaction can carry: its entries' start times, and the press each of its
- * inputs released. Event Timing leaves out an entry under 16 ms, so a tap's pointerdown can be missing from
- * the entries while a render it set off, stamped with it, lands inside the click: a finger held a moment on
- * a card whose onPointerEnter opens it.
+ * The stamps a commit of this interaction can carry: its entries', and the press each of its inputs
+ * released. Event Timing leaves out an entry under 16 ms, so a tap's pointerdown can be missing from
+ * the entries while a render it set off, stamped with it, lands inside the click: a finger held a moment
+ * on a card whose onPointerEnter opens it. A press the ring no longer holds is one of either kind: a
+ * click a key made released a keydown.
  */
-function commitStamps(inputs: readonly InputRecord[], stamps: number[]): number[] {
+function commitStamps(inputs: readonly InputRecord[], stamps: readonly Stamp[]): Stamp[] {
   const out = stamps.slice();
-  for (const i of ringInputs(inputs, stamps)) if (!out.some((s) => near(s, i.gestureTs))) out.push(i.gestureTs);
+  for (const i of ringInputs(inputs, stamps)) if (!out.some((s) => isPress(s, i.gestureTs))) out.push({ at: i.gestureTs, types: PRESSES });
   return out;
 }
+
+const earliest = (stamps: readonly Stamp[]) => stamps.reduce((a, s) => Math.min(a, s.at), Infinity);
+const latest = (stamps: readonly Stamp[]) => stamps.reduce((a, s) => Math.max(a, s.at), -Infinity);
 
 /**
  * Whether a newer interaction had already begun when this commit ran, so the commit is at best
@@ -306,10 +347,10 @@ function commitStamps(inputs: readonly InputRecord[], stamps: number[]): number[
  * never holds: Playwright's `selectOption` changes a select that way, so a page size changed through it
  * still put its render on the sort click. With nothing newer the commit belongs where its stamp says.
  */
-function newerInputBefore(inputs: readonly InputRecord[], stamps: number[], end: number, at: number): boolean {
+function newerInputBefore(inputs: readonly InputRecord[], stamps: readonly Stamp[], end: number, at: number): boolean {
   const own = ringInputs(inputs, stamps);
-  const last = own.reduce((a, i) => Math.max(a, i.ts), Math.max(...stamps));
-  if (inputs.some((i) => !ownInput(i, stamps) && i.ts > last + STAMP_TOLERANCE && i.ts <= at)) return true;
+  const last = own.reduce((a, i) => Math.max(a, i.ts), latest(stamps));
+  if (inputs.some((i) => !own.includes(i) && i.ts > last + STAMP_TOLERANCE && i.ts <= at)) return true;
   const from = Math.max(last, end) + STAMP_TOLERANCE;
   return own.some((i) => i.work.closers?.some((t) => t > from && t <= at));
 }
@@ -326,7 +367,7 @@ function newerInputBefore(inputs: readonly InputRecord[], stamps: number[], end:
  * else's work, and a page with a clock ticking once a second is full of them. Counting those turned an
  * honest fast click into "3 commits could not be tied to this click" and cost it its `measured`.
  */
-function unjoinedCommits(inputs: readonly InputRecord[], stamps: number[], entries: readonly InteractionTiming[]): number {
+function unjoinedCommits(inputs: readonly InputRecord[], stamps: readonly Stamp[], entries: readonly InteractionTiming[]): number {
   const during = (at: number) => entries.some((e) => at >= e.processingStart - STAMP_TOLERANCE && at <= e.processingEnd + STAMP_TOLERANCE);
   return ringInputs(inputs, stamps).reduce((a, i) => a + i.work.unjoined.filter(during).length, 0);
 }
@@ -341,7 +382,7 @@ function unjoinedCommits(inputs: readonly InputRecord[], stamps: number[], entri
  * them, rather than the first, is what keeps a pointerdown before hydration from speaking for a click
  * after it.
  */
-function hydrationOf(commits: readonly CommitSummary[], inputs: readonly InputRecord[], stamps: number[]): Hydration | null {
+function hydrationOf(commits: readonly CommitSummary[], inputs: readonly InputRecord[], stamps: readonly Stamp[]): Hydration | null {
   // At most one commit carries it: the boundary an input waited on is credited to the commit that
   // hydrated it and to no other, so there is nothing here to pick between or to add up.
   const hydrating = commits.find((c) => c.hydratedTarget != null) ?? null;
@@ -353,7 +394,7 @@ function hydrationOf(commits: readonly CommitSummary[], inputs: readonly InputRe
 
 /** The element an interaction landed on: an entry's target, or the node the ring kept when the entries' target has left the DOM. */
 export function interactionTarget(entries: readonly InteractionTiming[], inputs: readonly InputRecord[]): Node | null {
-  return entryTarget(entries) ?? ringInput(inputs, entries.map((e) => e.startTime))?.target ?? null;
+  return entryTarget(entries) ?? ringInput(inputs, stampsOf(entries))?.target ?? null;
 }
 
 /**
@@ -395,7 +436,7 @@ export function buildReport(
   // Name the interaction by the most meaningful entry painted with the headline.
   const sorted = group.entries.slice().sort((a, b) => rank(a.name) - rank(b.name));
   const named = sorted[0] ?? longest;
-  const stamps = entries.map((e) => e.startTime);
+  const stamps = stampsOf(entries);
   const ring = ringInput(inputs, stamps);
   // The entry's target is null when the node left the DOM before the observer ran (a close button, a
   // deleted row). The ring kept the node, and what React said about it at dispatch: by the time the
@@ -449,6 +490,9 @@ export function buildReport(
   for (const c of inWindow) walkMs += Math.max(0, Math.min(c.at + c.walkMs, processingEnd) - Math.max(c.at, processingStart));
   // Placed by its first input: a click that starts a navigation happened on the page it left.
   const navigation = navigationAt(navigations, first);
+  // Another interaction's input that came before this one's paint was handled first, and the frame waited on it.
+  const own = ringInputs(inputs, stamps);
+  const next = inputs.find((i) => i.ts > start && i.ts < end && !own.includes(i));
 
   return {
     schemaVersion: 3,
@@ -465,6 +509,7 @@ export function buildReport(
     processing: processingEnd - processingStart - walkMs,
     walkMs,
     presentation: end - processingEnd,
+    nextInput: next ? Object.freeze({ type: next.type, pointerType: next.pointerType || null, start: next.ts }) : null,
     // A node that left the page has no control above it any more; the one found at dispatch labels it.
     // Labelled as it read at dispatch where the ring has that node: a handler can change the text.
     target: targetNode ? describeTarget(targetNode, owners, handler, labels, live ?? ring?.control ?? targetNode, ring && (!live || ring.target === live) ? ring.label : null) : null,
@@ -521,8 +566,8 @@ const EXPLAINED_ON_READ: PropertyDescriptorMap = {
 };
 
 /** The commit's stamp names another input the ring knows, one that is not part of this interaction. */
-function claimedElsewhere(c: CommitSummary, inputs: readonly InputRecord[], stamps: number[]): boolean {
-  return inputs.some((i) => near(i.ts, c.inputTs) && !stamps.some((s) => near(s, i.ts)));
+function claimedElsewhere(c: CommitSummary, inputs: readonly InputRecord[], stamps: readonly Stamp[]): boolean {
+  return inputs.some((i) => i.type === c.inputType && near(i.ts, c.inputTs) && !ownInput(i, stamps, inputs));
 }
 
 /** The navigation an interaction that began at `time` happened in: the newest one that had begun by then. Null only for a report built without the page's navigations, as unit tests build them. */
@@ -533,7 +578,7 @@ function navigationAt(navigations: readonly PageNavigation[], time: number): Pag
 }
 
 /** The soft navigation an interaction started: the last one a router announced while one of its inputs was being dispatched. */
-function navigationStartedBy(navigations: readonly PageNavigation[], stamps: number[]): StartedNavigation | null {
+function navigationStartedBy(navigations: readonly PageNavigation[], stamps: readonly Stamp[]): StartedNavigation | null {
   let started: StartedNavigation | null = null;
   for (const { url, router } of navigations) if (router?.input && stampMatches(router.input, stamps)) started = { url, type: router.type };
   return started && Object.freeze(started);
@@ -593,7 +638,7 @@ export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): R
  * `inputWindow` of `followUpFrom`, the length the hook walks a commit by, so a page that sets it longer
  * gets the renders it pays to walk and one that sets it shorter keeps the ones it walked.
  */
-function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: number[], inputWindow: number): boolean {
+function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: readonly Stamp[], inputWindow: number): boolean {
   return c.at - followUpFrom(c, end, inputs, stamps) <= inputWindow && worthMentioning(c) && !newerInputBefore(inputs, stamps, end, c.at);
 }
 
@@ -644,20 +689,21 @@ export function laterRenderOf(r: Pick<ReportData, 'followUps' | 'entries'>): Com
  * When the ring has let the input go, there is nothing to check it against, and the window runs from the
  * paint.
  */
-function followUpFrom(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: number[]): number {
+function followUpFrom(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: readonly Stamp[]): number {
   // By type as well: a pointerup and its click are often under a millisecond apart.
   const own = inputs.find((i) => i.type === c.inputType && near(i.ts, c.inputTs));
-  if (!own || !ownInput(own, stamps)) return end;
-  const first = Math.min(...stamps);
+  const all = ringInputs(inputs, stamps);
+  if (!own || !all.includes(own)) return end;
+  const first = earliest(stamps);
   // No tolerance on the bounds: the inputs at them are the interaction's own, and the keydown that
   // makes a click can be under a millisecond before it.
-  const pressedBetween = inputs.some((i) => i.ts >= first && i.ts <= own.ts && !ownInput(i, stamps));
+  const pressedBetween = inputs.some((i) => i.ts >= first && i.ts <= own.ts && !all.includes(i));
   return pressedBetween ? end : Math.max(end, own.work.endedAt);
 }
 
 /** Does this commit belong to the report's input, landing after its paint and inside its later-render window (`followUpFrom`)? */
 export function isLaterRender(r: ReportData, c: CommitSummary, inputs: readonly InputRecord[] = [], inputWindow = DEFAULT_INPUT_WINDOW): boolean {
-  const stamps = r.entries.map((e) => e.startTime);
+  const stamps = stampsOf(r.entries);
   return c.at > r.end && stampMatches(c, commitStamps(inputs, stamps)) && isFollowUp(c, r.end, inputs, stamps, inputWindow);
 }
 
@@ -995,6 +1041,12 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
   return best && best.ms >= SCRIPT_MIN_MS ? best : null;
 }
 
+/** A sentence naming the longest script the browser recorded, where it has a name. */
+function longestSaid(p: ScriptPart | null): string {
+  const name = p && scriptName(p.script);
+  return p && name ? ` The longest script the browser recorded in that time was ${name}${p.script.source ? ` (${p.script.source})` : ''}, ${ms(p.ms)}.` : '';
+}
+
 /**
  * The word that marks a sentence as a reading rather than a measurement. Every blame that names
  * something and carries `confidence: 'inferred'` uses it, so the sentence and the data never
@@ -1278,6 +1330,16 @@ function explain(r: InteractionReport): Explanation {
    * there.
    */
   const screenOutranks = r.presentation > LONG_TASK_MS && r.presentation > r.processing;
+  /**
+   * The next interaction's input, where the frame this one painted in waited on it: it came before the
+   * paint, and from it (or from the end of the handlers, where it came during them) to the paint is most
+   * of the screen update. Only where the screen update is the larger part of the interaction, as for
+   * `screenOutranks`, but without the long-task bar: what the next key keeps the last keyup's frame
+   * waiting for can be under one.
+   */
+  const next = r.nextInput;
+  const waitedOnNext =
+    next && r.presentation > r.processing && r.presentation >= r.inputDelay && r.end - Math.max(next.start, processingEnd) >= WAITED_BEHIND_MIN_SHARE * r.presentation ? next : null;
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
@@ -1431,7 +1493,7 @@ function explain(r: InteractionReport): Explanation {
     // recorded. It is not said to be the 190 ms: the script's time can hold React's render too.
     const listener = handlerName ? null : longestPart(whileHandling);
     const listenerName = listener ? scriptName(listener.script) : null;
-    if (listener && listenerName) cause += ` The longest script the browser recorded in that time was ${listenerName}${listener.script.source ? ` (${listener.script.source})` : ''}, ${ms(listener.ms)}.`;
+    cause += longestSaid(listener);
     // It names the blame only where it covers most of the time being blamed.
     const blamedListener = listener && listener.ms >= WAITED_BEHIND_MIN_SHARE * outside ? listenerName : null;
     // The component is the target's, which is where a React handler lives. A listener on the document
@@ -1494,6 +1556,13 @@ function explain(r: InteractionReport): Explanation {
     // it. A 30 ms timer inside a 400 ms wait is in the sentence, with its own figure, and is not the blame.
     const named = behind && behind.ms >= WAITED_BEHIND_MIN_SHARE * r.inputDelay ? scriptName(behind.script) : null;
     blame = { kind: 'waiting', name: named, detail: null, ms: r.inputDelay, confidence: 'measured' };
+  } else if (waitedOnNext) {
+    // The frame waited on the next input, which the page handled first: typing fast, the next key's
+    // keydown and its render come before the frame the last keyup paints in. That render is the next
+    // report's, so there is nothing of this interaction's own to blame, and the wait is the answer.
+    const nextKind = kindOf(waitedOnNext.type, waitedOnNext.pointerType);
+    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update: the frame waited on the next ${nextKind}, which the page handled first.${longestSaid(lateScript)}`;
+    blame = { kind: 'painting', name: lateScript ? scriptName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (screenOutranks) {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot
     // be refused for the screen update and then fall past it.

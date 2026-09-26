@@ -249,7 +249,7 @@ function installNow(opts: InstallOptions): Api {
   // being dispatched, if any, is the one that started it.
   const stopRouterNavigations = onRouterNavigation(({ url, type, at }) => {
     const input = dispatchedInput();
-    navigated({ url, type: 'soft-navigation', start: at, router: { type, input: input && { inputTs: input.ts, gestureTs: input.gestureTs } } });
+    navigated({ url, type: 'soft-navigation', start: at, router: { type, input: input && { inputTs: input.ts, inputType: input.type, gestureTs: input.gestureTs } } });
   });
 
   installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit, label: (control) => labelOf(control, labels()) });

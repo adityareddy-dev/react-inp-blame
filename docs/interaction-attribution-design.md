@@ -512,10 +512,15 @@ is stamped with the newest input seen. A release also carries the timestamp of t
 belongs to (pointerup and click by `pointerId`, keyup by key code, and a click made from the
 keyboard, whose `pointerId` is -1 in Chrome, by the key whose task it came in), so a render after a cheap
 click still finds the pointerdown that was slow enough to be observed. A commit belongs to
-an interaction when one of those stamps matches an entry's `startTime` within 1 ms: the
+an interaction when its input matches an entry of the same type whose `startTime` is within 1 ms
+(a keypress stands for its keydown), or the press it carries matches a pointerdown or keydown entry: the
 Event Timing spec says `startTime` is the event's `timeStamp`, the same clock React's own
 Blocking track keys on. That is why 150 ms of input delay changes nothing and two
-overlapping interactions cannot both claim one commit at full cost. A commit no stamp
+overlapping interactions cannot both claim one commit at full cost. The type matters when typing at full
+speed: the next key goes down under a millisecond after the last one comes up, before the frame that
+keyup paints in, and by time alone the next key's render was the keyup's as well. The keyup's report now
+holds no render, and says its frame waited on the next key press, which the page handled first
+(`nextInput`). A commit no stamp
 explains, landing between an interaction's handlers and its paint, is still taken and
 flagged `joinedBy: 'overlap'`; one that ran during the input delay is what delayed the
 interaction, not part of it. Before or after the paint is decided against the paint that

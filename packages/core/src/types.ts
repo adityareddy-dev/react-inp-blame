@@ -511,6 +511,14 @@ export interface InteractionReport {
    */
   readonly walkMs: number;
   readonly presentation: number;
+  /**
+   * Another interaction's input that came after this one's and before its paint: its event `type`,
+   * `pointerType` as for this report, and `start`, its `timeStamp`. The page handled it before painting,
+   * so the frame this interaction painted in waited on it, and that wait is in `presentation`. Typing
+   * fast does it, the next key's keydown coming before the frame the last keyup paints in. Null when no
+   * input came in that time, or when the library no longer holds the one that did.
+   */
+  readonly nextInput: { readonly type: string; readonly pointerType: string | null; readonly start: number } | null;
   readonly target: TargetInfo | null;
   /**
    * Server-rendered HTML the interaction landed on before React had hydrated it; null when it landed

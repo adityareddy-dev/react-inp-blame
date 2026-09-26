@@ -409,6 +409,37 @@ test('a render that came after a newer interaction had started is not a follow-u
   assert.equal(pressOnly.followUps.length, 1);
 });
 
+test("a keyup whose frame waited on the next key press does not take that key's render, even under a millisecond from it", () => {
+  // Typing at full speed: the next key goes down 0.6 ms after the last one came up, before the frame
+  // that keyup paints in, so the keyup's entry runs to the paint after the next key's render. That
+  // render is stamped with the next keydown, and matched by time alone it was the keyup's too.
+  for (const next of [1100.6, 1101]) {
+    const a = [entry('keydown', 1000, 16, 1001, 1003), entry('keypress', 1000, 16, 1003, 1005), entry('keyup', 1100, 104, 1101, 1103)];
+    const b = [entry('keydown', next, 104, 1103.5, 1190, { interactionId: 8 }), entry('keypress', next, 104, 1104, 1190, { interactionId: 8 })];
+    const ring = [input(1000, 'keydown'), input(1100, 'keyup', { gestureTs: 1000 }), input(next, 'keydown'), input(1260, 'keyup', { gestureTs: next })];
+    const render = commit(1185, next, { inputType: 'keydown', rendered: 1000, total: 70 });
+    // Its keyup's render lands after the paint, stamped with the next key's press.
+    const release = commit(1300, 1260, { inputType: 'keyup', gestureTs: next, total: 20 });
+
+    const keyup = report(a, [render, release], [], ring);
+    assert.deepEqual(keyup.commits, [], `next key at ${next}`);
+    assert.deepEqual(keyup.followUps, [], `next key at ${next}`);
+    assert.equal(isLaterRender(keyup, release, ring), false);
+    assert.deepEqual(keyup.nextInput, { type: 'keydown', pointerType: null, start: next });
+    assert.equal(keyup.explanation.blame.kind, 'painting');
+    assert.match(keyup.verdict, /^104 ms key press\. After the key press was handled, the screen took another 101 ms to update: the frame waited on the next key press, which the page handled first\. /);
+    // The next key's handler is the longest script in that time, and names the blame as it does any painting blame.
+    const framed = report(a, [render, release], [frame(1100, 104, [script('DIV#root.oninput', 1104, 80)])], ring);
+    assert.equal(framed.explanation.blame.name, 'DIV#root.oninput');
+    assert.match(framed.verdict, /handled first\. The longest script the browser recorded in that time was DIV#root\.oninput \(app\.js\), 80 ms\./);
+
+    const key = report(b, [render, release], [], ring);
+    assert.deepEqual(key.commits, [joinedAs(render, 'exact')], `next key at ${next}`);
+    assert.equal(key.nextInput, null);
+    assert.equal(key.explanation.blame.kind, 'render');
+  }
+});
+
 test('a render after an input or change a script dispatched past the paint is not a later render of the input before it', () => {
   // The same sort, then the page size picked with Playwright's selectOption: an `input` and a `change` from
   // script and no pointer or key going down, so the ring's newest input was still the sort click, and the
@@ -1207,7 +1238,7 @@ test('a commit that hydrated is described as hydrating, not re-rendering', () =>
 test('a report is placed in the navigation its interaction began in, and names the soft navigation its input started', () => {
   const home: PageNavigation = { url: 'https://shop.example/', type: 'navigate', start: 0, router: null };
   // A link pressed at 990 ms and clicked at 1000: the router announced the cart while the click was dispatched.
-  const cart: PageNavigation = { url: 'https://shop.example/cart', type: 'soft-navigation', start: 1004, router: { type: 'push', input: { inputTs: 1000, gestureTs: 990 } } };
+  const cart: PageNavigation = { url: 'https://shop.example/cart', type: 'soft-navigation', start: 1004, router: { type: 'push', input: { inputTs: 1000, inputType: 'click', gestureTs: 990 } } };
   const placeOf = (entries: ReturnType<typeof entry>[]) => {
     const { navigationURL, navigationType, startedNavigation } = buildReport(entries, [], [], [], 'attributes', [home, cart]);
     return { navigationURL, navigationType, startedNavigation };

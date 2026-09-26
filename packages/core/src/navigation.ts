@@ -18,7 +18,7 @@ export interface PageNavigation {
   /** For a soft navigation: the router's word for it, and the input being dispatched when the router announced it, if one was. */
   readonly router: {
     readonly type: StartedNavigation['type'];
-    readonly input: Pick<CommitSummary, 'inputTs' | 'gestureTs'> | null;
+    readonly input: Pick<CommitSummary, 'inputTs' | 'inputType' | 'gestureTs'> | null;
   } | null;
 }
 

@@ -724,6 +724,7 @@ interface InteractionReport {
   reactStatus: 'reading' | 'waiting' | 'installed-late' | 'unreadable'; // stats().react as it was built
   start: number; end: number; duration: number; holdMs: number;             // ms, performance.now() clock
   inputDelay: number; processing: number; walkMs: number; presentation: number; // add up to duration
+  nextInput: { type: string; pointerType: string | null; start: number } | null; // came before its paint
   target: TargetInfo | null; entries: EventEntrySummary[]; // target: selector, label, component, owners, handler
   hydration: { kind: 'waited' | 'not-hydrated'; scope: 'root' | 'boundary';   // server-rendered HTML the click
                owner: string | null; ms: number | null } | null;            // landed on before React hydrated it
