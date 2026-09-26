@@ -633,10 +633,11 @@ export function installHook(opts: HookOptions): void {
     state.unsupported = { kind: 'hook-disabled', message };
     warnOnce('hook-disabled', message);
   } else if (existing) {
-    if (opts.hook === 'shim') {
+    attach(existing, 'chained');
+    // Not where the hook could not be wrapped: that has a warning of its own.
+    if (opts.hook === 'shim' && state.mode === 'chained') {
       warnOnce('shim-over-hook', "hook: 'shim' found a React DevTools hook already installed and chained onto it instead: replacing it would lock out whatever installed it.");
     }
-    attach(existing, 'chained');
   } else if (opts.hook === 'chain') {
     state.mode = 'none';
   } else {

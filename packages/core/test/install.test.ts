@@ -767,6 +767,18 @@ test('a frozen hook that replaces the shim before React registers is not followe
   });
 });
 
+test("hook: 'shim' over a frozen hook says only that it cannot be wrapped, not that it chained onto it", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    page.window[HOOK] = Object.freeze(existingHook());
+    const api = install({ hook: 'shim', devtoolsTrack: false });
+    assert.equal(api.stats().mode, 'unsupported');
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /cannot be wrapped/);
+    api.dispose();
+  });
+});
+
 test('stats() and debug.hook() only read: a tool that redefines the global over the shim is noticed at the next Event Timing batch', async () => {
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false });
