@@ -1422,18 +1422,22 @@ function explain(r: InteractionReport): Explanation {
    * asked of the working time: after it, a commit another input made can run in the same script, and that
    * commit is not in this report.
    */
-  // Each commit ran in one script: the one whose span holds its stamp, else the nearest within a stamp. A commit
-  // at the very end of React's listener is not also in the listener that starts straight after it.
+  // Each commit ran in one script: the one whose span holds its stamp, else the nearest that ended within a stamp
+  // before it. Never one that starts after it: Long Animation Frames lists only scripts over 5 ms, so a short
+  // React listener can be missing, and its commit is then in no script listed, not in the one straight after.
   const scriptsRun = (r.frames ?? []).flatMap((f) => f.scripts);
   const holderOf = (x: CommitSummary) => {
     let best: ScriptSummary | null = null;
     let off = STAMP_TOLERANCE;
     for (const s of scriptsRun) {
-      const d = Math.max(0, s.start - x.at, x.at - s.start - s.duration);
+      if (x.at < s.start) continue;
+      const d = Math.max(0, x.at - s.start - s.duration);
       if (d < off || (d === off && !best)) [best, off] = [s, d];
     }
     return best;
   };
+  // Whose handlers a script ran in, from its start, and a commit, from its stamp: one event's end is the next's start.
+  const handlingAt = (t: number, stamp: boolean) => r.entries.find((e) => t >= e.processingStart && (stamp ? t <= e.processingEnd : t < e.processingEnd)) ?? null;
   const committedIn = (x: CommitSummary, s: ScriptSummary) => holderOf(x) === s;
   // React's own scheduler task can hold a render and no commit, a transition's time slice, so it is never counted
   // as outside React.
@@ -1461,8 +1465,12 @@ function explain(r: InteractionReport): Explanation {
           : Math.round(forcedOutside) >= Math.round(forced) || forced - forcedOutside < 0.5
             ? `All but under 1 ms of it was charged to ${scripts} no React commit ran in, so that was`
             : `${cap(ms(forcedOutside))} of it was charged to ${scripts} no React commit ran in, so that was`;
-      // A commit in another of the handlers' scripts says that one was React's listener, where the handler ran.
-      const byInvoker = parts.some((p) => r.commits.some((x) => committedIn(x, p.script)));
+      // A commit in the same event's handlers, and so in none of these scripts, says React's listener for it was
+      // another script, listed or too short to be, and the handler ran there.
+      const byInvoker = r.commits.some((x) => {
+        const e = handlingAt(x.at, true);
+        return e !== null && outside.some((p) => handlingAt(p.script.start, false) === e);
+      });
       const elsewhere = byInvoker ? "code outside React, such as a library's listener" : handlerOrListener;
       return { said: `${READS_SIZE}. ${lead} not in a layout effect but in ${elsewhere}.`, inTheSubtree: false, commit: null, byInvoker };
     }
@@ -2000,9 +2008,10 @@ function explain(r: InteractionReport): Explanation {
   const walked = [...r.commits, ...r.followUps];
   if (namesLookMinified(walked)) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
-    // Mostly inside the handlers, it is where the layout rung would put it; after them, a commit there can be
-    // another input's, so the usual place is said.
-    const said = forcedWhileHandling >= FORCED_LAYOUT_IN_REACT_SHARE * forcedAfterInput ? whereRead(whileHandling).said : USUAL_READ;
+    // All inside the handlers, it is where the layout rung would put it. Where some was after them, a commit there
+    // can be another input's, and a sentence about the handlers' part would be read as about all of it, so the
+    // usual place is said.
+    const said = forcedAfterInput - forcedWhileHandling < 0.5 ? whereRead(whileHandling).said : USUAL_READ;
     notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout in scripts before the paint. ${said}`);
   }
   // The wait INP leaves out is what the note is for, so a render outside the entries goes first. INP
