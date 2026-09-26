@@ -1355,7 +1355,9 @@ function explain(r: InteractionReport): Explanation {
    * not React's. Its render duration stands for it, as in a production build. Spans that overlap
    * count once: a root flushed from inside another root's layout effect commits within that span.
    */
-  const inOneHandler = (from: number, to: number) => r.entries.some((e) => from >= e.processingStart - STAMP_TOLERANCE && to <= e.processingEnd + STAMP_TOLERANCE);
+  // No slack at the start: a commit and an entry's handlers are timed on the same clock, and what began even a tick
+  // before them was not theirs (a transition committed there has its effects held for the next render).
+  const inOneHandler = (from: number, to: number) => r.entries.some((e) => from >= e.processingStart && to <= e.processingEnd + STAMP_TOLERANCE);
   const spans = r.commits
     .flatMap((x, order) => {
       const began = x.startedAt;

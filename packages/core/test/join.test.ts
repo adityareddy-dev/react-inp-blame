@@ -1958,6 +1958,17 @@ test('effects React ran in a later task are not counted', () => {
   assert.doesNotMatch(r.explanation.cause, /useEffect/);
 });
 
+test("a transition's effects React held until the click rendered are not counted, though it committed just before the handlers", () => {
+  // The press set off a transition, which committed 0.4 ms before the click's handlers began. React held its
+  // effects until the next render, the click's, so they ended after onClick had run for 290 ms: the span from the
+  // commit to their end is the handler's time, not theirs.
+  const transition = commit(1002.6, 1000, { startedAt: 999.6, total: 3, effectsStartedAt: 1002.6, effectsEndedAt: 1297 });
+  const own = commit(1305, 1000, { startedAt: 1300, total: 5, effectsStartedAt: 1305, effectsEndedAt: 1306 });
+  const r = report([entry('click', 1000, 330, 1003, 1320)], [transition, own], null, draw());
+  assert.equal(r.explanation.blame.kind, 'handler');
+  assert.doesNotMatch(r.explanation.cause, /useEffect/);
+});
+
 test("the effects' time starts where the hook call returned, after this library's walk and React DevTools' reading", () => {
   const chart = commit(1010, 1000, { startedAt: 1004, total: 5, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], walkMs: 2, effectsStartedAt: 1030, effectsEndedAt: 1310 });
   const r = report([entry('click', 1000, 330, 1003, 1320)], [chart], null, draw({ owners: ['Chart'] }));

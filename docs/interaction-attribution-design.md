@@ -885,21 +885,25 @@ the moment the hook call for the commit returned (`effectsStartedAt`). The walk 
 own reading of the commit run inside that call, and neither is the effects' time. From one to the
 other is React's time as well, under the same rule as the render span: it counts only where both ends
 fall inside one event's handlers, so the effects of a transition, which React runs in a later task,
-count for nothing, since another task can have run in between. The effects add to the commit's
-committing time for the 25 ms test, and the sentence says each of the two that would show alone, or
-both where only their sum does, or the totals across the commits where only those earned the blame.
-A production build has no render start, but the effects are measured all the same, so there the
-render is named as a reading and the effects carry the figure. What is left of that build's working
-time is the handler and the render together, unsplit, so the effects take the blame there only where
-they are at least half of it, or where there is no handler's name to give the rest; below that the
-handler keeps it, with the effects taken off its time and said. A development build's handler keeps
-the blame, too, where React's time would not earn one: a 28 ms handler beside a 4 ms render and 24 ms
-of effects. Committing and effects only choose the commit a render blame names where they are worth
-a mention, and a sentence that names one commit gives what the others spent where that is worth
-saying, so none of it goes unsaid under the wrong name. The handler, for its part, now has to outrun all of React's time to be the blame, committing and
-effects included, not only the render durations it was held against before spans existed. A render
-blame's milliseconds are the commit's in all, render, committing and effects, since that is what it
-accounts for.
+count for nothing, since another task can have run in between. Both ends means from the handlers'
+first tick, with no slack before it: a transition that committed 0.4 ms before a click's handlers
+began has its effects held until the next render, the click's, after the handler has run, and with a
+millisecond of slack there the handler's 290 ms read as the effects'. The commit and the entry are
+timed on the same clock, so nothing of the handlers' own is stamped before them. The effects add to
+the commit's committing time for the 25 ms test, and the sentence says each of the two that would
+show alone, or both where only their sum does, or the totals across the commits where only those
+earned the blame. A production build has no render start, but the effects are measured all the same,
+so there the render is named as a reading and the effects carry the figure. What is left of that
+build's working time is the handler and the render together, unsplit, so the effects take the blame
+there only where they are at least half of it, or where there is no handler's name to give the rest;
+below that the handler keeps it, with the effects taken off its time and said. A development build's
+handler keeps the blame, too, where React's time would not earn one: a 28 ms handler beside a 4 ms
+render and 24 ms of effects. Committing and effects only choose the commit a render blame names where
+they are worth a mention, and a sentence that names one commit gives what the others spent where that
+is worth saying, so none of it goes unsaid under the wrong name. The handler, for its part, now has
+to outrun all of React's time to be the blame, committing and effects included, not only the render
+durations it was held against before spans existed. A render blame's milliseconds are the commit's in
+all, render, committing and effects, since that is what it accounts for.
 
 React commits some updates once a commit's effects are done and before it says they ran: one an
 effect made with `flushSync`, and one a layout effect made, the measure-then-`setState` a tooltip
