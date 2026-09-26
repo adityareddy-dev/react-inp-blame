@@ -853,6 +853,27 @@ test('a page that seals its DevTools hook after install() gets its methods back 
   });
 });
 
+test('a page that holds the global empty where it cannot be redefined still gets reports, without components, and install() does not throw', async (t) => {
+  // `var __REACT_DEVTOOLS_GLOBAL_HOOK__;` in a classic script, and a property defined with nothing in it, which
+  // React reads as no hook. Neither can become the library's accessor.
+  const warn = t.mock.method(console, 'warn', () => {});
+  for (const empty of [{ value: undefined, writable: true, enumerable: true }, { value: null }]) {
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+    await inBrowser((page) => {
+      Object.defineProperty(page.window, HOOK, empty);
+      const api = install({ devtoolsTrack: false });
+      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      assert.equal(page.window[HOOK], empty.value);
+      page.paint([slowClick(120)]);
+      assert.equal(api.last()?.duration, 120);
+      assert.equal(warn.mock.callCount(), 1);
+      assert.match(warn.mock.calls[0].arguments[0], /cannot be redefined/);
+      api.dispose();
+    });
+  }
+});
+
 test('a frozen hook that replaces the shim before React registers is not followed, and the assignment does not throw', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
