@@ -1207,6 +1207,22 @@ test('the forced layout sentence says a layout effect only where a commit ran in
   for (const effectsEndedAt of [2.1, 118]) {
     assert.equal(said([commit(2, 0, { total: 0, hasDurations: false, rendered: 3, effectsStartedAt: 2, effectsEndedAt })], root), `${reads}, often in a layout effect.`);
   }
+  // Chromium rounds an entry's duration to 8 ms, so where the screen updated soon after the handlers, the start and
+  // the duration can add up to less than their end (746.3 + 64 against 810.9, measured on Space). A development
+  // build's commit stamped at the listener's end is timed all the same.
+  const rounded = report(
+    [entry('click', 746.3, 64, 747, 810.9)],
+    [commit(810.9, 746.3, { total: 0.05, startedAt: 810.8, rendered: 3, components: [{ name: 'Row', count: 3, self: 0.05, total: 0.05 }] })],
+    [frame(746.3, 66, [script('DIV#root.onclick', 747, 63.9, 62.8)])],
+    [input(746.3, 'click', named)],
+  ).explanation;
+  assert.ok(
+    rounded.cause.endsWith(
+      `${reads}. React's commit took under 1 ms in all, so at most that much of the layout was in a layout effect or a ref callback, and the rest in code outside React, such as the click handler measureThing or a library's listener.`,
+    ),
+    rounded.cause,
+  );
+  assert.deepEqual([rounded.blame.name, rounded.blame.detail], ['measureThing', null]);
 
   // The layout charged to a listener no commit ran in, React's own script holding the commit and forcing
   // nothing: in no layout effect, in any build, however long React's commit took. The blame is the

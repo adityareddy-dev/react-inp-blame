@@ -858,22 +858,27 @@ Without Long Animation Frames that layout is not measured at all, and until 2026
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are
 nowhere in it, and the working time outside the render was all the handler's: on Linux WebKit in CI
 the same scenario came back as `onClick` running for 465 ms beside a 404 ms render. A development or
-profiling build keeps when React began each render, as the root fiber's `actualStartTime`, on the same
-clock as `performance.now()`, and the commit hook runs after the layout effects. So from that start
-to the commit's end is React's own time, committing included (`CommitSummary.startedAt` to `at`).
-A span only counts when it began and ended inside one event's handlers. React does not yield in
-there, so a render that began before them or committed after them stopped on the way, and what ran
+profiling build keeps when React began each render, as the root fiber's `actualStartTime`, on the
+same clock as `performance.now()`, and the commit hook runs after the layout effects. So from that
+start to the commit's end is React's own time, committing included (`CommitSummary.startedAt` to
+`at`). A span only counts when it began and ended inside one event's handlers. React does not yield
+in there, so a render that began before them or committed after them stopped on the way, and what ran
 meanwhile, the handler most often, was not React's; that commit falls back to its render duration.
-Where spans overlap (a layout effect flushing another root with `flushSync`) they count once. The
-handler now takes what lies outside both React's time and the forced layout the browser measured.
+The working time ends at the paint, as web-vitals has it, and Chromium rounds an entry's duration to
+8 ms, so that end can come before the handlers' own: a commit stamped at the end of React's listener
+past it is timed all the same, with none of its time in the working time, as only the part inside
+counts of a commit that straddles the end. Before, such a commit had no span, and on 4 of 24 Enter
+and Space presses measured in a development build the forced layout's sentence fell back to the usual
+line. Where spans overlap (a layout effect flushing another root with `flushSync`) they count once.
+The handler now takes what lies outside both React's time and the forced layout the browser measured.
 The two are not added together: a layout effect's forced layout sits inside the commit, and counting
 it twice would leave the handler less than it ran, so the larger one is taken. Neither is exact:
 geometry read in a render body is in the render and the layout both, as the layout branch says, and
 forced layout in the handler's own code, beside a commit busy with other work, stays in the handler's
 figure rather than the layout's. The render keeps the blame, however small the render itself was,
 once committing took as long as the handler would have needed to be blamed (25 ms and a quarter of
-the working time), since the time taken off the handler has to land somewhere. The commit it names
-is the one React spent longest on with committing counted, and its sentence says what that commit's
+the working time), since the time taken off the handler has to land somewhere. The commit it names is
+the one React spent longest on with committing counted, and its sentence says what that commit's
 committing took. A production build keeps no start, so nothing changes there.
 
 `useEffect`s were left with the handler until 2026-09-24. React 18 and 19 run a click's or a key's

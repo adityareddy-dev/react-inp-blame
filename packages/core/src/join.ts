@@ -1364,7 +1364,9 @@ function explain(r: InteractionReport): Explanation {
       if (began === null || !inOneHandler(began, x.at)) return [];
       const from = Math.max(began, processingStart);
       const to = Math.min(x.at, processingEnd);
-      return to > from ? [{ commit: x, order, from, to }] : [];
+      // The working time ends at the paint the duration's 8 ms rounding gives, which can be before the handlers' own
+      // end: a commit that ended past it is timed all the same, with none of it in the working time.
+      return to > from || x.at > processingEnd ? [{ commit: x, order, from, to: Math.max(from, to) }] : [];
     })
     .sort((a, b) => a.from - b.from);
   /**
