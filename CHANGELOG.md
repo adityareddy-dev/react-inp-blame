@@ -50,6 +50,11 @@ it changes when a field is removed or changes meaning, which a minor release may
   says "No long animation frame says what ran in 54 ms of it, before the keyup came, so the wait counted is the
   other 90 ms."
 
+- **A transition's held effects no longer take the handler's time.** A transition that committed just before a
+  click's handlers began, 0.4 ms in the case found, was counted as inside them. React holds a transition's
+  effects until the next render, the click's, after the handler, so the report said "The commit's useEffect
+  callbacks then ran for about 290 ms more" where the handler had run. A commit now counts as inside an event's
+  handlers only from their first tick. In React 18 and 19, since 0.12.0.
 
 ## [0.14.0] - 2026-09-26
 
