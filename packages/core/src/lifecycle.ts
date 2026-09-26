@@ -1,6 +1,6 @@
 import type { InputRecord } from './hook.js';
 import { createInpTracker, rateInp, type InpEstimate } from './inp.js';
-import { attachLaterRender, buildReport, interactionTarget, isLaterRender, refreshFrames, refreshReport, sealReport, timed, type LabelSource, type ReportData } from './join.js';
+import { attachLaterRender, awaitsEntry, buildReport, interactionTarget, isLaterRender, refreshFrames, refreshReport, sealReport, timed, type LabelSource, type ReportData } from './join.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import { inOverlay } from './overlay-host.js';
@@ -63,7 +63,10 @@ export interface Lifecycle {
   onFrame(): void;
   /** A navigation began at `start` (`performance.now()`); `navigations` already holds it. */
   onNavigation(start: number): void;
-  /** The page was hidden: the INP estimate is chosen again at the interaction count by then, as web-vitals chooses when it reports on hide. */
+  /**
+   * The page was hidden: the INP estimate is chosen again at the interaction count by then, as web-vitals
+   * chooses when it reports on hide, and a later render stops waiting on an entry (`awaitsEntry`).
+   */
   onHidden(): void;
   /** Published reports, oldest first, each at its latest revision. */
   reports(): InteractionReport[];
@@ -113,8 +116,11 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     return held;
   };
   // Only a later render INP left out makes a quick interaction worth publishing. INP timed the one a
-  // press's release made inside its own entry.
-  const worthPublishing = (data: ReportData) => data.duration >= threshold || data.followUps.some((c) => !timed(c, data.entries));
+  // press's release made inside its own entry, and one stamped with a release whose entry has not come
+  // may be inside it (`awaitsEntry`), so it waits for that entry unless `settle` says none will come. Not
+  // one `threshold` or more after the release: an entry holding that would publish the interaction anyway.
+  const worthPublishing = (data: ReportData) =>
+    data.duration >= threshold || data.followUps.some((c) => !timed(c, data.entries) && (c.sinceInput >= threshold || !awaitsEntry(c, data.entries)));
   const keep = (held: Held) => {
     published.push(held);
     if (published.length <= MAX_REPORTS) return;
@@ -126,6 +132,23 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
   const holdBack = (held: Held) => {
     quiet.push(held);
     if (quiet.length > MAX_QUIET) quiet.shift();
+  };
+  /**
+   * Publishes a quiet interaction whose render INP left out was waiting for a release's entry, once that
+   * entry will not come. A newer interaction's entry never comes before it, so one in `batch` means the
+   * release painted under the 16 ms floor and sent none, and once the page is hidden (`batch` null)
+   * nothing waits. An interaction with entries in the batch is judged on those instead. The untimed
+   * renders of a quiet interaction are all waiting ones: any other would have published it.
+   */
+  const settle = (batch: readonly InteractionTiming[] | null) => {
+    for (const held of quiet.slice()) {
+      const { interactionId, entries, followUps } = held.data;
+      if (batch?.some((e) => e.interactionId === interactionId)) continue;
+      if (!followUps.some((c) => !timed(c, entries) && (!batch || batch.some((e) => e.startTime > c.inputTs)))) continue;
+      quiet.splice(quiet.indexOf(held), 1);
+      keep(held);
+      publish(held.report);
+    }
   };
   const find = (id: number): Held | null => {
     for (const list of [published, quiet]) {
@@ -181,6 +204,8 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       const started = now();
       inp.add(batch.filter((e) => e.startTime >= navigationStart));
       spend(started);
+      // Before the batch's own interactions, so the newest report is still the last published.
+      settle(batch);
       const byId = new Map<number, InteractionTiming[]>();
       for (const e of batch) {
         const group = byId.get(e.interactionId);
@@ -245,6 +270,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       const started = now();
       inp.update();
       spend(started);
+      settle(null);
     },
 
     reports: () => published.map((held) => held.report),
