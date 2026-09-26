@@ -192,7 +192,7 @@ interface HookState {
   /** The hook this library created. React keeps the hook it registered with for the page's life, so a second install reuses it. */
   shim: DevtoolsHook | null;
   devtoolsLockedOut: boolean;
-  /** How the hook is in use: 'shim', 'chained' or 'none', or 'unsupported' when the page's hook is disabled or cannot be wrapped. */
+  /** How the hook is in use: 'shim', 'chained' or 'none', or 'unsupported' when the page has disabled or locked the hook. */
   mode: Stats['mode'];
   /** Why the page's hook cannot be used at all. A renderer's own problem is on the renderer. */
   unsupported: UnsupportedReason | null;
@@ -642,7 +642,14 @@ export function installHook(opts: HookOptions): void {
     state.mode = 'none';
   } else {
     const shim = (state.shim ??= createShim());
-    defineGlobal(holder, shim);
+    try {
+      defineGlobal(holder, shim);
+    } catch {
+      // The page holds the global empty where it cannot be redefined (`var __REACT_DEVTOOLS_GLOBAL_HOOK__;` in a
+      // classic script does), which React reads as no hook at all.
+      locked("the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and cannot be redefined, so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.");
+      return;
+    }
     attach(shim, 'shim');
   }
 }
@@ -673,15 +680,9 @@ function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   try {
     if (as === 'chained') detach = chain(hook);
   } catch {
-    // Pages that keep developer tools out of production can freeze or seal the hook, or give a method only a
-    // getter, or a setter that drops what it is given.
-    const message =
-      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen or sealed, or has methods that cannot be assigned, so it cannot be wrapped and React's commits cannot be read. Interactions are still reported, without components.";
-    state.attached = null;
-    state.detach = null;
-    state.mode = 'unsupported';
-    state.unsupported = { kind: 'hook-disabled', message };
-    warnOnce('hook-locked', message);
+    // Pages that keep developer tools out of production can freeze the hook, or seal one without
+    // onPostCommitFiberRoot, or give a method only a getter, or a setter that drops what it is given.
+    locked("the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen, or has a method that cannot be assigned or added, so it cannot be wrapped and React's commits cannot be read. Interactions are still reported, without components.");
     return;
   }
   state.attached = hook;
@@ -689,6 +690,15 @@ function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   state.unsupported = null;
   state.detach = detach;
   for (const renderer of registryOf(hook).values()) admit(renderer);
+}
+
+/** The page has locked the hook, or the global, against developer tools: nothing is attached, and the page is unsupported. */
+function locked(message: string): void {
+  state.attached = null;
+  state.detach = null;
+  state.mode = 'unsupported';
+  state.unsupported = { kind: 'hook-disabled', message };
+  warnOnce('hook-locked', message);
 }
 
 function registryOf(hook: DevtoolsHook): Map<number, Renderer> {
