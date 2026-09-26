@@ -6,20 +6,26 @@ const core = (f: string) => fileURLToPath(new URL(`../../packages/core/src/${f}`
 const page = (f: string) => fileURLToPath(new URL(`./${f}`, import.meta.url));
 
 // Only the build that goes to GitHub Pages, which .github/workflows/pages.yml sets this for. A stranger
-// arriving there has no README beside the page, so it says what the page is and that the delays are put
-// there on purpose. Off everywhere else, so the specs and the dev server see the demo unchanged.
-const hostedBanner = {
-  name: 'react-inp-blame-demo:hosted-banner',
+// arriving there has no README beside the page, so the header says what the library does, where it lives
+// and how to install it, that the delays are put there on purpose, and that nothing typed into the page
+// leaves it. Off everywhere else, so the specs and the dev server see the demo unchanged.
+const hostedHeader = {
+  name: 'react-inp-blame-demo:hosted-header',
   apply: 'build' as const,
   // The demo builds two pages, and devtools-hook.html has a `<div id="root">` of its own. Only the
-  // page a visitor lands on gets the banner.
+  // page a visitor lands on gets the header.
   transformIndexHtml: (html: string, ctx: { path: string }) =>
     process.env.INP_DEMO_HOSTED !== '1' || ctx.path !== '/index.html'
       ? html
       : html.replace(
           '<div id="root"></div>',
-          `<p class="hosted-banner">This page is the demo for <a href="https://github.com/adityareddy-dev/react-inp-blame">react-inp-blame</a>, ` +
-            `and everything on it is slow on purpose. Click something and read what the badge in the corner blames.</p>\n    <div id="root"></div>`,
+          `<header class="hosted-header">
+      <p><b>react-inp-blame</b> names the React component or handler behind a slow click, tap or key press.
+        <span><a href="https://github.com/adityareddy-dev/react-inp-blame">GitHub</a> <code>npm i react-inp-blame</code></span></p>
+      <p>Everything here is slow on purpose, so click something and read what the badge in the corner blames.
+        Nothing you type on this page leaves it: the sign-in is simulated and sends no request.</p>
+    </header>
+    <div id="root"></div>`,
         ),
 };
 
@@ -34,7 +40,7 @@ export default defineConfig({
       // devtools-hook.html loads the library itself, before or after React DevTools and Fast Refresh.
       pages: (path) => path !== '/devtools-hook.html',
     }),
-    hostedBanner,
+    hostedHeader,
   ],
   resolve: {
     alias: [
