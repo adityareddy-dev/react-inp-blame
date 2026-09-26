@@ -27,6 +27,13 @@ export interface CommitSummary {
   readonly gestureTs: number;
   readonly inputType: string;
   /**
+   * React made the commit while that input was being dispatched, in the input's own task, so its Event
+   * Timing entry holds it: INP timed it, even as a later render (the release of a press held past its
+   * paint). False outside the dispatch, and in a `change` from a later task. Absent on a report stored by
+   * an earlier release.
+   */
+  readonly inDispatch?: boolean;
+  /**
    * How the commit joined the report that holds it: exactly, by its input stamp, or by wall-clock
    * overlap when no stamp matched (the fallback). Absent on a commit no report holds, as in
    * `api.debug.commits()`.
@@ -526,7 +533,10 @@ export interface InteractionReport {
   /**
    * Commits that landed after that paint but still belong to this input (effects, transitions, cascades), within
    * `inputWindow` of the paint, or of the end of a later input's own work in the same interaction, such as the
-   * click that releases a press held past the paint. INP does not count them; the user still waits for them.
+   * click that releases a press held past the paint, and before any newer input or any `input`, `change` or
+   * `submit` a script dispatched after the paint. INP does not count them, except one that ran inside another of
+   * the interaction's own entries (`CommitSummary.inDispatch`), such as that release's render; the user still
+   * waits for them.
    */
   readonly followUps: readonly CommitSummary[];
   /**
@@ -572,7 +582,7 @@ export interface InstallOptions {
    * dynamic import after install() returns. Default false.
    */
   overlay?: boolean | 'query' | OverlayOptions;
-  /** Report interactions at or above this duration (ms), plus shorter ones that trigger a later render. Default 40. */
+  /** Report interactions at or above this duration (ms), plus shorter ones that trigger a later render INP does not count. Default 40. */
   threshold?: number;
   /** Draw each report in the Chrome Performance panel, in a "react-inp-blame" track group, once the page is idle. Default true. */
   devtoolsTrack?: boolean;
