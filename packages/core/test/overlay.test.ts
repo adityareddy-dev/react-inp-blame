@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { renderedVerb } from '../src/join.ts';
+import { laterRenderOf, renderedVerb } from '../src/join.ts';
 import { laterDetail, titleFor } from '../src/overlay.ts';
 import type { CommitSummary, InteractionReport } from '../src/types.ts';
 
@@ -47,4 +47,22 @@ test("the panel's line for a later render says what the render was made of in th
   assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 57 }), 'mounted');
   assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 20 }), 're-rendered');
   assert.equal(renderedVerb(later(59, [['Label', 4]])), 're-rendered');
+});
+
+test('the panel names the later render the note speaks of: one INP left out before a heavier one on the release', () => {
+  // A 32 ms pointerdown held past its paint, the 60 ms render its pointerup made inside its own entry, and
+  // a 40 ms one its effects made after the release painted. The row and "Rendered after the paint" read it.
+  const entries = [
+    { name: 'pointerdown', startTime: 0, duration: 32, processingStart: 2, processingEnd: 24 },
+    { name: 'pointerup', startTime: 60, duration: 24, processingStart: 61, processingEnd: 72 },
+  ];
+  const render = (at: number, total: number, name: string) =>
+    ({ at, inputTs: 60, gestureTs: 0, startedAt: null, hasDurations: true, total, rendered: 30, components: [{ name, count: 30, self: total, total }] }) as unknown as CommitSummary;
+  const release = render(70, 60, 'Canvas');
+  const effect = render(400, 40, 'Toolbar');
+  const r = { entries, followUps: [release, effect] } as unknown as InteractionReport;
+  assert.equal(laterRenderOf(r), effect);
+  // Where INP timed every one, the heaviest of them.
+  assert.equal(laterRenderOf({ ...r, followUps: [release] }), release);
+  assert.equal(laterRenderOf({ ...r, followUps: [] }), null);
 });
