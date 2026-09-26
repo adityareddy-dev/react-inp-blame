@@ -24,6 +24,10 @@ it changes when a field is removed or changes meaning, which a minor release may
   production build already were, and the same render reads "301 of them inside Rows". A component of the app's
   own with one of those names is still named on the path, but spends no step and is not what a render is named
   after. Vite and other setups are unchanged.
+- **Under `next dev`, a click on a link is said to be in the component that wrote `<Link>`.** It was said to
+  be in `LinkComponent`, next/link's own component that renders the `<a>`: on the Next.js demo, "click on link
+  "Second page" in LinkComponent", now "in Page". Through `react-inp-blame/next` that name is passed over for
+  the nearest readable owner above it, and named as before when there is none. `target.owners` still has it.
 
 ## [0.13.0] - 2026-09-26
 

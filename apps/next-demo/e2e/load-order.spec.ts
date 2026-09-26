@@ -90,6 +90,8 @@ test('a link click that starts a navigation is named with it, and the page it op
   const link = await reportAfter(page, null);
   await test.info().attach(`${run}: link verdict`, { body: link.verdict, contentType: 'text/plain' });
   expect(placeOf(link)).toEqual({ navigationURL: home, navigationType: 'navigate', startedNavigation: { url: second, type: 'push' } });
+  // Named after the page that wrote <Link>, not next/link's LinkComponent that renders the <a> for it.
+  expect(link.target?.component, link.target?.owners.join(' < ')).toBe('Page');
   // The click began before the navigation it started, so it is not part of the INP of the page it opened.
   const opened: InpEstimate | null = await page.evaluate(() => window.__REACT_INP_BLAME__.inp());
   expect(opened).toBeNull();

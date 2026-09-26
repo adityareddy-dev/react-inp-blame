@@ -34,6 +34,13 @@ const APP_ROUTER_LAYERS: readonly string[] = [
   'InnerScrollAndFocusHandler', 'InnerScrollAndFocusHandlerOld', 'InnerScrollHandlerNew', 'ClientPageRoot', 'ClientSegmentRoot',
 ];
 
+/**
+ * next/link's component, named the same in both routers from Next.js 14.2 to 16.3. It renders the `<a>` around
+ * what the app gives it, so in development a click on a link was named after it rather than after the
+ * component that wrote `<Link>`.
+ */
+const NEXT_WRAPPERS: readonly string[] = ['LinkComponent'];
+
 // Next.js replaces this expression with the JSON `withInpBlame` put in `env`, at build time. Declared
 // here rather than taken from Node's types, because in the browser nothing else of `process` is read.
 declare const process: { readonly env: { readonly REACT_INP_BLAME_NEXT?: string } };
@@ -45,9 +52,9 @@ const wrapper = process.env.REACT_INP_BLAME_NEXT;
 const settings: WrapperSettings | null = wrapper ? { install: {}, basePath: '', ...JSON.parse(wrapper) } : null;
 
 if (settings) {
-  // Under the App Router these names are Next.js's own, so a render that starts at its Router is named after
-  // the app's components below them.
-  for (const name of APP_ROUTER_LAYERS) frameworkLayers.add(name);
+  // Under Next.js these names are its own, so a render that starts at the App Router's Router, and a click on
+  // a link, are named after the app's components.
+  for (const name of [...APP_ROUTER_LAYERS, ...NEXT_WRAPPERS]) frameworkLayers.add(name);
   install(settings.install);
 }
 
