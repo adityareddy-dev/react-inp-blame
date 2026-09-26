@@ -542,8 +542,9 @@ function blameText(blame: Blame, rendered: string): Child[] {
     // null where several scripts shared the total; the row then says only what was measured.
     case 'layout':
       return [`browser recalculated styles and layout${ms}`, name && ' in ', name && b(name), detail && `${DOT}${detail}`];
+    // A wait between one event's handlers and the next's says where it came, in `detail`.
     case 'waiting':
-      return [`main thread was busy${ms} before the handler could start`, ...named];
+      return detail ? [`main thread was busy${ms} ${detail}`, ...named] : [`main thread was busy${ms} before the handler could start`, ...named];
     case 'painting':
       return [`screen took${ms} to update`, ...named];
     case 'script':

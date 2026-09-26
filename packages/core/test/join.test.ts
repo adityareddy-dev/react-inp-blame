@@ -85,7 +85,14 @@ function separator(): Record<string, unknown> {
 const script = (invoker: string, start: number, duration: number, forcedLayout = 0): ScriptSummary => ({ invoker, name: '', source: 'app.js', start, duration, forcedLayout });
 
 /** A long animation frame holding these scripts. */
-const frame = (start: number, duration: number, scripts: ScriptSummary[]): FrameSummary => ({ start, duration, blocking: Math.max(0, duration - 50), forcedLayout: scripts.reduce((a, s) => a + s.forcedLayout, 0), scripts });
+const frame = (start: number, duration: number, scripts: ScriptSummary[], styleAndLayoutStart: number | null = null): FrameSummary => ({
+  start,
+  duration,
+  blocking: Math.max(0, duration - 50),
+  forcedLayout: scripts.reduce((a, s) => a + s.forcedLayout, 0),
+  scripts,
+  styleAndLayoutStart,
+});
 
 /** The report as it is published: the data these arguments build, sealed. */
 const report = (...args: Parameters<typeof buildReport>) => sealReport(buildReport(...args));
@@ -2912,4 +2919,121 @@ test('a render that committed inside the script the screen update waited on is s
   // A render that committed after the script ended is not tied to it, and a script with none inside keeps the clause as it was.
   const after = report([entry('click', 0, 368, 2, 171)], [handled, commit(360, 0, { ...rows, total: 5 })], frames, [input(0, 'click')]);
   assert.match(after.explanation.cause, /before the next frame\.$/);
+});
+
+test('a screen update no script took is put on the browser recalculating styles and layout, timed where the frame timed it', () => {
+  // A class changed on 40,000 elements, in Chromium. From Enter the frame times its own style and layout: 211 ms.
+  const key = report([entry('keydown', 0, 240, 10, 12)], [], [frame(10, 222, [], 22)], [input(0, 'keydown')]);
+  assert.equal(key.explanation.blame.kind, 'painting');
+  assert.equal(
+    key.explanation.cause,
+    'After the key press was handled, the screen took another 228 ms to update, mostly the browser recalculating styles and layout and painting the frame: 210 ms.',
+  );
+
+  // From a click the same work comes before the frame renders, and is only frame time no script ran in.
+  const click = report([entry('click', 0, 232, 1, 2)], [], [frame(0, 214, [], 214)], [input(0, 'click')]);
+  assert.equal(
+    click.explanation.cause,
+    "After the click was handled, the screen took another 230 ms to update. No script ran for long in that time: 212 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed.",
+  );
+
+  // Where the frames saw less than half of it, nothing is said of why, as before.
+  const unseen = report([entry('click', 0, 232, 1, 2)], [], [frame(0, 90, [], 90)], [input(0, 'click')]);
+  assert.equal(unseen.explanation.cause, 'After the click was handled, the screen took another 230 ms to update.');
+
+  // A script that ran after the handlers still takes it, as it did.
+  const scripted = report([entry('click', 0, 232, 1, 2)], [], [frame(0, 214, [script('FrameRequestCallback', 3, 150)], 153)], [input(0, 'click')]);
+  assert.match(scripted.explanation.cause, /mostly because a script \(FrameRequestCallback, app\.js\) ran for 150 ms before the next frame\.$/);
+});
+
+test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {
+  // Enter on a button whose click changed a class on 30,000 cells, in Chromium: the keydown and the click it
+  // made took 1 ms, then 147 ms went by before the keyup's handler ran, the browser restyling the page.
+  const enter = (frames: FrameSummary[] | null, handlerEnds = 10.4, inputs = [input(0, 'keydown')], commits = [commit(handlerEnds + 0.5, 0, { total: 0.3, rendered: 2 })]) =>
+    report([entry('keydown', 0, 168, 10, handlerEnds), entry('click', 0, 168, handlerEnds, handlerEnds + 0.7), entry('keyup', 1, 168, 158, 158.2)], commits, frames, inputs);
+  const quiet = enter([frame(10, 147, [], 157)]);
+  assert.deepEqual(quiet.explanation.blame, { kind: 'waiting', name: null, detail: 'between click and keyup', ms: 146.9, confidence: 'measured' });
+  assert.equal(
+    quiet.explanation.cause,
+    "The handlers took 1 ms in all, but 147 ms went by between the click's handlers and the keyup's. No script ran in that time, so it was most likely the browser recalculating styles and layout for what the handlers before it changed. That time counts as working time, which runs from the first handler to the last.",
+  );
+
+  // A script that ran for part of it is said, and the rest is still the wait.
+  const timer = enter([frame(10, 147, [script('TimerHandler:setTimeout', 50, 30)], 157)]);
+  assert.equal(timer.explanation.blame.kind, 'waiting');
+  assert.match(timer.explanation.cause, / A script \(TimerHandler:setTimeout, app\.js\) ran for 30 ms of it, and the rest was most likely the browser recalculating styles and layout/);
+
+  // A script that filled it is what ran, and it is not the handler, which had finished before it started.
+  const filled = enter([frame(10, 147, [script('TimerHandler:setTimeout', 20, 120)], 157)], 10.4, [input(0, 'keydown', { handler: 'onSwitch' })]);
+  assert.equal(filled.explanation.blame.kind, 'script');
+  assert.equal(filled.explanation.blame.name, 'TimerHandler:setTimeout');
+  assert.match(filled.explanation.cause, /a script \(TimerHandler:setTimeout, app\.js\) ran for 120 ms\.$/);
+
+  // Without Long Animation Frames only React's part in it is known.
+  assert.match(enter(null).explanation.cause, / React did not render in it, and this browser does not record what else ran, so it was most likely /);
+  const smallRender = enter(null, 10.4, [input(0, 'keydown')], [commit(80, 0, { total: 0.2, rendered: 1 })]);
+  assert.match(smallRender.explanation.cause, / React rendered for under 1 ms of it, and /);
+  // And where React is not read at all, not even that, so nothing is put on the wait.
+  const late = report(
+    [entry('keydown', 0, 168, 10, 10.4), entry('click', 0, 168, 10.4, 11.1), entry('keyup', 1, 168, 158, 158.2)],
+    [],
+    null,
+    [input(0, 'keydown')],
+    'attributes',
+    [],
+    undefined,
+    'installed-late',
+  );
+  assert.equal(late.explanation.blame.kind, 'none');
+
+  // A keyup released after the key press painted is in a frame of its own, and leaves no wait in this one.
+  const typed = report(
+    [entry('keydown', 0, 112, 0.1, 0.1), entry('keypress', 0, 112, 0.1, 111), entry('keyup', 173, 112, 173.2, 173.3)],
+    [commit(110.6, 0, { total: 0.2, rendered: 1 })],
+    [frame(0.1, 111, [script('DIV#root.oninput', 0.3, 110)], 111)],
+    [input(0, 'keydown')],
+  );
+  assert.equal(typed.explanation.blame.kind, 'handler');
+  assert.match(typed.explanation.cause, /ran for about 111 ms;/);
+
+  // Handlers that did more than the wait still take the blame, for their own time only.
+  const busy = enter([frame(10, 147, [script('DIV#root.onkeydown', 10, 100)], 157)], 110);
+  assert.equal(busy.explanation.blame.kind, 'handler');
+  assert.match(busy.explanation.cause, /ran for about 101 ms;/);
+  // Less than the wait, and the wait is the answer.
+  const lighter = enter([frame(10, 147, [script('DIV#root.onkeydown', 10, 70)], 157)], 80);
+  assert.equal(lighter.explanation.blame.kind, 'waiting');
+  assert.equal(Math.round(lighter.explanation.blame.ms!), 77);
+  assert.match(lighter.explanation.cause, /^The handlers took 71 ms in all, but 77 ms went by/);
+
+  // A render in the handlers comes off their time as well as the wait: 50 ms of React and 5 of handler code
+  // beside a 52 ms wait.
+  const rendered = report(
+    [entry('keydown', 0, 128, 10, 10.5), entry('click', 0, 128, 10.5, 65.5), entry('keyup', 1, 128, 117.5, 118)],
+    [commit(65, 0, { total: 50, rendered: 30 })],
+    [frame(10, 108, [script('DIV#root.onclick', 10.5, 55)], 118)],
+    [input(0, 'keydown')],
+  );
+  assert.deepEqual(rendered.explanation.blame, { kind: 'waiting', name: null, detail: 'between click and keyup', ms: 52, confidence: 'measured' });
+
+  // A larger screen update or wait before the handlers keeps the verdict, and the time between is a note.
+  const gapNote = (r: InteractionReport) => r.explanation.notes.find((n) => n.includes('of the working time also went by')) ?? '';
+  const screen = report(
+    [entry('keydown', 0, 376, 10, 11), entry('click', 0, 376, 11, 12), entry('keyup', 1, 376, 170, 170.5)],
+    [commit(11.5, 0, { total: 0.3, rendered: 2 })],
+    [frame(10, 160, [], 170)],
+    [input(0, 'keydown')],
+  );
+  assert.equal(screen.explanation.blame.kind, 'painting');
+  assert.equal(gapNote(screen), "158 ms of the working time also went by between the click's handlers and the keyup's, with no handler running.");
+  const delayed = report(
+    [entry('keydown', 0, 400, 200, 201), entry('click', 0, 400, 201, 202), entry('keyup', 1, 400, 290, 290.5)],
+    [commit(201.5, 0, { total: 0.3, rendered: 2 })],
+    [frame(0, 291, [], null)],
+    [input(0, 'keydown')],
+  );
+  assert.deepEqual([delayed.explanation.blame.kind, delayed.explanation.blame.detail], ['waiting', null]);
+  assert.match(gapNote(delayed), /^88 ms of the working time also went by between the click's handlers and the keyup's/);
+  // Where the wait is the verdict, it is not said twice.
+  assert.equal(gapNote(quiet), '');
 });

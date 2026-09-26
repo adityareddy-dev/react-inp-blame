@@ -286,6 +286,12 @@ export interface FrameSummary {
   readonly blocking: number;
   readonly forcedLayout: number;
   readonly scripts: readonly ScriptSummary[];
+  /**
+   * When the frame's own style and layout began, after its scripts and animation frame callbacks. From
+   * there to the frame's end the browser recalculated styles and layout and painted, less any
+   * ResizeObserver callbacks `scripts` lists after it. `null` where the frame did not render.
+   */
+  readonly styleAndLayoutStart: number | null;
 }
 
 export interface TargetInfo {
@@ -369,7 +375,10 @@ export interface Blame {
    * that was never dispatched because its HTML was *still* waiting spent its time elsewhere, so it
    * keeps the blame that says where, and `hydration.kind` is `'not-hydrated'`. 'layout' is the
    * browser recalculating styles and layout inside the handlers, one figure in a Long Animation Frames
-   * entry, which measures it in every build, React's durations or not.
+   * entry, which measures it in every build, React's durations or not. 'waiting' is the input waiting
+   * for the main thread: before its first handler, or inside the working time, between one of its
+   * events' handlers and the next's (Enter on a button whose click restyled 30,000 cells, where the
+   * keyup waits for the browser to finish).
    */
   readonly kind: 'render' | 'handler' | 'hydration' | 'layout' | 'waiting' | 'painting' | 'script' | 'none';
   /**
@@ -383,9 +392,9 @@ export interface Blame {
    * one of them is where the layout happened and this is null. The cause sentence names the largest
    * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script
    * the input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that
-   * filled at least half of the wait; null otherwise. A 'handler' React has no name for (a listener
-   * bound on the document, say) takes the invoker of the longest script in the working time on the
-   * same terms: "#document.onkeydown".
+   * filled at least half of the wait, before the first handler or between them; null otherwise. A
+   * 'handler' React has no name for (a listener bound on the document, say) takes the invoker of the
+   * longest script in the working time on the same terms: "#document.onkeydown".
    */
   readonly name: string | null;
   /**
@@ -396,7 +405,9 @@ export interface Blame {
    * the page, which holds them all, so it carries the whole count. Null where it rendered one. For a
    * handler, its component, or null where the name is a listener the browser recorded rather than a React
    * handler. For a 'layout', what that same commit was mostly made of, as a render's, wherever `name` came
-   * from that commit, and null wherever `name` did not, since a script has no component counts.
+   * from that commit, and null wherever `name` did not, since a script has no component counts. For a
+   * 'waiting' inside the working time, where it came: "between click and keyup", or "between handlers"
+   * where it was split across more than one; null for a wait before the first handler.
    */
   readonly detail: string | null;
   /** How much of the interaction it accounts for, in ms; null when the build records no durations. */

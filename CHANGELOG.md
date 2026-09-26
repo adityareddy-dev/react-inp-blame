@@ -6,8 +6,26 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **A screen update no script held is put on the browser.** Where the screen took longer to update than the
+  handlers took and no script ran for most of it, the sentence stopped at the figure. Now, where long
+  animation frames saw at least half of it, it goes on to say what took it: the frame's own style and layout
+  and paint where the frame timed them (its `styleAndLayoutStart`, now on `FrameSummary`), else "No script ran for
+  long in that time: 212 ms of it was the browser's own work on the main thread, most likely recalculating
+  styles and layout for what changed." The Vite demo has an eighth slow scenario for it, the restyle storm: one class
+  on 30,000 cells.
+
 ### Fixed
 
+- **Time between an interaction's events is said to be that, not handler time.** Enter on the restyle storm
+  ran the keydown's and the click's handlers in 1 ms, then 157 ms went by, the browser restyling the page,
+  before the keyup's handler ran. That time sits inside the working time, which runs from the first handler to
+  the last as web-vitals counts it, and the verdict read "The onClick handler ran for about 158 ms". It now
+  reads "The handlers took 1 ms in all, but 157 ms went by between the click's handlers and the keyup's", with
+  what filled it, and the blame is a `waiting` whose `detail` says where: "between click and keyup". Where the
+  wait before the handlers or the screen update is larger, that time is a note instead. A handler is never
+  said to have run through it, and a script that ran in it is named by what ran it.
 - **A render a script forced after the handlers is said to be what that script did.** On TanStack Table's
   virtualized rows at 4x, a checkbox's screen update waited 174 ms on react-virtual's scroll listener, which
   re-rendered the rows through `flushSync`. The sentence named the listener and not the render, and counted
