@@ -1032,14 +1032,25 @@ function chain(hook: DevtoolsHook): () => void {
     guardedPostCommit(hook, id, root);
     if (typeof prevPostCommit === 'function') prevPostCommit.call(this, id, root);
   };
+  // A page can lock the hook after install(), and dispose() must not throw into it then. A method that cannot be
+  // put back stays ours, which only passes calls on once the hook is not attached.
+  const putBack = (restore: () => void) => {
+    try {
+      restore();
+    } catch {
+      // Frozen or sealed since it was wrapped.
+    }
+  };
   const undo = (failed?: boolean) => {
     // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through. Where
     // wrapping failed, each one that no longer reads as the page's own goes back.
-    if (failed ? hook.inject !== prevInject : hook.inject === inject) hook.inject = prevInject;
-    if (failed ? hook.onCommitFiberRoot !== prevCommit : hook.onCommitFiberRoot === onCommitFiberRoot) hook.onCommitFiberRoot = prevCommit;
+    if (failed ? hook.inject !== prevInject : hook.inject === inject) putBack(() => (hook.inject = prevInject));
+    if (failed ? hook.onCommitFiberRoot !== prevCommit : hook.onCommitFiberRoot === onCommitFiberRoot) putBack(() => (hook.onCommitFiberRoot = prevCommit));
     if (failed ? hook.onPostCommitFiberRoot !== prevPostCommit : hook.onPostCommitFiberRoot === onPostCommitFiberRoot) {
-      if (hadPostCommit) hook.onPostCommitFiberRoot = prevPostCommit;
-      else delete hook.onPostCommitFiberRoot;
+      // Emptied before it is removed, so that on a hook sealed since, which keeps the property, React calls
+      // nothing there and a later install() does not wrap ours.
+      putBack(() => (hook.onPostCommitFiberRoot = hadPostCommit ? prevPostCommit : undefined));
+      if (!hadPostCommit) putBack(() => delete hook.onPostCommitFiberRoot);
     }
   };
   try {
@@ -1054,11 +1065,7 @@ function chain(hook: DevtoolsHook): () => void {
     }
   } catch (error) {
     // A method that cannot be assigned: the ones already wrapped are put back, so the page's hook is as it was.
-    try {
-      undo(true);
-    } catch {
-      // One that cannot be put back only passes calls on, since the hook is never attached.
-    }
+    undo(true);
     throw error;
   }
   // Renderers that registered before install(): React DevTools' hook kept what they handed it.
