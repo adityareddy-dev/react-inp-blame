@@ -1904,8 +1904,9 @@ build as well as on the dev server.
 - **Frameworks that render their own HTML need a setup of their own**, and have one only under React
   Router, Remix, TanStack Start and Astro. The Vite plugin adds its install script only to the HTML pages
   Vite itself serves and builds, and theirs never go through it, so the library installs nothing there
-  unless the plugin's `entry` names a module, and nothing says so. The READMEs' setup for a build with no
-  HTML page has not been tried.
+  unless the plugin's `entry` names a module. Since 2026-09-25 the plugin warns when that happens under
+  those four, and in a build whose inputs are all scripts, and names the fix; any other framework gets
+  no warning. The READMEs' setup for a build with no HTML page has not been tried.
   React Router and TanStack Start got a setup on 2026-09-23: `install()` in a module of the app's own that
   the client entry imports first. That is early enough under React Router because its `<Scripts>` imports
   the route modules statically and then the client entry with `import()`, and the route modules reach only
@@ -1950,7 +1951,8 @@ build as well as on the dev server.
 ## Next steps
 
 What is left is the list above: look at the Performance panel tracks by eye, and run the library
-against Next.js's own bench apps. The frameworks that render their own HTML need a setup as well. The
+against Next.js's own bench apps. The frameworks that render their own HTML, other than React Router,
+Remix, TanStack Start and Astro, need a setup as well, and get no warning. The
 `react-inp-blame/web-vitals` entry landed on 2026-09-19 and has its own section, which now includes a
 run under Next.js's `useReportWebVitals`. The hydration verdict landed on 2026-09-19 and has its own
 section above.
