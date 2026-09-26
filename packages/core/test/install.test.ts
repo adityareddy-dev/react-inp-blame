@@ -691,6 +691,63 @@ test('a render that a report listener causes is never read, so a panel showing r
   });
 });
 
+test("a key pressed before a report listener's update renders it along with its own, and the commit is still the key's", async (t) => {
+  // Typing at full speed, the next key press comes before React's own task for what the panel set on
+  // hearing the last report. React 19.3 renders that update with the key's, inside the key's dispatch, so
+  // the key's commit finishes the panel's lane. Read as the panel's render it was dropped, and the
+  // keystroke's report said React rendered nothing.
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    clock.now = 1000;
+    page.duringClick(() => existing.onCommitFiberRoot(id, root));
+    const PANEL_LANE = 0b100000;
+    onInteraction(() => {
+      root.pendingLanes |= PANEL_LANE;
+    });
+    page.paint([click(7, 1000, 120)]);
+    await nextTask();
+
+    // React commits from the field's onChange, in the `input` event of the key's task, and clears the panel's lane with it.
+    clock.now = 1200;
+    page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 1200, target: null, code: 'KeyA' });
+    page.window.event = { isTrusted: true, type: 'input', timeStamp: 1201, target: FIELD };
+    clock.now = 1290;
+    commitAgain(root, 80);
+    root.pendingLanes &= ~PANEL_LANE;
+    existing.onCommitFiberRoot(id, root);
+    delete page.window.event;
+    assert.deepEqual(
+      api.debug.commits().map((c) => ({ inputType: c.inputType, inputTs: c.inputTs })),
+      [
+        { inputType: 'click', inputTs: 1000 },
+        { inputType: 'keydown', inputTs: 1200 },
+      ],
+    );
+    page.paint([pointer('keydown', 8, 1200, 104)]);
+    await nextTask();
+    assert.equal(api.last()?.interactionId, 8);
+    assert.deepEqual(
+      api.last()?.commits.map((c) => ({ inputTs: c.inputTs, joinedBy: c.joinedBy })),
+      [{ inputTs: 1200, joinedBy: 'exact' }],
+    );
+
+    // The panel showing the key's report renders in a task of its own, and that render is still not read.
+    clock.now = 1400;
+    commitAgain(root, 40);
+    root.pendingLanes &= ~PANEL_LANE;
+    existing.onCommitFiberRoot(id, root);
+    await nextTask();
+    assert.equal(api.debug.commits().length, 2);
+    assert.equal(api.last()?.revision, 0);
+    api.dispose();
+  });
+});
+
 test("the renders a listener's render sets off, from its layout effects or its passive effects, are not read either", async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {
