@@ -111,32 +111,20 @@ function SignInPage({ onSignedIn }: { onSignedIn: (p: Profile) => void }) {
   return (
     <div className="login">
       <PhonePreview email={email} />
-      <div>
-        <form className="card-ig" onSubmit={(e) => e.preventDefault()}>
-          <h1 className="wordmark">Framely</h1>
-          <input className="field" data-test="email" placeholder="Phone number, username, or email" value={email} onChange={onEmailChange} autoComplete="off" />
-          <PasswordField
-            onChange={(v) => {
-              passwordRef.current = v;
-              setHasPassword(v.length > 0);
-            }}
-          />
-          <button className="btn" type="button" data-test="login" onClick={handleLogin} disabled={status === 'loading' || !email || !hasPassword}>
-            Log in
-          </button>
-          <div className="hint" style={{ textAlign: 'center', marginTop: 8 }}>{status === 'loading' ? 'Signing you in…' : ''}</div>
-          <div className="or">OR</div>
-          <a href="#" onClick={(e) => e.preventDefault()} style={{ fontSize: 12, color: '#00376b' }}>
-            Forgot password?
-          </a>
-        </form>
-        <div className="card-ig small">
-          Don't have an account?{' '}
-          <a href="#" onClick={(e) => e.preventDefault()}>
-            Sign up
-          </a>
-        </div>
-      </div>
+      <form className="card signin" onSubmit={(e) => e.preventDefault()}>
+        <h1>Log in to Framely</h1>
+        <input className="field" data-test="email" placeholder="Email" value={email} onChange={onEmailChange} autoComplete="off" />
+        <PasswordField
+          onChange={(v) => {
+            passwordRef.current = v;
+            setHasPassword(v.length > 0);
+          }}
+        />
+        <button className="btn" type="button" data-test="login" onClick={handleLogin} disabled={status === 'loading' || !email || !hasPassword}>
+          Log in
+        </button>
+        <div className="hint" style={{ marginTop: 8 }}>{status === 'loading' ? 'Signing you in…' : ''}</div>
+      </form>
     </div>
   );
 }
@@ -226,7 +214,7 @@ function ProfilePage({ profile, onReset }: { profile: Profile; onReset: () => vo
           </p>
         </div>
       </div>
-      <div className="grid-ig" data-test="photos">
+      <div className="photo-grid" data-test="photos">
         {profile.photos.map((h, i) => (
           <PhotoTile key={i} hue={h} />
         ))}
