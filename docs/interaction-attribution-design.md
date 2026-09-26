@@ -467,12 +467,13 @@ or an OpenTelemetry collector. Selectors still carry ids and classes, and name t
 were built from with its value quoted. An id or a class is escaped as `CSS.escape` escapes it, by the
 same rules written out in `element.ts` so that the tests check the string a page gets: React 18's
 `:r1:` and Tailwind's `md:flex` or `w-1/2` made a selector `querySelector` throws on, and anything past
-ASCII, React 19.1's `«r1»` among it, is left as it is. When the entry's target is null because the node
-left the DOM before the observer ran (a close button, a deleted row), the input ring below still holds
-the node, and the enclosing components and the handler prop read from its fiber at dispatch. Keeping
-the fiber itself was not enough: React 18 and 19 clear a deleted fiber's `return` and `memoizedProps`
-when the deletion's effects run, which is before the entry arrives, and a click that deleted its own
-row was reported with no component, no owners and no handler at all.
+ASCII, React 19.1's `«r1»` among it, is left as it is. The id is read from its attribute, since on a
+form with a field named "id" (a hidden one is common) the `id` property is that field. When the entry's
+target is null because the node left the DOM before the observer ran (a close button, a deleted row),
+the input ring below still holds the node, and the enclosing components and the handler prop read from
+its fiber at dispatch. Keeping the fiber itself was not enough: React 18 and 19 clear a deleted fiber's
+`return` and `memoizedProps` when the deletion's effects run, which is before the entry arrives, and a
+click that deleted its own row was reported with no component, no owners and no handler at all.
 
 **Which prop a native event maps to.** The table is in `fiber.ts`, and it is read off React's own event
 plugins in the installed react-dom 19.3.0 (`cjs/react-dom-client.development.js`): SimpleEventPlugin for

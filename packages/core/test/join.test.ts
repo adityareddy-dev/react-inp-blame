@@ -298,7 +298,7 @@ test('a selector names the test attribute it was built from, with its value quot
 
 test('a selector escapes an id or a class the way CSS.escape does, so it still parses as one', () => {
   const selectorOf = (target: Record<string, unknown>) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], []).target?.selector;
-  const named = (tag: string, id: string, classes: string[] = [], attributes: Record<string, string> = {}) => Object.assign(element(tag, [], attributes), { id, classList: classes });
+  const named = (tag: string, id: string, classes: string[] = [], attributes: Record<string, string> = {}) => Object.assign(element(tag, [], { ...attributes, id }), { id, classList: classes });
   // React 18's useId, which Radix, Headless UI and React Aria put on their triggers, and Tailwind's variants and fractions.
   assert.equal(selectorOf(named('input', ':r1:')), 'input#\\:r1\\:');
   assert.equal(selectorOf(named('button', 'radix-:r1:')), 'button#radix-\\:r1\\:');
@@ -314,6 +314,16 @@ test('a selector escapes an id or a class the way CSS.escape does, so it still p
   assert.equal(selectorOf(named('div', '«r1»', ['café'])), 'div#«r1».café');
   // And an id or a class that needed nothing comes out as it was.
   assert.equal(selectorOf(named('button', 'save', ['btn', 'primary_2', 'x'])), 'button#save.btn.primary_2');
+});
+
+test("a form's selector has the id it was given, though a field named id takes the form's id property", () => {
+  const selectorOf = (target: Record<string, unknown>) => buildReport([entry('click', 0, 120, 3, 100, { target })], [], []).target?.selector;
+  // A hidden <input name="id">, which CRUD forms and Remix or React Router forms carry, is what the
+  // form's `id` property returns: that element, or a RadioNodeList when there are several.
+  const field = element('input', [], { name: 'id', type: 'hidden' });
+  const form = (attributes: Record<string, string>) => Object.assign(element('form', [], attributes), { id: field });
+  assert.equal(selectorOf(form({ id: 'checkout' })), 'form#checkout');
+  assert.equal(selectorOf(form({})), 'form');
 });
 
 /** What a click on a button the ring saw inside `owners` reports as its component and its `where`. */

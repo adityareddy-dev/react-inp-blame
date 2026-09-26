@@ -23,7 +23,9 @@ export function selector(node: Node): string | null {
   const el = elementOf(node);
   if (!el) return null;
   let s = el.tagName.toLowerCase();
-  if (el.id) s += '#' + ident(el.id);
+  // The attribute rather than the property: on a form with a field named "id", `id` is that field.
+  const id = el.getAttribute('id');
+  if (id) s += '#' + ident(id);
   for (const name of TEST_ATTRIBUTES) {
     const value = el.getAttribute(name);
     // Quoted, so that a value with spaces or brackets is still one selector.
