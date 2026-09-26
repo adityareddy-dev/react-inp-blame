@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-26
+
 ### Added
 
 - **A minifier's name in a build that keeps readable names gets a note.** On Twenty the verdict read "React
@@ -1070,7 +1072,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.3.0...v0.12.0
 [0.11.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/215a9f2...0c8d148
 [0.10.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/ab94834...215a9f2
