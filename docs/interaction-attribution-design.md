@@ -351,6 +351,11 @@ heard on `visibilitychange` lost the last reports. A `visibilitychange` handler 
 React commit, and the listeners are still called through the hook, so what they render stays out of
 every report. A page that sends on `pagehide` can still miss them, since that event comes first.
 
+A listener that throws does not stop the others hearing the report. Its error goes to `reportError`,
+which runs the page's `error` handlers the way the browser does for an event listener that throws, so
+error monitoring sees it; until 2026-09-26 it was caught and dropped without a trace. Those handlers run
+inside the delivery, so what they render is the listeners' work too.
+
 Durations come from `ProfileMode` on the root, which is what makes React fill `actualDuration`:
 bit 8 on React 17, bit 2 on 18 and 19, chosen by the version react-dom hands `inject()`. React
 17 and 18 development builds, and 19 profiling builds, set it when a hook existed as react-dom

@@ -176,8 +176,16 @@ function installNow(opts: InstallOptions): Api {
         for (const fn of page.listeners) {
           try {
             fn(r);
-          } catch {
-            // A listener's error is its own; the others still hear the report.
+          } catch (error) {
+            // A listener's error is its own: the others still hear the report, and the page hears the error
+            // the way it hears one from any other callback it registered.
+            if (typeof reportError === 'function') {
+              reportError(error);
+            } else {
+              setTimeout(() => {
+                throw error;
+              });
+            }
           }
         }
       }
@@ -380,7 +388,8 @@ export function mountOverlay(opts: OverlayOptions = {}): Promise<OverlayHandle |
  * Calls `fn` with each report once it is published, and again with every later revision of it, in a
  * task after the one that published it, or inside the `visibilitychange` that hides the page for what
  * is still waiting then. An update `fn` makes while it runs is never read as part of an interaction;
- * one it schedules for later, with setTimeout or an await, is an ordinary render. Returns the unsubscribe.
+ * one it schedules for later, with setTimeout or an await, is an ordinary render. An error `fn` throws
+ * goes to `reportError` and does not stop the other listeners. Returns the unsubscribe.
  */
 export function onInteraction(fn: Listener): () => void {
   // A server renders no interactions, and a listener added during a render there would outlive the request.

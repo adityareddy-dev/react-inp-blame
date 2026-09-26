@@ -724,6 +724,59 @@ test('reports waiting to be heard when the page is hidden are heard before its v
   });
 });
 
+test("a listener that throws does not stop the others hearing the report, and its error reaches the page's error handlers", async (t) => {
+  const reported: unknown[] = [];
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'reportError');
+  Object.defineProperty(globalThis, 'reportError', { value: (error: unknown) => reported.push(error), configurable: true, writable: true });
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'reportError', saved);
+    else delete (globalThis as any).reportError;
+  });
+  const warned = t.mock.method(console, 'warn', () => {});
+  const logged = t.mock.method(console, 'error', () => {});
+  await inBrowser(async (page) => {
+    const api = install({ devtoolsTrack: false });
+    // An analytics forwarder that reads a field of a target the report does not have.
+    const thrown: unknown[] = [];
+    onInteraction(() => {
+      const error = new TypeError("Cannot read properties of null (reading 'label')");
+      thrown.push(error);
+      throw error;
+    });
+    const heard: number[] = [];
+    onInteraction((r) => heard.push(r.interactionId));
+
+    page.paint([click(7, 1000, 120)]);
+    await nextTask();
+    page.paint([click(14, 2000, 200)]);
+    await nextTask();
+    assert.deepEqual(heard, [7, 14]);
+    assert.equal(reported.length, 2);
+    assert.ok(reported.every((error, i) => error === thrown[i]), 'reportError was not handed what the listener threw');
+    assert.equal(warned.mock.callCount(), 0);
+    assert.equal(logged.mock.callCount(), 0);
+    api.dispose();
+  });
+});
+
+test('where there is no reportError, the error a listener throws is thrown again from a task of its own', async (t) => {
+  assert.equal(typeof (globalThis as any).reportError, 'undefined');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    const error = new TypeError("Cannot read properties of null (reading 'label')");
+    const heard: number[] = [];
+    onInteraction(() => {
+      throw error;
+    });
+    onInteraction((r) => heard.push(r.interactionId));
+    page.paint([click(7, 1000, 120)]);
+    assert.throws(() => t.mock.timers.runAll(), (thrown) => thrown === error);
+    assert.deepEqual(heard, [7]);
+    api.dispose();
+  });
+});
+
 test('a render that a report listener causes is never read, so a panel showing reports never joins the report it shows', async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {
