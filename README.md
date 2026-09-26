@@ -1041,8 +1041,9 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   `css` prop styles, to insert its styles, is not counted.
 - **A styling library's wrapper is named the way the library names one it was given no label for**, whatever
   label it has: MUI's `MuiButtonBaseRoot` reads `Styled(button)`, a styled-components wrapper its Babel or SWC
-  plugin named `Title` reads `styled.h1`, and the component @emotion/react's `css` prop wraps an element in
-  reads `Styled(li)`. So none of them is taken for a component the app wrote, in development or production.
+  plugin named `Title` reads `styled.h1`, a Linaria one its plugin named `StyledContainer` reads `styled.div`,
+  and the component @emotion/react's `css` prop wraps an element in reads `Styled(li)`. So none of them is
+  taken for a component the app wrote, in development or production.
   A click on a MUI button is then named by the nearest readable component above the wrapper, which can be
   MUI's own `ButtonBase` rather than the app's component around it: names alone cannot tell a library's
   component from the app's.

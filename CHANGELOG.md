@@ -37,6 +37,7 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 
 
+
 - **Forced layout reads as "recalculating styles and layout".** The figure is Long Animation Frames'
   `forcedStyleAndLayoutDuration`, which holds style recalculation and layout together, and a Chrome trace of a
   shadcn/ui Sheet opening had about 80 ms of style recalculation in it against 1 ms of layout. The cause of a
