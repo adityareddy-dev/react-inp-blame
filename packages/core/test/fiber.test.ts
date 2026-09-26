@@ -83,6 +83,34 @@ test('only component fibers count against the walk budget, not the DOM and text 
   );
 });
 
+test('a component React only cloned and skipped does not count against the walk budget', () => {
+  // Ticking the checkbox in one row of 6000: React clones every row on the way and bails out of all but the
+  // one whose child has an update. The walk leaves each clone at once, and counting them cut it at 5000
+  // before it reached the one component that rendered, which a commit then reported as nothing.
+  function List() {}
+  function Row() {}
+  function Checkbox() {}
+  const passedThrough = (type: unknown, ...children: Record<string, unknown>[]) => fiber(typeof type === 'string' ? 5 : 0, type, children, 0);
+  const skipped = () => {
+    const row = fiber(0, Row, [element('li', text())], 0);
+    row.alternate = { child: row.child };
+    return row;
+  };
+  const list = (ticked: number | null) =>
+    root(passedThrough(List, passedThrough('ul', ...Array.from({ length: 6000 }, (_, i) => (i === ticked ? passedThrough(Row, passedThrough('li', rendered(Checkbox))) : skipped())))));
+  for (const ticked of [100, 5500]) {
+    const walk = walkCommit(list(ticked) as any, 5000, 100, click, development);
+    assert.deepEqual([walk.rendered, walk.truncated, walk.hotPath], [1, false, ['Checkbox']], `row ${ticked}`);
+  }
+  // A list where nothing rendered is still nothing, and not a cut either.
+  const none = walkCommit(list(null) as any, 5000, 100, click, development);
+  assert.deepEqual([none.rendered, none.truncated], [0, false]);
+  // A component that rendered counts, even where it rendered nothing below it for the walk to follow.
+  const empty = () => Object.assign(rendered(Row), { alternate: { child: null } });
+  const cut = walkCommit(root(passedThrough(List, ...Array.from({ length: 5 }, empty))) as any, 4, 100, click, development);
+  assert.deepEqual([cut.rendered, cut.truncated], [3, true]);
+});
+
 test('a production walk cut at its budget does not blame the subtree it happened to reach first', () => {
   function Dashboard() {}
   function Orders() {}

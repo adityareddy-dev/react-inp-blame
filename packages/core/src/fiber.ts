@@ -848,7 +848,8 @@ function hydratesBoundary(f: Fiber): boolean {
  * Summarise one commit from the fiber tree after it became current.
  * A fiber whose alternate still points at the same child list bailed out, so nothing
  * under it rendered and its subtree is stale: that is the prune.
- * `budget` caps the component fibers visited; DOM and text fibers do not count against it.
+ * `budget` caps the component fibers React rendered or passed through; DOM and text fibers do not count
+ * against it, and nor do components React only cloned and bailed out of.
  * The lists in the summary are frozen, like the commit the caller makes of it.
  */
 export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: InputStamp, context: CommitContext): CommitWalk {
@@ -869,17 +870,19 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
 
   function visit(f: Fiber, depth: number): Agg[] {
     const comp = countsAsComponent(f);
+    const bailedOut = f.alternate !== null && f.alternate.child === f.child;
+    const performed = comp && (f.flags & PerformedWork) !== 0;
     // Host and text fibers are most of any tree, and counting them cut every root-level update
     // short on a page of 5000 DOM nodes. They cost the walk no more than they cost React: a
     // subtree React did not re-render is pruned below, so the walk only follows React's own work.
-    if (comp && ++componentsVisited > budget) {
+    // A component React cloned and bailed out of is left at once, and does not count either:
+    // counting them cut a 6000-row list short of the one row whose checkbox rendered.
+    if (comp && (performed || !bailedOut) && ++componentsVisited > budget) {
       outOfBudget = true;
       truncated = true;
       return [];
     }
     hydrated ||= hydratesBoundary(f);
-    const bailedOut = f.alternate !== null && f.alternate.child === f.child;
-    const performed = comp && (f.flags & PerformedWork) !== 0;
     let kids: Agg[] = [];
     if (!bailedOut && f.child !== null) {
       if (depth >= MAX_DEPTH) {

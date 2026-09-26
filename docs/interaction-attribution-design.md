@@ -461,8 +461,12 @@ Only component fibers count against `walkBudget` (default 5000). DOM and text fi
 any tree, and until 2026-09-15 they counted too: at the default budget every context-storm click
 in the demo was cut at 713 of its 801 components, and every big-list keystroke at 1027 of 1441.
 They cost the walk no more than they cost React, because the prune keeps it to the subtrees React
-re-rendered. The walk recurses inside React's commit, so past 1000 levels it stops descending
-that branch, carries on with its siblings and marks the commit `truncated`.
+re-rendered. A component React cloned and bailed out of does not count either, since the walk leaves it
+at once. React clones every child of a parent on an update's path, so until 2026-09-26 ticking the
+checkbox in row 5500 of 6000 spent the budget on the rows before it that React skipped, and the commit
+reported that nothing rendered. A component that rendered, or one the walk passes through, still
+counts. The walk recurses inside React's commit, so past 1000 levels it stops descending that branch,
+carries on with its siblings and marks the commit `truncated`.
 
 **Event Timing.** A `PerformanceObserver` on `event` entries, grouped by `interactionId` (a
 click is three entries: pointerdown, pointerup, click). The headline number is the longest
