@@ -9,30 +9,40 @@ it changes when a field is removed or changes meaning, which a minor release may
 ### Added
 
 
-- **A commit says how many components it mounted, and how many sit inside the component its hot path ends
-  on.** `CommitSummary.mounted` counts the components React rendered for the first time in the commit, told by
-  a fiber with no alternate, and `CommitSummary.pathRendered` those inside the last component on `hotPath`,
-  that component included, which is what the sentences under Changed below are built on. Both are additive,
-  so `schemaVersion` stays at 3; a report stored by an earlier release has neither and reads as it did.
+- **A commit counts what it mounted, and what sits under the two components a render sentence names.**
+  `CommitSummary.mounted` counts the components React rendered for the first time in the commit, told by a
+  fiber with no alternate. `CommitSummary.startRendered` counts those under the first name on `hotPath`: the
+  commit's count where one root rendered or where several share that component, less where other roots
+  rendered beside it. `CommitSummary.pathRendered` counts those inside the deepest name on `hotPath` that is
+  not a library's layer, that component included, else the one the path ends on. The sentences under Changed
+  below are built on them. All three are additive, so `schemaVersion` stays at 3; a report stored by an
+  earlier release has none of them and reads as it did.
 
 ### Changed
 
 - **The count a render is said to be "inside" a component is that component's own, and the render is named
-  from where it started.** On cal.com, switching an event type to its advanced tab read "React spent 180 ms
-  re-rendering 1216 components inside Form", where 1216 was the whole commit's count, about a third of it
-  above Form and beside it, and nothing named EventTypeWeb, the root the render started from and the
-  component that holds the form's state. Where the walk counted fewer components inside the component a
-  render is named after than in the commit, the sentence now gives both, with the component the render
-  started from where a reader could search for it: "re-rendering 1216 components from EventTypeWeb down, 812
-  of them inside EventAdvancedWebWrapper". A render named after the component it started from holds the
-  whole count and reads as it did, and so does a walk cut short, whose every count is partial. The clause
-  for what a render was mostly made of, or for one component's own render, follows the count as before. The
-  wording is the same wherever the render is said: in the cause of a render blame and of a handler blame,
-  in the React clause of a layout blame, in the note on a later render and in the panel's rows.
-  `blame.detail` is "812 of 1216 components" on such a render, where it was "1216 components", and a layout
-  blame named after its commit, and a hydration blame, carry the same value. `blame.kind` does not change,
-  and `blame.detail` keeps its meaning, so `schemaVersion` stays at 3.
-
+  from where it started where that holds them all.** On cal.com, switching an event type to its advanced tab
+  read "React spent 180 ms re-rendering 1216 components inside Form", where 1216 was the whole commit's
+  count, about a third of it above Form and beside it, and nothing named EventTypeWeb, the root the render
+  started from and the component that holds the form's state. Where the walk counted fewer components inside
+  the component a render is named after than in the commit, the sentence now gives both, with the component
+  the render started from where it holds every one counted and a reader could search for it: "re-rendering
+  1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper" (the 1216 was measured;
+  the 812 and the name come from a read of cal.com's source, and a run may move them). Where other roots
+  rendered beside the one the path starts from, as the two code blocks of the shadcn/ui install tabs do, no
+  start is said: "re-rendering 181 components, 79 of them inside RovingFocusGroup". A render named after
+  the component it started from holds the whole count and reads as it did. So does one named after the
+  component it was mostly made of, whose count is in that clause already, and a hydration blame, named after
+  the boundary or the page that holds every component hydrated. A walk cut short says both counts as lower
+  bounds: "at least 5000 components from App down, at least 800 of them inside Heavy". The clause for what
+  a render was mostly made of says which count it is of once two have been said, "mostly Controller (700 of
+  the 1216, 100 ms)", and the one for a component's own render follows the count as before. The wording is
+  the same wherever the render is said: in the cause of a render blame and of a handler blame, in the React
+  clause of a layout blame, in the note on a later render and in the panel's rows. `blame.detail` is "812 of
+  1216 components" on such a render, where it was "1216 components", "at least 800 of at least 5000
+  components" on a walk cut short, and a layout blame named after its commit carries the same value; a
+  hydration blame keeps the whole count. `blame.kind` does not change, and `blame.detail` keeps its meaning,
+  so `schemaVersion` stays at 3.
 
 
 

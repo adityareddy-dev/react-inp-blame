@@ -62,8 +62,9 @@ This library does the join and answers in plain words:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
-    after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
-    PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
+    after the screen updated: 84 ms mounting 256 components from SignInDemo down, 241 of them
+    inside ProfilePage, mostly PhotoTile (240 of the 256, 73 ms). INP doesn't count it, but
+    people still wait for it.
 
 ## What is proven so far
 
@@ -366,7 +367,34 @@ on without components. Since 0.1.0 `stats().unsupportedReason` says which of the
 commit with a rendered tree already behind it means `install()` ran after that root rendered, and a
 warning says so once.
 
-
+**The walk.** After a commit the current tree is walked once. A component fiber that rendered
+carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
+bailed out, so its whole subtree is stale and gets pruned; that prune is what keeps the walk
+cheap on big trees. Ancestors that were only cloned on the way down (App, layouts, providers)
+are named on the path but never counted as roots. The hot path follows the child carrying at
+least 60% of the parent's work, so it stops at "the OrderSummary subtree" rather than
+descending into 800 identical rows, and spends at most twelve steps below the one it starts from,
+on names a reader could search for. A library's layers between them are named on the path but
+spend no step: a name a reader could not search for (Radix's `Primitive.div`, a Slot, a
+minifier's) or a Provider or a Context, and the same for a wrapper named after the component it
+renders (shadcn's `TabsList` over Radix's). Every name spent a step before this, so on the shadcn/ui
+docs Radix's layers alone spent the twelve and a render of the install tabs was named after
+RovingFocusGroupCollectionProviderProvider, and on cal.com a provider and a minified name spent the
+two that would have reached the tab below the form. The walk also counts the components rendering
+for the first time (`mounted`, a fiber with no alternate), and beside the commit's count keeps two
+more: those under the component the path starts from (`startRendered`, the whole where one root
+rendered or the roots share it, less where other roots rendered beside it) and those inside the
+deepest searchable name on the path (`pathRendered`). So a sentence can say "1216 components from
+EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper" where 0.12.0 put the whole count
+inside the last name it reached (the 812 and the name are a read of cal.com's source, not a run),
+or "181 components, 79 of them inside RovingFocusGroup" where two code blocks rendered and neither
+holds the rest. It can also say "mounting" of a Radix dialog's content, which its Portals mount in
+a commit of their own. A memo wrapper is a fiber of its own above the component it
+renders (`memo(fn, compare)`, `memo(forwardRef(...))` and `memo(Class)`, but not `memo(fn)`, which
+React keeps as a single fiber), and React flags both as having rendered, so each such component was
+counted twice until 2026-09-15: 504 rendered where 304 did, on 17, 18 and 19 alike. The wrapper now
+counts as the component below it and lends it its name, which is where `displayName` is stamped and
+what a minifier cannot rename.
 
 Only component fibers count against `walkBudget` (default 5000). DOM and text fibers are most of
 any tree, and until 2026-09-15 they counted too: at the default budget every context-storm click
