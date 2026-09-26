@@ -3229,7 +3229,9 @@ test("a wait between one event's handlers and the next is put on the wait, not o
       .explanation.cause;
   for (const next of ['pointerup', 'mouseup', 'touchend', 'click', 'auxclick']) assert.match(heldThen('pointerdown', next), /\. The pointer was still down for 99 ms of it/);
   assert.match(heldThen('pointerdown', 'contextmenu'), /\. Nothing on record ran in 99 ms of it, before the contextmenu came, so the wait was the other 70 ms\./);
-  for (const next of ['input', 'keypress', 'keydown']) assert.match(heldThen('keydown', next), new RegExp(`\\. Nothing on record ran in 99 ms of it, before the ${next} came`));
+  for (const next of ['input', 'keypress', 'keydown']) {
+    assert.match(heldThen('keydown', next), new RegExp(`\\. Nothing on record ran in 99 ms of it, before the ${next} came`));
+  }
   // A render that committed just before the keyup's handlers began is in the time between, however close.
   const close = enter(null, 10.4, [input(0, 'keydown')], [commit(10.9, 0, { total: 0.3, rendered: 2 }), commit(157.4, 0, { total: 130, startedAt: 12, rendered: 300 })]);
   assert.equal(close.explanation.blame.kind, 'render');
