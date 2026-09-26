@@ -99,7 +99,7 @@ const FORCED_LAYOUT_MIN_MS_NO_DURATIONS = HANDLER_MIN_MS;
 // a reader following it optimises whichever one the library happened to sort first. The sentence
 // still names the largest and says how much of the total it holds, because that much is a fact.
 const FORCED_LAYOUT_ONE_SCRIPT_SHARE = 0.9;
-// The screen update gets a note of its own from 100 ms, half of INP's 200 ms budget for "good".
+// The screen update gets a note of its own over 100 ms, half of INP's 200 ms budget for "good".
 const PRESENTATION_NOTE_MS = 100;
 // A screen update with no script in it is put on the browser's own work from half of it, the share that
 // lets a script name a wait.
@@ -2080,7 +2080,7 @@ function explain(r: InteractionReport): Explanation {
     notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
   // A render the clause ties to the script is said there and nowhere else, so the note is kept for it
-  // under PRESENTATION_NOTE_MS too. From PRESENTATION_NOTE_MS it is kept where the working time was longer
+  // under PRESENTATION_NOTE_MS too. Over PRESENTATION_NOTE_MS it is kept where the working time was longer
   // as well, the way closedByTheScreen keeps a render the screen update outranked: on twenty's select-all,
   // 762 ms of the screen updating went unsaid behind 947 ms of rendering. A render the script forced is
   // tied to it there too, as insideLate says, and not left in the working time as an effect's.

@@ -3374,7 +3374,7 @@ test('a script after the handlers is what held the screen update only from half 
   assert.equal(report(click, [handled], timer(184, 300), [input(0, 'click')]).explanation.blame.name, null);
 });
 
-test('a screen update of 100 ms or more gets its note under another verdict where the working time was longer too', () => {
+test('a screen update over 100 ms gets its note under another verdict where the working time was longer too', () => {
   // twenty's select-all in a production build: a 1712 ms click, 947 ms of it the handler rendering 4632 components,
   // then 762 ms of the screen updating, 712 of it the frame's own style, layout and paint.
   const rows = {
@@ -3396,11 +3396,12 @@ test('a screen update of 100 ms or more gets its note under another verdict wher
     'After the handler finished, the screen took another 762 ms to update, mostly the browser recalculating styles and layout and painting the frame: 712 ms.',
   ]);
 
-  // From 100 ms, not under it: 197 ms of working time, then 104 ms and 96 ms of the screen updating.
+  // Over 100 ms, not at it or under it: 197 ms of working time, then 104, 100 and 96 ms of the screen updating.
   const rendered = (end: number) =>
     report([entry('click', 0, end, 3, 200)], [commit(190, 0, { total: 150 })], [frame(0, end, [script('#document.onclick', 3, 197)], 210)], [input(0, 'click')]).explanation;
   assert.equal(rendered(304).blame.kind, 'render');
   assert.deepEqual(rendered(304).notes, ['After the handler finished, the screen took another 104 ms to update, mostly the browser recalculating styles and layout and painting the frame: 94 ms.']);
+  assert.deepEqual(rendered(300).notes, []);
   assert.deepEqual(rendered(296).notes, []);
 
   // TanStack Virtual's checkbox at 4x: the handler rendered the table for 129 ms, then the frame waited on the
