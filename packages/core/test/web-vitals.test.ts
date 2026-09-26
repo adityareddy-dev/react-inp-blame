@@ -35,6 +35,8 @@ interface ElementOptions {
  * `interactionTarget` is built from attributes, never from what the element says.
  */
 function element(tag: string, { attributes = {}, classes = [], id = '', fiber = null, parentNode = null }: ElementOptions = {}): Record<string, unknown> {
+  // The id is an attribute as well, as it is on a page, and the attribute is what the selector reads.
+  const named: Record<string, string> = id ? { ...attributes, id } : attributes;
   const el: Record<string, unknown> = {
     nodeType: 1,
     tagName: tag.toUpperCase(),
@@ -42,7 +44,7 @@ function element(tag: string, { attributes = {}, classes = [], id = '', fiber = 
     classList: classes,
     parentNode,
     parentElement: parentNode,
-    getAttribute: (name: string) => attributes[name] ?? null,
+    getAttribute: (name: string) => named[name] ?? null,
   };
   if (fiber) el[FIBER_KEY] = fiber;
   Object.defineProperty(el, 'textContent', {
