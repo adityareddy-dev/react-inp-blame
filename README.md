@@ -928,10 +928,7 @@ cut short. With `enabled` at its default, neither plugin adds anything to a prod
 of date or a size passes its budget in `scripts/size-budget.json`. The table before 0.8.0 said 39.0 and
 14.4 KB for `/auto`, figures from 0.1.0 that had not been measured again as the entry grew.
 
-On four open-source apps, built with and without it, 15 paired runs each unthrottled and at 4x CPU:
-[docs/benchmarks](docs/benchmarks/README.md). INP did not move on any of them. On a Next.js site
-with thousands of components, page load took about 75 ms longer unthrottled, most likely from the
-name stamps.
+
 
 ## What it reads from React
 
