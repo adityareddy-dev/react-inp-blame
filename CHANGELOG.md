@@ -26,8 +26,9 @@ it changes when a field is removed or changes meaning, which a minor release may
   what filled it, and the blame is a `waiting` whose `detail` says where: "between click and keyup". Where the
   wait before the handlers or the screen update is larger, that time is a note instead. A handler is never
   said to have run through it. A script that ran in it is part of that wait, named the way a script the input
-  waited behind is, and never as the handler. The wait runs from the next event's own input, so a key held down
-  is not one, and a report built before its long animation frame arrives gives the same wait, saying no frame
+  waited behind is, and never as the handler. Before the next event's own input, only time something kept the
+  main thread busy is a wait, so a key held down with the thread idle is not one and a timer running while it
+  was held still is. A report built before its long animation frame arrives gives the same wait, saying no frame
   that says what else ran has been recorded yet.
 - **A render a script forced after the handlers is said to be what that script did.** On TanStack Table's
   virtualized rows at 4x, a checkbox's screen update waited 174 ms on react-virtual's scroll listener, which

@@ -3043,6 +3043,63 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   // thread kept both events in one frame, is no wait at all.
   const held = report([entry('keydown', 0, 168, 0.2, 1.2), entry('keyup', 100, 64, 100.1, 100.3)], [], [], [input(0, 'keydown')]);
   assert.notEqual(held.explanation.blame.kind, 'waiting');
+  // Held down while the thread was busy, the time before the release is the wait all the same: people hold a key
+  // for 80 to 150 ms. A long frame over it says so, and before the frames arrive, the keyup's handlers starting
+  // well after its release do.
+  for (const up of [60, 120, 140]) {
+    const keys = [entry('keydown', 0, 168, 2, 6), entry('keyup', up, 168 - up, 150, 150.2)];
+    const timer = report(keys, [], [frame(2, 160, [script('TimerHandler:setTimeout', 6.5, 143)], 151)], [input(0, 'keydown')]).explanation;
+    assert.deepEqual([up, timer.blame.kind, timer.blame.name, Math.round(timer.blame.ms!)], [up, 'waiting', 'TimerHandler:setTimeout', 144]);
+    for (const frames of [[], null]) assert.equal(report(keys, [], frames, [input(0, 'keydown')]).explanation.blame.kind, 'waiting');
+  }
+  // A timer the keydown's handler left behind is not lost to a 48 ms handler, nor, on a mouse, to a 60 ms one.
+  const behind = report(
+    [entry('keydown', 0, 168, 2, 50), entry('keyup', 120, 48, 150, 150.2)],
+    [commit(49, 0, { total: 0.5, rendered: 1 })],
+    [frame(2, 160, [script('DIV#root.onkeydown', 2, 48), script('TimerHandler:setTimeout', 50.5, 99.5)], 151)],
+    [input(0, 'keydown')],
+  ).explanation;
+  assert.deepEqual([behind.blame.kind, behind.blame.name], ['waiting', 'TimerHandler:setTimeout']);
+  const pressed = report(
+    [entry('pointerdown', 0, 216, 1, 2), entry('pointerup', 100, 116, 150, 150.2), entry('click', 100, 116, 150.2, 210)],
+    [commit(209, 100, { total: 0.5, rendered: 1 })],
+    [frame(1, 210, [script('TimerHandler:setTimeout', 2.5, 147.5), script('BUTTON.onclick', 150.2, 59.8)], 211)],
+    [input(0, 'pointerdown'), input(100, 'click')],
+  ).explanation;
+  assert.deepEqual([pressed.blame.kind, pressed.blame.name, pressed.blame.detail], ['waiting', 'TimerHandler:setTimeout', 'between pointerdown and pointerup']);
+  // A render before the release is part of the wait it kept the thread busy in, not taken off the wait after it.
+  const renderFirst = (frames: FrameSummary[] | null) =>
+    report([entry('keydown', 0, 168, 2, 6), entry('keyup', 70, 98, 150, 150.2)], [commit(66.5, 0, { total: 60, startedAt: 6.5, rendered: 300 })], frames, [input(0, 'keydown')]).explanation;
+  const framed = renderFirst([frame(2, 160, [script('MessagePort.onmessage', 6.5, 60), script('TimerHandler:setTimeout', 70, 80)], 151)]);
+  assert.deepEqual([framed.blame.kind, framed.blame.name], ['waiting', 'TimerHandler:setTimeout']);
+  assert.equal(renderFirst(null).blame.kind, 'waiting');
+  // Idle while held and busy after the release: only the time after it is the wait, and the sentence says so.
+  const idleThenBusy = report(
+    [entry('keydown', 0, 176, 0.2, 1.2), entry('keyup', 100, 76, 170, 170.2)],
+    [],
+    [frame(100, 72, [script('TimerHandler:setTimeout', 100.1, 69.5)], 171)],
+    [input(0, 'keydown')],
+  ).explanation;
+  assert.deepEqual([idleThenBusy.blame.kind, idleThenBusy.blame.name, Math.round(idleThenBusy.blame.ms!)], ['waiting', 'TimerHandler:setTimeout', 70]);
+  assert.match(
+    idleThenBusy.cause,
+    /169 ms went by between the keydown's handlers and the keyup's\. The key was still down for 99 ms of it, with nothing on record running, and the keyup waited the other 70 ms\. A script \(TimerHandler:setTimeout, app\.js\) ran for 70 ms of the wait\./,
+  );
+  // A long frame over the held time that blocked for no longer than what it records is no busy thread: a paint
+  // held up off the thread keeps a frame open with the thread idle, and so does a keydown handler's long task.
+  const heldIdle = [
+    report([entry('keydown', 0, 176, 0.2, 1.2), entry('keyup', 100, 76, 100.1, 100.3)], [], [{ ...frame(0.2, 170, [], 165), blocking: 0 }], [input(0, 'keydown')]),
+    report(
+      [entry('keydown', 0, 176, 0.2, 58.2), entry('keyup', 150, 26, 150.1, 150.3)],
+      [],
+      [{ ...frame(0.2, 170, [script('DIV#root.onkeydown', 0.2, 58)], 165), blocking: 8 }],
+      [input(0, 'keydown')],
+    ),
+  ];
+  for (const held of heldIdle) assert.notEqual(held.explanation.blame.kind, 'waiting', held.explanation.cause);
+  // A render that committed just before the keyup's handlers began is in the time between, however close.
+  const close = enter(null, 10.4, [input(0, 'keydown')], [commit(10.9, 0, { total: 0.3, rendered: 2 }), commit(157.4, 0, { total: 130, startedAt: 12, rendered: 300 })]);
+  assert.equal(close.explanation.blame.kind, 'render');
   // A task React's scheduler posted for straight after the keydown's handlers is in the gap, not in them: its 36 ms
   // of layout is not added to the keyup's 30, which used to make "66 ms of the 49 ms spent handling" a layout verdict.
   const posted = report(

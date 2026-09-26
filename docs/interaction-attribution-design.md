@@ -1019,15 +1019,21 @@ is left out of what the handlers are said to have run for. From 50 ms it is the 
 the wait before the first handler, and the screen update does not outrank the working time; where only those
 last two stop it, it is a note. Only entries painted within 8 ms of the headline paint count: a keyup released
 after the key press painted is in a frame of its own, and one whose handlers start just past the working time's
-rounded end is clamped to it. What the next event waited of a gap runs from its own input, where that came
-during the gap: before it the key was not released yet, and a paint held up off the main thread can keep a key
-held down for 100 ms in one frame with the thread idle. That figure comes from Event Timing alone. Long
-animation frames only say what filled it, never how long it was, since they can reach a report after it is built
-(it is revised when they do): where they cover most of it the sentence says what ran, and where they do not yet,
-it says no frame that says what else ran has been recorded yet. It once took the covered part as the wait, which
-made a 147 ms wait lose to a 100 ms render with half of it covered and win with less, and gave a report built
-before its frame "The onClick handler most likely took about 2 ms of the 420 ms", in CI on React 19.2's
-production build. A script that starts from the end of one event's handlers on is in the gap however soon
+rounded end is clamped to it. What the next event waited of a gap is all of it from its own input on, and
+before that only the time something on record kept the main thread busy: a script, a frame's own style and
+layout, a React render, or all of a long frame whose blocking time is more than what it records can account
+for. A paint held up off the main thread can keep a key held down for 100 ms in one frame with the thread idle,
+and that is no wait; people hold a key for 80 to 150 ms, and a timer the keydown left running through it is.
+Before the frames arrive, the next event's handlers starting more than 4 ms after its input say the thread was
+busy when it came, and the time before it is taken as busy too. Where the idle part is a tenth of the gap or
+more, the sentence says the key or pointer was still down for that long and what the wait was. Where long
+animation frames cover most of the wait the sentence says what ran, and where they do not yet, it says no frame
+that says what else ran has been recorded yet; they can reach a report after it is built (it is revised when
+they do), so they change how much of the time before an input was a wait, but never whether the time after it
+was. The wait once took only the covered part, which made a 147 ms wait lose to a 100 ms render with half of it
+covered and win with less, and gave a report built before its frame "The onClick handler most likely took about
+2 ms of the 420 ms", in CI on React 19.2's production build. A render that committed before the next event's
+handlers began is in the gap however close to them. A script that starts from the end of one event's handlers on is in the gap however soon
 after, since a task starts only once the one before it has finished: React's scheduler posts one for straight
 after the handlers. A script Long Animation Frames recorded there is part of the wait, named when it holds half
 of it, as one the input waited behind is, and never called the handler; a React render there is weighed as a

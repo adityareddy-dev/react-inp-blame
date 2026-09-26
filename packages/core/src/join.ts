@@ -67,6 +67,11 @@ const LONG_TASK_MS = 50;
 const WAITED_BEHIND_MIN_SHARE = 0.5;
 /** How much of a wait between handlers long animation frames have to cover for the sentence to say what filled it from them. */
 const FRAMES_COVER_SHARE = 0.9;
+/** How soon after its input an event's handlers start when the main thread is free for them: dispatch alone. */
+const DISPATCHED_AT_ONCE_MS = 4;
+// Time between handlers before the next input, with nothing on record running, is said from a tenth of the
+// time between on. Under that it is the odd moment between two tasks, not a key or a button held down.
+const HELD_SAID_SHARE = 0.1;
 // A later render is worth a sentence from 10 ms or 25 components. Less is the page settling after the
 // paint, a spinner going away or a status line changing, which is not what anyone was waiting for.
 const LATER_MIN_MS = 10;
@@ -1133,26 +1138,54 @@ function explain(r: InteractionReport): Explanation {
     if (last && from <= last.to + STAMP_TOLERANCE) {
       last.to = Math.max(last.to, to);
       last.last = e.name;
+      last.input = Math.min(last.input, e.startTime);
     } else handling.push({ from, to, first: e.name, last: e.name, input: e.startTime });
   }
-  // What the next event waited of each gap runs from its own input, where that came during the gap: before
-  // it, the key was not yet released, and the thread may have sat idle while a paint held up off it kept both
-  // events in one frame.
+  // What the next event waited of each gap: all of it from its own input on, and before that, only the time
+  // something on record kept the main thread busy. A key held down while a paint held up off the thread kept
+  // both events in one frame, with the thread idle until the key came up, and that is no wait. Busy is a
+  // script, a frame's own style and layout or a React render, or all of a long frame whose blocking time is
+  // more than what it records can account for. Before the frames arrive, handlers that started well after
+  // their input say the thread was busy when it came, and the time before it is taken as busy too.
+  const busyBefore = (from: number, h: { from: number; input: number }): Interval[] => {
+    const until = Math.min(h.input, h.from);
+    if (until <= from) return [];
+    if (!r.frames?.length && h.from - h.input > DISPATCHED_AT_ONCE_MS) return [{ from, to: until }];
+    const clip = (a: number, b: number): Interval[] => (a < until && b > from ? [{ from: Math.max(a, from), to: Math.min(b, until) }] : []);
+    const busy: Interval[] = [];
+    for (const f of r.frames ?? []) {
+      const end = f.start + f.duration;
+      const located: Interval[] = f.scripts.map((x) => ({ from: x.start, to: x.start + x.duration }));
+      if (f.styleAndLayoutStart !== null) located.push({ from: f.styleAndLayoutStart, to: end });
+      busy.push(...located.flatMap((x) => clip(x.from, x.to)));
+      if (f.blocking > coverage(located) + STAMP_TOLERANCE) busy.push(...clip(f.start, end));
+    }
+    for (const x of r.commits) if (x.hasDurations) busy.push(...clip(x.startedAt ?? x.at - x.total, x.at));
+    return busy;
+  };
   const gaps = handling.slice(1).map((h, i) => {
     const from = handling[i]!.to;
-    return { from, to: h.from, waitedFrom: Math.min(h.from, Math.max(from, h.input)), after: handling[i]!.last, before: h.first };
+    const waited = [...busyBefore(from, h), { from: Math.min(h.from, Math.max(from, h.input)), to: h.from }];
+    return { from, to: h.from, waited, after: handling[i]!.last, before: h.first };
   });
   const between = gaps.reduce((a, g) => a + g.to - g.from, 0);
-  const inAGap = (t: number) => gaps.some((g) => t > g.from + STAMP_TOLERANCE && t < g.to - STAMP_TOLERANCE);
+  // A render that committed before the next handlers began ran before them, however close.
+  const inAGap = (t: number) => gaps.some((g) => t > g.from + STAMP_TOLERANCE && t < g.to);
   // A task starts only once the one before it has finished, so a script that starts from the end of one event's
   // handlers on is not theirs, however soon after: React's scheduler posts its next task for straight after.
   const startsInAGap = (t: number) => gaps.some((g) => t >= g.from && t < g.to - STAMP_TOLERANCE);
   const partsBetween = gaps.flatMap((g) => scriptParts(r.frames ?? [], g.from, g.to));
   const scriptedBetween = partsBetween.reduce((a, p) => a + p.ms, 0);
-  const waitedBetween = gaps.reduce((a, g) => a + g.to - g.waitedFrom, 0);
+  const waitedBetween = gaps.reduce((a, g) => a + coverage(g.waited), 0);
+  // Time before an input with nothing on record running: the key or the pointer still down.
+  const heldBetween = between - waitedBetween;
+  const heldGap = heldBetween >= HELD_SAID_SHARE * between ? gaps.find((g) => g.to - g.from - coverage(g.waited) >= 0.5) : undefined;
   // Long frames over the wait say what filled it. They can reach a report after it is built (it is revised when
-  // they do), so they only ever change what the sentence says of it, never how long it was.
-  const framedWaited = gaps.reduce((a, g) => a + coverage((r.frames ?? []).map((f) => ({ from: Math.max(g.waitedFrom, f.start), to: Math.min(g.to, f.start + f.duration) }))), 0);
+  // they do), so they change what the sentence says of it, and how much of the time before an input was a wait.
+  const framedWaited = gaps.reduce(
+    (a, g) => a + coverage((r.frames ?? []).flatMap((f) => g.waited.map((w) => ({ from: Math.max(w.from, f.start), to: Math.min(w.to, f.start + f.duration) })))),
+    0,
+  );
   const framesSay = !!r.frames && framedWaited >= FRAMES_COVER_SHARE * waitedBetween;
   const renderedBetween = r.commits.filter((x) => inAGap(x.at));
   const renderedBetweenMs = renderedBetween.reduce((a, x) => a + (x.hasDurations ? x.total : 0), 0);
@@ -1566,20 +1599,25 @@ function explain(r: InteractionReport): Explanation {
     const handled = r.processing - between;
     const restyle = 'the browser recalculating styles and layout for what the handlers before it changed';
     const longest = longestPart(partsBetween);
+    // Where the key or the pointer was still down for part of it, what follows is said of the rest, the wait.
+    const it = heldGap ? 'the wait' : 'it';
+    const heldSaid = heldGap
+      ? ` The ${heldGap.before.startsWith('key') ? 'key' : 'pointer'} was still down for ${ms(heldBetween)} of it, with nothing on record running, and the ${onlyGap ? onlyGap.before : 'next event'} waited the other ${ms(between - Math.round(heldBetween))}.`
+      : '';
     const scriptsSaid =
       partsBetween.length === 1
-        ? `${cap(aScript(partsBetween[0]!.script))} ran for ${underOr(partsBetween[0]!.ms)} of it`
-        : `Scripts ran for ${underOr(scriptedBetween)} of it${longest ? `, the longest ${aScript(longest.script)} for ${ms(longest.ms)}` : ''}`;
+        ? `${cap(aScript(partsBetween[0]!.script))} ran for ${underOr(partsBetween[0]!.ms)} of ${it}`
+        : `Scripts ran for ${underOr(scriptedBetween)} of ${it}${longest ? `, the longest ${aScript(longest.script)} for ${ms(longest.ms)}` : ''}`;
     // A build that records no durations says React rendered, and nothing of how long.
     const reactSaid = !renderedBetween.length
-      ? 'React did not render in it'
+      ? `React did not render in ${it}`
       : renderedBetween.every((x) => x.hasDurations)
-        ? `React rendered for ${underOr(renderedBetweenMs)} of it`
-        : 'React rendered in it';
+        ? `React rendered for ${underOr(renderedBetweenMs)} of ${it}`
+        : `React rendered in ${it}`;
     const filled = framesSay
       ? scriptedBetween < 1
-        ? ` No script ran in that time, so it was ${HEDGE} ${restyle}.`
-        : scriptedBetween >= WAITED_BEHIND_MIN_SHARE * between
+        ? ` No script ran in ${heldGap ? 'the wait' : 'that time'}, so it was ${HEDGE} ${restyle}.`
+        : scriptedBetween >= WAITED_BEHIND_MIN_SHARE * waitedBetween
           ? ` ${scriptsSaid}.`
           : ` ${scriptsSaid}, and the rest was ${HEDGE} ${restyle}.`
       : !r.frames
@@ -1587,9 +1625,9 @@ function explain(r: InteractionReport): Explanation {
         : scriptedBetween >= 1
           ? ` ${scriptsSaid}, and no long animation frame over the rest has been recorded yet, so the rest was ${HEDGE} ${restyle}.`
           : ` ${reactSaid}, and no long animation frame that says what else ran has been recorded yet, so it was ${HEDGE} ${restyle}.`;
-    cause = `The handlers took ${underOr(handled)} in all, but ${ms(between)} went by ${whereBetween}.${filled} That time counts as working time, which runs from the first handler to the last.`;
-    const named = longest && longest.ms >= WAITED_BEHIND_MIN_SHARE * between ? scriptName(longest.script) : null;
-    blame = { kind: 'waiting', name: named, detail: onlyGap ? `between ${onlyGap.after} and ${onlyGap.before}` : 'between handlers', ms: between, confidence: 'measured' };
+    cause = `The handlers took ${underOr(handled)} in all, but ${ms(between)} went by ${whereBetween}.${heldSaid}${filled} That time counts as working time, which runs from the first handler to the last.`;
+    const named = longest && longest.ms >= WAITED_BEHIND_MIN_SHARE * waitedBetween ? scriptName(longest.script) : null;
+    blame = { kind: 'waiting', name: named, detail: onlyGap ? `between ${onlyGap.after} and ${onlyGap.before}` : 'between handlers', ms: heldGap ? waitedBetween : between, confidence: 'measured' };
   } else if (layoutMatters) {
     // The number is the browser's and nothing React did changes it, so the confidence is about the
     // measurement alone: whether any of the total had to be apportioned across the edge of the window.
