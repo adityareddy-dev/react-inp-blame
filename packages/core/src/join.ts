@@ -1279,7 +1279,8 @@ function explain(r: InteractionReport): Explanation {
     x.at <= s.start + s.duration + STAMP_TOLERANCE &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
-  const insideLate = lateScript && screenOutranks && !waitedOnNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  const insideLate =
+    lateScript && (screenOutranks || r.presentation > PRESENTATION_NOTE_MS) && !waitedOnNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
   const lateRender = insideLate.length ? heaviest(insideLate) : null;
   const lateRenderSaid = !lateRender
     ? ''
@@ -1936,7 +1937,10 @@ function explain(r: InteractionReport): Explanation {
     // React's render as well (the blind rung above says why), so where the count would have named that
     // render but for the bar, the script is not measured in its place: nothing under the bar is blamed.
     const confidence = unsure ? 'inferred' : 'measured';
-    const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : renderedNothing);
+    // Where every render ran in the script after the handlers, the screen update's note says it: React did
+    // render, just not in the working time.
+    const noneWorking = insideLate.length && !unjoined ? "React didn't render anything in the working time" : renderedNothing;
+    const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(anyScript.ms) < Math.round(anyScript.script.duration) ? ' of it' : '';
     const ran = `${scriptPhrase(anyScript.script)} ran for ${ms(anyScript.ms)}${ofIt}`;
