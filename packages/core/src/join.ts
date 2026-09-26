@@ -2015,8 +2015,9 @@ function explain(r: InteractionReport): Explanation {
   if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
   if (r.hydration?.kind === 'waited' && blame.kind !== 'hydration') {
     // Saying it was not what took the time is a measurement. Where the build records no durations
-    // nobody measured it, and the sentence would be a guess dressed as a finding.
-    const notTheStory = r.hydration.ms == null ? '' : ' That was not what took the time here.';
+    // nobody measured it, and the sentence would be a guess dressed as a finding. Nor is it said where
+    // the render blame names the commit that hydrated: the cause has just said it took the time.
+    const notTheStory = r.hydration.ms == null || (blame.kind === 'render' && rc === hydrating) ? '' : ' That was not what took the time here.';
     notes.push(`It landed on server-rendered HTML that had not been hydrated yet, and React hydrated ${boundaryPhrase(r.hydration)} during it.${notTheStory}`);
   }
   // What the sentence put on one component's own render: the fix is in what that component computes, not

@@ -1773,6 +1773,26 @@ test('a hydration too small to be the story is a note beside the ordinary blame,
   assert.deepEqual(r.explanation.phases[1]?.parts?.map((p) => [p.label, p.ms]), [['Hydrating', 8]]);
 });
 
+test('a render blame on the commit that hydrated does not have the note say the hydration was not what took the time', () => {
+  // 30 ms of hydrating against 35 ms of code outside React: the boundary alone does not outweigh the
+  // rest, so it is not the hydration blame, but React's time as a whole does, and the render blame
+  // names the same commit. The note still says the click landed on HTML that had not been hydrated,
+  // which the cause does not, and stops there.
+  const hydration = commit(40, 0, { hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' }, roots: ['ProductPage'], hotPath: ['ProductPage'] });
+  const r = report([entry('click', 0, 96, 2, 77)], [hydration, commit(60, 0, { total: 10, rendered: 12, roots: ['Cart'], hotPath: ['Cart'] })], []);
+
+  assert.deepEqual(r.hydration, { kind: 'waited', scope: 'boundary', owner: 'ProductPage', ms: 30 });
+  assert.equal(r.explanation.blame.kind, 'render');
+  assert.equal(r.explanation.blame.name, 'ProductPage');
+  assert.match(r.explanation.cause, /^React spent 30 ms hydrating /);
+  assert.ok(r.explanation.notes.includes('It landed on server-rendered HTML that had not been hydrated yet, and React hydrated the Suspense boundary in ProductPage during it.'));
+  assert.doesNotMatch(r.verdict, /not what took the time/);
+  // The same hydration behind a handler that outlasts it keeps the whole note.
+  const alone = report([entry('click', 0, 96, 2, 77)], [hydration], [], loginClick('handleLogin'));
+  assert.equal(alone.explanation.blame.kind, 'handler');
+  assert.ok(alone.explanation.notes.includes('It landed on server-rendered HTML that had not been hydrated yet, and React hydrated the Suspense boundary in ProductPage during it. That was not what took the time here.'));
+});
+
 test('a commit that rendered no component at all is not described as a re-render of none', () => {
   // React commits with nothing rendered: a retry that found the boundary still blocked, which is what
   // a click on HTML React cannot hydrate leaves behind.

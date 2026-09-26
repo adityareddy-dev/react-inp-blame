@@ -644,7 +644,9 @@ part of the working time rather than as a fourth phase: `Phase.parts` was added 
 phases add up to the interaction exactly as before, so reports stay at `schemaVersion: 1`. It takes the
 blame only when it is what the working time went on, at least `RENDER_MIN_MS` and more than the time
 outside React's render; a boundary that hydrated in 2 ms ahead of a 400 ms handler is a note beside the
-ordinary verdict instead.
+ordinary verdict instead. One that falls short while React's time as a whole outweighs the rest can
+still be the commit the render blame names, and then the note says where the click landed without
+adding that the hydration was not what took the time.
 
 *It was still waiting.* Every input of the interaction the ring still holds landed on HTML that had not
 been hydrated, and no commit hydrated it. React stops a discrete event at a boundary it has not reached,
