@@ -1277,6 +1277,9 @@ test("the renders a listener's render sets off, from its layout effects or its p
   });
 });
 
+/** The roots the hook looks for the report listeners' work on (`listenerWorkOf`). */
+const heldRoots = () => (session?.slots as Record<string, { roots: { deref(): unknown }[] }>).hook!.roots;
+
 test('a page that keeps creating React roots and dropping them holds on to the dropped ones only for a while, report listener or not', async (t) => {
   // A root per toast, popup or map marker. The roots the listeners' work is looked for on are held
   // weakly, so a dropped one leaves an empty WeakRef behind. This one lets the test drop a root at once.
@@ -1295,7 +1298,6 @@ test('a page that keeps creating React roots and dropping them holds on to the d
   t.after(() => {
     globalThis.WeakRef = WeakRef;
   });
-  const roots = () => (session?.slots as Record<string, { roots: { deref(): unknown }[] }>).hook!.roots;
   await inBrowser((page) => {
     const existing = existingHook();
     page.window[HOOK] = existing;
@@ -1312,12 +1314,45 @@ test('a page that keeps creating React roots and dropping them holds on to the d
     };
 
     toasts();
-    assert.ok(roots().length <= 128, `${roots().length} roots held with no report listener`);
+    assert.ok(heldRoots().length <= 128, `${heldRoots().length} roots held with no report listener`);
     // A listener that no report has reached yet, so nothing has looked at the roots for it.
     onInteraction(() => {});
     toasts();
-    assert.ok(roots().length <= 128, `${roots().length} roots held with a report listener`);
-    assert.ok(roots().some((ref) => ref.deref() === app), 'the root still mounted was let go');
+    assert.ok(heldRoots().length <= 128, `${heldRoots().length} roots held with a report listener`);
+    assert.ok(heldRoots().some((ref) => ref.deref() === app), 'the root still mounted was let go');
+    api.dispose();
+  });
+});
+
+test('a page that keeps many React roots mounted looks at each only a few times as it records new ones', async (t) => {
+  // A root per map marker, all of them kept. Looking through every root each time a new one commits would
+  // take time that grows with the square of the roots, inside React's commit; looking again only once the
+  // list has doubled keeps it to a few looks for each root.
+  let looks = 0;
+  class CountedRef<T extends object> {
+    target: T;
+    constructor(target: T) {
+      this.target = target;
+    }
+    deref(): T {
+      looks++;
+      return this.target;
+    }
+  }
+  const { WeakRef } = globalThis;
+  globalThis.WeakRef = CountedRef as unknown as WeakRefConstructor;
+  t.after(() => {
+    globalThis.WeakRef = WeakRef;
+  });
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const markers = 3000;
+    for (let i = 0; i < markers; i++) existing.onCommitFiberRoot(id, mountedRoot(0b11, 4));
+    assert.equal(heldRoots().length, markers);
+    assert.ok(looks <= 4 * markers, `${looks} looks at ${markers} roots`);
     api.dispose();
   });
 });
