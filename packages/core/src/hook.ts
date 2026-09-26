@@ -192,7 +192,7 @@ interface HookState {
   /** The hook this library created. React keeps the hook it registered with for the page's life, so a second install reuses it. */
   shim: DevtoolsHook | null;
   devtoolsLockedOut: boolean;
-  /** How the hook is in use: 'shim', 'chained' or 'none', or 'unsupported' when the page's hook is disabled. */
+  /** How the hook is in use: 'shim', 'chained' or 'none', or 'unsupported' when the page's hook is disabled or cannot be wrapped. */
   mode: Stats['mode'];
   /** Why the page's hook cannot be used at all. A renderer's own problem is on the renderer. */
   unsupported: UnsupportedReason | null;
@@ -660,10 +660,24 @@ export function uninstallHook(): void {
 }
 
 function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
+  let detach: (() => void) | null = null;
+  try {
+    if (as === 'chained') detach = chain(hook);
+  } catch {
+    // Pages that keep developer tools out of production can freeze the hook, or give a method only a getter.
+    const message =
+      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen or has methods that cannot be assigned, so it cannot be wrapped and React's commits cannot be read. Interactions are still reported, without components.";
+    state.attached = null;
+    state.detach = null;
+    state.mode = 'unsupported';
+    state.unsupported = { kind: 'hook-disabled', message };
+    warnOnce('hook-locked', message);
+    return;
+  }
   state.attached = hook;
   state.mode = as;
   state.unsupported = null;
-  state.detach = as === 'chained' ? chain(hook) : null;
+  state.detach = detach;
   for (const renderer of registryOf(hook).values()) admit(renderer);
 }
 
@@ -1001,15 +1015,7 @@ function chain(hook: DevtoolsHook): () => void {
     guardedPostCommit(hook, id, root);
     if (typeof prevPostCommit === 'function') prevPostCommit.call(this, id, root);
   };
-  if (typeof prevInject === 'function') hook.inject = inject;
-  hook.onCommitFiberRoot = onCommitFiberRoot;
-  hook.onPostCommitFiberRoot = onPostCommitFiberRoot;
-  // Renderers that registered before install(): React DevTools' hook kept what they handed it.
-  if (hook.renderers instanceof Map) {
-    const registry = registryOf(hook);
-    for (const [id, internals] of hook.renderers) if (!registry.has(id)) register(hook, id, internals);
-  }
-  return () => {
+  const undo = () => {
     // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through.
     if (hook.inject === inject) hook.inject = prevInject;
     if (hook.onCommitFiberRoot === onCommitFiberRoot) hook.onCommitFiberRoot = prevCommit;
@@ -1018,6 +1024,25 @@ function chain(hook: DevtoolsHook): () => void {
       else delete hook.onPostCommitFiberRoot;
     }
   };
+  try {
+    if (typeof prevInject === 'function') hook.inject = inject;
+    hook.onCommitFiberRoot = onCommitFiberRoot;
+    hook.onPostCommitFiberRoot = onPostCommitFiberRoot;
+  } catch (error) {
+    // A method that cannot be assigned: the ones already wrapped are put back, so the page's hook is as it was.
+    try {
+      undo();
+    } catch {
+      // One that cannot be put back only passes calls on, since the hook is never attached.
+    }
+    throw error;
+  }
+  // Renderers that registered before install(): React DevTools' hook kept what they handed it.
+  if (hook.renderers instanceof Map) {
+    const registry = registryOf(hook);
+    for (const [id, internals] of hook.renderers) if (!registry.has(id)) register(hook, id, internals);
+  }
+  return undo;
 }
 
 /**
