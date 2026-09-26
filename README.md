@@ -76,8 +76,9 @@ spreads over its header and body:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
-    after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
-    PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
+    after the screen updated: 84 ms mounting 256 components from SignInDemo down, 241 of them
+    inside ProfilePage, mostly PhotoTile (240 of the 256, 73 ms). INP doesn't count it, but
+    people still wait for it.
 
 `overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
@@ -1032,10 +1033,11 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   is passed over for the next one out, but only if there is one, so a chain holding nothing better prints the
   name as it stands. That goes for `where`, for the component a render blame names and what it was "mostly"
   made of, and for `generateTarget`. A short capitalised name cannot be told from minifier output, so `Abc` is
-  taken at face value either way. The names as they are stay on `target.owners` (the eight innermost) and
-  each commit's `components`; a commit's `hotPath` names the app's own components on it, and passes a library's
-  layers between them (a Slot, `Primitive.div`, a Provider, a wrapper named after the component it renders)
-  without a name or one of its twelve steps, so it reaches the app's component below them where there is
+  taken at face value either way. The names as they are stay on `target.owners` (the eight innermost), each
+  commit's `components` and its `hotPath`; the path spends its twelve steps only on names a reader could
+  search for, passing a library's layers between them (a Slot, `Primitive.div`, a Provider, a wrapper named
+  after the component it renders) without spending one, and a render is named after the deepest searchable
+  name on it, so it reaches the component below those layers where there is
   one. A name with the `$1` that Vite's development server and Rolldown add to one that clashes
   (`Dt$1`) is judged without it. The component emotion renders beside every element @emotion/styled or the
   `css` prop styles, to insert its styles, is not counted.

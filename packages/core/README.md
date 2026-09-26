@@ -72,8 +72,9 @@ demo's sign-in page, in development:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
-    after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
-    PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
+    after the screen updated: 84 ms mounting 256 components from SignInDemo down, 241 of them
+    inside ProfilePage, mostly PhotoTile (240 of the 256, 73 ms). INP doesn't count it, but
+    people still wait for it.
 
 `overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a

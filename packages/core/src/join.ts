@@ -787,31 +787,35 @@ function ownRender(c: CommitSummary): { readonly name: string; readonly self: nu
 /**
  * "LineItem ×800" where LineItem was most of the commit (`dominantComponent`); "TableBody's own render" where
  * that was most of the time; else the component count, "812 of 1216 components" where the walk counted fewer
- * inside the component the commit is named after. The panel's line for a later render says the same.
+ * inside the component the commit is named after, unless `inside` is false, for a blame named after
+ * something that holds them all. The panel's line for a later render says the same.
  */
-export function mostlyOf(c: CommitSummary): string | null {
+export function mostlyOf(c: CommitSummary, inside = true): string | null {
   if (c.rendered === 1) return null;
   const top = dominantComponent(c);
   if (top && top.count > 1) return `${top.name} ×${top.count}`;
   const own = ownRender(c);
   if (own) return `${own.name}'s own render`;
-  const inside = insideCount(c);
-  return inside == null ? renderedCount(c) : `${inside} of ${renderedCount(c)}`;
+  const within = inside ? insideCount(c) : null;
+  return within == null ? renderedCount(c) : `${atLeast(c)}${within} of ${renderedCount(c)}`;
 }
+
+/** "at least " where the walk stopped before the end of the tree, so every count of it is a lower bound. */
+const atLeast = (c: CommitSummary): string => (c.truncated ? 'at least ' : '');
 
 /** "801 components"; "at least 5000 components" where the walk stopped before the end of the tree. */
 export function renderedCount(c: CommitSummary): string {
-  return `${c.truncated ? 'at least ' : ''}${plural(c.rendered, 'component')}`;
+  return `${atLeast(c)}${plural(c.rendered, 'component')}`;
 }
 
 /**
  * How many of the components rendered sit inside the one the commit is named after, where the walk counted
- * them and they are fewer than the commit's (`pathRendered`): what "inside" can claim of a count. Null where
- * they are all of them, where the walk was cut, whose counts are partial either way, and on a report an
- * earlier release stored.
+ * them and they are fewer than the commit's (`pathRendered`): what "inside" can claim of a count. Where the
+ * walk was cut both counts are lower bounds, and the one inside is said as one. Null where they are all of
+ * them, and on a report an earlier release stored.
  */
 function insideCount(c: CommitSummary): number | null {
-  return !c.truncated && c.pathRendered != null && c.pathRendered < c.rendered ? c.pathRendered : null;
+  return c.pathRendered != null && c.pathRendered < c.rendered ? c.pathRendered : null;
 }
 
 /** Whether most of what a commit rendered was rendering for the first time: mounted, not rendered again. */
@@ -830,16 +834,29 @@ export function renderedVerb(c: CommitSummary): string {
 }
 
 /**
+ * The commit a report's render blame was built from, for the panel's row to take its verb from: the one
+ * whose name and detail the blame carries, the heaviest of them where several do. It is not always the
+ * heaviest commit: a 5 ms render whose layout effects ran for 60 ms is named over a 20 ms mount beside it.
+ * The heaviest where none matches, and null where the report holds no commit.
+ */
+export function blamedCommit(r: InteractionReport): CommitSummary | null {
+  const { name, detail } = r.explanation.blame;
+  const named = r.commits.filter((x) => leafOf(x) === name && mostlyOf(x) === detail);
+  return named.length ? heaviest(named) : r.commits.length ? heaviest(r.commits) : null;
+}
+
+/**
  * "801 components inside OrderSummary"; "1216 components from EventTypeWeb down, 812 of them inside Form"
  * where the walk counted fewer inside the component the render is named after than in the commit
- * (`insideCount`), from the component the render started at where that has a name worth saying
- * (`startName`).
+ * (`insideCount`), from the component the render started at where that holds them all and has a name worth
+ * saying (`startName`); "at least 5000 components, at least 800 of them inside Heavy" where the walk was
+ * cut.
  */
 function renderedWhere(c: CommitSummary): string {
   const inside = insideCount(c);
   if (inside == null) return `${renderedCount(c)} inside ${leafOf(c)}`;
   const from = startName(c);
-  return `${renderedCount(c)}${from ? ` from ${from} down` : ''}, ${inside} of them inside ${leafOf(c)}`;
+  return `${renderedCount(c)}${from ? ` from ${from} down` : ''}, ${atLeast(c)}${inside} of them inside ${leafOf(c)}`;
 }
 
 /**
@@ -863,7 +880,8 @@ function renderPhrase(c: CommitSummary): string {
     const time = top.self != null ? `, ${ms(top.self)}` : '';
     // The one on the path is one of many of the same name: the count inside it would be read as the count of them.
     if (top.name === leaf) return `${verb} ${renderedCount(c)} inside ${leaf} (${top.count} of them${time})`;
-    mostly = `, mostly ${top.name} (${top.count} of them${time})`;
+    // Counted over the whole commit, so after a count inside one component it says which count it is of.
+    mostly = `, mostly ${top.name} (${top.count} of ${insideCount(c) == null ? 'them' : `the ${c.rendered}`}${time})`;
   } else if (own) {
     // Named even where it is the leaf: "in its own render" could be read as the render's own. In brackets, so
     // a committing or effects figure after it reads as the next part of the whole rather than more of "it".
@@ -1277,7 +1295,8 @@ function explain(r: InteractionReport): Explanation {
       boundary.ms == null
         ? `${first}, ${renderedCount(commit)}: ${HEDGE} what the ${ms(r.processing)} of working time went on. This React build records no render durations, so that is read from the component count.${profiling}`
         : say(confidence, `${first}: ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.`, `${first}, ${HEDGE} ${ms(boundary.ms)} of the ${ms(r.processing)} of working time.${profiling}`);
-    blame = { kind: 'hydration', name: boundaryPhrase(boundary), detail: mostlyOf(commit), ms: boundary.ms, confidence };
+    // Named after the boundary or the page, which holds every component hydrated, so the count is the whole.
+    blame = { kind: 'hydration', name: boundaryPhrase(boundary), detail: mostlyOf(commit, false), ms: boundary.ms, confidence };
   } else if (layoutMatters) {
     // The number is the browser's and nothing React did changes it, so the confidence is about the
     // measurement alone: whether any of the total had to be apportioned across the edge of the window.

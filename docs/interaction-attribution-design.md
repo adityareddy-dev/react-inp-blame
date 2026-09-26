@@ -62,8 +62,9 @@ This library does the join and answers in plain words:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
-    after the screen updated: 84 ms re-rendering 256 components inside ProfilePage, mostly
-    PhotoTile (240 of them, 73 ms). INP doesn't count it, but people still wait for it.
+    after the screen updated: 84 ms mounting 256 components from SignInDemo down, 241 of them
+    inside ProfilePage, mostly PhotoTile (240 of the 256, 73 ms). INP doesn't count it, but
+    people still wait for it.
 
 ## What is proven so far
 
@@ -382,18 +383,23 @@ bailed out, so its whole subtree is stale and gets pruned; that prune is what ke
 cheap on big trees. Ancestors that were only cloned on the way down (App, layouts, providers)
 are named on the path but never counted as roots. The hot path follows the child carrying at
 least 60% of the parent's work, so it stops at "the OrderSummary subtree" rather than
-descending into 800 identical rows, and names at most twelve of the app's own components below
-the one it starts from. A library's layers between them are passed without a name or a step: a
-name a reader could not search for (Radix's `Primitive.div`, a Slot, a minifier's), a Provider or
-a Context, and a wrapper named after the component it renders (shadcn's `TabsList` over Radix's).
-On the shadcn/ui docs Radix's layers alone spent the twelve, so a render of the install tabs was
-named after Tabs, and on cal.com a provider and a minified name spent the two that would have
-reached the tab below the form. The walk also counts the components inside the component the path
-ends on (`pathRendered`), beside the commit's count, and those rendering for the first time
-(`mounted`, a fiber with no alternate), so a sentence can say "1216 components from EventTypeWeb
-down, 812 of them inside EventAdvancedWebWrapper" where 0.12.0 put the whole count inside the last
-name it reached, and "mounting" of a Radix dialog's content, which its Portal mounts in a commit of
-its own. A memo wrapper is a fiber of its own above the component it
+descending into 800 identical rows, and spends at most twelve steps below the one it starts from,
+on names a reader could search for. A library's layers between them are named on the path but
+spend no step: a name a reader could not search for (Radix's `Primitive.div`, a Slot, a
+minifier's) or a Provider or a Context, and the same for a wrapper named after the component it
+renders (shadcn's `TabsList` over Radix's). Every name spent a step before this, so on the shadcn/ui
+docs Radix's layers alone spent the twelve and a render of the install tabs was named after
+RovingFocusGroupCollectionProviderProvider, and on cal.com a provider and a minified name spent the
+two that would have reached the tab below the form. The walk also counts the components rendering
+for the first time (`mounted`, a fiber with no alternate), and beside the commit's count keeps two
+more: those under the component the path starts from (`startRendered`, the whole where one root
+rendered or the roots share it, less where other roots rendered beside it) and those inside the
+deepest searchable name on the path (`pathRendered`). So a sentence can say "1216 components from
+EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper" where 0.12.0 put the whole count
+inside the last name it reached (the 812 and the name are a read of cal.com's source, not a run),
+or "181 components, 79 of them inside RovingFocusGroup" where two code blocks rendered and neither
+holds the rest. It can also say "mounting" of a Radix dialog's content, which its Portals mount in
+a commit of their own. A memo wrapper is a fiber of its own above the component it
 renders (`memo(fn, compare)`, `memo(forwardRef(...))` and `memo(Class)`, but not `memo(fn)`, which
 React keeps as a single fiber), and React flags both as having rendered, so each such component was
 counted twice until 2026-09-15: 504 rendered where 304 did, on 17, 18 and 19 alike. The wrapper now
@@ -969,9 +975,13 @@ where that component is half of the components rendered or more, a styling libra
 counted, or half of the render's time: "mostly Label (4 of them)" in a render of 59 components on the
 shadcn/ui docs sent the reader to the wrong file. The count said to be inside the component a render
 is named after is that component's own where the walk counted fewer there than in the commit, with the
-component the render started from named where a reader could search for it ("1216 components from
-EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper"), and a render is "mounting" where more
-than half of its components rendered for the first time. `explanation.blame.confidence` says what the
+component the render started from named where it holds them all and a reader could search for it
+("1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper", the 812 a read
+of cal.com's source rather than a run). A walk cut short says both counts as lower bounds, and a render
+is "mounting" where more than half of its components rendered for the first time. A hydration blame
+keeps the whole count, since the boundary or page it is named after holds every component hydrated,
+and so does a render named after the component it was mostly made of.
+`explanation.blame.confidence` says what the
 call rests on. It is `'measured'` when the blame follows from timings of the interaction itself:
 React's durations for commits joined by their exact input stamp and walked in full, the browser's
 own phases, a script's Long Animation Frames entry. It is `'inferred'` when the blame is the

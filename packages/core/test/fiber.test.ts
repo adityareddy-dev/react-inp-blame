@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { leafName, startName } from '../src/commits.ts';
 import { dehydratedAround, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, rootShapeProblem, walkCommit, type FiberRoot } from '../src/fiber.ts';
+import type { CommitSummary } from '../src/types.ts';
 
 // The HostRoot fiber React 17, 18 and 19 hand the hook as `root.current`, in a development build.
 const hostRoot = (): Record<string, unknown> => ({ tag: 3, flags: 0, mode: 3, child: null, sibling: null, return: null, alternate: null, actualDuration: 1.5 });
@@ -146,11 +148,13 @@ test('a production walk cut at its budget does not blame the subtree it happened
   assert.deepEqual(uncut.hotPath, ['Metrics']);
 });
 
-test("the hot path spends its steps on the app's components, passing a library's layers and a wrapper named after what it renders", () => {
+const named = (name: string) => Object.assign(() => {}, { displayName: name });
+const chain = (names: string[], ...leaves: Record<string, unknown>[]) => names.reduceRight((kids, name) => [rendered(named(name), ...kids)], leaves)[0]!;
+const walk = (tree: Record<string, unknown>) => walkCommit(root(tree) as any, 5000, 100, click, development) as CommitSummary;
+
+test("the hot path names every component on the chain and spends its steps on the ones a reader could search for, passing a library's layers and a wrapper named after what it renders", () => {
   // The install tabs on the shadcn/ui docs, switched to npm: shadcn's Tabs parts over Radix's, each named like
   // the part it renders, and between one part and the next the layers Radix renders, named as React sees them.
-  const named = (name: string) => Object.assign(() => {}, { displayName: name });
-  const chain = (names: string[], ...leaves: Record<string, unknown>[]) => names.reduceRight((kids, name) => [rendered(named(name), ...kids)], leaves)[0]!;
   const trigger = () =>
     chain(['TabsTrigger', 'TabsTrigger', 'RovingFocusGroupItem', 'RovingFocusGroupCollectionItemSlot', 'RovingFocusGroupCollectionItemSlot.Slot', 'RovingFocusGroupCollectionItemSlot.SlotClone', 'Primitive.button', 'Primitive.button.Slot', 'Primitive.button.SlotClone'], element('button', text()));
   const list = chain(
@@ -158,21 +162,52 @@ test("the hot path spends its steps on the app's components, passing a library's
     ...Array.from({ length: 8 }, trigger),
   );
   const tabs = chain(['CodeBlockCommand', 'Tabs', 'Tabs', 'TabsProvider', 'Primitive.div'], list, rendered(named('TabsContent'), element('pre', text())));
-  const c = walkCommit(root(tabs) as any, 5000, 100, click, development);
-  // 0.12.0 named every layer and spent its twelve steps on them, ending at RovingFocusGroupCollectionSlot.SlotClone.
-  assert.deepEqual(c.hotPath, ['CodeBlockCommand', 'Tabs', 'TabsList', 'RovingFocusGroup']);
-  // What sits inside the last of them, it included, beside the commit's count: the sentence says both.
-  assert.deepEqual([c.rendered, c.pathRendered], [87, 79]);
+  const c = walk(tabs);
+  // Every name on the chain but a repeat of the one before it, as 0.12.0 listed them. 0.12.0 spent its twelve
+  // steps on the layers too, so its path ended at RovingFocusGroupCollectionSlot.SlotClone and the render was
+  // named after RovingFocusGroupCollectionProviderProvider; the layers now spend none, and the render is named
+  // after the deepest name that is not one.
+  assert.deepEqual(c.hotPath, [
+    'CodeBlockCommand', 'Tabs', 'TabsProvider', 'Primitive.div', 'TabsList', 'RovingFocusGroup', 'RovingFocusGroupCollectionProvider', 'RovingFocusGroupCollectionProviderProvider',
+    'RovingFocusGroupCollectionSlot', 'RovingFocusGroupCollectionSlot.Slot', 'RovingFocusGroupCollectionSlot.SlotClone', 'Primitive.div',
+  ]);
+  assert.equal(leafName(c), 'RovingFocusGroup');
+  // What sits inside that component, it included, beside the commit's count: the sentence says both.
+  assert.deepEqual([c.rendered, c.startRendered, c.pathRendered], [87, 87, 79]);
 
-  // A dependency's minified name between two of the app's is passed the same way.
-  const routed = walkCommit(root(chain(['App', 'hl', 'Qt', 'Layout'], element('main', text()))) as any, 5000, 100, click, development);
-  assert.deepEqual([routed.hotPath, routed.pathRendered], [['App', 'Layout'], 1]);
-  // Twelve of the app's own components below the first still cap the path.
-  const deep = walkCommit(root(chain(Array.from({ length: 15 }, (_, i) => `Level${i}`), element('p', text()))) as any, 5000, 100, click, development);
+  // A dependency's minified name between two of the app's stays on the path and spends no step either.
+  const routed = walk(chain(['App', 'hl', 'Qt', 'Layout'], ...Array.from({ length: 5 }, () => rendered(named('Item'), element('li', text())))));
+  assert.deepEqual([routed.hotPath, leafName(routed), routed.pathRendered], [['App', 'hl', 'Qt', 'Layout'], 'Layout', 6]);
+  // A chain with no readable name on it is named after its end, as 0.12.0 named it, and the count is that
+  // component's: what an unstamped production build gives.
+  const minified = walk(chain(['e', 't', 'Xe'], ...Array.from({ length: 400 }, () => rendered(named('Ye'), element('li', text())))));
+  assert.deepEqual([minified.hotPath, leafName(minified), minified.pathRendered], [['e', 't', 'Xe'], 'Xe', 401]);
+  // Twelve components below the first still cap the path.
+  const deep = walk(chain(Array.from({ length: 15 }, (_, i) => `Level${i}`), element('p', text())));
   assert.deepEqual([deep.hotPath.length, deep.hotPath[12]], [13, 'Level12']);
   // A path that stays at its root holds the whole commit.
-  const flat = walkCommit(root(rendered(named('List'), ...Array.from({ length: 5 }, () => rendered(named('Row'), element('li', text()))))) as any, 5000, 100, click, development);
-  assert.deepEqual([flat.hotPath, flat.rendered, flat.pathRendered], [['List'], 6, 6]);
+  const flat = walk(rendered(named('List'), ...Array.from({ length: 5 }, () => rendered(named('Row'), element('li', text())))));
+  assert.deepEqual([flat.hotPath, flat.rendered, flat.startRendered, flat.pathRendered], [['List'], 6, 6, 6]);
+});
+
+test('a commit says how many components sit under the root its hot path starts from, which is one root among several', () => {
+  // A store with a subscriber in each part of the page (jotai, Redux, Zustand) re-renders each from its own
+  // root in one commit. The path starts at the heaviest, so "from Dashboard down" would claim the count.
+  const many = (name: string, n: number) => Array.from({ length: n }, () => rendered(named(name), element('div', text())));
+  const passedThrough = (name: string, ...children: Record<string, unknown>[]) => fiber(0, named(name), children, 0);
+  const split = walk(passedThrough('App', rendered(named('Dashboard'), rendered(named('Panel'), ...many('Bar', 40))), rendered(named('Sidebar'), ...many('NavItem', 40))));
+  assert.deepEqual([split.roots, split.hotPath], [['Dashboard', 'Sidebar'], ['Dashboard', 'Panel']]);
+  assert.deepEqual([split.rendered, split.startRendered, split.pathRendered], [83, 42, 41]);
+  assert.equal(startName(split), null);
+  // Two roots of one name, which `roots` lists once: Radix's DialogPortal gives a dialog's overlay and its
+  // content a Portal each, and both mount in one commit.
+  const portals = walk(passedThrough('DialogPortal', rendered(named('Portal'), rendered(named('Overlay'), ...many('Piece', 15))), rendered(named('Portal'), rendered(named('Content'), ...many('Field', 40)))));
+  assert.deepEqual([portals.roots, portals.hotPath], [['Portal'], ['Portal', 'Content']]);
+  assert.deepEqual([portals.rendered, portals.startRendered, portals.pathRendered], [59, 42, 41]);
+  assert.equal(startName(portals), null);
+  // One root holds them all, and is where the render is said to have started.
+  const one = walk(rendered(named('App'), rendered(named('Dashboard'), rendered(named('Panel'), ...many('Bar', 40))), rendered(named('Sidebar'), ...many('NavItem', 4))));
+  assert.deepEqual([one.rendered, one.startRendered, one.pathRendered, startName(one)], [48, 48, 41, 'App']);
 });
 
 test('a commit counts the components rendering for the first time, and those inside the component its hot path ends on', () => {
@@ -186,7 +221,7 @@ test('a commit counts the components rendering for the first time, and those ins
   const charts = Array.from({ length: 3 }, () => rendered(Chart, rendered(Bar, element('rect')), rendered(Bar, element('rect'))));
   const c = walkCommit(root(again(rendered(App, again(rendered(Sidebar, element('nav', text()))), again(rendered(Dashboard, ...charts))))) as any, 5000, 100, click, development);
   assert.deepEqual([c.rendered, c.mounted], [12, 9]);
-  assert.deepEqual([c.hotPath, c.pathRendered], [['App', 'Dashboard'], 10]);
+  assert.deepEqual([c.hotPath, c.startRendered, c.pathRendered], [['App', 'Dashboard'], 12, 10]);
   // Nothing new in a re-render of the same tree, and a fresh one is nothing but.
   assert.equal(walkCommit(root(again(rendered(App, again(rendered(Sidebar, element('nav', text())))))) as any, 5000, 100, click, development).mounted, 0);
   assert.equal(walkCommit(root(rendered(App, rendered(Sidebar, element('nav', text())))) as any, 5000, 100, click, development).mounted, 2);

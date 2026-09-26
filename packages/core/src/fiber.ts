@@ -21,10 +21,10 @@ const MAX_DEPTH = 1000;
 // The hot path follows a child carrying at least this share of its parent's work. Over half means
 // no sibling carries as much; 60 rather than 50 keeps it from following a child that barely leads.
 const HOT_PATH_SHARE = 0.6;
-// The hot path names at most this many of the app's own components below the one it starts from: enough
-// to reach the subtree to blame in a real tree, few enough to read in one line. A library's layers between
-// them are passed without a name or a step (`passedLayer`): on the shadcn/ui docs Radix's alone would spend
-// all twelve.
+// The hot path spends at most this many steps below the component it starts from: enough to reach the
+// subtree to blame in a real tree, few enough to read in one line. A library's layers between the
+// components that spend them are named on the path but spend no step (`passedLayer`): on the shadcn/ui
+// docs Radix's alone would spend all twelve.
 const HOT_PATH_STEPS = 12;
 // A commit keeps its most-rendered components and its outermost ones up to these counts. A report
 // names a culprit; it is not a profile.
@@ -950,8 +950,11 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // so they still choose.
   const comparable = (a: Agg) => hasDurations || !a.cut;
   const hotPath: string[] = [];
-  // Of `rendered`, those inside the component the path ends on: all of them until the path goes below a root
-  // it started from, and all of them under the component several roots share.
+  // Of `rendered`, those inside the component the path starts from: all of them under the component several
+  // roots share, and the heaviest root's own where the path starts at one root among several.
+  let startRendered = rendered;
+  // Of `rendered`, those inside the component the commit is named after (`leafName`): the deepest on the
+  // path that is not a layer, else the end of the path.
   let pathRendered = rendered;
   const onlyRoot = performedRoots.length === 1 ? performedRoots[0]! : null;
   if (!hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber))) {
@@ -959,22 +962,23 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     if (shared) hotPath.push(shared);
   } else if (performedRoots.length) {
     let cur = performedRoots.reduce((a, b) => (metric(b) > metric(a) ? b : a));
-    let last = cur.name;
-    hotPath.push(last);
-    pathRendered = cur.rendered;
+    hotPath.push(cur.name);
+    startRendered = cur.rendered;
+    let named: Agg | null = passedLayer(cur.name) ? null : cur;
     for (let steps = 0; cur.kids.length && comparable(cur) && steps < HOT_PATH_STEPS; ) {
       const next = cur.kids.reduce((a, b) => (metric(b) > metric(a) ? b : a));
       if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
+      if (next.name !== cur.name) hotPath.push(next.name);
       // A library's layer, and a wrapper named after the component it renders (shadcn's Label over
-      // Radix's), is passed without a name or a step: the steps go on the app's own components.
-      if (next.name !== last && !passedLayer(next.name)) {
-        hotPath.push(next.name);
-        last = next.name;
-        pathRendered = next.rendered;
+      // Radix's), is named on the path but spends no step: the steps go on the components a reader could
+      // search for, and the render is named after the deepest of them.
+      if (!passedLayer(next.name) && next.name !== named?.name) {
+        named = next;
         steps++;
       }
       cur = next;
     }
+    pathRendered = (named ?? cur).rendered;
   }
 
   // Summed over a whole commit, readings of a coarse clock come out close; one component's do not.
@@ -997,6 +1001,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     truncated,
     roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),
+    startRendered,
     pathRendered,
     components: Object.freeze(components),
     hasDurations,

@@ -1,6 +1,6 @@
 import { heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
-import { carriesWork, isPointerEvent, isTypingEvent, kindOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
+import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { warnOnce } from './warn.js';
@@ -517,8 +517,10 @@ function blameLine(r: InteractionReport): Child[] {
   if (blame.kind === 'none' && (r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable')) return ['nothing is blamed: React is not being read'];
   // An inferred blame is the likeliest reading of component counts and phase times, not a measurement.
   // The row says so in two words; the cause sentence under it says what would make it exact.
-  // "mounted" where the commit was mostly components rendering for the first time, as the cause says.
-  const line = blameText(blame, r.commits.length ? renderedVerb(heaviest(r.commits)) : 're-rendered');
+  // "mounted" where the commit the blame names was mostly components rendering for the first time, as the
+  // cause says of it: not always the heaviest commit, where one's committing and effects outweighed it.
+  const named = blame.kind === 'render' ? blamedCommit(r) : null;
+  const line = blameText(blame, named ? renderedVerb(named) : 're-rendered');
   return blame.confidence === 'inferred' && blame.kind !== 'none' ? ['most likely ', ...line] : line;
 }
 
