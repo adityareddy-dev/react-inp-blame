@@ -724,6 +724,61 @@ test('reports waiting to be heard when the page is hidden are heard before its v
   });
 });
 
+/**
+ * A pointerdown at 1000 that paints after 32 ms, quiet at a threshold of 40, then its pointerup at 1060,
+ * whose render commits at 1080 in a task of its own, and the page hidden with `queued` still waiting for
+ * the observers. Returns what was published at the hide, what a listener had heard when the hide's handler
+ * returned, and what it had heard two tasks later.
+ */
+async function heldPressThenHide(t: TestContext, queued: any[]) {
+  const clock = useClock(t);
+  let result = { published: [] as number[], heardAtHide: [] as number[], heardLater: [] as number[] };
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    const heard: number[] = [];
+    onInteraction((r) => heard.push(r.interactionId));
+    clock.now = 1000;
+    page.fire('pointerdown', { isTrusted: true, type: 'pointerdown', timeStamp: 1000, target: null, pointerId: 1 });
+    page.paint([pointer('pointerdown', 7, 1000, 32)]);
+    await nextTask();
+    clock.now = 1060;
+    page.fire('pointerup', { isTrusted: true, type: 'pointerup', timeStamp: 1060, target: null, pointerId: 1 });
+    await nextTask();
+    clock.now = 1080;
+    commitAgain(root, 20);
+    existing.onCommitFiberRoot(id, root, 3, false);
+    assert.deepEqual(
+      api.debug.commits().map((c) => [c.inputType, c.inDispatch]),
+      [['pointerup', false]],
+    );
+    page.queue(queued);
+    page.hide();
+    const published = api.reports().map((r) => r.interactionId);
+    const heardAtHide = [...heard];
+    await nextTask();
+    await nextTask();
+    result = { published, heardAtHide, heardLater: [...heard] };
+    api.dispose();
+  });
+  return result;
+}
+
+test("a quiet held press stays quiet at hide when its release's entries, still queued then, hold the release's render", async (t) => {
+  // The hide takes the release's entries before it settles the press, so they time the render at 1080 and
+  // it is not read as a later render INP left out.
+  assert.deepEqual(await heldPressThenHide(t, [pointer('pointerup', 7, 1060, 24), pointer('click', 7, 1060, 24)]), { published: [], heardAtHide: [], heardLater: [] });
+});
+
+test('a quiet report the hide itself publishes is heard before its visibilitychange handler returns, and only once', async (t) => {
+  // The release painted under 16 ms and sent no entry, so the hide publishes the press with the render it waited on.
+  assert.deepEqual(await heldPressThenHide(t, []), { published: [7], heardAtHide: [7], heardLater: [7] });
+});
+
 test("a listener that throws does not stop the others hearing the report, and its error reaches the page's error handlers", async (t) => {
   const reported: unknown[] = [];
   const saved = Object.getOwnPropertyDescriptor(globalThis, 'reportError');
