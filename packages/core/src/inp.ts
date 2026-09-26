@@ -71,8 +71,7 @@ const presented = (e: TimedInteraction) => e.startTime + e.duration;
  *   asked to report them. The library calls `reset()` at both, and on `clear()`, which web-vitals has
  *   no match for; at a soft navigation web-vitals is not asked to report, only this estimate starts over.
  * - web-vitals updates once the page is idle, this estimate as entries arrive, so for a moment after
- *   an interaction this one can be ahead. When the page is hidden, web-vitals also takes the entries
- *   its observer has not delivered yet; this estimate takes them when they are delivered.
+ *   an interaction this one can be ahead.
  * - Next.js 16.3's `useReportWebVitals` runs the web-vitals 4 it vendors, which after a back/forward
  *   cache restore keeps counting every interaction since the page loaded. Past 50 interactions before
  *   a restore, it and this estimate can point at different interactions.
