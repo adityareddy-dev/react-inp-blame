@@ -18,6 +18,8 @@ interface EventTimingObserverInit extends PerformanceObserverInit {
 /** The spec's `PerformanceLongAnimationFrameTiming`, which TypeScript's DOM lib does not declare: the fields read here. */
 interface PerformanceLongAnimationFrameTiming extends PerformanceEntry {
   readonly blockingDuration: number;
+  /** 0 where the frame did not render. */
+  readonly styleAndLayoutStart: number;
   readonly scripts: readonly PerformanceScriptTiming[];
 }
 
@@ -117,6 +119,7 @@ function summarizeFrame(e: PerformanceLongAnimationFrameTiming): FrameSummary {
     blocking: e.blockingDuration || 0,
     forcedLayout: scripts.reduce((a, s) => a + s.forcedLayout, 0),
     scripts: Object.freeze(scripts),
+    styleAndLayoutStart: e.styleAndLayoutStart > 0 ? e.styleAndLayoutStart : null,
   });
 }
 

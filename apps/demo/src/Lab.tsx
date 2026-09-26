@@ -9,6 +9,7 @@ import { Fine } from './scenarios/Fine';
 import { HandlerHog } from './scenarios/HandlerHog';
 import { LayoutThrash } from './scenarios/LayoutThrash';
 import { LiftedState } from './scenarios/LiftedState';
+import { RestyleStorm } from './scenarios/RestyleStorm';
 import { SlowRender } from './scenarios/SlowRender';
 
 interface Scenario {
@@ -77,6 +78,14 @@ export const labScenarios: Record<string, Scenario> = {
     fix: 'Memoise what each section derives, or move the work off the render path and store the result.',
     el: SlowRender,
   },
+  'restyle-storm': {
+    title: 'Restyle storm',
+    short: 'One class, 30,000 cells',
+    what: 'Click "Switch density". React renders one component; the browser then restyles and lays out 30,000 cells.',
+    problem: 'Nothing in React or in a script is slow. One class change reaches every cell, and recalculating their styles and layout holds up the frame.',
+    fix: 'Render fewer cells (virtualise the grid), or keep them out of layout with content-visibility or contain.',
+    el: RestyleStorm,
+  },
   fine: {
     title: 'Done right',
     short: 'Same shapes, memoised',
@@ -94,7 +103,7 @@ export function Lab({ scenario }: { scenario: string }) {
     <>
       <div className="topbar">
         <span>
-          <b>Anti-pattern lab</b> · seven slow interactions, each a named React mistake
+          <b>Anti-pattern lab</b> · eight slow interactions, each a named mistake
         </span>
         <a href="#">← Sign-in demo</a>
       </div>
