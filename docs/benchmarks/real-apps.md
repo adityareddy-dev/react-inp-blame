@@ -295,16 +295,14 @@ Most of the 31 misses come from a few defects, and one miss often has two of the
 - **A screen update with no script named said nothing about why.** twenty's command menu at 4x, a column
   drop. Fixed after 0.14.0 ([#42](https://github.com/adityareddy-dev/react-inp-blame/pull/42)): where long animation frames saw at least half of it, the
   sentence says it was the browser's own work, from the frame's style and layout where the frame timed them.
-- **"Often in a layout effect" said of every forced layout.** On cmdk and the tabs the reads are not in
-  layout effects. Fixed after 0.14.0: where the build times React's commit, the sentence says whether the
-  commit and its effects could have held the layout, and names code outside React where they could not.
 
 Left as they are, and known:
 
 - twenty's route changes, through React Router's data router, weren't recognised as soft navigations, so
   every report there carries the URL the page loaded on.
-- "Often in a layout effect" is still the hint in a production build, which keeps no commit time to rule a
-  layout effect out. A development build now says which (below).
+- "Often in a layout effect" is a generic hint. Here it is right: Radix's `Presence` reads `animationName` in
+  a layout effect, and cmdk scrolls the selected item into view from one. (Corrected 2026-09-26: this said the
+  reads on cmdk and the tabs were not in layout effects. Their source says they are.)
 - The same step can read as style work at 4x and screen update unthrottled when the two are close: the
   command menu's jump to Calendar did.
 

@@ -811,14 +811,20 @@ about 190 ms of layout against a 48 ms render, named `LayoutThrash` with `PriceT
 it, exactly as the render blame it replaced was.
 
 The sentence then says what forces a layout, a read of an element's size right after a style change, and
-where that read could have been. It is usually a layout effect's, and a production build keeps nothing that
-says otherwise, so there the sentence says "often in a layout effect". A development or profiling build times
-React's commit (`startedAt` to `at`, less the render) and, on React 18 and 19, its effects, and a layout
-effect's read sits inside that time. So where the commit and effects hold half the layout or more, the read
-was "most likely in a layout effect, a ref callback or an effect"; where they hold less, it was not in a
-layout effect, and where the render holds less too, it was code outside React, the handler or a library's
-listener. On cmdk's list and Radix's tabs the reads are not in layout effects. A commit with no timed
-effects, React 17's or one with no `useEffect`, is said to have timed the commit only.
+where that read could have been. It is usually a layout effect's: Radix's `Presence` reads `animationName`
+in one, and cmdk scrolls the selected item into view from one. Two records can rule it out. The browser
+charges forced layout to the script it happened in, and React commits inside the script that ran it, the
+microtask a click's update is flushed in included (checked in Chromium: a click listener's script runs to the
+end of the microtask it queued and is charged that microtask's layout). So where half the layout or more was
+charged to scripts no commit of this interaction ran in, it was in no layout effect, in any build, and the
+sentence says it was code outside React, the handler or a library's listener; the blame then names that script,
+where one holds nearly all of it, rather than the subtree React rendered. Where the commit ran in the same
+script, a development or profiling build times it (`startedAt` to `at`, less the render) and, on React 18 and
+19, its effects, and a layout effect's read sits inside that time. Where they hold less than half of the
+layout, the sentence says at most that much of it was a layout effect's, and the rest was the handler's or a
+library's, or React's render where the render could have held it. Otherwise, and in a production build, it
+says "often in a layout effect". This is asked of the working time only: after it, a commit another input made
+can run in the same script, and that commit is not in the report.
 
 Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are

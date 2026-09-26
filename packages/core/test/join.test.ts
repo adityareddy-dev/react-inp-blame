@@ -1152,33 +1152,67 @@ test('the screen update takes the blame off a rung only by taking it, never by e
   assert.equal(painted.explanation.blame.ms, 155);
 });
 
-test('where a build times React\'s commit, the forced layout sentence says whether a layout effect could have held it', () => {
-  // 100 ms of forced layout in a 116 ms click handler, in a development build that times the commit.
-  const thrash = [frame(0, 128, [script('DIV#root.onclick', 2, 116, 100)])];
+test('the forced layout sentence says a layout effect only where a commit ran in the script and could have held it', () => {
   const click = [entry('click', 0, 128, 2, 118)];
-  const tail = (c: CommitSummary[]) => report(click, c, thrash, [input(0, 'click')]).explanation.cause.replace(/^.*\. (That happens)/, '$1');
+  const explain = (c: CommitSummary[], scripts: ScriptSummary[]) => report(click, c, [frame(0, 128, scripts)], [input(0, 'click')]).explanation;
+  const said = (c: CommitSummary[], scripts: ScriptSummary[]) => explain(c, scripts).cause.replace(/^.*\. (That happens)/, '$1');
+  const reads = "That happens when code reads an element's size right after changing styles";
+  const outsideReact = "code outside React, such as the click handler or a library's listener.";
 
-  // A commit that took 5 ms held none of it, nor did a 5 ms render: it was outside React.
+  // 100 ms of forced layout in React's click listener, where the commit ran too. A development build times
+  // the commit: 5 ms of it, so at most 5 ms of the layout was a layout effect's.
+  const root = [script('DIV#root.onclick', 2, 116, 100)];
   assert.equal(
-    tail([commit(110, 0, { total: 5, startedAt: 100 })]),
-    "That happens when code reads an element's size right after changing styles. Not in a layout effect here: React's commit took 5 ms in all, so it was code outside React, such as the click handler or a library's listener.",
+    said([commit(110, 0, { total: 5, startedAt: 100 })], root),
+    `${reads}. React's commit took 5 ms in all, so at most that much of it was in a layout effect or a ref callback, and the rest was in ${outsideReact}`,
   );
   // With the commit's useEffect timed, the effects are counted and said too.
   assert.match(
-    tail([commit(110, 0, { total: 5, startedAt: 100, effectsStartedAt: 108, effectsEndedAt: 110 })]),
-    /Not in a layout effect here: React's commit and effects took 7 ms in all, so it was code outside React/,
+    said([commit(110, 0, { total: 5, startedAt: 100, effectsStartedAt: 108, effectsEndedAt: 110 })], root),
+    /React's commit and effects took 7 ms in all, so at most that much of it was in a layout effect, a ref callback or an effect, and the rest was in code outside React/,
   );
+  assert.match(said([commit(110, 0, { total: 5, startedAt: 104.6 })], root), /React's commit took under 1 ms in all, so at most that much/);
   // A render that could have held it leaves the render in.
-  assert.match(tail([commit(110, 0, { total: 60, startedAt: 48 })]), /took 2 ms in all, so it was React's render or code outside React\.$/);
-  // A commit long enough to have held it is most likely where it was.
-  assert.equal(
-    tail([commit(110, 0, { total: 5, startedAt: 40 })]),
-    "That happens when code reads an element's size right after changing styles, here most likely in a layout effect or a ref callback: React spent 65 ms committing.",
+  assert.match(
+    said([commit(110, 0, { total: 60, startedAt: 48 })], root),
+    /took 2 ms in all, so at most that much of it was in a layout effect or a ref callback, and the rest was in React's render or code outside React\.$/,
   );
+  // A commit long enough to have held it, or one a production build does not time, leaves the usual line.
+  assert.equal(said([commit(110, 0, { total: 5, startedAt: 40 })], root), `${reads}, often in a layout effect.`);
+  assert.equal(said([commit(110, 0, { total: 0, hasDurations: false, rendered: 3 })], root), `${reads}, often in a layout effect.`);
+
+  // The layout charged to a listener no commit ran in, React's own script holding the commit and forcing
+  // nothing: in no layout effect, in any build, however long React's commit took. The blame is the
+  // listener, not the subtree the commit rendered.
+  const beside = [script('DIV#root.onclick', 2, 18), script('DOCUMENT.onclick', 20, 98, 90)];
+  for (const c of [commit(18, 0, { total: 5, startedAt: 4 }), commit(18, 0, { total: 0, hasDurations: false, rendered: 30 })]) {
+    const e = explain([c], beside);
+    assert.equal(e.blame.kind, 'layout');
+    assert.match(e.cause, / It was charged to DOCUMENT\.onclick\./);
+    assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${outsideReact}`), e.cause);
+    assert.equal(e.blame.name, 'DOCUMENT.onclick');
+    assert.equal(e.blame.detail, null);
+  }
+  // Most of it, not all: the share outside is said as a figure, and no one script holds enough to be named.
+  const most = explain([commit(55, 0, { total: 3, startedAt: 50 })], [script('DIV#root.onclick', 2, 58, 20), script('DOCUMENT.onclick', 60, 58, 50)]);
+  assert.ok(most.cause.endsWith(`${reads}. 50 ms of it was charged to a script no React commit ran in, so that was not in a layout effect but in ${outsideReact}`), most.cause);
+  assert.equal(most.blame.name, null);
   // React not rendering at all rules it out in any build.
-  assert.match(tail([]), /right after changing styles\. React did not render, so here it was code outside React, such as the click handler or a library's listener\.$/);
-  // A production build keeps no commit time, so only the usual place is said.
-  assert.match(tail([commit(110, 0, { total: 0, hasDurations: false, rendered: 3 })]), /right after changing styles, often in a layout effect\.$/);
+  assert.equal(said([], root), `${reads}. React did not render, so it was ${outsideReact}`);
+});
+
+test("the forced layout note after the handlers keeps the usual line: a commit there can be another input's", () => {
+  // The click's handlers ran from 2 to 20; a transition committed at 110 inside React's scheduler task, which
+  // forced 55 ms of layout. What its commit took is not counted, since it ran after the handlers.
+  const e = report(
+    [entry('click', 0, 120, 2, 20)],
+    [commit(110, 0, { total: 10, startedAt: 30 })],
+    [frame(0, 120, [script('DIV#root.onclick', 2, 18), script('MessagePort.onmessage', 30, 80, 55)])],
+    [input(0, 'click')],
+  ).explanation;
+  const note = e.notes.find((n) => n.startsWith('The browser also spent'));
+  assert.ok(note, JSON.stringify(e.notes));
+  assert.match(note, /during the same script\. That happens when code reads an element's size right after changing styles, often in a layout effect\.$/);
 });
 
 test('a measured forced layout is not unseated by a screen update shorter than the time it ran in', () => {
