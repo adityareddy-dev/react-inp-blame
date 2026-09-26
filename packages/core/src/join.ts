@@ -63,7 +63,8 @@ const LONG_TASK_MS = 50;
 // A script the input waited behind gives a waiting blame its name from half of the wait. Under that
 // the wait was mostly something the browser did not list (another frame's work, rendering, garbage
 // collection), and the name would send the reader after the smaller part of it. The same half holds
-// for the listener that names a handler blame React had no name for.
+// for the listener that names a handler blame React had no name for, and for the script after the
+// handlers that the screen update is said to have waited on.
 const WAITED_BEHIND_MIN_SHARE = 0.5;
 /** How much of a wait between handlers long animation frames have to cover for the sentence to say what filled it from them. */
 const FRAMES_COVER_SHARE = 0.9;
@@ -1074,10 +1075,10 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
   return best && best.ms >= SCRIPT_MIN_MS ? best : null;
 }
 
-/** A sentence naming the longest script the browser recorded, where it has a name. */
-function longestSaid(p: ScriptPart | null): string {
+/** A sentence naming the longest script the browser recorded, where it has a name, and `also` what it did. */
+function longestSaid(p: ScriptPart | null, also = ''): string {
   const name = p && scriptName(p.script);
-  return p && name ? ` The longest script the browser recorded in that time was ${name}${p.script.source ? ` (${p.script.source})` : ''}, ${ms(p.ms)}.` : '';
+  return p && name ? ` The longest script the browser recorded in that time was ${name}${p.script.source ? ` (${p.script.source})` : ''}, ${ms(p.ms)}${also}.` : '';
 }
 
 /**
@@ -1326,9 +1327,15 @@ function explain(r: InteractionReport): Explanation {
     frameLayout >= browserShare
       ? `, mostly the browser recalculating styles and layout and painting the frame: ${ms(frameLayout)}.`
       : unscripted >= browserShare
-        ? `. No script ran for long in that time: ${ms(unscripted)} of it was the browser's own work on the main thread, ${HEDGE} recalculating styles and layout for what changed.`
+        ? `${lateScript ? ':' : '. No script ran for long in that time:'} ${ms(unscripted)} of it was the browser's own work on the main thread, ${HEDGE} recalculating styles and layout for what changed.`
         : '.';
-  const lateScriptClause = lateScript ? `, mostly because ${scriptPhrase(lateScript.script)} ran for ${ms(lateScript.ms)} before the next frame${lateRenderSaid}.` : browserClause;
+  // The script is what the screen update waited on from half of it. Under that it is said after the
+  // browser's own work, with any render inside it: a 20 ms timer in a frame that spent 250 ms on style and
+  // layout is not why the screen took 370 ms to update.
+  const lateLeads = lateScript && lateScript.ms >= WAITED_BEHIND_MIN_SHARE * r.presentation ? lateScript : null;
+  const lateScriptClause = lateLeads
+    ? `, mostly because ${scriptPhrase(lateLeads.script)} ran for ${ms(lateLeads.ms)} before the next frame${lateRenderSaid}.`
+    : `${browserClause}${longestSaid(lateScript, lateRenderSaid)}`;
 
   // The commits of the working time. One the screen update's clause ties to the script it ran in is that
   // script's, or the same render is said twice, once as the script's and once as the handlers'.
@@ -1938,7 +1945,7 @@ function explain(r: InteractionReport): Explanation {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot
     // be refused for the screen update and then fall past it.
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`;
-    blame = { kind: 'painting', name: lateScript ? scriptBlameName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
+    blame = { kind: 'painting', name: lateLeads ? scriptBlameName(lateLeads.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (blind) {
     // No react-dom is read, so what React rendered for this input, if anything, is unknown, and with it
     // the split of the working time: a handler and the render its state update sets off run in one

@@ -3328,6 +3328,40 @@ test('a screen update no script took is put on the browser recalculating styles 
   assert.match(scripted.explanation.cause, /mostly because a script \(FrameRequestCallback, app\.js\) ran for 150 ms before the next frame\.$/);
 });
 
+test('a script after the handlers is what held the screen update only from half of it, and under that is said after the browser', () => {
+  // A 400 ms click whose frame spent 250 ms on its own style, layout and paint, and 20 ms on a timer.
+  const click = [entry('click', 0, 400, 2, 30)];
+  const handled = commit(20, 0, { total: 3 });
+  const timer = (duration: number, styleAndLayoutStart = 150) => [
+    frame(0, 400, [script('BUTTON.onclick', 2, 28), script('TimerHandler:setTimeout', 100, duration)], styleAndLayoutStart),
+  ];
+  const small = report(click, [handled], timer(20), [input(0, 'click')]);
+  assert.deepEqual(small.explanation.blame, { kind: 'painting', name: null, detail: null, ms: 370, confidence: 'measured' });
+  assert.equal(
+    small.explanation.cause,
+    'After the click was handled, the screen took another 370 ms to update, mostly the browser recalculating styles and layout and painting the frame: 250 ms. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 20 ms.',
+  );
+
+  // A render inside that timer is still said with it, and is not put in the working time before it.
+  const rendered = report(click, [handled, commit(110, 0, { total: 15, startedAt: 101 })], timer(20), [input(0, 'click')]);
+  assert.match(rendered.explanation.cause, /, 20 ms, and React rendered inside it: 15 ms re-rendering 30 components inside List/);
+  assert.ok(!rendered.explanation.notes.some((n) => n.includes('15 ms')), rendered.explanation.notes.join(' | '));
+
+  // Frame time no script ran in is not said to have had no script in it where one ran for 150 ms.
+  const unscripted = report(click, [handled], timer(150, 330), [input(0, 'click')]);
+  assert.equal(unscripted.explanation.blame.name, null);
+  assert.equal(
+    unscripted.explanation.cause,
+    "After the click was handled, the screen took another 370 ms to update: 220 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 150 ms.",
+  );
+
+  // From half of the 370 ms the timer is the reason, and the blame's name.
+  const half = report(click, [handled], timer(185, 300), [input(0, 'click')]);
+  assert.equal(half.explanation.blame.name, 'TimerHandler:setTimeout');
+  assert.match(half.explanation.cause, /, mostly because a script \(TimerHandler:setTimeout, app\.js\) ran for 185 ms before the next frame\.$/);
+  assert.equal(report(click, [handled], timer(184, 300), [input(0, 'click')]).explanation.blame.name, null);
+});
+
 test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {
   // Enter on a button whose click changed a class on 30,000 cells, in Chromium: the keydown and the click it
   // made took 1 ms, then 147 ms went by before the keyup's handler ran, the browser restyling the page.

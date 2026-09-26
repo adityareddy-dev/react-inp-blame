@@ -1106,11 +1106,14 @@ Frames script from 20 ms; waiting, painting and
 working time known only by counts from 50 ms, the length of a long task, with painting blamed under that
 only where the frame waited on the next interaction's press, as above, and the screen update was the
 larger part of the interaction. The screen update's sentence says what held it where a long animation frame
-saw it: the longest script after the handlers, from 20 ms, with any React render that committed inside it and
-began there (a render react-virtual's scroll listener forced with `flushSync`, which is then not counted in the
-working time before it); or, with no such script, the browser's own work from half the screen update. That is
-the frame's style, layout and paint where the frame timed them, from its `styleAndLayoutStart` less any
-ResizeObserver callbacks, as it does after a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a click
+saw it: the longest script after the handlers, from 20 ms and half the screen update, with any React render
+that committed inside it and began there (a render react-virtual's scroll listener forced with `flushSync`,
+which is then not counted in the working time before it); or, with no such script, the browser's own work from
+half the screen update, and a shorter script from 20 ms after it as the longest the browser recorded, with any
+render inside it. A 20 ms timer is not why a 370 ms screen update that spent 250 ms on style and layout was
+slow, and the sentence once said it was. The browser's own work is the frame's style, layout and paint where
+the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does after a key
+press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a click
 Chromium does most of that work for the pointer's hit test, before the frame starts rendering. After Enter the
 same work lands inside the working time instead: the keydown's handlers and the click's took 1 ms, then the keyup
 waited 157 ms for the browser before its own, and the working time runs from the first handler to the last, as
