@@ -9,11 +9,17 @@
 //   node scripts/vite-app.mjs --tarball <path>         # a tarball that already exists
 //   node scripts/vite-app.mjs --fresh                  # no lockfile: every dependency as npm resolves it today
 //   node scripts/vite-app.mjs --fixture react-router   # the React Router app, or tanstack-start, remix, astro, ...
+//   node scripts/vite-app.mjs --pnpm                   # installed with pnpm, in the node_modules it makes by default
 //   node scripts/vite-app.mjs -- --project=dev         # anything after -- goes to Playwright
 //
 // The copy is what makes it the user's install. Inside the repo the app could resolve react-inp-blame
 // through the workspace link or the monorepo's node_modules, and would never see the package as npm
 // hands it over: only what `files` lets in, reached through its exports map.
+//
+// With --pnpm the app is installed by the pnpm on the PATH instead. Its default node_modules is isolated:
+// the app's folder holds only what its package.json names, each a link into node_modules/.pnpm, where a
+// package finds only what it declares. The versions are still the ones in the fixture's npm lockfile,
+// which `pnpm import` turns into pnpm's own before the install.
 //
 // Plain JavaScript on Node's own modules, like pack-smoke.mjs.
 import assert from 'node:assert/strict';
@@ -160,6 +166,15 @@ function run(what, command, args, options) {
  * quotes every path in it.
  */
 const npm = (command, cwd) => run(`npm ${command}`, `npm ${command}`, [], { cwd, shell: true });
+/** pnpm, through the shell for the same reason. */
+const pnpm = (command, cwd) => run(`pnpm ${command}`, `pnpm ${command}`, [], { cwd, shell: true });
+
+/** The pnpm on the PATH, for the log, so a failure says which one installed the app. */
+function pnpmVersion() {
+  const { status, stdout } = spawnSync('pnpm --version', [], { shell: true, encoding: 'utf8' });
+  assert.ok(status === 0, '--pnpm needs pnpm on the PATH, for example from `npm install --global pnpm`');
+  return stdout.trim();
+}
 
 /** The ```ts, ```tsx or ```js block under the README's `heading` whose first line is a comment naming `file`. */
 function readmeBlock(heading, file) {
@@ -207,15 +222,61 @@ function pack() {
 }
 
 /**
+ * The app's top-level packages from pnpm are links into node_modules/.pnpm, one for each dependency its
+ * package.json names and nothing more: the layout where a package that imports what it never declared
+ * fails, as it would for a pnpm user. pnpm names the folder of a package it took from a file after the
+ * file, so the link's target also says the library came from the tarball.
+ */
+function assertIsolated(app) {
+  const modules = fs.realpathSync(path.join(app, 'node_modules'));
+  const link = path.join(modules, PACKAGE);
+  const stat = fs.lstatSync(link, { throwIfNoEntry: false });
+  assert.ok(stat?.isSymbolicLink(), `node_modules/${PACKAGE} in ${app} is not a link into node_modules/.pnpm, so pnpm did not lay out an isolated node_modules`);
+  const target = fs.realpathSync(link);
+  assert.ok(
+    target.startsWith(path.join(modules, '.pnpm', `${PACKAGE}@file+`)),
+    `pnpm installed ${PACKAGE} at ${target}, not from the tarball into node_modules/.pnpm`,
+  );
+  const manifest = readJson(path.join(app, 'package.json'));
+  const declared = new Set(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.optionalDependencies }));
+  const top = fs
+    .readdirSync(modules)
+    .filter((name) => !name.startsWith('.'))
+    .flatMap((name) => (name.startsWith('@') ? fs.readdirSync(path.join(modules, name)).map((inner) => `${name}/${inner}`) : [name]));
+  const undeclared = top.filter((name) => !declared.has(name));
+  assert.ok(
+    undeclared.length === 0,
+    `pnpm put ${undeclared.join(', ')} in the app's node_modules, which its package.json does not name, so the layout is not the isolated one`,
+  );
+}
+
+/**
+ * The same install through pnpm. pnpm reads no npm lockfile, so `pnpm import` writes pnpm's own from the
+ * fixture's first, and the app gets the versions npm locked. `pnpm add` then puts the tarball in place of
+ * the registry's react-inp-blame. It has no --no-save, so it writes the path into the copy's package.json,
+ * which is thrown away after the run.
+ */
+function pnpmInstall(app, tarball, fresh) {
+  if (!fresh) pnpm('import', app);
+  fs.rmSync(path.join(app, 'package-lock.json'));
+  pnpm(`add ${quoted(tarball)}`, app);
+}
+
+/**
  * The package the app got has to be the tarball. The version alone cannot say so while the registry has
  * the same one, so it is also where npm says it came from, and that it is a folder rather than a link.
+ * From pnpm it is a link, and where it leads says the same.
  */
-function assertTarballInstalled(app) {
+function assertTarballInstalled(app, withPnpm) {
   const dir = path.join(app, 'node_modules', PACKAGE);
-  const stat = fs.lstatSync(dir, { throwIfNoEntry: false });
-  assert.ok(stat?.isDirectory() && !stat.isSymbolicLink(), `node_modules/${PACKAGE} in ${app} is not a folder npm unpacked`);
-  const entry = readJson(path.join(app, 'node_modules/.package-lock.json')).packages[`node_modules/${PACKAGE}`];
-  assert.ok(entry?.resolved?.startsWith('file:'), `npm installed ${PACKAGE} from ${entry?.resolved}, not from the tarball`);
+  if (withPnpm) {
+    assertIsolated(app);
+  } else {
+    const stat = fs.lstatSync(dir, { throwIfNoEntry: false });
+    assert.ok(stat?.isDirectory() && !stat.isSymbolicLink(), `node_modules/${PACKAGE} in ${app} is not a folder npm unpacked`);
+    const entry = readJson(path.join(app, 'node_modules/.package-lock.json')).packages[`node_modules/${PACKAGE}`];
+    assert.ok(entry?.resolved?.startsWith('file:'), `npm installed ${PACKAGE} from ${entry?.resolved}, not from the tarball`);
+  }
   const expected = readJson(path.join(root, 'packages/core/package.json')).version;
   const { version } = readJson(path.join(dir, 'package.json'));
   assert.ok(version === expected, `the app has ${PACKAGE} ${version}, and packages/core is ${expected}`);
@@ -229,21 +290,29 @@ function main() {
   const playwright = split === -1 ? [] : argv.slice(split + 1);
   const { values } = parseArgs({
     args: own,
-    options: { tarball: { type: 'string' }, fresh: { type: 'boolean', default: false }, fixture: { type: 'string', default: 'vite-react-ts' } },
+    options: {
+      tarball: { type: 'string' },
+      fresh: { type: 'boolean', default: false },
+      fixture: { type: 'string', default: 'vite-react-ts' },
+      pnpm: { type: 'boolean', default: false },
+    },
   });
   const name = values.fixture;
   assert.ok(Object.hasOwn(FIXTURES, name), `--fixture is ${Object.keys(FIXTURES).join(' or ')}, not ${name}`);
   const fixture = path.join(root, 'fixtures', name);
 
   guards(name);
+  const installer = values.pnpm ? `, installed with pnpm ${pnpmVersion()}` : '';
   const tarball = values.tarball === undefined ? pack() : path.resolve(values.tarball);
   assert.ok(fs.existsSync(tarball), `${tarball} does not exist`);
 
   const app = fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
-  console.log(`${path.basename(tarball)} into ${app}, the app in fixtures/${name}${values.fresh ? ', dependencies resolved today' : ''}, on Node ${process.version}`);
+  console.log(`${path.basename(tarball)} into ${app}, the app in fixtures/${name}${values.fresh ? ', dependencies resolved today' : ''}, on Node ${process.version}${installer}`);
   try {
     fs.cpSync(fixture, app, { recursive: true, filter: (source) => !NOT_COPIED.has(path.basename(source)) });
-    if (values.fresh) {
+    if (values.pnpm) {
+      pnpmInstall(app, tarball, values.fresh);
+    } else if (values.fresh) {
       // One install of everything, as a new app gets it on the day this runs.
       fs.rmSync(path.join(app, 'package-lock.json'));
       npm(`install --no-audit --no-fund ${quoted(tarball)}`, app);
@@ -252,12 +321,12 @@ function main() {
       // In place of the registry's react-inp-blame, leaving the app's package.json and lock as they were.
       npm(`install --no-save --no-audit --no-fund ${quoted(tarball)}`, app);
     }
-    assertTarballInstalled(app);
+    assertTarballInstalled(app, values.pnpm);
     const versions = FIXTURES[name].reported.map((name) => `${name} ${readJson(path.join(app, 'node_modules', name, 'package.json')).version}`);
     console.log(`\nInstalled: ${versions.join(', ')}`);
 
     // A step of its own, so a type error in the README's config reads as one.
-    npm('run build', app);
+    (values.pnpm ? pnpm : npm)('run build', app);
     FIXTURES[name].typecheck(app);
     const cli = path.join(app, 'node_modules/@playwright/test', readJson(path.join(app, 'node_modules/@playwright/test/package.json')).bin.playwright);
     run(['playwright test', ...playwright].join(' '), process.execPath, [cli, 'test', ...playwright], {
