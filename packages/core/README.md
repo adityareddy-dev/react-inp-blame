@@ -3,7 +3,7 @@
 When a click, tap or key press in your React app is slow, this names the component or the handler
 behind it and says where the time went.
 
-![The demo's sign-in page: a click on Log in, the badge showing the page's INP, the panel opening, and one row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/main/docs/media/overlay.gif)
+![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/main/docs/media/overlay.gif)
 
 **[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow
 on purpose. Click something and read what the badge blames.
