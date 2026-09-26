@@ -197,6 +197,27 @@ test('the label is the one read at dispatch, before a handler changed the text, 
   assert.equal(report([entry('click', 0, 120, 3, 100, { target: button })], [], [], other, 'text').target?.label, 'button "Count is 1"');
 });
 
+test("the handler is the one the ring read at dispatch, where the click's own render gave the element another before the entry came", () => {
+  // `onClick={editing ? save : startEdit}`: the click on Save ran save, and its render put startEdit on the
+  // button before the entry arrived. Read then, the button named the handler of the next click.
+  function startEdit() {}
+  function addToCart() {}
+  const button = (onClick: () => void) => {
+    const fiber: Record<string, unknown> = { tag: 5, flags: 0, mode: 0, elementType: 'button', type: 'button', memoizedProps: { onClick }, memoizedState: null, return: null, child: null, sibling: null, alternate: null };
+    fiber.stateNode = Object.assign(element('button', []), { __reactFiber$k1: fiber, __reactProps$k1: { onClick } });
+    return fiber.stateNode as Node;
+  };
+  const clickOn = (target: Node, extra: Partial<InputRecord>) => report([entry('click', 0, 120, 3, 100, { target })], [], [], [input(0, 'click', { target, ...extra })]).target?.handler;
+  const edited = button(startEdit);
+  assert.equal(clickOn(edited, { handler: 'save' }), 'save');
+  // Where React had no handler on it at dispatch, as before a page's hydrateRoot, none ran, whatever it has now.
+  assert.equal(clickOn(edited, { handler: null }), null);
+  // Server HTML at dispatch had nothing to read yet, and React hydrated it to run the click: it is read now.
+  assert.equal(clickOn(button(addToCart), { handler: null, dehydrated: { scope: 'boundary', owner: 'ProductPage' } }), 'addToCart');
+  // So is an event the ring has no record of.
+  assert.equal(report([entry('click', 0, 120, 3, 100, { target: edited })], [], []).target?.handler, 'startEdit');
+});
+
 test('a late entry of a long press makes the next revision, rebuilt from every entry, and leaves the one before as it was', () => {
   const first = buildReport(longPress.slice(0, 1), [], []);
   assert.equal(first.duration, 32);
