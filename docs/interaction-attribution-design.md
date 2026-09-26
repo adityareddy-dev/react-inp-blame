@@ -382,7 +382,18 @@ bailed out, so its whole subtree is stale and gets pruned; that prune is what ke
 cheap on big trees. Ancestors that were only cloned on the way down (App, layouts, providers)
 are named on the path but never counted as roots. The hot path follows the child carrying at
 least 60% of the parent's work, so it stops at "the OrderSummary subtree" rather than
-descending into 800 identical rows. A memo wrapper is a fiber of its own above the component it
+descending into 800 identical rows, and names at most twelve of the app's own components below
+the one it starts from. A library's layers between them are passed without a name or a step: a
+name a reader could not search for (Radix's `Primitive.div`, a Slot, a minifier's), a Provider or
+a Context, and a wrapper named after the component it renders (shadcn's `TabsList` over Radix's).
+On the shadcn/ui docs Radix's layers alone spent the twelve, so a render of the install tabs was
+named after Tabs, and on cal.com a provider and a minified name spent the two that would have
+reached the tab below the form. The walk also counts the components inside the component the path
+ends on (`pathRendered`), beside the commit's count, and those rendering for the first time
+(`mounted`, a fiber with no alternate), so a sentence can say "1216 components from EventTypeWeb
+down, 812 of them inside EventAdvancedWebWrapper" where 0.12.0 put the whole count inside the last
+name it reached, and "mounting" of a Radix dialog's content, which its Portal mounts in a commit of
+its own. A memo wrapper is a fiber of its own above the component it
 renders (`memo(fn, compare)`, `memo(forwardRef(...))` and `memo(Class)`, but not `memo(fn)`, which
 React keeps as a single fiber), and React flags both as having rendered, so each such component was
 counted twice until 2026-09-15: 504 rendered where 304 did, on 17, 18 and 19 alike. The wrapper now
@@ -956,7 +967,11 @@ own render", and a note says that time is usually work TableBody does as it rend
 filter, which memoising the rows does not speed up. A render is said to be "mostly" one component only
 where that component is half of the components rendered or more, a styling library's wrappers not
 counted, or half of the render's time: "mostly Label (4 of them)" in a render of 59 components on the
-shadcn/ui docs sent the reader to the wrong file. `explanation.blame.confidence` says what the
+shadcn/ui docs sent the reader to the wrong file. The count said to be inside the component a render
+is named after is that component's own where the walk counted fewer there than in the commit, with the
+component the render started from named where a reader could search for it ("1216 components from
+EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper"), and a render is "mounting" where more
+than half of its components rendered for the first time. `explanation.blame.confidence` says what the
 call rests on. It is `'measured'` when the blame follows from timings of the interaction itself:
 React's durations for commits joined by their exact input stamp and walked in full, the browser's
 own phases, a script's Long Animation Frames entry. It is `'inferred'` when the blame is the

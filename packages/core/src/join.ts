@@ -1,4 +1,4 @@
-import { dominantComponent, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName } from './commits.js';
+import { dominantComponent, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, joinWindow, type InputRecord } from './hook.js';
@@ -786,14 +786,17 @@ function ownRender(c: CommitSummary): { readonly name: string; readonly self: nu
 
 /**
  * "LineItem ×800" where LineItem was most of the commit (`dominantComponent`); "TableBody's own render" where
- * that was most of the time; else the component count. The panel's line for a later render says the same.
+ * that was most of the time; else the component count, "812 of 1216 components" where the walk counted fewer
+ * inside the component the commit is named after. The panel's line for a later render says the same.
  */
 export function mostlyOf(c: CommitSummary): string | null {
   if (c.rendered === 1) return null;
   const top = dominantComponent(c);
   if (top && top.count > 1) return `${top.name} ×${top.count}`;
   const own = ownRender(c);
-  return own ? `${own.name}'s own render` : renderedCount(c);
+  if (own) return `${own.name}'s own render`;
+  const inside = insideCount(c);
+  return inside == null ? renderedCount(c) : `${inside} of ${renderedCount(c)}`;
 }
 
 /** "801 components"; "at least 5000 components" where the walk stopped before the end of the tree. */
@@ -802,12 +805,51 @@ export function renderedCount(c: CommitSummary): string {
 }
 
 /**
+ * How many of the components rendered sit inside the one the commit is named after, where the walk counted
+ * them and they are fewer than the commit's (`pathRendered`): what "inside" can claim of a count. Null where
+ * they are all of them, where the walk was cut, whose counts are partial either way, and on a report an
+ * earlier release stored.
+ */
+function insideCount(c: CommitSummary): number | null {
+  return !c.truncated && c.pathRendered != null && c.pathRendered < c.rendered ? c.pathRendered : null;
+}
+
+/** Whether most of what a commit rendered was rendering for the first time: mounted, not rendered again. */
+function mostlyMounted(c: CommitSummary): boolean {
+  return c.mounted != null && c.mounted * 2 > c.rendered;
+}
+
+/** "re-rendering"; "mounting" where most of the commit was components rendering for the first time; "hydrating" for a hydration. */
+function renderVerb(c: CommitSummary): string {
+  return c.hydrated ? 'hydrating' : mostlyMounted(c) ? 'mounting' : 're-rendering';
+}
+
+/** The same in the past tense, for the panel's rows. */
+export function renderedVerb(c: CommitSummary): string {
+  return c.hydrated ? 'hydrated' : mostlyMounted(c) ? 'mounted' : 're-rendered';
+}
+
+/**
+ * "801 components inside OrderSummary"; "1216 components from EventTypeWeb down, 812 of them inside Form"
+ * where the walk counted fewer inside the component the render is named after than in the commit
+ * (`insideCount`), from the component the render started at where that has a name worth saying
+ * (`startName`).
+ */
+function renderedWhere(c: CommitSummary): string {
+  const inside = insideCount(c);
+  if (inside == null) return `${renderedCount(c)} inside ${leafOf(c)}`;
+  const from = startName(c);
+  return `${renderedCount(c)}${from ? ` from ${from} down` : ''}, ${inside} of them inside ${leafOf(c)}`;
+}
+
+/**
  * "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "re-rendering 637
  * components inside TableBody (257 ms of it in TableBody's own render)" where one component's own render was
- * most of it (`ownRender`); "hydrating" for a hydration.
+ * most of it (`ownRender`); "mounting" where most of the components were rendering for the first time;
+ * "hydrating" for a hydration.
  */
 function renderPhrase(c: CommitSummary): string {
-  const verb = c.hydrated ? 'hydrating' : 're-rendering';
+  const verb = renderVerb(c);
   const leaf = leafOf(c);
   const top = dominantComponent(c);
   // React commits with nothing rendered: a retry that found the boundary still blocked, or an update
@@ -819,13 +861,15 @@ function renderPhrase(c: CommitSummary): string {
   const own = ownRender(c);
   if (top && top.count > 1) {
     const time = top.self != null ? `, ${ms(top.self)}` : '';
-    mostly = top.name === leaf ? ` (${top.count} of them${time})` : `, mostly ${top.name} (${top.count} of them${time})`;
+    // The one on the path is one of many of the same name: the count inside it would be read as the count of them.
+    if (top.name === leaf) return `${verb} ${renderedCount(c)} inside ${leaf} (${top.count} of them${time})`;
+    mostly = `, mostly ${top.name} (${top.count} of them${time})`;
   } else if (own) {
     // Named even where it is the leaf: "in its own render" could be read as the render's own. In brackets, so
     // a committing or effects figure after it reads as the next part of the whole rather than more of "it".
     mostly = ` (${ms(own.self)} of it in ${own.name}'s own render)`;
   }
-  return `${verb} ${renderedCount(c)} inside ${leaf}${mostly}`;
+  return `${verb} ${renderedWhere(c)}${mostly}`;
 }
 
 /**
@@ -1348,8 +1392,8 @@ function explain(r: InteractionReport): Explanation {
       c.rendered === 0
         ? 'React rendered nothing'
         : c.rendered < RENDER_MIN_COMPONENTS_BESIDE_HANDLER
-          ? `React re-rendered only ${plural(c.rendered, 'component')}`
-          : `React re-rendered ${renderedCount(c)} inside ${leafOf(c)}, none of them ${RENDER_MIN_COMPONENTS_BESIDE_HANDLER} times over, and ${ms(r.processing)} is more than ${RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER} ms for each of them`;
+          ? `React ${renderedVerb(c)} only ${plural(c.rendered, 'component')}`
+          : `React ${renderedVerb(c)} ${renderedWhere(c)}, none of them ${RENDER_MIN_COMPONENTS_BESIDE_HANDLER} times over, and ${ms(r.processing)} is more than ${RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER} ms for each of them`;
     // The effects are measured in every build, so they come off what the handler is said to have taken.
     const took = effects >= 1 ? `about ${ms(r.processing - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
     const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';

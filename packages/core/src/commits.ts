@@ -39,6 +39,17 @@ export const readableName = (name: string): boolean =>
   });
 
 /**
+ * A layer the hot path passes without naming it or spending a step on it, so that its steps go on the app's
+ * own components and reach them where there are any: a name a reader could not search for
+ * (`readableName`), and a Provider or a Context, which renders what it is given. On the shadcn/ui docs
+ * Radix's layers alone (`Primitive.div`, `.Slot`, `.SlotClone`, `TabsProvider`, `CollectionProvider`,
+ * `ProviderProvider`) spent the twelve steps between Tabs and the trigger that rendered, and on cal.com a
+ * provider and a minified name spent the two that would have reached the tab below the form.
+ */
+const PROVIDER = /Provider$|Context$/;
+export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name);
+
+/**
  * The component a commit is named after: the deepest readable name on its hot path, else the end of its
  * hot path, or its outermost root, as they stand, since the alternative is inventing a name; null when it
  * rendered none.
@@ -50,6 +61,17 @@ export function leafName(c: CommitSummary): string | null {
   if (c.truncated && !c.hasDurations) return c.hotPath[c.hotPath.length - 1] || null;
   // Not another root: the hot path starts at the heaviest, so any other root is a subtree beside the work.
   return c.hotPath[c.hotPath.length - 1] || c.roots[0] || null;
+}
+
+/**
+ * The component a commit's render started from, for a sentence that says where it went: the top of its hot
+ * path, where the path goes below it and the name is one a reader could search for. It is often where the
+ * cause is: on cal.com the form's state lives in EventTypeWeb, and the render was named after a component
+ * eleven layers down.
+ */
+export function startName(c: CommitSummary): string | null {
+  const first = c.hotPath[0];
+  return first && c.hotPath.length > 1 && first !== leafName(c) && readableName(first) ? first : null;
 }
 
 /** The names styling libraries give every element they wrap: `styled.div`, `Styled(Button)`. */

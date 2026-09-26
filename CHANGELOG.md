@@ -17,8 +17,51 @@ it changes when a field is removed or changes meaning, which a minor release may
   dependency's component, and that selecting it in React DevTools shows its props and what rendered it, which
   usually says whose it is. With fewer names, or mostly unreadable ones, there is no note, since there the
   short name could be the app's own. The name is left as it stands. The blame is unchanged.
+- **A commit says how many components it mounted, and how many sit inside the component its hot path ends
+  on.** `CommitSummary.mounted` counts the components React rendered for the first time in the commit, told by
+  a fiber with no alternate, and `CommitSummary.pathRendered` those inside the last component on `hotPath`,
+  that component included, which is what the sentences under Changed below are built on. Both are additive,
+  so `schemaVersion` stays at 3; a report stored by an earlier release has neither and reads as it did.
 
 ### Changed
+
+- **The count a render is said to be "inside" a component is that component's own, and the render is named
+  from where it started.** On cal.com, switching an event type to its advanced tab read "React spent 180 ms
+  re-rendering 1216 components inside Form", where 1216 was the whole commit's count, about a third of it
+  above Form and beside it, and nothing named EventTypeWeb, the root the render started from and the
+  component that holds the form's state. Where the walk counted fewer components inside the component a
+  render is named after than in the commit, the sentence now gives both, with the component the render
+  started from where a reader could search for it: "re-rendering 1216 components from EventTypeWeb down, 812
+  of them inside EventAdvancedWebWrapper". A render named after the component it started from holds the
+  whole count and reads as it did, and so does a walk cut short, whose every count is partial. The clause
+  for what a render was mostly made of, or for one component's own render, follows the count as before. The
+  wording is the same wherever the render is said: in the cause of a render blame and of a handler blame,
+  in the React clause of a layout blame, in the note on a later render and in the panel's rows.
+  `blame.detail` is "812 of 1216 components" on such a render, where it was "1216 components", and a layout
+  blame named after its commit, and a hydration blame, carry the same value. `blame.kind` does not change,
+  and `blame.detail` keeps its meaning, so `schemaVersion` stays at 3.
+- **The hot path spends its steps on the app's components and passes a library's layers.** The path names
+  at most twelve components below the one it starts from. On the shadcn/ui docs, switching the install tabs
+  to npm was named after Tabs, since Radix's layers between one part and the next (`TabsProvider`,
+  `Primitive.div`, `CollectionProvider`, `ProviderProvider`, `CollectionSlot`, `.Slot`, `.SlotClone`) and
+  shadcn's parts named like the Radix parts they render (`Tabs` over `Tabs`, `TabsList` over `TabsList`)
+  spent all twelve; on cal.com a provider and a minified name spent the two that would have reached the tab
+  below the form. A name a reader could not search for (a Slot, `Primitive.div`, a styling wrapper, a
+  minifier's), a Provider or a Context, and a wrapper named after the component it renders are now passed
+  without a name or a step, so `hotPath` names the app's own components on the chain and the render is named
+  after the deepest of them: RovingFocusGroup on those tabs, EventAdvancedWebWrapper on cal.com. `blame.name`
+  changes on such a render, to a component further into the app; `hotPath` no longer lists those layers, and
+  neither does the panel's "Heaviest path". A walk cut short under several roots names the component they
+  share the same way, passing a styling wrapper or a provider for the app's component above it.
+  `schemaVersion` stays at 3.
+- **A render that mounted most of what it rendered reads as "mounting".** Radix's Portal renders null and
+  sets mounted in a layout effect, so a dialog's content mounts in a commit of its own, from the Portal down,
+  and opening a Sheet on the shadcn/ui docs read "React was re-rendering 59 components inside
+  DismissableLayer" of a commit that rendered 57 of the 59 for the first time. Where more than half of a
+  commit's components rendered for the first time, the sentence now reads "mounting 59 components from
+  Portal down, 31 of them inside DismissableLayer", a handler blame's clause says React mounted them, and the
+  panel's rows say "mounted". A hydration reads as hydrating, as before. Which blame the interaction gets
+  does not change, so `schemaVersion` stays at 3.
 
 - **A render that was mostly one component's own render says so.** Sorting TanStack Table's virtualized rows
   example (200,000 rows) by a click on a header read "React spent 277 ms re-rendering 637 components inside

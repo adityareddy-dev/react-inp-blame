@@ -146,6 +146,52 @@ test('a production walk cut at its budget does not blame the subtree it happened
   assert.deepEqual(uncut.hotPath, ['Metrics']);
 });
 
+test("the hot path spends its steps on the app's components, passing a library's layers and a wrapper named after what it renders", () => {
+  // The install tabs on the shadcn/ui docs, switched to npm: shadcn's Tabs parts over Radix's, each named like
+  // the part it renders, and between one part and the next the layers Radix renders, named as React sees them.
+  const named = (name: string) => Object.assign(() => {}, { displayName: name });
+  const chain = (names: string[], ...leaves: Record<string, unknown>[]) => names.reduceRight((kids, name) => [rendered(named(name), ...kids)], leaves)[0]!;
+  const trigger = () =>
+    chain(['TabsTrigger', 'TabsTrigger', 'RovingFocusGroupItem', 'RovingFocusGroupCollectionItemSlot', 'RovingFocusGroupCollectionItemSlot.Slot', 'RovingFocusGroupCollectionItemSlot.SlotClone', 'Primitive.button', 'Primitive.button.Slot', 'Primitive.button.SlotClone'], element('button', text()));
+  const list = chain(
+    ['TabsList', 'TabsList', 'RovingFocusGroup', 'RovingFocusGroupCollectionProvider', 'RovingFocusGroupCollectionProviderProvider', 'RovingFocusGroupCollectionSlot', 'RovingFocusGroupCollectionSlot.Slot', 'RovingFocusGroupCollectionSlot.SlotClone', 'Primitive.div'],
+    ...Array.from({ length: 8 }, trigger),
+  );
+  const tabs = chain(['CodeBlockCommand', 'Tabs', 'Tabs', 'TabsProvider', 'Primitive.div'], list, rendered(named('TabsContent'), element('pre', text())));
+  const c = walkCommit(root(tabs) as any, 5000, 100, click, development);
+  // 0.12.0 named every layer and spent its twelve steps on them, ending at RovingFocusGroupCollectionSlot.SlotClone.
+  assert.deepEqual(c.hotPath, ['CodeBlockCommand', 'Tabs', 'TabsList', 'RovingFocusGroup']);
+  // What sits inside the last of them, it included, beside the commit's count: the sentence says both.
+  assert.deepEqual([c.rendered, c.pathRendered], [87, 79]);
+
+  // A dependency's minified name between two of the app's is passed the same way.
+  const routed = walkCommit(root(chain(['App', 'hl', 'Qt', 'Layout'], element('main', text()))) as any, 5000, 100, click, development);
+  assert.deepEqual([routed.hotPath, routed.pathRendered], [['App', 'Layout'], 1]);
+  // Twelve of the app's own components below the first still cap the path.
+  const deep = walkCommit(root(chain(Array.from({ length: 15 }, (_, i) => `Level${i}`), element('p', text()))) as any, 5000, 100, click, development);
+  assert.deepEqual([deep.hotPath.length, deep.hotPath[12]], [13, 'Level12']);
+  // A path that stays at its root holds the whole commit.
+  const flat = walkCommit(root(rendered(named('List'), ...Array.from({ length: 5 }, () => rendered(named('Row'), element('li', text()))))) as any, 5000, 100, click, development);
+  assert.deepEqual([flat.hotPath, flat.rendered, flat.pathRendered], [['List'], 6, 6]);
+});
+
+test('a commit counts the components rendering for the first time, and those inside the component its hot path ends on', () => {
+  function App() {}
+  function Sidebar() {}
+  function Dashboard() {}
+  function Chart() {}
+  function Bar() {}
+  // A fiber that rendered before has an alternate, holding the child list of its last render.
+  const again = (f: Record<string, unknown>) => Object.assign(f, { alternate: { tag: f.tag, child: {} } });
+  const charts = Array.from({ length: 3 }, () => rendered(Chart, rendered(Bar, element('rect')), rendered(Bar, element('rect'))));
+  const c = walkCommit(root(again(rendered(App, again(rendered(Sidebar, element('nav', text()))), again(rendered(Dashboard, ...charts))))) as any, 5000, 100, click, development);
+  assert.deepEqual([c.rendered, c.mounted], [12, 9]);
+  assert.deepEqual([c.hotPath, c.pathRendered], [['App', 'Dashboard'], 10]);
+  // Nothing new in a re-render of the same tree, and a fresh one is nothing but.
+  assert.equal(walkCommit(root(again(rendered(App, again(rendered(Sidebar, element('nav', text())))))) as any, 5000, 100, click, development).mounted, 0);
+  assert.equal(walkCommit(root(rendered(App, rendered(Sidebar, element('nav', text())))) as any, 5000, 100, click, development).mounted, 2);
+});
+
 test("@emotion/styled's Insertion is not counted as a component, whatever the minifier named it", () => {
   function Row() {}
   function Insertion() {}

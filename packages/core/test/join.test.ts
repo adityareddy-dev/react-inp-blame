@@ -2203,6 +2203,105 @@ test('a render whose walk stopped at its budget says "at least", names no compon
   assert.equal(blameOf({ roots: ['Orders'], hotPath: [], components }).blame.name, 'the app');
 });
 
+test('a render is counted inside the component it is named after, from the one it started at, and is a mount where most of it was one', () => {
+  // Opening a Sheet on the shadcn/ui docs, production build. Radix's Portal renders null and sets mounted in a
+  // layout effect, so the sheet's content mounts in a commit of its own, rooted at the Portal: 59 components,
+  // 57 of them new, 31 of them inside DismissableLayer, with the overlay's portal and the wrappers above it
+  // making up the rest. 0.12.0 read "re-rendering 59 components inside DismissableLayer" beside the layout.
+  const open = [entry('click', 0, 69, 2, 60)];
+  const sheet = commit(30, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 59,
+    mounted: 57,
+    roots: ['Portal'],
+    hotPath: ['Portal', 'DialogContent', 'Presence', 'DialogContentModal', 'DialogContentImpl', 'FocusScope', 'DismissableLayer'],
+    pathRendered: 31,
+    components: [{ name: 'Label', count: 4, self: null, total: null }],
+  });
+  const layout = report(open, [sheet], [frame(0, 69, [script('#document.onclick', 2, 58, 51)])], [input(0, 'click')]).explanation;
+  assert.deepEqual(layout.blame, { kind: 'layout', name: 'DismissableLayer', detail: '31 of 59 components', ms: 51, confidence: 'measured' });
+  assert.match(layout.cause, / React was (most likely )?mounting 59 components from Portal down, 31 of them inside DismissableLayer\. /);
+  const render = report(open, [sheet], [], [input(0, 'click')]).explanation;
+  assert.deepEqual(render.blame, { kind: 'render', name: 'DismissableLayer', detail: '31 of 59 components', ms: null, confidence: 'inferred' });
+  assert.match(render.cause, /^React was most likely mounting 59 components from Portal down, 31 of them inside DismissableLayer\. /);
+  // Fewer than half mounted is a re-render, and a report an earlier release stored, which counted neither, reads as it did.
+  assert.match(report(open, [commit(30, 0, { ...sheet, mounted: 20 })], [], [input(0, 'click')]).explanation.cause, /^React was most likely re-rendering 59 components from Portal down/);
+  const stored = { ...sheet } as { mounted?: number; pathRendered?: number };
+  delete stored.mounted;
+  delete stored.pathRendered;
+  const old = report(open, [stored as CommitSummary], [], [input(0, 'click')]).explanation;
+  assert.match(old.cause, /^React was most likely re-rendering 59 components inside DismissableLayer\. /);
+  assert.equal(old.blame.detail, '59 components');
+
+  // Switching the install tabs on the same docs to npm: 181 components from CodeBlockCommand, which holds the
+  // tab chosen, 79 of them inside RovingFocusGroup. 0.12.0 spent its twelve steps on Radix's Provider and Slot
+  // layers, named the render after Tabs, and put all 181 inside it.
+  const tabs = commit(60, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 181,
+    mounted: 0,
+    roots: ['CodeBlockCommand'],
+    hotPath: ['CodeBlockCommand', 'Tabs', 'TabsList', 'RovingFocusGroup'],
+    pathRendered: 79,
+    components: [{ name: 'TabsTrigger', count: 16, self: null, total: null }],
+  });
+  const switched = report([entry('click', 0, 128, 2, 118)], [tabs], [], [input(0, 'click')]).explanation;
+  assert.deepEqual(switched.blame, { kind: 'render', name: 'RovingFocusGroup', detail: '79 of 181 components', ms: null, confidence: 'inferred' });
+  assert.match(switched.cause, /^React was most likely re-rendering 181 components from CodeBlockCommand down, 79 of them inside RovingFocusGroup\. /);
+
+  // Switching a cal.com event type to its advanced tab, development build: 1216 components from EventTypeWeb,
+  // where the form's state lives, 812 of them inside the tab's wrapper. 0.12.0 stopped at Form, twelve layers
+  // down, and put all 1216 inside it.
+  const advanced = commit(200, 0, {
+    rendered: 1216,
+    mounted: 40,
+    total: 180,
+    roots: ['EventTypeWeb'],
+    hotPath: ['EventTypeWeb', 'EventType', 'EventTypeSingleLayout', 'Shell', 'KBarWrapper', 'KBarRoot', 'Layout', 'MainContainer', 'ErrorBoundary', 'ShellMain', 'Form', 'LoadableComponent', 'EventAdvancedWebWrapper'],
+    pathRendered: 812,
+    components: [
+      { name: 'Controller', count: 60, self: 30, total: 2 },
+      { name: 'EventTypeWeb', count: 1, self: 12, total: 180 },
+    ],
+  });
+  const tab = report([entry('click', 0, 220, 3, 210)], [advanced], []).explanation;
+  assert.equal(tab.cause, 'React spent 180 ms re-rendering 1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper.');
+  assert.deepEqual(tab.blame, { kind: 'render', name: 'EventAdvancedWebWrapper', detail: '812 of 1216 components', ms: tab.blame.ms, confidence: 'measured' });
+  // A render that was mostly one component, and one that was mostly a component's own render, keep their clause after the count.
+  const mostly = report([entry('click', 0, 220, 3, 210)], [commit(200, 0, { ...advanced, components: [{ name: 'Controller', count: 700, self: 100, total: 2 }] })], []).explanation;
+  assert.equal(mostly.cause, 'React spent 180 ms re-rendering 1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper, mostly Controller (700 of them, 100 ms).');
+  assert.equal(mostly.blame.detail, 'Controller ×700');
+
+  // A render named after the component it started at holds the whole count, and reads as it did.
+  const whole = report([entry('click', 0, 220, 3, 210)], [commit(200, 0, { ...advanced, hotPath: ['EventTypeWeb'], pathRendered: 1216 })], []).explanation;
+  assert.equal(whole.cause, 'React spent 180 ms re-rendering 1216 components inside EventTypeWeb.');
+  assert.equal(whole.blame.detail, '1216 components');
+  // Where the render started at a name nobody could search for, the count inside is still said, and the start is not.
+  const minified = report([entry('click', 0, 220, 3, 210)], [commit(200, 0, { ...advanced, hotPath: ['hl', 'EventType', 'Layout'], pathRendered: 690 })], []).explanation;
+  assert.equal(minified.cause, 'React spent 180 ms re-rendering 1216 components, 690 of them inside Layout.');
+
+  // Selecting every row on Twenty, production build, the walk cut at its budget under several roots: the
+  // component they share is named and every count is partial, so none is said to be inside a part of it.
+  const rows = commit(400, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 4632,
+    mounted: 0,
+    truncated: true,
+    roots: ['RecordIndexFiltersToContextStoreEffect', 'RecordTableHeaderCheckboxColumn'],
+    hotPath: ['RecordIndexContainer'],
+    pathRendered: 4632,
+    components: [{ name: 'RecordTableCell', count: 2000, self: null, total: null }],
+  });
+  const all = report([entry('click', 0, 900, 3, 880)], [rows], [], [input(0, 'click')]).explanation;
+  assert.match(all.cause, /^React was most likely re-rendering at least 4632 components inside RecordIndexContainer\. /);
+  assert.equal(all.blame.detail, 'at least 4632 components');
+  const partial = report([entry('click', 0, 900, 3, 880)], [commit(400, 0, { ...rows, hotPath: ['RecordIndexContainer', 'RecordIndexTableContainer'], pathRendered: 3000 })], [], [input(0, 'click')]).explanation;
+  assert.match(partial.cause, /^React was most likely re-rendering at least 4632 components inside RecordIndexTableContainer\. /);
+});
+
 test('names that look minified get a note, and readable or styled names mixed with a few short ones do not', () => {
   const noteOf = (names: string[]) =>
     report([entry('click', 0, 120, 3, 100)], [commit(50, 0, { hasDurations: false, total: 0, rendered: 40, roots: [names[0]!], hotPath: [names[0]!], components: names.map((name) => ({ name, count: 8, self: null, total: null })) })], [], [])

@@ -1,6 +1,6 @@
 import { heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
-import { carriesWork, isPointerEvent, isTypingEvent, kindOf, mostlyOf, renderedCount } from './join.js';
+import { carriesWork, isPointerEvent, isTypingEvent, kindOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { warnOnce } from './warn.js';
@@ -238,7 +238,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
         h('div', { class: 'r1', 'data-rating': r.explanation.rating }, h('i', 'dot'), h('span', 't', titleFor(r)), h('span', 'ms', `${Math.round(r.duration)} ms`)),
         n > 1 && h('div', 'meta', `${n} key presses${DOT}slowest ${Math.round(r.duration)} ms${DOT}typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms`),
         h('div', 'blame', ...blameLine(r)),
-        later && h('div', 'blame later', 'then ', b(where(later)), ` re-rendered after the paint${DOT}${laterDetail(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
+        later && h('div', 'blame later', 'then ', b(where(later)), ` ${renderedVerb(later)} after the paint${DOT}${laterDetail(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
         h('div', 'bar', ...phaseBar(r.explanation.phases, total)),
       ),
       isExpanded && more(r),
@@ -517,18 +517,19 @@ function blameLine(r: InteractionReport): Child[] {
   if (blame.kind === 'none' && (r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable')) return ['nothing is blamed: React is not being read'];
   // An inferred blame is the likeliest reading of component counts and phase times, not a measurement.
   // The row says so in two words; the cause sentence under it says what would make it exact.
-  const line = blameText(blame);
+  // "mounted" where the commit was mostly components rendering for the first time, as the cause says.
+  const line = blameText(blame, r.commits.length ? renderedVerb(heaviest(r.commits)) : 're-rendered');
   return blame.confidence === 'inferred' && blame.kind !== 'none' ? ['most likely ', ...line] : line;
 }
 
 /** The row's line for a blame: text with the name it turns on in bold. */
-function blameText(blame: Blame): Child[] {
+function blameText(blame: Blame, rendered: string): Child[] {
   const { name, detail } = blame;
   const ms = blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : '';
   const named = name ? [DOT, b(name)] : [];
   switch (blame.kind) {
     case 'render':
-      return [b(name ?? 'the tree'), ` re-rendered${detail ? `${DOT}${detail}` : ''}${ms}`];
+      return [b(name ?? 'the tree'), ` ${rendered}${detail ? `${DOT}${detail}` : ''}${ms}`];
     case 'handler': {
       const where = detail ? ` in ${detail}` : '';
       // A production build of React records no render times, so there is no figure to put beside the

@@ -1,3 +1,4 @@
+import { passedLayer } from './commits.js';
 import { iconAround, isControl } from './element.js';
 import type { InputStamp } from './hook.js';
 import type { CommitSummary, HydrationBoundary, RenderedComponent } from './types.js';
@@ -20,8 +21,10 @@ const MAX_DEPTH = 1000;
 // The hot path follows a child carrying at least this share of its parent's work. Over half means
 // no sibling carries as much; 60 rather than 50 keeps it from following a child that barely leads.
 const HOT_PATH_SHARE = 0.6;
-// The hot path names at most this many steps below the component it starts from: enough to reach the
-// subtree to blame in a real tree, few enough to read in one line.
+// The hot path names at most this many of the app's own components below the one it starts from: enough
+// to reach the subtree to blame in a real tree, few enough to read in one line. A library's layers between
+// them are passed without a name or a step (`passedLayer`): on the shadcn/ui docs Radix's alone would spend
+// all twelve.
 const HOT_PATH_STEPS = 12;
 // A commit keeps its most-rendered components and its outermost ones up to these counts. A report
 // names a culprit; it is not a profile.
@@ -836,6 +839,8 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   let measured = 0;
   const byName = new Map<string, Tally>();
   let rendered = 0;
+  // Of them, the components rendering for the first time: a fiber React made in this commit has no alternate.
+  let mounted = 0;
   // Rendered components with a time, and whether any time had a fraction of a millisecond.
   let timed = 0;
   let fractional = false;
@@ -881,6 +886,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       return kids;
     }
     rendered++;
+    if (f.alternate === null) mounted++;
     const name = nameOf(f) || '(anonymous)';
     const total = f.actualDuration || 0;
     if (total > 0) {
@@ -939,17 +945,29 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // so they still choose.
   const comparable = (a: Agg) => hasDurations || !a.cut;
   const hotPath: string[] = [];
+  // Of `rendered`, those inside the component the path ends on: all of them until the path goes below a root
+  // it started from, and all of them under the component several roots share.
+  let pathRendered = rendered;
   const onlyRoot = performedRoots.length === 1 ? performedRoots[0]! : null;
   if (!hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber))) {
     const shared = sharedAncestor(top);
     if (shared) hotPath.push(shared);
   } else if (performedRoots.length) {
     let cur = performedRoots.reduce((a, b) => (metric(b) > metric(a) ? b : a));
-    hotPath.push(cur.name);
-    for (let step = 0; cur.kids.length && comparable(cur) && step < HOT_PATH_STEPS; step++) {
+    let last = cur.name;
+    hotPath.push(last);
+    pathRendered = cur.rendered;
+    for (let steps = 0; cur.kids.length && comparable(cur) && steps < HOT_PATH_STEPS; ) {
       const next = cur.kids.reduce((a, b) => (metric(b) > metric(a) ? b : a));
       if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
-      if (next.name !== cur.name) hotPath.push(next.name);
+      // A library's layer, and a wrapper named after the component it renders (shadcn's Label over
+      // Radix's), is passed without a name or a step: the steps go on the app's own components.
+      if (next.name !== last && !passedLayer(next.name)) {
+        hotPath.push(next.name);
+        last = next.name;
+        pathRendered = next.rendered;
+        steps++;
+      }
       cur = next;
     }
   }
@@ -968,11 +986,13 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     gestureTs: input.gestureTs,
     inputType: input.type,
     rendered,
+    mounted,
     hydrated: hydrated || hydratedTarget != null,
     hydratedTarget: hydratedTarget && Object.freeze(hydratedTarget),
     truncated,
     roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),
+    pathRendered,
     components: Object.freeze(components),
     hasDurations,
     coarseClock,
@@ -1004,12 +1024,16 @@ function unreachedBeside(f: Fiber, root: Fiber): boolean {
 
 function sharedAncestor(top: Agg[]): string | null {
   let name: string | null = null;
+  // The innermost that is not a library's layer, where there is one: on Twenty the innermost shared component
+  // was a styling wrapper, one of 270 called StyledContainer, with the app's own component right above it.
+  let named: string | null = null;
   let list = top;
   while (list.length === 1 && !list[0]!.performed) {
     name = list[0]!.name;
+    if (!passedLayer(name)) named = name;
     list = list[0]!.kids;
   }
-  return name;
+  return named ?? name;
 }
 
 /**

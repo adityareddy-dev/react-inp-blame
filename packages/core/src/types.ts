@@ -35,6 +35,12 @@ export interface CommitSummary {
   /** Component fibers that performed work in this commit. */
   readonly rendered: number;
   /**
+   * Of `rendered`, the components React rendered for the first time in this commit, mounting them, rather
+   * than again: a fiber with no alternate. Radix mounts a dialog's content in a commit of its own, from its
+   * Portal down, which mounts nearly every component in it. Absent on a report stored by an earlier release.
+   */
+  readonly mounted?: number;
+  /**
    * The commit hydrated server-rendered HTML, a root's or a Suspense boundary's. Hydrating is the page
    * starting up rather than an input's work, so such a commit is kept only when React ran it inside an
    * input's dispatch, hydrating so that it could handle that input.
@@ -52,12 +58,21 @@ export interface CommitSummary {
   /** The outermost components that rendered, at most 5. */
   readonly roots: readonly string[];
   /**
-   * The chain that carries most of the work, outermost first. For a production walk cut at `walkBudget`,
-   * whose counts cannot choose among subtrees it reached in part or not at all, it stops at its one subtree
-   * where nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
-   * under, or empty where they sit under none.
+   * The chain that carries most of the work, outermost first, naming the app's own components on it: a
+   * library's layers between them (`Primitive.div`, a Slot, a Provider, a wrapper named after the component
+   * it renders) are passed without a name. For a production walk cut at `walkBudget`, whose counts cannot
+   * choose among subtrees it reached in part or not at all, it stops at its one subtree where nothing it did
+   * not reach rendered beside it, and is otherwise the component its subtrees all sit under, or empty where
+   * they sit under none.
    */
   readonly hotPath: readonly string[];
+  /**
+   * Of `rendered`, those inside the component `hotPath` ends on, that component included: what a sentence
+   * can say rendered "inside" it, where `rendered` is the whole commit's. Equal to `rendered` where the
+   * path holds one component or none, and partial like `rendered` where the walk was cut. Absent on a
+   * report stored by an earlier release.
+   */
+  readonly pathRendered?: number;
   /** Per-component aggregates, heaviest first, at most 12. */
   readonly components: readonly RenderedComponent[];
   /** Whether React measured render durations for this tree: its root is in ProfileMode, or part of it was measured anyway (under a `<Profiler>`). Only development and profiling builds measure. */
@@ -356,7 +371,8 @@ export interface Blame {
   /**
    * For a render or a hydration, what it was mostly made of: many of one component ("LineItem ×800"), one
    * component's own render where React timed it at half the render or more ("TableBody's own render"), else
-   * how many components rendered ("637 components"); null where it rendered one. For a handler, its
+   * how many components rendered ("637 components"), of which how many inside the component `name` gives
+   * where that is fewer ("812 of 1216 components"); null where it rendered one. For a handler, its
    * component, or null where the name is a listener the browser recorded rather than a React handler. For a
    * 'layout', what that same commit was mostly made of, wherever `name` came from that commit, and null
    * wherever `name` did not, since a script has no component counts.
