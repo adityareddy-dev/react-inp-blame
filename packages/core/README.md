@@ -488,12 +488,15 @@ peer dependencies are `*` on purpose: npm refuses a canary against any range, so
 itself and says what is wrong.
 
 Under Jest, whose default runtime loads everything as CommonJS, a test that reaches this package's ES modules
-fails with "Must use import to load ES Module" unless Jest compiles them. With `next/jest`, add
-`transpilePackages: ['react-inp-blame']` to your Next.js config. Anywhere else, install `@babel/preset-env`,
-add `transformIgnorePatterns: ['/node_modules/(?!react-inp-blame/)']` to the Jest config, and put
+fails with "Cannot use import statement outside a module" (from Jest 30.5, "Must use import to load ES Module")
+unless Jest compiles them. With `next/jest`, add `transpilePackages: ['react-inp-blame']` to your Next.js config.
+Anywhere else, add `transformIgnorePatterns: ['/node_modules/(?!(.pnpm/)?react-inp-blame[@/])']` to the Jest
+config, which covers npm's `node_modules` and pnpm's, install `@babel/preset-env`, and put
 `presets: [['@babel/preset-env', { targets: { node: 'current' } }]]` in a `babel.config.js` beside
-`package.json`: a `.babelrc` is never read for a file in `node_modules`. On Node 24.9 and later, running Jest
-with `NODE_OPTIONS=--experimental-vm-modules` also works, with no Babel config or pattern.
+`package.json`: a `.babelrc` is never read for a file in `node_modules`. A Jest config that sets its own
+`transform`, as ts-jest's preset does, has to hand `.js` files to babel-jest as well, which
+`preset: 'ts-jest/presets/js-with-babel'` does. With Jest 30.4 or later on Node 24.9 or later, running Jest with
+`NODE_OPTIONS=--experimental-vm-modules` also works, with no Babel config or pattern.
 
 While on 0.x a minor release can break things (an export, an option, what a report field holds, an oldest
 version), and the CHANGELOG says which; `schemaVersion` on a report moves when a field is removed or changes
