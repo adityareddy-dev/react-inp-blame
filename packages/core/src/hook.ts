@@ -672,9 +672,10 @@ function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   try {
     if (as === 'chained') detach = chain(hook);
   } catch {
-    // Pages that keep developer tools out of production can freeze the hook, or give a method only a getter.
+    // Pages that keep developer tools out of production can freeze or seal the hook, or give a method only a
+    // getter, or a setter that drops what it is given.
     const message =
-      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen or has methods that cannot be assigned, so it cannot be wrapped and React's commits cannot be read. Interactions are still reported, without components.";
+      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen or sealed, or has methods that cannot be assigned, so it cannot be wrapped and React's commits cannot be read. Interactions are still reported, without components.";
     state.attached = null;
     state.detach = null;
     state.mode = 'unsupported';
@@ -1043,6 +1044,11 @@ function chain(hook: DevtoolsHook): () => void {
     if (typeof prevInject === 'function') hook.inject = inject;
     hook.onCommitFiberRoot = onCommitFiberRoot;
     hook.onPostCommitFiberRoot = onPostCommitFiberRoot;
+    // A setter that drops what it is given throws nothing, and React's commits would never come here. So each
+    // method is read back, and one that did not take is put back like one that threw.
+    if ((typeof prevInject === 'function' && hook.inject !== inject) || hook.onCommitFiberRoot !== onCommitFiberRoot || hook.onPostCommitFiberRoot !== onPostCommitFiberRoot) {
+      throw new TypeError();
+    }
   } catch (error) {
     // A method that cannot be assigned: the ones already wrapped are put back, so the page's hook is as it was.
     try {
