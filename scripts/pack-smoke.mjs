@@ -411,6 +411,128 @@ function typeChecks(app) {
   }
 }
 
+// Jest's error for an ES module it was left to load as CommonJS, which its default runtime does with
+// everything. The package is ES modules only, so this is where a test that reaches it stops.
+const ESM_REFUSED = 'Must use import to load ES Module';
+
+// The entries a module of the app's own imports, and so the ones its tests reach.
+const JEST_SUBPATHS = ['.', './auto', './web-vitals', './next-client'];
+
+/**
+ * A test that requires each of those and holds what it gives to EXPECTED, as the loaders do, then
+ * subscribes, so an entry that loaded but came out empty fails too. /auto installs as it loads: jsdom has
+ * no Event Timing, so it warns and installs nothing, as in a browser without it.
+ */
+function jestTest() {
+  const expected = Object.fromEntries(JEST_SUBPATHS.map((subpath) => [specifierOf(subpath), EXPECTED[subpath].names]));
+  return `const expected = ${JSON.stringify(expected, null, 2)};
+
+test.each(Object.keys(expected))('%s', (specifier) => {
+  const value = require(specifier);
+  expect(Object.fromEntries(Object.keys(expected[specifier]).map((name) => [name, typeof value[name]]))).toEqual(expected[specifier]);
+});
+
+test('onInteraction', () => {
+  const off = require('${PACKAGE}').onInteraction(() => {});
+  expect(typeof off).toBe('function');
+  off();
+});
+`;
+}
+
+const JEST_PLAIN = "module.exports = { testEnvironment: 'jsdom' };\n";
+const JEST_BABEL = `module.exports = {
+  testEnvironment: 'jsdom',
+  transformIgnorePatterns: ['/node_modules/(?!${PACKAGE}/)'],
+};
+`;
+const JEST_NEXT = `const nextJest = require('next/jest');
+
+module.exports = nextJest({ dir: __dirname })({ testEnvironment: 'jsdom' });
+`;
+// The READMEs' babel.config.js, and the same presets as a .babelrc holds them.
+const BABEL_CONFIG = "module.exports = { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] };\n";
+const BABELRC = `${JSON.stringify({ presets: [['@babel/preset-env', { targets: { node: 'current' } }]] })}\n`;
+// The README's next.config, less the options, so next/jest reads the config withInpBlame hands back.
+const nextJestConfig = (config) => `const { withInpBlame } = require('${PACKAGE}/next');
+
+module.exports = withInpBlame(${config});
+`;
+
+// Jest can require() an ES module itself only under --experimental-vm-modules, and only on a Node whose vm
+// modules can be evaluated synchronously, 24.9 and later. Its error offers that Node and leaves out the flag.
+const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
+const jestRequiresEsm = nodeMajor > 24 || (nodeMajor === 24 && nodeMinor >= 9);
+
+// The setups the READMEs give under Jest, each beside the one thing it needs taken away, so passing says
+// the setup is what did it. `loads` is whether every test has to pass or the run has to stop at
+// ESM_REFUSED. A setup's files are removed once it has run, so an app a failure leaves behind holds the
+// setup that failed, for `npx jest` there to run again.
+const JEST_SETUPS = [
+  {
+    setup: 'run with NODE_OPTIONS=--experimental-vm-modules',
+    files: { 'jest.config.js': JEST_PLAIN },
+    env: { NODE_OPTIONS: '--experimental-vm-modules' },
+    loads: jestRequiresEsm,
+  },
+  // The pattern lets babel-jest at the package, but babel-jest's own preset leaves import and export as
+  // they are, and Babel reads a .babelrc for the app's own files, never for one in node_modules.
+  {
+    setup: 'with transformIgnorePatterns and no Babel config',
+    files: { 'jest.config.js': JEST_BABEL },
+    loads: false,
+  },
+  {
+    setup: 'with transformIgnorePatterns and the presets in a .babelrc',
+    files: { 'jest.config.js': JEST_BABEL, '.babelrc': BABELRC },
+    loads: false,
+  },
+  {
+    setup: 'with transformIgnorePatterns and the presets in babel.config.js',
+    files: { 'jest.config.js': JEST_BABEL, 'babel.config.js': BABEL_CONFIG },
+    loads: true,
+  },
+  // next/jest compiles with Next.js's own SWC, and in node_modules only the packages in transpilePackages.
+  {
+    setup: 'under next/jest',
+    files: { 'jest.config.js': JEST_NEXT, 'next.config.js': nextJestConfig('{}') },
+    loads: false,
+  },
+  {
+    setup: `under next/jest with ${PACKAGE} in transpilePackages`,
+    files: { 'jest.config.js': JEST_NEXT, 'next.config.js': nextJestConfig(`{ transpilePackages: ['${PACKAGE}'] }`) },
+    loads: true,
+  },
+];
+
+/**
+ * Jest in a CommonJS app, the kind its default runtime is for, with the environment a React app's tests
+ * run in. Each setup runs the app's Jest on this same Node, with no colour so the output reads as text in
+ * the failure, and with no cache so no setup runs on what another compiled.
+ */
+function runsUnderJest(app) {
+  fs.writeFileSync(path.join(app, 'smoke.test.js'), jestTest());
+  // next/jest looks for the app directory before it reads next.config.js.
+  fs.mkdirSync(path.join(app, 'app'));
+  fs.writeFileSync(path.join(app, 'app/page.js'), 'export default function Page() {\n  return null;\n}\n');
+  const jest = path.join('node_modules/jest', installed(app, 'jest').bin);
+  for (const { setup, files, env, loads } of JEST_SETUPS) {
+    for (const [file, source] of Object.entries(files)) fs.writeFileSync(path.join(app, file), source);
+    const { status, stdout, stderr, error } = spawnSync(process.execPath, [jest, '--no-cache'], {
+      cwd: app,
+      encoding: 'utf8',
+      env: { ...process.env, FORCE_COLOR: '0', ...env },
+    });
+    const output = [stdout, stderr, error].filter(Boolean).join('\n').trimEnd();
+    if (loads) {
+      assert.ok(status === 0, `Jest ${setup} exited ${status}, where the READMEs say it loads the package:\n${output}`);
+    } else {
+      assert.ok(status !== 0 && output.includes(ESM_REFUSED), `Jest ${setup} was to stop at "${ESM_REFUSED}" and exited ${status}:\n${output}`);
+    }
+    for (const file of Object.keys(files)) fs.rmSync(path.join(app, file));
+  }
+}
+
 // Next.js is named alone because npm installs the peers a package asks for: each app gets the react and
 // react-dom its Next.js wants, a canary's included, with no version guessed here.
 const NEXT_APP = ['next', 'react', 'react-dom'];
@@ -418,7 +540,8 @@ const NEXT_APP = ['next', 'react', 'react-dom'];
 const nextDemo = readJson(path.join(root, 'apps/next-demo/package.json'));
 
 // `install` is what npm is asked for along with the tarball, `beside` is what then has to be in the app,
-// and `check` is what the fixture adds to the checks every app gets.
+// `check` is what the fixture adds to the checks every app gets, and `type` is the app's own, where it
+// is not `module`.
 const FIXTURES = {
   // All four peers are optional, so with none of them the package still has to install and load.
   bare: { install: [], beside: [], check: arrivesAlone },
@@ -430,14 +553,22 @@ const FIXTURES = {
   // The types, as an app's tsconfig finds them. TypeScript 5, the last with node10 as it was: 6.0 fails
   // a config that sets it unless ignoreDeprecations says "6.0", and 7.0 removed it.
   types: { install: ['typescript@5'], beside: ['typescript'], check: typeChecks },
+  // Jest 30 with each setup the READMEs give it, the Next.js one included. @babel/preset-env 7 is the
+  // Babel Jest's own packages are on; 8 works as well, with npm warning that it overrides their peer ranges.
+  jest: {
+    install: ['jest@30', 'jest-environment-jsdom@30', '@babel/preset-env@7', `next@${nextDemo.dependencies.next}`],
+    beside: ['jest', 'babel-jest', 'jest-environment-jsdom', '@babel/preset-env', ...NEXT_APP],
+    check: runsUnderJest,
+    type: 'commonjs',
+  },
   // A canary is allowed to break, so this one runs only when named. CI names it in the job that may fail.
   'next-canary': { install: ['next@canary'], beside: NEXT_APP, check: wrapsNextConfig, gating: false },
 };
 
 /** Installs into the app and checks it. Returns what npm put beside the package, with versions. */
 function smoke(name, tarball, app) {
-  const { install, beside, check } = FIXTURES[name];
-  const manifest = { name: `pack-smoke-${name}`, private: true, type: 'module' };
+  const { install, beside, check, type = 'module' } = FIXTURES[name];
+  const manifest = { name: `pack-smoke-${name}`, private: true, type };
   fs.writeFileSync(path.join(app, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   // One install of the tarball and everything beside it, resolved together as an app's own would be.
   // This is the ERESOLVE guard, and only a real install is one: reading the peer ranges back proves nothing.
