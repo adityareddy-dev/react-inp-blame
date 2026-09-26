@@ -1906,7 +1906,9 @@ build as well as on the dev server.
   Vite itself serves and builds, and theirs never go through it, so the library installs nothing there
   unless the plugin's `entry` names a module. Since 2026-09-25 the plugin warns when that happens under
   those four, and in a build whose inputs are all scripts, and names the fix; any other framework gets
-  no warning. The READMEs' setup for a build with no HTML page has not been tried.
+  no warning. The inputs are read from the top-level `build` only, so a build that lists them per
+  environment, under `environments.client.build`, gets no warning even when they are all scripts
+  (Vite 8.3.0). The READMEs' setup for a build with no HTML page has not been tried.
   React Router and TanStack Start got a setup on 2026-09-23: `install()` in a module of the app's own that
   the client entry imports first. That is early enough under React Router because its `<Scripts>` imports
   the route modules statically and then the client entry with `import()`, and the route modules reach only
@@ -1953,6 +1955,6 @@ build as well as on the dev server.
 What is left is the list above: look at the Performance panel tracks by eye, and run the library
 against Next.js's own bench apps. The frameworks that render their own HTML, other than React Router,
 Remix, TanStack Start and Astro, need a setup as well, and get no warning unless their build's inputs
-are all scripts. The `react-inp-blame/web-vitals` entry landed on 2026-09-19 and has its own section,
-which now includes a run under Next.js's `useReportWebVitals`. The hydration verdict landed on
-2026-09-19 and has its own section above.
+are all scripts and set in `build` itself, not per environment. The `react-inp-blame/web-vitals`
+entry landed on 2026-09-19 and has its own section, which now includes a run under Next.js's
+`useReportWebVitals`. The hydration verdict landed on 2026-09-19 and has its own section above.
