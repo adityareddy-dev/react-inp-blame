@@ -2979,8 +2979,11 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   // A React render in it is weighed as a render, not as the wait.
   const renderedIn = enter([frame(10, 147, [script('MessagePort.onmessage', 20, 120)], 157)], 10.4, [input(0, 'keydown')], [commit(10.9, 0, { total: 0.3, rendered: 2 }), commit(139, 0, { total: 115, rendered: 300 })]);
   assert.equal(renderedIn.explanation.blame.kind, 'render');
-  // Where no long frame covered it, the main thread may have sat idle, a key held down, and nothing is put on it.
-  assert.notEqual(enter([]).explanation.blame.kind, 'waiting');
+  // Painted in one frame, the handlers had the main thread busy between them, so where no long frame covers the
+  // gap the frame is not on record yet: the wait is still the verdict, and it says so rather than name what ran.
+  const unframed = enter([]);
+  assert.deepEqual([unframed.explanation.blame.kind, unframed.explanation.blame.detail], ['waiting', 'between click and keyup']);
+  assert.match(unframed.explanation.cause, /keyup's\. React did not render in it, and no long animation frame that says what else ran has been recorded yet, so it was most likely /);
 
   // Without Long Animation Frames only React's part in it is known.
   assert.match(enter(null).explanation.cause, / React did not render in it, and this browser does not record what else ran, so it was most likely /);

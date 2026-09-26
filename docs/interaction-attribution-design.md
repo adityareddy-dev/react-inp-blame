@@ -1017,11 +1017,16 @@ web-vitals counts it. A wait like that between one event's handlers and the next
 is left out of what the handlers are said to have run for. From 50 ms it is the verdict, a `waiting` one with
 `detail` "between click and keyup", where it outweighs the handlers, React and any forced layout, is at least
 the wait before the first handler, and the screen update does not outrank the working time; where only those
-last two stop it, it is a note. It is what long frames covered of that time: where none did, the thread may
-have sat idle with a key held down, and nothing is put on it. A script Long Animation Frames recorded there is
-part of the wait, named when it holds half of it, as one the input waited behind is, and never called the
-handler; a React render there is weighed as a render. Only entries whose handlers ran inside the working time count: a keyup released after the
-key press painted is in a frame of its own. The hot path follows a
+last two stop it, it is a note. Only entries painted within 8 ms of the headline paint count: a keyup released
+after the key press painted is in a frame of its own, and one whose handlers start just past the working time's
+rounded end is clamped to it. Since they all painted in one frame, the thread was busy between their handlers
+(an idle thread paints first), and the wait is what long frames covered of that time. Where none covers most of
+it, the frame is not on record, most often not delivered yet: a report is built from the entries in hand and
+revised when its frames arrive. Then the gap is taken as a browser without Long Animation Frames takes it, and
+the sentence says no frame that says what else ran has been recorded yet. Before this, that first revision
+went to the handler, "about 2 ms of the 420 ms", in CI on React 19.2's production build. A script Long
+Animation Frames recorded there is part of the wait, named when it holds half of it, as one the input waited
+behind is, and never called the handler; a React render there is weighed as a render. The hot path follows a
 child carrying 60% of its parent's work (`fiber.ts`). Where React timed each component and one of them,
 rendered once, spent 25 ms and half of the render or more in its own render, the sentence says so
 rather than leaving the reader with the count: sorting TanStack Table's 200,000 rows reads "re-rendering

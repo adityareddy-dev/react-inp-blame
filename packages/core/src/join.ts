@@ -1138,11 +1138,15 @@ function explain(r: InteractionReport): Explanation {
   const inAGap = (t: number) => gaps.some((g) => t > g.from + STAMP_TOLERANCE && t < g.to - STAMP_TOLERANCE);
   const partsBetween = gaps.flatMap((g) => scriptParts(r.frames ?? [], g.from, g.to));
   const scriptedBetween = partsBetween.reduce((a, p) => a + p.ms, 0);
-  // A long frame over the gap is what says the main thread was busy in it; without one it may have sat idle,
-  // a key held down between its keydown and keyup.
+  // Every entry here painted in one frame, so the main thread did not sit idle between their handlers: an idle
+  // thread paints, and a keyup after that is in a frame of its own. A long frame over the gap says what kept
+  // it busy. Where none covers most of it, the frame is not on record, most often not delivered yet (a report
+  // is built from the entries in hand and revised when its frames arrive), and the gap is taken as a browser
+  // without Long Animation Frames takes it.
   const framedBetween = gaps.reduce((a, g) => a + coverage((r.frames ?? []).map((f) => ({ from: Math.max(g.from, f.start), to: Math.min(g.to, f.start + f.duration) }))), 0);
   const renderedBetween = r.commits.filter((x) => inAGap(x.at));
   const renderedBetweenMs = renderedBetween.reduce((a, x) => a + (x.hasDurations ? x.total : 0), 0);
+  const framesSay = !!r.frames && framedBetween >= between / 2;
   /**
    * The time between handlers the next event waited on the main thread, React's renders aside, which are
    * weighed as renders: with Long Animation Frames, what long frames covered of it, a script that ran there
@@ -1150,7 +1154,7 @@ function explain(r: InteractionReport): Explanation {
    * all of it. Where React is not read, or rendered without durations, and no frame says what ran, it is
    * unknown and taken as none.
    */
-  const waitBetween = r.frames
+  const waitBetween = framesSay
     ? Math.max(0, framedBetween - renderedBetweenMs)
     : blind || renderedBetween.some((x) => !x.hasDurations && carriesWork(x))
       ? 0
@@ -1568,13 +1572,15 @@ function explain(r: InteractionReport): Explanation {
       : renderedBetween.every((x) => x.hasDurations)
         ? `React rendered for ${underOr(renderedBetweenMs)} of it`
         : 'React rendered in it';
-    const filled = r.frames
+    const filled = framesSay
       ? scriptedBetween < 1
         ? ` No script ran in that time, so it was ${HEDGE} ${restyle}.`
         : scriptedBetween >= WAITED_BEHIND_MIN_SHARE * between
           ? ` ${scriptsSaid}.`
           : ` ${scriptsSaid}, and the rest was ${HEDGE} ${restyle}.`
-      : ` ${reactSaid}, and this browser does not record what else ran, so it was ${HEDGE} ${restyle}.`;
+      : r.frames
+        ? ` ${reactSaid}, and no long animation frame that says what else ran has been recorded yet, so it was ${HEDGE} ${restyle}.`
+        : ` ${reactSaid}, and this browser does not record what else ran, so it was ${HEDGE} ${restyle}.`;
     cause = `The handlers took ${underOr(handled)} in all, but ${ms(between)} went by ${whereBetween}.${filled} That time counts as working time, which runs from the first handler to the last.`;
     const named = longest && longest.ms >= WAITED_BEHIND_MIN_SHARE * between ? scriptName(longest.script) : null;
     blame = { kind: 'waiting', name: named, detail: onlyGap ? `between ${onlyGap.after} and ${onlyGap.before}` : 'between handlers', ms: between, confidence: 'measured' };
