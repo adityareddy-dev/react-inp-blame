@@ -820,35 +820,39 @@ Each commit is put in the one script whose span holds its stamp, after its start
 a commit stamped at the end of a listener's microtask is that listener's end exactly, and the next listener
 starts on the same tick or later. A stamp on a script's first tick is that script's only where the effects
 React runs straight after a click's or a key's commit ended inside it: React's own listener can commit on its
-first tick (7 clicks in 150 with React 19.3 in Chromium), while a commit stamped where the listener before it
-ended has run its effects by the time the next one starts. Long Animation Frames lists only scripts over 5 ms,
-so a short React listener can be missing from the list, and its commit, stamped just after one listener ends or
-just before the next one starts, is then in no script listed rather than in either. So where half the layout or
-more was charged to scripts no commit of this interaction ran in, it was in no layout effect, in any build, and
-the sentence says it was code outside React; the blame then names that script, where one holds nearly all of
-it, rather than the subtree React rendered. Where a commit is stamped in the handlers of the event the blamed
-script ran in, or of an event dispatched inside them, but not in that script, React's listener for that event
-may have been another script, listed or too short to be, and the handler may have run there. A script and a
-commit belong to the innermost event whose handlers hold them: Chromium dispatches the click that Enter or
-Space sets off inside the key event's own handlers, so the click's entry sits inside the keypress's or the
-keyup's. Where one event's handlers begin, a script starting there is that event's and a commit stamped there
-the one before's. Nothing tells React's listener apart from a library's listener that set state, a
-click-outside handler closing a menu, so the sentence offers both the handler and a library's listener and the
-blame names the script by what the browser says ran it, not by the handler's name. A commit in another event's
-handlers, a pointerup's beside a click's or the keypress's own beside the click's, says nothing of where the
-click's listener ran. Where the commit ran in the same script, a development or profiling build times it
-(`startedAt` to `at`, less the render) and, on React 18 and 19, its effects, and a layout effect's read sits
-inside that time. Where they hold less than half of the layout, the sentence says at most that much of it was a
-layout effect's. A render body can read a size too, but a render of r ms holds at most r ms of layout: where
-commit, effects and render together could still hold half, the rest is React's render or code outside React,
-and the blame names the subtree that commit rendered, not a heavier one elsewhere; where they could not, the
-sentence says at most what they took was React's, the rest was code outside React, and the blame names the
-script. Otherwise, and in a production build, it says "often in a layout effect". So does a layout charged to
-React's scheduler task with no commit in it: that task can hold a transition's render slice, which is React's
-even though nothing committed there. This is asked of the working time only: after it, a commit another input
-made can run in the same script, and that commit is not in the report. The note about forced layout under
-another verdict asks the same where the layout outside the handlers comes to under half a millisecond, and says
-the usual line where there was more, since a sentence about the part inside would be read as about all of it.
+first tick (7 clicks in 150 with React 19.3 in Chromium), while a click's or a key's commit stamped where the
+listener before it ended has run its effects by the time the next one starts. A transition's commit is the
+exception: React can hold its effects until the next event's listener renders, and so one stamped on that
+listener's first tick would be put in it. In 40 taps measured that way the stamp came 0.2 to 0.4 ms before the
+listener every time. Long Animation Frames lists only scripts over 5 ms, so a short React listener can be
+missing from the list, and its commit, stamped just after one listener ends or just before the next one starts,
+is then in no script listed rather than in either. So where half the layout or more was charged to scripts no
+commit of this interaction ran in, it was in no layout effect, in any build, and the sentence says it was code
+outside React; the blame then names that script, where one holds nearly all of it, rather than the subtree
+React rendered. Where a commit is stamped in the handlers of the event the blamed script ran in, or of an event
+dispatched inside them, but not in that script, React's listener for that event may have been another script,
+listed or too short to be, and the handler may have run there. A script and a commit belong to the innermost
+event whose handlers hold them, the one that began last and, of two that began together, ends first: Chromium
+dispatches the click that Enter or Space sets off inside the key event's own handlers, so the click's entry
+sits inside the keypress's or the keyup's. A script starting where an event's handlers ended is not that
+event's, and a commit stamped where an event's handlers began is the event's already running, where one is.
+Nothing tells React's listener apart from a library's listener that set state, a click-outside handler closing
+a menu, so the sentence offers both the handler and a library's listener and the blame names the script by what
+the browser says ran it, not by the handler's name. A commit in another event's handlers, a pointerup's beside
+a click's or the keypress's own beside the click's, says nothing of where the click's listener ran. Where the
+commit ran in the same script, a development or profiling build times it (`startedAt` to `at`, less the render)
+and, on React 18 and 19, its effects, and a layout effect's read sits inside that time. Where they hold less
+than half of the layout, the sentence says at most that much of it was a layout effect's. A render body can
+read a size too, but a render of r ms holds at most r ms of layout: where commit, effects and render together
+could still hold half, the rest is React's render or code outside React, and the blame names the subtree that
+commit rendered, not a heavier one elsewhere; where they could not, the sentence says at most what they took
+was React's, the rest was code outside React, and the blame names the script. Otherwise, and in a production
+build, it says "often in a layout effect". So does a layout charged to React's scheduler task with no commit in
+it: that task can hold a transition's render slice, which is React's even though nothing committed there. This
+is asked of the working time only: after it, a commit another input made can run in the same script, and that
+commit is not in the report. The note about forced layout under another verdict asks the same where the layout
+outside the handlers comes to under half a millisecond, and says the usual line where there was more, since a
+sentence about the part inside would be read as about all of it.
 
 Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are

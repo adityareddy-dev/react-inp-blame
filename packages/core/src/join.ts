@@ -235,6 +235,15 @@ const PRESSES: readonly string[] = ['pointerdown', 'keydown'];
  * An entry as a stamp. A keypress is fired by its keydown and has that keydown's time, and so do a
  * mousedown and a mouseup their pointer events', so each stands for the input the ring recorded.
  */
+/** Whether `a` comes after `b`, compared element by element. */
+function isAfter(a: readonly number[], b: readonly number[]): boolean {
+  for (let i = 0; i < a.length; i++) {
+    const [x, y] = [a[i] ?? 0, b[i] ?? 0];
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
 function stampOf(e: Pick<EventEntrySummary, 'name' | 'startTime'>): Stamp {
   const type = e.name === 'keypress' ? 'keydown' : e.name === 'mousedown' ? 'pointerdown' : e.name === 'mouseup' ? 'pointerup' : e.name;
   return { at: e.startTime, types: INPUT_TYPES.includes(type) ? [type] : null };
@@ -1436,15 +1445,17 @@ function explain(r: InteractionReport): Explanation {
       const end = s.start + s.duration + 1e-6;
       return x.at <= end && (x.at > s.start || (x.at === s.start && x.effectsEndedAt !== null && x.effectsEndedAt > s.start && x.effectsEndedAt <= end));
     }) ?? null;
-  // Whose handlers a script ran in, from its start, and a commit, from its stamp: the innermost event's, since
-  // Chromium dispatches the click a key sets off inside that key's own handlers. Where one event's handlers begin
-  // as another's end or while they run, a script starting there is the later event's, a commit stamped there the
-  // earlier one's.
-  const byStart = [...r.entries].sort((a, b) => a.processingStart - b.processingStart);
+  // Whose handlers a script ran in, from its start, and a commit, from its stamp: the innermost event's, the one
+  // that began last and, of two that began together, ends first, since Chromium dispatches the click a key sets off
+  // inside that key's own handlers. A script starting where an event's handlers ended is not that event's, and a
+  // commit stamped where an event's handlers began is the event's already running, where one is: the new event's
+  // listeners had not run yet.
   const handlingAt = (t: number, stamp: boolean) => {
+    const rank = (e: EventEntrySummary) => [stamp && e.processingStart < t ? 1 : 0, e.processingStart, -e.processingEnd];
     let at: EventEntrySummary | null = null;
-    for (const e of byStart) {
-      if (t >= e.processingStart && t <= e.processingEnd && !(stamp && at && t === e.processingStart)) at = e;
+    for (const e of r.entries) {
+      if (t < e.processingStart || (stamp ? t > e.processingEnd : t >= e.processingEnd)) continue;
+      if (!at || isAfter(rank(e), rank(at))) at = e;
     }
     return at;
   };

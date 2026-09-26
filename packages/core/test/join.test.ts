@@ -1198,6 +1198,12 @@ test('the forced layout sentence says a layout effect only where a commit ran in
   // straight after it, ended inside it (as measured in Chromium, where a trivial click update and a useEffect
   // reading the layout commit on the listener's first tick 7 times in 150).
   assert.equal(said([commit(118, 0, { total: 0, hasDurations: false, rendered: 3 })], root), `${reads}, often in a layout effect.`);
+  assert.equal(
+    report([entry('click', 0, 70, 2.1, 64.4)], [commit(64.4, 0, { total: 0, hasDurations: false, rendered: 3 })], [frame(0, 70, [script('DIV#root.onclick', 2.1, 62.3, 60)])], [
+      input(0, 'click'),
+    ]).explanation.cause.replace(/^.*\. (That happens)/, '$1'),
+    `${reads}, often in a layout effect.`,
+  );
   for (const effectsEndedAt of [2.1, 118]) {
     assert.equal(said([commit(2, 0, { total: 0, hasDurations: false, rendered: 3, effectsStartedAt: 2, effectsEndedAt })], root), `${reads}, often in a layout effect.`);
   }
@@ -1276,6 +1282,14 @@ test('the forced layout sentence says a layout effect only where a commit ran in
     [input(0, 'pointerup'), input(0, 'click')],
   ).explanation;
   assert.ok(pointerup.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${outsideReact}`), pointerup.cause);
+  // And a commit in a later event's handlers says nothing of where an earlier one's listener ran.
+  const later = report(
+    [entry('pointerup', 0, 128, 2, 100), entry('click', 0, 128, 100, 118)],
+    [commit(110, 0, { total: 0, hasDurations: false, rendered: 3 })],
+    [frame(0, 128, [script('DIV#root.onpointerup', 2, 98, 90)])],
+    [input(0, 'pointerup', named), input(0, 'click', named)],
+  ).explanation;
+  assert.deepEqual([later.blame.name, later.blame.detail], ['measureThing', null]);
   // Nor does one a script in the pointerup's handlers sat beside, where the click's listener held the layout: the
   // blame is the click's handler, whatever ran around the pointerup's commit. Entries in any order.
   const [up, clicked] = [entry('pointerup', 0, 128, 2, 20), entry('click', 0, 128, 20, 118)];
@@ -1309,7 +1323,23 @@ test('the forced layout sentence says a layout effect only where a commit ran in
   const clickListener = script('DIV#root.onclick', 2.2, 62.8, 61.7);
   for (const reversed of [false, true]) assert.equal(enter(2.2, [onKeyPress, onClick], [clickListener], reversed).blame.name, 'measureThing');
   assert.equal(enter(2.2, [onKeyPress], [clickListener]).blame.name, 'measureThing');
-  assert.equal(enter(62, [onClick], [script('DIV#root.onkeypress', 2, 59.9, 58)]).blame.name, 'DIV#root.onkeypress');
+  // The keydown's handlers end on the tick the keypress's begin, as Chromium times them: a script starting there is
+  // the keypress's, whatever order the entries come in.
+  for (const reversed of [false, true]) {
+    assert.equal(enter(62, [onClick], [script('DIV#root.onkeypress', 2, 59.9, 58)], reversed).blame.name, 'DIV#root.onkeypress');
+  }
+  // With no keypress listener the click begins on the keypress's first tick. The click is the innermost of the two
+  // until its handlers end, so a commit after that, in the keypress's, says nothing of where its listener ran.
+  const keypress = [entry('keypress', 0, 70, 2, 65), entry('click', 0, 70, 2, 64)];
+  for (const entries of [keypress, [...keypress].reverse()]) {
+    const e = report(
+      entries,
+      [commit(64.5, 0, { total: 0.1, startedAt: 64.3 })],
+      [frame(0, 70, [script('DIV#root.onclick', 2, 60, 58)])],
+      [input(0, 'keypress', named), input(0, 'click', named)],
+    ).explanation;
+    assert.deepEqual([e.blame.name, e.blame.detail], ['measureThing', null]);
+  }
   // Most of it, not all: the share outside is said as a figure, and no one script holds enough to be named.
   const most = explain([commit(55, 0, { total: 3, startedAt: 50 })], [script('DIV#root.onclick', 2, 58, 20), script('DOCUMENT.onclick', 60, 58, 50)]);
   assert.ok(most.cause.endsWith(`${reads}. 50 ms of it was charged to a script no React commit ran in, so that was not in a layout effect but in ${outsideReact}`), most.cause);
