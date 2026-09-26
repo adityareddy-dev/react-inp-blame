@@ -20,6 +20,7 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ### Changed
 
+
 - **The count a render is said to be "inside" a component is that component's own, and the render is named
   from where it started where that holds them all.** On cal.com, switching an event type to its advanced tab
   read "React spent 180 ms re-rendering 1216 components inside Form", where 1216 was the whole commit's
