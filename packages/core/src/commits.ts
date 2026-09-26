@@ -38,6 +38,9 @@ export const readableName = (name: string): boolean =>
     return READABLE_NAME.test(plain) && !SLOT.test(plain);
   });
 
+const PROVIDER = /Provider$|Context$/;
+export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name);
+
 /**
  * The component a commit is named after: the deepest readable name on its hot path, else the end of its
  * hot path, or its outermost root, as they stand, since the alternative is inventing a name; null when it
@@ -50,6 +53,17 @@ export function leafName(c: CommitSummary): string | null {
   if (c.truncated && !c.hasDurations) return c.hotPath[c.hotPath.length - 1] || null;
   // Not another root: the hot path starts at the heaviest, so any other root is a subtree beside the work.
   return c.hotPath[c.hotPath.length - 1] || c.roots[0] || null;
+}
+
+/**
+ * The component a commit's render started from, for a sentence that says where it went: the top of its hot
+ * path, where the path goes below it and the name is one a reader could search for. It is often where the
+ * cause is: on cal.com the form's state lives in EventTypeWeb, and the render was named after a component
+ * eleven layers down.
+ */
+export function startName(c: CommitSummary): string | null {
+  const first = c.hotPath[0];
+  return first && c.hotPath.length > 1 && first !== leafName(c) && readableName(first) ? first : null;
 }
 
 /** The names styling libraries give every element they wrap: `styled.div`, `Styled(Button)`. */

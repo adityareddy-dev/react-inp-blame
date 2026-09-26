@@ -9,8 +9,31 @@ it changes when a field is removed or changes meaning, which a minor release may
 ### Added
 
 
+- **A commit says how many components it mounted, and how many sit inside the component its hot path ends
+  on.** `CommitSummary.mounted` counts the components React rendered for the first time in the commit, told by
+  a fiber with no alternate, and `CommitSummary.pathRendered` those inside the last component on `hotPath`,
+  that component included, which is what the sentences under Changed below are built on. Both are additive,
+  so `schemaVersion` stays at 3; a report stored by an earlier release has neither and reads as it did.
 
 ### Changed
+
+- **The count a render is said to be "inside" a component is that component's own, and the render is named
+  from where it started.** On cal.com, switching an event type to its advanced tab read "React spent 180 ms
+  re-rendering 1216 components inside Form", where 1216 was the whole commit's count, about a third of it
+  above Form and beside it, and nothing named EventTypeWeb, the root the render started from and the
+  component that holds the form's state. Where the walk counted fewer components inside the component a
+  render is named after than in the commit, the sentence now gives both, with the component the render
+  started from where a reader could search for it: "re-rendering 1216 components from EventTypeWeb down, 812
+  of them inside EventAdvancedWebWrapper". A render named after the component it started from holds the
+  whole count and reads as it did, and so does a walk cut short, whose every count is partial. The clause
+  for what a render was mostly made of, or for one component's own render, follows the count as before. The
+  wording is the same wherever the render is said: in the cause of a render blame and of a handler blame,
+  in the React clause of a layout blame, in the note on a later render and in the panel's rows.
+  `blame.detail` is "812 of 1216 components" on such a render, where it was "1216 components", and a layout
+  blame named after its commit, and a hydration blame, carry the same value. `blame.kind` does not change,
+  and `blame.detail` keeps its meaning, so `schemaVersion` stays at 3.
+
+
 
 
 
