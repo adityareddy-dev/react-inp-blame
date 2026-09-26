@@ -3005,6 +3005,54 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   );
   assert.equal(late.explanation.blame.kind, 'none');
 
+  // The frames can reach a report after it is built, so they change what is said of the wait and never how long it
+  // was: a 100 ms render in the keydown's handlers and a 147 ms wait after them is the wait's however much of it
+  // the frames cover yet.
+  const renderThenWait = (frames: FrameSummary[] | null) =>
+    report(
+      [entry('keydown', 0, 264, 10, 110), entry('click', 0, 264, 110, 110.7), entry('keyup', 1, 264, 258, 258.2)],
+      [commit(109, 0, { total: 100, startedAt: 9, rendered: 40 })],
+      frames,
+      [input(0, 'keydown')],
+    ).explanation;
+  for (const covered of [0, 73, 74, 110, 147]) {
+    const e = renderThenWait(covered ? [frame(10, 100.7 + covered, [], null)] : []);
+    assert.deepEqual([covered, e.blame.kind, e.blame.detail], [covered, 'waiting', 'between click and keyup']);
+  }
+  assert.match(renderThenWait([frame(10, 247.7, [], null)]).cause, /keyup's\. No script ran in that time/);
+  assert.match(renderThenWait([frame(10, 174.7, [], null)]).cause, /keyup's\. React did not render in it, and no long animation frame that says what else ran has been recorded yet/);
+  // A frame on record with a script in it says the script, and that the rest is not on record yet.
+  assert.match(
+    enter([frame(10, 60, [script('TimerHandler:setTimeout', 12, 55)])]).explanation.cause,
+    /keyup's\. A script \(TimerHandler:setTimeout, app\.js\) ran for 55 ms of it, and no long animation frame over the rest has been recorded yet, so the rest was most likely /,
+  );
+  // Before its frame arrives, a render in the gap is weighed as it is without Long Animation Frames.
+  assert.match(
+    enter([], 10.4, [input(0, 'keydown')], [commit(10.9, 0, { total: 0.3, rendered: 2 }), commit(80, 0, { total: 0.2, rendered: 1 })]).explanation.cause,
+    / React rendered for under 1 ms of it, and no long animation frame that says what else ran has been recorded yet/,
+  );
+  assert.equal(enter([], 10.4, [input(0, 'keydown')], unTimed.commits.slice()).explanation.blame.kind, unTimed.explanation.blame.kind);
+  // When the frame arrives, the report is revised and the verdict stays.
+  const entries = [entry('keydown', 0, 168, 10, 10.4), entry('click', 0, 168, 10.4, 11.1), entry('keyup', 1, 168, 158, 158.2)];
+  const commits = [commit(10.9, 0, { total: 0.3, rendered: 2 })];
+  const before = buildReport(entries, commits, [], [input(0, 'keydown')]);
+  const after = sealReport(refreshReport(before, entries, commits, [frame(10, 147, [], 157)], [input(0, 'keydown')]));
+  assert.deepEqual([sealReport(before).explanation.blame.kind, after.explanation.blame.kind], ['waiting', 'waiting']);
+  assert.match(after.explanation.cause, /keyup's\. No script ran in that time/);
+  // What the keyup waited starts at its own input: a key held down for 100 ms, while a paint held up off the main
+  // thread kept both events in one frame, is no wait at all.
+  const held = report([entry('keydown', 0, 168, 0.2, 1.2), entry('keyup', 100, 64, 100.1, 100.3)], [], [], [input(0, 'keydown')]);
+  assert.notEqual(held.explanation.blame.kind, 'waiting');
+  // A task React's scheduler posted for straight after the keydown's handlers is in the gap, not in them: its 36 ms
+  // of layout is not added to the keyup's 30, which used to make "66 ms of the 49 ms spent handling" a layout verdict.
+  const posted = report(
+    [entry('keydown', 0, 96, 2, 6), entry('keyup', 1, 96, 45, 90)],
+    [commit(88, 0, { total: 2, startedAt: 45 })],
+    [frame(0, 96, [script('DIV#root.onkeydown', 2, 4), script('MessagePort.onmessage', 6.4, 37.6, 36), script('DIV#root.onkeyup', 45, 45, 30)])],
+    [input(0, 'keydown')],
+  );
+  assert.notEqual(posted.explanation.blame.kind, 'layout', posted.explanation.cause);
+
   // Painted in the same frame, a keyup can start its handler past the end web-vitals gives the working time,
   // the paint as the 8 ms rounded durations put it (React 19.0 in Chromium, in CI): it still ends the wait.
   const pastTheEnd = report(
