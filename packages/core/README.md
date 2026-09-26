@@ -396,7 +396,8 @@ and so can `blame.name`, which for a script can be its URL, or the page's for an
   sends it all; one that sends on `pagehide`, which comes first, can miss the last. It is the one way
   to hear reports. A panel that renders what it hears is safe: the update your listener makes while it
   runs is never read as part of an interaction. One it schedules for later, with setTimeout or an
-  await, is an ordinary render.
+  await, is an ordinary render. A listener that throws does not stop the others, and its error goes to
+  `reportError`, where your error monitoring sees it.
 - The API: `reports()` (up to 50, keeping the ten slowest and those INP can still point at past that),
   `last()`, `inp()` (the INP of the navigation the page is on, estimated the
   way web-vitals does, chosen again when the page is hidden; it starts over at each soft navigation

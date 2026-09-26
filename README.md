@@ -684,7 +684,9 @@ the page is hidden is heard inside that `visibilitychange` instead, so a page th
 `visibilitychange` sends it all; one that sends on `pagehide`, which comes first, can miss the last. A
 panel that renders what it hears is safe, because the update a listener makes while it runs is never read
 as part of an interaction. An update it schedules for later, with setTimeout or an await, is an ordinary
-render. The package's types document every field.
+render. A listener that throws does not stop the others hearing the report, and its error goes to
+`reportError`, where the page's error handlers and error monitoring see it. The package's types document
+every field.
 
 ### install(options)
 
