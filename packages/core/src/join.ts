@@ -1077,10 +1077,10 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
 
 /**
  * A sentence naming the longest script the browser recorded, where it has a name, and `also` what it did.
- * Where it has none the sentence is only said for what it did, which would otherwise go unsaid.
+ * Where it has none the sentence is said only `unnamed`, for a script whose time is worth saying anyway.
  */
-function longestSaid(p: ScriptPart | null, also = ''): string {
-  const name = p && (scriptName(p.script) ?? (also ? 'one with no name' : null));
+function longestSaid(p: ScriptPart | null, also = '', unnamed = false): string {
+  const name = p && (scriptName(p.script) ?? (unnamed ? 'one with no name' : null));
   return p && name ? ` The longest script the browser recorded in that time was ${name}${p.script.source ? ` (${p.script.source})` : ''}, ${ms(p.ms)}${also}.` : '';
 }
 
@@ -1341,12 +1341,13 @@ function explain(r: InteractionReport): Explanation {
         ? `${lateScript ? ':' : '. No script ran for long in that time:'} ${ms(unscripted)} of it was the browser's own work on the main thread, ${HEDGE} recalculating styles and layout for what changed.`
         : '.';
   // The script is what the screen update waited on from half of it. Under that it is said after the
-  // browser's own work, with any render inside it: a 20 ms timer in a frame that spent 250 ms on style and
-  // layout is not why the screen took 370 ms to update.
+  // browser's own work, with any render inside it, and said where the browser gave it no name too: a 20 ms
+  // timer in a frame that spent 250 ms on style and layout is not why the screen took 370 ms to update, but
+  // a 150 ms script is time in it all the same, with a name or without.
   const lateLeads = lateScript && lateScript.ms >= WAITED_BEHIND_MIN_SHARE * r.presentation ? lateScript : null;
   const lateScriptClause = lateLeads
     ? `, mostly because ${scriptPhrase(lateLeads.script)} ran for ${ms(lateLeads.ms)} before the next frame${lateRenderSaid}.`
-    : `${browserClause}${longestSaid(lateScript, lateRenderSaid)}`;
+    : `${browserClause}${longestSaid(lateScript, lateRenderSaid, true)}`;
 
   // The commits of the working time. One the screen update's clause ties to the script it ran in is that
   // script's, or the same render is said twice, once as the script's and once as the handlers'.
