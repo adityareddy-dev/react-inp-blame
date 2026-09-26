@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { leafName } from '../src/commits.ts';
 import { walkCommit } from '../src/fiber.ts';
+import { buildReport, sealReport } from '../src/join.ts';
 import type { CommitSummary } from '../src/types.ts';
 
 // A file of its own, because importing react-inp-blame/next-client adds the App Router's names to the layers
@@ -28,12 +29,8 @@ const SEGMENT = ['OuterLayoutRouter', 'SegmentStateProvider', 'RenderFromTemplat
 const ROUTER = ['Router', 'HotReload', 'AppDevOverlayErrorBoundary', 'DevRootHTTPAccessFallbackBoundary', 'HTTPAccessFallbackBoundary', 'HTTPAccessFallbackErrorBoundary', 'RedirectBoundary', 'RedirectErrorBoundary', '__next_root_layout_boundary__', 'SegmentViewNode', ...SEGMENT, ...SEGMENT, 'SegmentViewNode', 'ClientPageRoot', 'ServerPage', 'ActionButton', 'Rows'];
 const rows = () => walk(chain(ROUTER, ...Array.from({ length: 300 }, () => fiber(0, named('Row'), [fiber(5, 'li')]))));
 
-test("under the App Router a render from the Router down is named after the app's components, not Next.js's boundaries", async () => {
-  // Without the Next.js entry the names are readable ones like any other, and the twelve steps ran out at the
-  // root segment's ErrorBoundary, which the render was then named after.
-  const before = rows();
-  assert.deepEqual([before.hotPath.at(-1), leafName(before)], ['ErrorBoundary', 'ErrorBoundary']);
-
+/** Imports the Next.js entry, as withInpBlame's build would. */
+async function nextEntry(): Promise<void> {
   process.env.REACT_INP_BLAME_NEXT = JSON.stringify({ install: {}, basePath: '' });
   try {
     // Outside a browser its install() finds no window and does nothing; the names are added all the same.
@@ -41,9 +38,37 @@ test("under the App Router a render from the Router down is named after the app'
   } finally {
     delete process.env.REACT_INP_BLAME_NEXT;
   }
+}
+
+/** What a click on a link the ring saw inside `owners` reports as its component and its `where`. */
+function clickedInside(owners: string[]): { component: string | null; owners: readonly string[]; where: string | null } {
+  const a = { nodeType: 1, tagName: 'A', id: '', classList: { length: 0 }, parentNode: null, parentElement: null, nextSibling: null, firstChild: null, getAttribute: () => null };
+  const ring = [{ ts: 0, type: 'click', gestureTs: 0, press: undefined, target: a as unknown as Node, owners, handler: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const entry = { name: 'click', interactionId: 7, startTime: 0, duration: 120, processingStart: 3, processingEnd: 100, target: null };
+  const r = sealReport(buildReport([entry] as any, [], [], ring));
+  return { component: r.target?.component ?? null, owners: r.target?.owners ?? [], where: r.explanation.where };
+}
+
+test("under the App Router a render from the Router down is named after the app's components, not Next.js's boundaries", async () => {
+  // Without the Next.js entry the names are readable ones like any other, and the twelve steps ran out at the
+  // root segment's ErrorBoundary, which the render was then named after.
+  const before = rows();
+  assert.deepEqual([before.hotPath.at(-1), leafName(before)], ['ErrorBoundary', 'ErrorBoundary']);
+
+  await nextEntry();
   const after = rows();
   assert.deepEqual(after.hotPath.slice(-3), ['ServerPage', 'ActionButton', 'Rows']);
   assert.equal(leafName(after), 'Rows');
   // The count the sentence gives beside it is the rows' and their list's.
   assert.equal(after.pathRendered, 301);
+});
+
+test("under Next.js a click on a link is named after the component that wrote <Link>, not next/link's own", async () => {
+  // A link a page wrote, as the Next.js demo's link to its second page is. Without the entry LinkComponent is a
+  // readable name like any other, and under `next dev` the click was said to be in it.
+  const link = ['LinkComponent', 'Page', 'ClientPageRoot', 'InnerLayoutRouter'];
+  await nextEntry();
+  assert.deepEqual(clickedInside(link), { component: 'Page', owners: link, where: 'link in Page' });
+  // Passed over, never dropped: with nothing of the app's readable above it, the link is named as it is.
+  assert.equal(clickedInside(['LinkComponent', 'x', 'ClientPageRoot']).component, 'LinkComponent');
 });
