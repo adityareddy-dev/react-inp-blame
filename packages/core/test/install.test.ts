@@ -362,7 +362,7 @@ test("dispose() takes down the badge install({ overlay: true }) showed, and a ha
     assert.equal(hosts(), 1, 'a handle from before dispose() hid the badge a new install() showed');
     again.dispose();
     await nextTask();
-    assert.equal(hosts(), 0, 'a handle from before dispose() lost the badge a new install() showed, which outlived its dispose()');
+    assert.equal(hosts(), 0, 'dispose() left up the badge the second install() showed');
     after?.dispose();
   });
 });
