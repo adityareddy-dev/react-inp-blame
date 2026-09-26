@@ -1,6 +1,6 @@
 // Runs an app from fixtures/ the way a user has it: fixtures/vite-react-ts, the app `npm create vite --
-// --template react-ts` makes with the README's vite.config.ts pasted in, or with `--fixture` one of the
-// frameworks that write their own HTML, each from its own template with the README's setup for it. The
+// --template react-ts` makes with the vite.config.ts from docs/install.md pasted in, or with `--fixture` one of the
+// frameworks that write their own HTML, each from its own template with the setup docs/install.md gives it. The
 // script copies it out of the repo into the temp directory and installs its dependencies there from its
 // own lockfile, with react-inp-blame from the tarball `npm pack` makes. It then builds the app and runs its
 // Playwright specs on the dev server (for the Vite app, a Fast Refresh edit included) and on the build.
@@ -176,18 +176,18 @@ function pnpmVersion() {
   return stdout.trim();
 }
 
-/** The ```ts, ```tsx or ```js block under the README's `heading` whose first line is a comment naming `file`. */
+/** The ```ts, ```tsx or ```js block under `heading` in docs/install.md whose first line is a comment naming `file`. */
 function readmeBlock(heading, file) {
-  const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
+  const readme = fs.readFileSync(path.join(root, 'docs/install.md'), 'utf8').replace(/\r\n/g, '\n');
   const section = readme.indexOf(`\n${heading}\n`);
-  assert.ok(section !== -1, `README.md has no "${heading}" heading, which scripts/vite-app.mjs reads the fixture's ${file} from`);
+  assert.ok(section !== -1, `docs/install.md has no "${heading}" heading, which scripts/vite-app.mjs reads the fixture's ${file} from`);
   const next = readme.indexOf('\n## ', section + 1);
   const blocks = readme.slice(section, next === -1 ? undefined : next).matchAll(/\n```(?:tsx?|js)\n([\s\S]*?)\n```/g);
   const block = [...blocks].find(([, code]) => {
     const first = code.split('\n', 1)[0];
     return first === `// ${file}` || first.startsWith(`// ${file},`);
   });
-  assert.ok(block, `README.md has no \`\`\`ts or \`\`\`js block under "${heading}" that starts with the comment // ${file}`);
+  assert.ok(block, `docs/install.md has no \`\`\`ts or \`\`\`js block under "${heading}" that starts with the comment // ${file}`);
   return block[1];
 }
 
@@ -206,7 +206,7 @@ function guards(name) {
     const block = readmeBlock(readme, file);
     assert.ok(
       normalized(code) === normalized(block) || normalized(code) === normalized(forProduction(block)),
-      `fixtures/${name}/${file} is not the ${file} block under "${readme}" in README.md. Copy the README block into the fixture, so the fixture tests what users paste.`,
+      `fixtures/${name}/${file} is not the ${file} block under "${readme}" in docs/install.md. Copy the block into the fixture, so the fixture tests what users paste.`,
     );
   }
 }
