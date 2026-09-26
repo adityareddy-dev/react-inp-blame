@@ -1158,67 +1158,92 @@ test('the forced layout sentence says a layout effect only where a commit ran in
   const said = (c: CommitSummary[], scripts: ScriptSummary[]) => explain(c, scripts).cause.replace(/^.*\. (That happens)/, '$1');
   const reads = "That happens when code reads an element's size right after changing styles";
   const outsideReact = "code outside React, such as the click handler or a library's listener.";
+  const named = { target: element('button', []) as unknown as Node, handler: 'measureThing' };
 
   // 100 ms of forced layout in React's click listener, where the commit ran too. A development build times
-  // the commit: 5 ms of it, so at most 5 ms of the layout was a layout effect's. A 5 ms render could have
-  // read geometry too, so it stays in what the rest could be, and so does the subtree it rendered.
+  // the commit and the render: 5 ms each, so at most 10 ms of the layout was React's and the rest was not,
+  // and the blame is the script, not the subtree React rendered.
   const root = [script('DIV#root.onclick', 2, 116, 100)];
   const timed = explain([commit(110, 0, { total: 5, startedAt: 100 })], root);
-  assert.ok(
-    timed.cause.endsWith(`${reads}. React's commit took 5 ms in all, so at most that much of the layout was in a layout effect or a ref callback, and the rest in React's render or code outside React.`),
-    timed.cause,
-  );
-  assert.deepEqual([timed.blame.name, timed.blame.detail], ['List', 'Row ×30']);
-  // A render too short to have held any of it leaves code outside React, and the blame goes to the script, by
-  // its handler's name where it ran as the handler.
-  const bare = explain([commit(110, 0, { total: 0.4, startedAt: 104.6 })], root, [input(0, 'click', { target: element('button', []) as unknown as Node, handler: 'measureThing' })]);
+  assert.ok(timed.cause.endsWith(`${reads}. React's commit and render took 10 ms in all, so at most that much of the layout was in React, and the rest in ${outsideReact}`), timed.cause);
+  assert.deepEqual([timed.blame.name, timed.blame.detail], ['DIV#root.onclick', null]);
+  // So with a 2 ms render and a 2 ms commit.
+  assert.deepEqual(explain([commit(110, 0, { total: 2, startedAt: 106 })], root).blame.name, 'DIV#root.onclick');
+  // A render too short to say leaves the commit alone in the sentence, and the blame goes to the script by its
+  // handler's name where it ran as the handler.
+  const bare = explain([commit(110, 0, { total: 0.4, startedAt: 104.6 })], root, [input(0, 'click', named)]);
   assert.ok(
     bare.cause.endsWith(
       `${reads}. React's commit took 5 ms in all, so at most that much of the layout was in a layout effect or a ref callback, and the rest in code outside React, such as the click handler measureThing or a library's listener.`,
     ),
     bare.cause,
   );
+  assert.match(bare.cause, /React spent under 1 ms re-rendering/);
   assert.deepEqual([bare.blame.name, bare.blame.detail], ['measureThing', null]);
-  // With the commit's useEffect timed, the effects are counted and said too; two commits are said as two.
+  // With the commit's useEffect timed, the effects are counted too; two commits are said as two.
   assert.match(
     said([commit(110, 0, { total: 5, startedAt: 100, effectsStartedAt: 108, effectsEndedAt: 110 })], root),
-    /React's commit and effects took 7 ms in all, so at most that much of the layout was in a layout effect, a ref callback or an effect, and the rest in React's render/,
+    /React's commit, effects and render took 12 ms in all, so at most that much of the layout was in React, and the rest in code outside React/,
   );
-  assert.match(said([commit(60, 0, { total: 1, startedAt: 58 }), commit(110, 0, { total: 1, startedAt: 108 })], root), /React's commits took 2 ms in all/);
-  assert.match(said([commit(110, 0, { total: 0.2, startedAt: 109.4 })], root), /React's commit took under 1 ms in all, so at most that much/);
-  // A render that could have held a lot of it is in the rest as well.
-  assert.match(said([commit(110, 0, { total: 45, startedAt: 50 })], root), /took 15 ms in all, so at most that much of the layout was in a layout effect or a ref callback, and the rest in React's render or code outside React\.$/);
+  assert.match(said([commit(60, 0, { total: 1, startedAt: 58 }), commit(110, 0, { total: 1, startedAt: 108 })], root), /React's commits and renders took 4 ms in all/);
+  assert.match(said([commit(110, 0, { total: 0.2, startedAt: 109.4 })], root), /React's commit took under 1 ms in all, so at most that much of the layout was in a layout effect/);
+  // A render that could have held most of the rest stays in it, and so does its subtree in the blame.
+  const long = explain([commit(110, 0, { total: 45, startedAt: 50 })], root);
+  assert.ok(long.cause.endsWith(`${reads}. React's commit took 15 ms in all, so at most that much of the layout was in a layout effect or a ref callback, and the rest in React's render or code outside React.`), long.cause);
+  assert.deepEqual([long.blame.name, long.blame.detail], ['List', 'Row ×30']);
   // A commit long enough to have held it, or one a production build does not time, leaves the usual line.
   assert.equal(said([commit(110, 0, { total: 5, startedAt: 40 })], root), `${reads}, often in a layout effect.`);
   assert.equal(said([commit(110, 0, { total: 0, hasDurations: false, rendered: 3 })], root), `${reads}, often in a layout effect.`);
 
   // The layout charged to a listener no commit ran in, React's own script holding the commit and forcing
   // nothing: in no layout effect, in any build, however long React's commit took. The blame is the
-  // listener, not the subtree the commit rendered.
+  // listener, not the subtree the commit rendered, and not the handler, which ran in React's listener.
   const beside = [script('DIV#root.onclick', 2, 18), script('DOCUMENT.onclick', 20, 98, 90)];
+  const library = "code outside React, such as a library's listener.";
   for (const c of [commit(18, 0, { total: 5, startedAt: 4 }), commit(18, 0, { total: 0, hasDurations: false, rendered: 30 })]) {
-    const e = explain([c], beside);
-    assert.equal(e.blame.kind, 'layout');
-    assert.match(e.cause, / It was charged to DOCUMENT\.onclick\./);
-    assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${outsideReact}`), e.cause);
-    assert.deepEqual([e.blame.name, e.blame.detail], ['DOCUMENT.onclick', null]);
+    for (const ring of [[input(0, 'click')], [input(0, 'click', named)]]) {
+      const e = explain([c], beside, ring);
+      assert.equal(e.blame.kind, 'layout');
+      assert.match(e.cause, / It was charged to DOCUMENT\.onclick\./);
+      assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${library}`), e.cause);
+      assert.deepEqual([e.blame.name, e.blame.detail], ['DOCUMENT.onclick', null]);
+    }
   }
+  // React's commit stamped at the very end of its listener is that listener's, not the one that starts right after.
+  const tail = explain([commit(17.5, 0, { total: 0, hasDurations: false, rendered: 30 })], [script('DIV#root.onclick', 2, 16), script('DOCUMENT.onclick', 18, 98, 90)]);
+  assert.match(tail.cause, /No React commit ran in the script it was charged to/);
+  assert.equal(tail.blame.name, 'DOCUMENT.onclick');
   // Most of it, not all: the share outside is said as a figure, and no one script holds enough to be named.
   const most = explain([commit(55, 0, { total: 3, startedAt: 50 })], [script('DIV#root.onclick', 2, 58, 20), script('DOCUMENT.onclick', 60, 58, 50)]);
-  assert.ok(most.cause.endsWith(`${reads}. 50 ms of it was charged to a script no React commit ran in, so that was not in a layout effect but in ${outsideReact}`), most.cause);
+  assert.ok(most.cause.endsWith(`${reads}. 50 ms of it was charged to a script no React commit ran in, so that was not in a layout effect but in ${library}`), most.cause);
   assert.equal(most.blame.name, null);
   // Where the part React's script holds rounds away, the figure is not the whole total again.
-  assert.match(
-    explain([commit(18, 0, { total: 5, startedAt: 4 })], [script('DIV#root.onclick', 2, 18, 0.4), script('DOCUMENT.onclick', 20, 98, 99.7)]).cause,
-    /\. All but under 1 ms of it was charged to a script no React commit ran in, so that was not in a layout effect/,
-  );
+  for (const [inside, outside] of [
+    [0.4, 99.7],
+    [0.6, 99.5],
+  ]) {
+    assert.match(
+      explain([commit(18, 0, { total: 5, startedAt: 4 })], [script('DIV#root.onclick', 2, 18, inside), script('DOCUMENT.onclick', 20, 98, outside)]).cause,
+      /\. All but under 1 ms of it was charged to a script no React commit ran in, so that was not in a layout effect/,
+    );
+  }
+  // The subtree named is the one the commit in the forcing script rendered, not a heavier one elsewhere.
+  const big = commit(35, 0, { total: 30, startedAt: 3, roots: ['Big'], hotPath: ['Big'], components: [{ name: 'BigRow', count: 10, self: 30, total: 30 }] });
+  const small = commit(110, 0, { total: 25, startedAt: 80, roots: ['Small'], hotPath: ['Small'], components: [{ name: 'SmallRow', count: 4, self: 25, total: 25 }] });
+  const two = explain([big, small], [script('DIV#root.onclick', 2, 38), script('DOCUMENT.onclick', 42, 74, 60)]);
+  assert.match(two.cause, /React's commit took 5 ms in all/);
+  assert.deepEqual([two.blame.name, two.blame.detail], ['Small', 'SmallRow ×4']);
   // React's scheduler task can hold a render with no commit, a transition's slice, so it is never outside React.
   assert.equal(said([commit(18, 0, { total: 5, startedAt: 4 })], [script('DIV#root.onclick', 2, 18), script('MessagePort.onmessage', 20, 98, 90)]), `${reads}, often in a layout effect.`);
+  assert.equal(
+    said([commit(17, 0, { total: 0.4, startedAt: 16 })], [script('DIV#root.onclick', 2, 16, 5), script('MessagePort.onmessage', 20, 98, 90)]),
+    `${reads}, often in a layout effect.`,
+  );
   // React not rendering at all rules it out in any build.
   assert.equal(said([], root), `${reads}. React did not render, so it was ${outsideReact}`);
 });
 
-test("the forced layout note after the handlers keeps the usual line: a commit there can be another input's", () => {
+test("the forced layout note puts the layout where the layout rung would, and keeps the usual line after the handlers", () => {
   // The click's handlers ran from 2 to 20; a transition committed at 110 inside React's scheduler task, which
   // forced 55 ms of layout. What its commit took is not counted, since it ran after the handlers.
   const e = report(
@@ -1229,7 +1254,16 @@ test("the forced layout note after the handlers keeps the usual line: a commit t
   ).explanation;
   const note = e.notes.find((n) => n.startsWith('The browser also spent'));
   assert.ok(note, JSON.stringify(e.notes));
-  assert.match(note, /during the same script\. That happens when code reads an element's size right after changing styles, often in a layout effect\.$/);
+  assert.match(note, /in scripts before the paint\. That happens when code reads an element's size right after changing styles, often in a layout effect\.$/);
+  // Inside the handlers, charged to a listener no commit ran in, with a render taking the verdict: the note says so.
+  const render = report(
+    [entry('click', 0, 128, 2, 118)],
+    [commit(78, 0, { total: 70, startedAt: 4 })],
+    [frame(0, 128, [script('DIV#root.onclick', 2, 77), script('DOCUMENT.onclick', 80, 36, 20)])],
+    [input(0, 'click')],
+  ).explanation;
+  assert.equal(render.blame.kind, 'render');
+  assert.match(render.notes.find((n) => n.startsWith('The browser also spent')) ?? '', /No React commit ran in the script it was charged to, so it was not in a layout effect/);
 });
 
 test('a measured forced layout is not unseated by a screen update shorter than the time it ran in', () => {

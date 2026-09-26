@@ -811,23 +811,30 @@ about 190 ms of layout against a 48 ms render, named `LayoutThrash` with `PriceT
 it, exactly as the render blame it replaced was.
 
 The sentence then says what forces a layout, a read of an element's size right after a style change, and
-where that read could have been. It is usually a layout effect's: Radix's `Presence` reads `animationName`
-in one, and cmdk scrolls the selected item into view from one. Two records can rule it out. The browser
-charges forced layout to the script it happened in, and React commits inside the script that ran it, the
-microtask a click's update is flushed in included (checked in Chromium: a click listener's script runs to the
-end of the microtask it queued and is charged that microtask's layout). So where half the layout or more was
-charged to scripts no commit of this interaction ran in, it was in no layout effect, in any build, and the
-sentence says it was code outside React, the handler or a library's listener; the blame then names that script,
-where one holds nearly all of it, rather than the subtree React rendered. Where the commit ran in the same
-script, a development or profiling build times it (`startedAt` to `at`, less the render) and, on React 18 and
-19, its effects, and a layout effect's read sits inside that time. Where they hold less than half of the
-layout, the sentence says at most that much of it was a layout effect's, and the rest was the handler's or a
-library's, or React's render where the render could have held it, which is any render of 1 ms or more, since a
-render body can read a size too. Where it could, the blame keeps the subtree; where it could not, the script,
-as above. Otherwise, and in a production build, it says "often in a layout effect". So does a layout charged to
-React's scheduler task with no commit in it: that task can hold a transition's render slice, which is React's
-even though nothing committed there. This is asked of the working time only: after it, a commit another input
-made can run in the same script, and that commit is not in the report.
+where that read could have been. It is usually a layout effect's: Radix's `Presence`, which its dialogs and
+tabs render through, reads `animationName` in one, and cmdk scrolls the selected item into view from one. Two
+records can rule it out. The browser charges forced layout to the script it happened in, and React commits
+inside the script that ran it, the microtask a click's update is flushed in included (checked in Chromium: a
+click listener's script runs to the end of the microtask it queued and is charged that microtask's layout).
+Each commit is put in one script, the one whose span holds its stamp, so a commit at the very end of React's
+listener is not also in the listener that starts right after it. So where half the layout or more was charged
+to scripts no commit of this interaction ran in, it was in no layout effect, in any build, and the sentence says
+it was code outside React; the blame then names that script, where one holds nearly all of it, rather than the
+subtree React rendered. Where a commit ran in another of the handlers' scripts, that one was React's listener and
+the handler ran there, so the sentence offers a library's listener and the blame names the script by what the
+browser says ran it, not by the handler's name. Where the commit ran in the same script, a development or
+profiling build times it (`startedAt` to `at`, less the render) and, on React 18 and 19, its effects, and a
+layout effect's read sits inside that time. Where they hold less than half of the layout, the sentence says at
+most that much of it was a layout effect's. A render body can read a size too, but a render of r ms holds at
+most r ms of layout: where commit, effects and render together could still hold half, the rest is React's render
+or code outside React, and the blame names the subtree that commit rendered, not a heavier one elsewhere; where
+they could not, the sentence says at most what they took was React's, the rest was code outside React, and the
+blame names the script. Otherwise, and in a production build, it says "often in a layout effect". So does a
+layout charged to React's scheduler task with no commit in it: that task can hold a transition's render slice,
+which is React's even though nothing committed there. This is asked of the working time only: after it, a
+commit another input made can run in the same script, and that commit is not in the report. The note about
+forced layout under another verdict asks the same where most of the layout was inside the handlers, and says
+the usual line where it was after them.
 
 Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are

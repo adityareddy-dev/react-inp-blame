@@ -105,6 +105,8 @@ const PRESENTATION_NOTE_MS = 100;
 const BROWSER_WORK_MIN_SHARE = 0.5;
 // React's scheduler runs its work from a MessageChannel, so Long Animation Frames names its tasks after the port.
 const REACT_TASK = 'MessagePort.onmessage';
+const READS_SIZE = "That happens when code reads an element's size right after changing styles";
+const USUAL_READ = `${READS_SIZE}, often in a layout effect.`;
 // A press held around the interaction is worth a note from 100 ms; an ordinary click is shorter.
 const HOLD_NOTE_MS = 100;
 // A later render without durations is given a frame's length, to find the long animation frames it ran in.
@@ -1420,18 +1422,33 @@ function explain(r: InteractionReport): Explanation {
    * asked of the working time: after it, a commit another input made can run in the same script, and that
    * commit is not in this report.
    */
-  const committedIn = (x: CommitSummary, s: ScriptSummary) => x.at >= s.start - STAMP_TOLERANCE && x.at <= s.start + s.duration + STAMP_TOLERANCE;
+  // Each commit ran in one script: the one whose span holds its stamp, else the nearest within a stamp. A commit
+  // at the very end of React's listener is not also in the listener that starts straight after it.
+  const scriptsRun = (r.frames ?? []).flatMap((f) => f.scripts);
+  const holderOf = (x: CommitSummary) => {
+    let best: ScriptSummary | null = null;
+    let off = STAMP_TOLERANCE;
+    for (const s of scriptsRun) {
+      const d = Math.max(0, s.start - x.at, x.at - s.start - s.duration);
+      if (d < off || (d === off && !best)) [best, off] = [s, d];
+    }
+    return best;
+  };
+  const committedIn = (x: CommitSummary, s: ScriptSummary) => holderOf(x) === s;
   // React's own scheduler task can hold a render and no commit, a transition's time slice, so it is never counted
   // as outside React.
   const outsideReact = (parts: readonly ScriptPart[]) =>
     blind || unjoined ? [] : parts.filter((p) => p.forcedLayout > 0 && p.script.invoker !== REACT_TASK && !r.commits.some((x) => committedIn(x, p.script)));
-  /** The sentence, and whether the layout could still be in the subtree React rendered, which the blame names only then. */
-  const whereRead = (parts: readonly ScriptPart[]): { said: string; inTheSubtree: boolean } => {
-    const reads = "That happens when code reads an element's size right after changing styles";
-    const usual = { said: `${reads}, often in a layout effect.`, inTheSubtree: true };
+  /**
+   * The sentence; whether the layout could still be in the subtree React rendered, which the blame names only
+   * then; the commit in the scripts that forced it, whose subtree that is; and whether the script it was charged
+   * to is named by what ran it rather than by the handler's name, since the handler ran in another script.
+   */
+  const whereRead = (parts: readonly ScriptPart[]): { said: string; inTheSubtree: boolean; commit: CommitSummary | null; byInvoker: boolean } => {
+    const usual = { said: USUAL_READ, inTheSubtree: true, commit: null, byInvoker: false };
     if (blind || unjoined) return usual;
     const handlerOrListener = `code outside React, such as ${handler ?? `the ${kind} handler`} or a library's listener`;
-    if (r.commits.length === 0) return { said: `${reads}. React did not render, so it was ${handlerOrListener}.`, inTheSubtree: false };
+    if (r.commits.length === 0) return { ...usual, said: `${READS_SIZE}. React did not render, so it was ${handlerOrListener}.`, inTheSubtree: false };
     const forced = forcedLayoutOf(parts);
     const forcing = parts.filter((p) => p.forcedLayout > 0);
     const outside = outsideReact(parts);
@@ -1441,28 +1458,40 @@ function explain(r: InteractionReport): Explanation {
       const lead =
         outside.length === forcing.length
           ? `No React commit ran in the ${outside.length === 1 ? 'script' : 'scripts'} it was charged to, so it was`
-          : forced - forcedOutside < 0.5
+          : Math.round(forcedOutside) >= Math.round(forced) || forced - forcedOutside < 0.5
             ? `All but under 1 ms of it was charged to ${scripts} no React commit ran in, so that was`
             : `${cap(ms(forcedOutside))} of it was charged to ${scripts} no React commit ran in, so that was`;
-      return { said: `${reads}. ${lead} not in a layout effect but in ${handlerOrListener}.`, inTheSubtree: false };
+      // A commit in another of the handlers' scripts says that one was React's listener, where the handler ran.
+      const byInvoker = parts.some((p) => r.commits.some((x) => committedIn(x, p.script)));
+      const elsewhere = byInvoker ? "code outside React, such as a library's listener" : handlerOrListener;
+      return { said: `${READS_SIZE}. ${lead} not in a layout effect but in ${elsewhere}.`, inTheSubtree: false, commit: null, byInvoker };
     }
     // The commits that ran in the scripts that forced it. Each has to be timed whole inside one event's
-    // handlers, or what its commit took is not known.
-    // None is a render with no commit, which React's scheduler task can hold, and a render can read too.
+    // handlers, or what its commit took is not known. React's scheduler task forcing layout with no commit in
+    // it held a render of unknown length, so then only the usual place is said too.
     const theirs = r.commits.filter((x) => forcing.some((p) => committedIn(x, p.script)));
-    if (theirs.length === 0 || !theirs.every((x) => committingOf.has(x))) return usual;
+    const commit = theirs.length ? heaviest(theirs) : null;
+    const slice = forcing.some((p) => p.script.invoker === REACT_TASK && !theirs.some((x) => committedIn(x, p.script)));
+    if (!commit || slice || !theirs.every((x) => committingOf.has(x))) return { ...usual, commit };
     const inReact = theirs.reduce((a, x) => a + (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0), 0);
-    if (inReact >= FORCED_LAYOUT_IN_REACT_SHARE * (forced - forcedOutside)) return usual;
+    const inScripts = forced - forcedOutside;
+    if (inReact >= FORCED_LAYOUT_IN_REACT_SHARE * inScripts) return { ...usual, commit };
     // React 17, and a commit with no useEffect, report no effects, so only the commit is said to be timed.
     const effectsTimed = theirs.some((x) => effectsOf.has(x));
-    // A render body can read geometry too, so a render of any length stays in what the rest could be.
-    const rendered = theirs.reduce((a, x) => a + x.total, 0) >= 1;
-    const commits = `React's ${theirs.length === 1 ? 'commit' : 'commits'}${effectsTimed ? ' and effects' : ''}`;
+    const one = theirs.length === 1;
     const where = `a layout effect${effectsTimed ? ', a ref callback or an effect' : ' or a ref callback'}`;
-    return {
-      said: `${reads}. ${commits} took ${underOr(inReact)} in all, so at most that much of the layout was in ${where}, and the rest in ${rendered ? "React's render or code outside React" : handlerOrListener}.`,
-      inTheSubtree: rendered,
-    };
+    const bound = `React's ${one ? 'commit' : 'commits'}${effectsTimed ? ' and effects' : ''} took ${underOr(inReact)} in all, so at most that much of the layout was in ${where}`;
+    // A render body can read a size too, and a render of r ms holds at most r ms of layout: where the render
+    // could hold most of the rest it stays in what the rest could be, and so does its subtree in the blame.
+    const renderMs = theirs.reduce((a, x) => a + x.total, 0);
+    if (inReact + renderMs >= FORCED_LAYOUT_IN_REACT_SHARE * inScripts) {
+      return { said: `${READS_SIZE}. ${bound}, and the rest in React's render or code outside React.`, inTheSubtree: true, commit, byInvoker: false };
+    }
+    const all =
+      renderMs < 0.5
+        ? bound
+        : `React's ${one ? 'commit' : 'commits'}${effectsTimed ? ', effects' : ''} and ${one ? 'render' : 'renders'} took ${underOr(inReact + renderMs)} in all, so at most that much of the layout was in React`;
+    return { said: `${READS_SIZE}. ${all}, and the rest in ${handlerOrListener}.`, inTheSubtree: false, commit, byInvoker: false };
   };
   /** Where a commit's effects figure holds renders it could not take out: ", one more render included". */
   const includedN = (n: number) => (n === 0 ? '' : `, ${n === 1 ? 'one more render' : `${n} more renders`} included`);
@@ -1758,7 +1787,7 @@ function explain(r: InteractionReport): Explanation {
     // A production build's component counts are measured by the walk, so they are not hedged here.
     const reactSure = !!named && (!hasDurations || measuredFrom(named) === 'measured');
     const maybe = reactSure ? '' : `${HEDGE} `;
-    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React was ${maybe}${renderPhrase(c)}`}.` : '';
+    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${underOr(renderTotal)} ${renderPhrase(c)}` : `React was ${maybe}${renderPhrase(c)}`}.` : '';
     const read = whereRead(whileHandling);
     cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo}${rendered} ${read.said}`;
     // Nothing names the read that forced the layout. What is held is where it happened: the subtree
@@ -1766,11 +1795,13 @@ function explain(r: InteractionReport): Explanation {
     // — and that only while one script holds nearly all of it, since `ms` is the whole total and a
     // name beside it is read as owning all of it. Where the sentence puts it outside React, the subtree is
     // not where it happened, and the script is named, by its handler's name where it ran as the handler.
-    const inTheSubtree = !!named && read.inTheSubtree;
+    // The subtree is the one the commit in the forcing scripts rendered, where the sentence found one.
+    const own = read.commit ? (!unjoined && namesThisInteraction(read.commit) ? read.commit : null) : named;
+    const inTheSubtree = !!own && read.inTheSubtree;
     blame = {
       kind: 'layout',
-      name: inTheSubtree ? leafOf(named) : holdsMostOfIt && charged ? (read.inTheSubtree ? invoker : scriptBlameName(charged.script)) : null,
-      detail: inTheSubtree ? mostlyOf(named) : null,
+      name: inTheSubtree ? leafOf(own) : holdsMostOfIt && charged ? (read.inTheSubtree || read.byInvoker ? invoker : scriptBlameName(charged.script)) : null,
+      detail: inTheSubtree ? mostlyOf(own) : null,
       ms: forcedWhileHandling,
       confidence,
     };
@@ -1969,7 +2000,10 @@ function explain(r: InteractionReport): Explanation {
   const walked = [...r.commits, ...r.followUps];
   if (namesLookMinified(walked)) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
-    notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout during the same script. That happens when code reads an element's size right after changing styles, often in a layout effect.`);
+    // Mostly inside the handlers, it is where the layout rung would put it; after them, a commit there can be
+    // another input's, so the usual place is said.
+    const said = forcedWhileHandling >= FORCED_LAYOUT_IN_REACT_SHARE * forcedAfterInput ? whereRead(whileHandling).said : USUAL_READ;
+    notes.push(`The browser also spent ${ms(forcedAfterInput)} recalculating styles and layout in scripts before the paint. ${said}`);
   }
   // The wait INP leaves out is what the note is for, so a render outside the entries goes first. INP
   // did time a render the release made inside its own entry, so for that one the note says where it ran.
