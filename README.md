@@ -894,6 +894,34 @@ script sentences. On a page without cross-origin isolation, Playwright's Firefox
 commit's components are timed, every one reads a whole millisecond and they average under 4 ms, the report
 leaves their times out and blame built on render times is `'inferred'`.
 
+## Versions
+
+| | CI runs | Outside that |
+| --- | --- | --- |
+| react-dom | 17.0.2, 18.2.0, 18.3.1, 19.0.0, 19.1.9, 19.2.8, 19.3.0, and the canary `next@canary` brings | Outside 17 to 19 that root is not read, and [one warning](#react-version) says so |
+| Next.js | 14.2.35, 15.3.9, 15.5.26, 16.2.12, 16.3.5 and canary | Below 14.2 the wrapper leaves the config as it was and [says why](#next-too-old) |
+| Vite | 6.4, 7.3 and 8.3; a build on Vite 5 | Not tried below 5 |
+| React Router, Remix, TanStack Start | React Router 7.18 and 8.4, Remix 2.17 on Vite, TanStack Start 1.168 | Not tried |
+| Astro | 7.3 | Not tried |
+| webpack | 5.111 | Not tried |
+| Node, for the build plugins | Installs and loads on 20.19, tests on 22 and 24 | `engines` asks for 20.19 |
+
+The peer dependencies are all `*` and optional, on purpose. npm refuses to install beside a prerelease that a
+range leaves out, even for an optional peer, and `next@canary` or a React canary is a prerelease of a version no
+range written today can name. So a real range would stop those installs with an ERESOLVE error, where the library
+itself says what is wrong: the Next.js wrapper checks the version at build time, and `install()` checks each
+react-dom as it registers.
+
+**What a release can change while on 0.x.** A minor release, 0.14.0 after 0.13.0, can break things: remove or
+rename an export or an option, change what a report field holds, or raise an oldest version in the table. The
+CHANGELOG says which under Changed or Removed, and `schemaVersion` on a report moves when a field is removed or
+changes meaning. A patch release only fixes. From 1.0.0 on, those changes wait for 2.0.0.
+
+Which component a report blames, and the sentence that explains it, can change in any release, a patch
+included, as the verdict gets better. Don't key alerts or dashboards on the wording, or expect the same click to
+be blamed on the same component after an upgrade. Fixes, security ones included, go into the latest release on
+npm only ([SECURITY.md](SECURITY.md)).
+
 ## What it costs
 
 Measured 2026-09-15 on 7917366 in the demo's context storm (a click re-rendering 801 components) and big list
