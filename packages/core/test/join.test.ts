@@ -1199,13 +1199,16 @@ test('the forced layout sentence says a layout effect only where a commit ran in
   // nothing: in no layout effect, in any build, however long React's commit took. The blame is the
   // listener, not the subtree the commit rendered, and not the handler, which ran in React's listener.
   const beside = [script('DIV#root.onclick', 2, 18), script('DOCUMENT.onclick', 20, 98, 90)];
-  const library = "code outside React, such as a library's listener.";
+  const measureThing = "code outside React, such as the click handler measureThing or a library's listener.";
   for (const c of [commit(18, 0, { total: 5, startedAt: 4 }), commit(18, 0, { total: 0, hasDurations: false, rendered: 30 })]) {
-    for (const ring of [[input(0, 'click')], [input(0, 'click', named)]]) {
+    for (const [ring, where] of [
+      [[input(0, 'click')], outsideReact],
+      [[input(0, 'click', named)], measureThing],
+    ] as const) {
       const e = explain([c], beside, ring);
       assert.equal(e.blame.kind, 'layout');
       assert.match(e.cause, / It was charged to DOCUMENT\.onclick\./);
-      assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${library}`), e.cause);
+      assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${where}`), e.cause);
       assert.deepEqual([e.blame.name, e.blame.detail], ['DOCUMENT.onclick', null]);
     }
   }
@@ -1214,17 +1217,43 @@ test('the forced layout sentence says a layout effect only where a commit ran in
   assert.match(tail.cause, /No React commit ran in the script it was charged to/);
   assert.equal(tail.blame.name, 'DOCUMENT.onclick');
   // Long Animation Frames lists only scripts over 5 ms, so a short React listener can be missing. Its commit,
-  // stamped just before the listener that forced the layout starts, is in no script listed, not in that one, and
-  // being in the click's handlers, it says React's listener ran there: a library's listener, in any build.
+  // stamped just before the listener that forced the layout starts, or on the same tick, is in no script listed,
+  // not in that one, and being in the click's handlers, it says React's listener may have run there, so the
+  // script is named by what ran it, in any build.
   for (const [at, c] of [
     [4.8, { total: 1, startedAt: 3 }],
     [4.8, { total: 0, hasDurations: false, rendered: 3 }],
     [4, { total: 1, startedAt: 3 }],
+    [5.2, { total: 0, hasDurations: false, rendered: 3 }],
   ] as const) {
     const e = explain([commit(at, 0, c)], [script('DOCUMENT.onclick', 5.2, 112.8, 90)], [input(0, 'click', named)]);
-    assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${library}`), e.cause);
+    assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${measureThing}`), e.cause);
     assert.deepEqual([e.blame.name, e.blame.detail], ['DOCUMENT.onclick', null]);
   }
+  // Nor in the one that ended just before it. As timed in Chromium: a library's capture listener forced the layout,
+  // and React's listener, too short to be listed, ran after it, its commit stamped 0.4 ms after the capture
+  // listener ended, where its own microtask did.
+  for (const c of [commit(57.3, 0, { total: 0, hasDurations: false, rendered: 3 }), commit(57.3, 0, { total: 0.1, startedAt: 57.1 })]) {
+    const e = report([entry('click', 0, 68, 2, 59.8)], [c], [frame(0, 68, [script('DOCUMENT.onclick', 2, 54.9, 54.7)])], [input(0, 'click', named)]).explanation;
+    assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${measureThing}`), e.cause);
+    assert.deepEqual([e.blame.name, e.blame.detail], ['DOCUMENT.onclick', null]);
+  }
+  // Nothing tells React's listener from a library's that set state: here React's own listener measured and set
+  // nothing, and a click-outside listener too short to be listed closed a menu, as late as the click's last
+  // handler. The sentence keeps the handler, and the blame names the script by what ran it.
+  for (const at of [111.5, 118]) {
+    const e = explain([commit(at, 0, { total: 0, hasDurations: false, rendered: 3 })], [script('DIV#root.onclick', 2, 108, 90)], [input(0, 'click', named)]);
+    assert.ok(e.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${measureThing}`), e.cause);
+    assert.deepEqual([e.blame.name, e.blame.detail], ['DIV#root.onclick', null]);
+  }
+  // So where both committed: React's listener, and a library's on another root that forced the layout.
+  const both = explain(
+    [commit(9, 0, { total: 1, startedAt: 7 }), commit(117, 0, { total: 1, startedAt: 115 })],
+    [script('DIV#root.onclick', 2, 8), script('DOCUMENT.onclick', 10.2, 107.8, 90)],
+    [input(0, 'click', named)],
+  );
+  assert.match(both.cause, /and the rest in code outside React, such as the click handler measureThing or a library's listener\.$/);
+  assert.deepEqual([both.blame.name, both.blame.detail], ['DOCUMENT.onclick', null]);
   // A commit in another event's handlers says nothing of where this one's ran: React's pointerup listener
   // committed, and its click listener read the layout and set no state.
   const pointerup = report(
@@ -1234,9 +1263,21 @@ test('the forced layout sentence says a layout effect only where a commit ran in
     [input(0, 'pointerup'), input(0, 'click')],
   ).explanation;
   assert.ok(pointerup.cause.endsWith(`${reads}. No React commit ran in the script it was charged to, so it was not in a layout effect but in ${outsideReact}`), pointerup.cause);
+  // Nor does one a script in the pointerup's handlers sat beside, where the click's listener held the layout: the
+  // blame is the click's handler, whatever ran around the pointerup's commit. Entries in any order.
+  const [up, clicked] = [entry('pointerup', 0, 128, 2, 20), entry('click', 0, 128, 20, 118)];
+  for (const entries of [[up, clicked], [clicked, up]]) {
+    const e = report(
+      entries,
+      [commit(9, 0, { startedAt: 7.5 }), commit(20, 0, { total: 0.2, startedAt: 19.6 })],
+      [frame(0, 128, [script('DOCUMENT.onpointerup', 10, 8, 5), script('DIV#root.onclick', 20.1, 97.9, 85)])],
+      [input(0, 'pointerup', named), input(0, 'click', named)],
+    ).explanation;
+    assert.deepEqual([e.blame.name, e.blame.detail], ['measureThing', null]);
+  }
   // Most of it, not all: the share outside is said as a figure, and no one script holds enough to be named.
   const most = explain([commit(55, 0, { total: 3, startedAt: 50 })], [script('DIV#root.onclick', 2, 58, 20), script('DOCUMENT.onclick', 60, 58, 50)]);
-  assert.ok(most.cause.endsWith(`${reads}. 50 ms of it was charged to a script no React commit ran in, so that was not in a layout effect but in ${library}`), most.cause);
+  assert.ok(most.cause.endsWith(`${reads}. 50 ms of it was charged to a script no React commit ran in, so that was not in a layout effect but in ${outsideReact}`), most.cause);
   assert.equal(most.blame.name, null);
   // Where the part React's script holds rounds away, the figure is not the whole total again.
   for (const [inside, outside] of [
@@ -1285,6 +1326,19 @@ test("the forced layout note puts the layout where the layout rung would, and ke
   ).explanation;
   assert.equal(render.blame.kind, 'render');
   assert.match(render.notes.find((n) => n.startsWith('The browser also spent')) ?? '', /No React commit ran in the script it was charged to, so it was not in a layout effect/);
+  // Under half a millisecond after the handlers rounds away and leaves the sentence; more is said as the usual line.
+  for (const [after, said] of [
+    [0.4, /No React commit ran in the script it was charged to, so it was not in a layout effect/],
+    [0.6, /, often in a layout effect\.$/],
+  ] as const) {
+    const e = report(
+      [entry('click', 0, 128, 2, 118)],
+      [commit(78, 0, { total: 70, startedAt: 4 })],
+      [frame(0, 128, [script('DIV#root.onclick', 2, 77), script('DOCUMENT.onclick', 80, 36, 20), script('MessagePort.onmessage', 119, 6, after)])],
+      [input(0, 'click')],
+    ).explanation;
+    assert.match(e.notes.find((n) => n.startsWith('The browser also spent')) ?? '', said);
+  }
   // Split between a listener inside the handlers and React's scheduler task after them, where a transition
   // committed: a sentence about the part inside would be read as about all of it, so the note says the usual line.
   const split = report(

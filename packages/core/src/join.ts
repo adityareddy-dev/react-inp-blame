@@ -1422,34 +1422,34 @@ function explain(r: InteractionReport): Explanation {
    * asked of the working time: after it, a commit another input made can run in the same script, and that
    * commit is not in this report.
    */
-  // Each commit ran in one script: the one whose span holds its stamp, else the nearest that ended within a stamp
-  // before it. Never one that starts after it: Long Animation Frames lists only scripts over 5 ms, so a short
-  // React listener can be missing, and its commit is then in no script listed, not in the one straight after.
+  // Each commit ran in the script whose span holds its stamp, after its start and up to its end, and in no other.
+  // In Chromium a commit stamped at the end of a listener's microtask is that listener's end exactly, and the next
+  // listener starts on the same tick or later. Long Animation Frames lists only scripts over 5 ms, so a short React
+  // listener can be missing, and its commit is then in no script listed, not in the one before or after it.
   const scriptsRun = (r.frames ?? []).flatMap((f) => f.scripts);
-  const holderOf = (x: CommitSummary) => {
-    let best: ScriptSummary | null = null;
-    let off = STAMP_TOLERANCE;
-    for (const s of scriptsRun) {
-      if (x.at < s.start) continue;
-      const d = Math.max(0, x.at - s.start - s.duration);
-      if (d < off || (d === off && !best)) [best, off] = [s, d];
-    }
-    return best;
-  };
-  // Whose handlers a script ran in, from its start, and a commit, from its stamp: one event's end is the next's start.
-  const handlingAt = (t: number, stamp: boolean) => r.entries.find((e) => t >= e.processingStart && (stamp ? t <= e.processingEnd : t < e.processingEnd)) ?? null;
+  const holderOf = (x: CommitSummary) => scriptsRun.find((s) => x.at > s.start && x.at <= s.start + s.duration) ?? null;
+  // Whose handlers a script ran in, from its start, and a commit, from its stamp. One event's end is the next's
+  // start: a script starting there is the next event's, a commit stamped there the earlier one's.
+  const handled = [...r.entries].sort((a, b) => a.processingStart - b.processingStart);
+  const handlingAt = (t: number, stamp: boolean) => handled.find((e) => t >= e.processingStart && (stamp ? t <= e.processingEnd : t < e.processingEnd)) ?? null;
   const committedIn = (x: CommitSummary, s: ScriptSummary) => holderOf(x) === s;
+  // A commit in the same event's handlers as a script, and not in it, says React's listener for that event may have
+  // been another script, listed or too short to be, and the handler may have run there. Nothing tells React's
+  // listener from a library's that set state, so such a script is named by what ran it, not by the handler's name.
+  const committedBeside = (s: ScriptSummary) => {
+    const e = handlingAt(s.start, false);
+    return e !== null && r.commits.some((x) => handlingAt(x.at, true) === e && !committedIn(x, s));
+  };
   // React's own scheduler task can hold a render and no commit, a transition's time slice, so it is never counted
   // as outside React.
   const outsideReact = (parts: readonly ScriptPart[]) =>
     blind || unjoined ? [] : parts.filter((p) => p.forcedLayout > 0 && p.script.invoker !== REACT_TASK && !r.commits.some((x) => committedIn(x, p.script)));
   /**
    * The sentence; whether the layout could still be in the subtree React rendered, which the blame names only
-   * then; the commit in the scripts that forced it, whose subtree that is; and whether the script it was charged
-   * to is named by what ran it rather than by the handler's name, since the handler ran in another script.
+   * then; and the commit in the scripts that forced it, whose subtree that is.
    */
-  const whereRead = (parts: readonly ScriptPart[]): { said: string; inTheSubtree: boolean; commit: CommitSummary | null; byInvoker: boolean } => {
-    const usual = { said: USUAL_READ, inTheSubtree: true, commit: null, byInvoker: false };
+  const whereRead = (parts: readonly ScriptPart[]): { said: string; inTheSubtree: boolean; commit: CommitSummary | null } => {
+    const usual = { said: USUAL_READ, inTheSubtree: true, commit: null };
     if (blind || unjoined) return usual;
     const handlerOrListener = `code outside React, such as ${handler ?? `the ${kind} handler`} or a library's listener`;
     if (r.commits.length === 0) return { ...usual, said: `${READS_SIZE}. React did not render, so it was ${handlerOrListener}.`, inTheSubtree: false };
@@ -1465,14 +1465,7 @@ function explain(r: InteractionReport): Explanation {
           : Math.round(forcedOutside) >= Math.round(forced) || forced - forcedOutside < 0.5
             ? `All but under 1 ms of it was charged to ${scripts} no React commit ran in, so that was`
             : `${cap(ms(forcedOutside))} of it was charged to ${scripts} no React commit ran in, so that was`;
-      // A commit in the same event's handlers, and so in none of these scripts, says React's listener for it was
-      // another script, listed or too short to be, and the handler ran there.
-      const byInvoker = r.commits.some((x) => {
-        const e = handlingAt(x.at, true);
-        return e !== null && outside.some((p) => handlingAt(p.script.start, false) === e);
-      });
-      const elsewhere = byInvoker ? "code outside React, such as a library's listener" : handlerOrListener;
-      return { said: `${READS_SIZE}. ${lead} not in a layout effect but in ${elsewhere}.`, inTheSubtree: false, commit: null, byInvoker };
+      return { said: `${READS_SIZE}. ${lead} not in a layout effect but in ${handlerOrListener}.`, inTheSubtree: false, commit: null };
     }
     // The commits that ran in the scripts that forced it. Each has to be timed whole inside one event's
     // handlers, or what its commit took is not known. React's scheduler task forcing layout with no commit in
@@ -1493,13 +1486,13 @@ function explain(r: InteractionReport): Explanation {
     // could hold most of the rest it stays in what the rest could be, and so does its subtree in the blame.
     const renderMs = theirs.reduce((a, x) => a + x.total, 0);
     if (inReact + renderMs >= FORCED_LAYOUT_IN_REACT_SHARE * inScripts) {
-      return { said: `${READS_SIZE}. ${bound}, and the rest in React's render or code outside React.`, inTheSubtree: true, commit, byInvoker: false };
+      return { said: `${READS_SIZE}. ${bound}, and the rest in React's render or code outside React.`, inTheSubtree: true, commit };
     }
     const all =
       renderMs < 0.5
         ? bound
         : `React's ${one ? 'commit' : 'commits'}${effectsTimed ? ', effects' : ''} and ${one ? 'render' : 'renders'} took ${underOr(inReact + renderMs)} in all, so at most that much of the layout was in React`;
-    return { said: `${READS_SIZE}. ${all}, and the rest in ${handlerOrListener}.`, inTheSubtree: false, commit, byInvoker: false };
+    return { said: `${READS_SIZE}. ${all}, and the rest in ${handlerOrListener}.`, inTheSubtree: false, commit };
   };
   /** Where a commit's effects figure holds renders it could not take out: ", one more render included". */
   const includedN = (n: number) => (n === 0 ? '' : `, ${n === 1 ? 'one more render' : `${n} more renders`} included`);
@@ -1802,13 +1795,14 @@ function explain(r: InteractionReport): Explanation {
     // of the commit this interaction joined, or, failing that, the script the browser charged it to
     // — and that only while one script holds nearly all of it, since `ms` is the whole total and a
     // name beside it is read as owning all of it. Where the sentence puts it outside React, the subtree is
-    // not where it happened, and the script is named, by its handler's name where it ran as the handler.
+    // not where it happened, and the script is named, by its handler's name where it ran as the handler and no
+    // commit in the same event's handlers ran outside it.
     // The subtree is the one the commit in the forcing scripts rendered, where the sentence found one.
     const own = read.commit ? (!unjoined && namesThisInteraction(read.commit) ? read.commit : null) : named;
     const inTheSubtree = !!own && read.inTheSubtree;
     blame = {
       kind: 'layout',
-      name: inTheSubtree ? leafOf(own) : holdsMostOfIt && charged ? (read.inTheSubtree || read.byInvoker ? invoker : scriptBlameName(charged.script)) : null,
+      name: inTheSubtree ? leafOf(own) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null,
       detail: inTheSubtree ? mostlyOf(own) : null,
       ms: forcedWhileHandling,
       confidence,

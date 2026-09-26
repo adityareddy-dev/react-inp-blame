@@ -816,17 +816,20 @@ tabs render through, reads `animationName` in one, and cmdk scrolls the selected
 records can rule it out. The browser charges forced layout to the script it happened in, and React commits
 inside the script that ran it, the microtask a click's update is flushed in included (checked in Chromium: a
 click listener's script runs to the end of the microtask it queued and is charged that microtask's layout).
-Each commit is put in one script, the one whose span holds its stamp, else the nearest that ended within 1 ms
-before it, never one that starts after it: Long Animation Frames lists only scripts over 5 ms, so a short React
-listener can be missing from the list, and its commit, stamped just before the next listener starts, is then in
-no script listed rather than in that one. So where half the layout or more was charged to scripts no commit of
+Each commit is put in the one script whose span holds its stamp, after its start and up to its end: in Chromium
+a commit stamped at the end of a listener's microtask is that listener's end exactly, and the next listener
+starts on the same tick or later. Long Animation Frames lists only scripts over 5 ms, so a short React listener
+can be missing from the list, and its commit, stamped just after one listener ends or just before the next one
+starts, is then in no script listed rather than in either. So where half the layout or more was charged to scripts no commit of
 this interaction ran in, it was in no layout effect, in any build, and the sentence says it was code outside
 React; the blame then names that script, where one holds nearly all of it, rather than the subtree React
-rendered. Where a commit is stamped in the same event's handlers as such a script (a script is its event's from
-its start), React's listener for that event was another script, listed or too short to be, and the handler ran
-there, so the sentence offers a library's listener and the blame names the script by what the browser says ran
-it, not by the handler's name. A commit in another event's handlers, a pointerup's beside a click's, says nothing
-of where the click's listener ran. Where the commit ran in the same script, a development or
+rendered. Where a commit is stamped in the same event's handlers as the script the blame would name, but not in
+it (a script is its event's from its start, and a commit stamped where one event's handlers end and the next's
+begin is the earlier event's), React's listener for that event may have been another script, listed or too
+short to be, and the handler may have run there. Nothing tells that apart from a library's listener that set
+state, a click-outside handler closing a menu, so the sentence offers both the handler and a library's listener
+and the blame names the script by what the browser says ran it, not by the handler's name. A commit in another
+event's handlers, a pointerup's beside a click's, says nothing of where the click's listener ran. Where the commit ran in the same script, a development or
 profiling build times it (`startedAt` to `at`, less the render) and, on React 18 and 19, its effects, and a
 layout effect's read sits inside that time. Where they hold less than half of the layout, the sentence says at
 most that much of it was a layout effect's. A render body can read a size too, but a render of r ms holds at
@@ -837,9 +840,9 @@ blame names the script. Otherwise, and in a production build, it says "often in 
 layout charged to React's scheduler task with no commit in it: that task can hold a transition's render slice,
 which is React's even though nothing committed there. This is asked of the working time only: after it, a
 commit another input made can run in the same script, and that commit is not in the report. The note about
-forced layout under another verdict asks the same where all of the layout was inside the handlers, and says the
-usual line where any of it was after them, since a sentence about the part inside would be read as about all of
-it.
+forced layout under another verdict asks the same where all but under 1 ms of the layout was inside the
+handlers, and says the usual line where more of it was outside them, since a sentence about the part inside
+would be read as about all of it.
 
 Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are
