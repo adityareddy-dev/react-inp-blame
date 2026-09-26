@@ -1032,11 +1032,12 @@ function chain(hook: DevtoolsHook): () => void {
     guardedPostCommit(hook, id, root);
     if (typeof prevPostCommit === 'function') prevPostCommit.call(this, id, root);
   };
-  const undo = () => {
-    // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through.
-    if (hook.inject === inject) hook.inject = prevInject;
-    if (hook.onCommitFiberRoot === onCommitFiberRoot) hook.onCommitFiberRoot = prevCommit;
-    if (hook.onPostCommitFiberRoot === onPostCommitFiberRoot) {
+  const undo = (failed?: boolean) => {
+    // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through. Where
+    // wrapping failed, each one that no longer reads as the page's own goes back.
+    if (failed ? hook.inject !== prevInject : hook.inject === inject) hook.inject = prevInject;
+    if (failed ? hook.onCommitFiberRoot !== prevCommit : hook.onCommitFiberRoot === onCommitFiberRoot) hook.onCommitFiberRoot = prevCommit;
+    if (failed ? hook.onPostCommitFiberRoot !== prevPostCommit : hook.onPostCommitFiberRoot === onPostCommitFiberRoot) {
       if (hadPostCommit) hook.onPostCommitFiberRoot = prevPostCommit;
       else delete hook.onPostCommitFiberRoot;
     }
@@ -1046,14 +1047,15 @@ function chain(hook: DevtoolsHook): () => void {
     hook.onCommitFiberRoot = onCommitFiberRoot;
     hook.onPostCommitFiberRoot = onPostCommitFiberRoot;
     // A setter that drops what it is given throws nothing, and React's commits would never come here. So each
-    // method is read back, and one that did not take is put back like one that threw.
-    if ((typeof prevInject === 'function' && hook.inject !== inject) || hook.onCommitFiberRoot !== onCommitFiberRoot || hook.onPostCommitFiberRoot !== onPostCommitFiberRoot) {
+    // method is read back, and one that still reads as the page's own is put back like one that threw. One that
+    // reads as something else took it all the same: a setter that wraps what it is given passes React's calls on.
+    if ((typeof prevInject === 'function' && hook.inject === prevInject) || hook.onCommitFiberRoot === prevCommit || hook.onPostCommitFiberRoot === prevPostCommit) {
       throw new TypeError();
     }
   } catch (error) {
     // A method that cannot be assigned: the ones already wrapped are put back, so the page's hook is as it was.
     try {
-      undo();
+      undo(true);
     } catch {
       // One that cannot be put back only passes calls on, since the hook is never attached.
     }
