@@ -1075,9 +1075,12 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
   return best && best.ms >= SCRIPT_MIN_MS ? best : null;
 }
 
-/** A sentence naming the longest script the browser recorded, where it has a name, and `also` what it did. */
+/**
+ * A sentence naming the longest script the browser recorded, where it has a name, and `also` what it did.
+ * Where it has none the sentence is only said for what it did, which would otherwise go unsaid.
+ */
 function longestSaid(p: ScriptPart | null, also = ''): string {
-  const name = p && scriptName(p.script);
+  const name = p && (scriptName(p.script) ?? (also ? 'one with no name' : null));
   return p && name ? ` The longest script the browser recorded in that time was ${name}${p.script.source ? ` (${p.script.source})` : ''}, ${ms(p.ms)}${also}.` : '';
 }
 

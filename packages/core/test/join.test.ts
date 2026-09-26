@@ -3346,6 +3346,18 @@ test('a script after the handlers is what held the screen update only from half 
   const rendered = report(click, [handled, commit(110, 0, { total: 15, startedAt: 101 })], timer(20), [input(0, 'click')]);
   assert.match(rendered.explanation.cause, /, 20 ms, and React rendered inside it: 15 ms re-rendering 30 components inside List/);
   assert.ok(!rendered.explanation.notes.some((n) => n.includes('15 ms')), rendered.explanation.notes.join(' | '));
+  // And where the browser gave the timer no name, the render is still said.
+  const nameless = report(
+    click,
+    [handled, commit(110, 0, { total: 15, startedAt: 101 })],
+    [frame(0, 400, [script('BUTTON.onclick', 2, 28), { invoker: '', name: '', source: 'app.js', start: 100, duration: 20, forcedLayout: 0 }], 150)],
+    [input(0, 'click')],
+  );
+  assert.equal(
+    nameless.explanation.cause,
+    'After the click was handled, the screen took another 370 ms to update, mostly the browser recalculating styles and layout and painting the frame: 250 ms. The longest script the browser recorded in that time was one with no name (app.js), 20 ms, and React rendered inside it: 15 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).',
+  );
+  assert.ok(!nameless.explanation.notes.some((n) => n.includes('15 ms')), nameless.explanation.notes.join(' | '));
 
   // Frame time no script ran in is not said to have had no script in it where one ran for 150 ms.
   const unscripted = report(click, [handled], timer(150, 330), [input(0, 'click')]);
