@@ -6,6 +6,25 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **The Next.js demo waits on the server.** A Server Action and a route handler, each at 400 ms and at 2 s, then
+  300 slow rows. CI checks that the 400 ms clicks carry the rows as a later render named after their own
+  components, and that past `inputWindow` no report holds them, as the README's Known limits say.
+
+### Fixed
+
+- **Under `next dev`, the render a Server Action's result sets off is named after the app's components.** It
+  renders from the App Router's `Router` down, through a dozen of Next.js's own components for every layout and
+  page segment (`OuterLayoutRouter`, `ErrorBoundary`, `LoadingBoundary`, the redirect and not-found boundaries,
+  `InnerLayoutRouter`, `ClientPageRoot` and more). They are readable in development, so the hot path spent its
+  twelve steps on them two segments above the page, and on the Next.js demo the later render read "304 ms
+  mounting 315 components from Router down, 302 of them inside ErrorBoundary". Where the library is installed
+  through `react-inp-blame/next`, those names are now passed like a library's layers, as the minified ones of a
+  production build already were, and the same render reads "301 of them inside Rows". A component of the app's
+  own with one of those names is still named on the path, but spends no step and is not what a render is named
+  after. Vite and other setups are unchanged.
+
 ## [0.13.0] - 2026-09-26
 
 ### Added

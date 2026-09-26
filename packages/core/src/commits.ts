@@ -39,7 +39,13 @@ export const readableName = (name: string): boolean =>
   });
 
 const PROVIDER = /Provider$|Context$/;
-export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name);
+/**
+ * Names the page's framework renders around the app's own components and nothing else, passed like any other
+ * layer. Only the framework's own entry adds to it, since there the names are known to be its:
+ * `react-inp-blame/next-client` adds the App Router's.
+ */
+export const frameworkLayers = new Set<string>();
+export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name) || frameworkLayers.has(name);
 
 /**
  * The component a commit is named after: the deepest name on its hot path that is not a layer
