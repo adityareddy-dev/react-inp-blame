@@ -679,10 +679,12 @@ const stop = onInteraction((report) => console.log(report.explanation.blame, rep
 ```
 
 `onInteraction(fn)` is the one way to hear reports: `fn` gets each report, and every later revision of it,
-in a task after the one that published it, and the call returns the unsubscribe. A panel that renders what
-it hears is safe, because the update a listener makes while it runs is never read as part of an
-interaction. An update it schedules for later, with setTimeout or an await, is an ordinary render. The
-package's types document every field.
+in a task after the one that published it, and the call returns the unsubscribe. What is still waiting when
+the page is hidden is heard inside that `visibilitychange` instead, so a page that sends what it heard on
+`visibilitychange` sends it all; one that sends on `pagehide`, which comes first, can miss the last. A
+panel that renders what it hears is safe, because the update a listener makes while it runs is never read
+as part of an interaction. An update it schedules for later, with setTimeout or an await, is an ordinary
+render. The package's types document every field.
 
 ### install(options)
 
