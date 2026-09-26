@@ -28,7 +28,7 @@ it changes when a field is removed or changes meaning, which a minor release may
   of the rest either, it says at most what the commit and render took was React's and the rest was code outside
   React, and the blame names the script; otherwise the rest is React's render or code outside React, and the
   blame names the subtree that commit rendered. Otherwise the usual line stays. The note about forced layout
-  under another verdict says the same where the layout was inside the handlers.
+  under another verdict says the same where all of the layout was inside the handlers.
 - **Time between an interaction's events is said to be that, not handler time.** Enter on the restyle storm
   ran the keydown's and the click's handlers in 1 ms, then 157 ms went by, the browser restyling the page,
   before the keyup's handler ran. That time sits inside the working time, which runs from the first handler to
