@@ -919,6 +919,24 @@ range written today can name. So a real range would stop those installs with an 
 itself says what is wrong: the Next.js wrapper checks the version at build time, and `install()` checks each
 react-dom as it registers.
 
+**Under Jest.** The package is ES modules only, and Jest's default runtime loads everything as CommonJS, so a
+test that reaches it fails with "Must use import to load ES Module" unless Jest compiles it first. With
+`next/jest`, add `transpilePackages: ['react-inp-blame']` to your Next.js config. Anywhere else, install
+`@babel/preset-env`, add `transformIgnorePatterns: ['/node_modules/(?!react-inp-blame/)']` to the Jest config,
+and put the presets in a `babel.config.js`, the kind of Babel config that reaches into `node_modules`:
+
+```js
+// babel.config.js, beside package.json
+module.exports = { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] };
+```
+
+The pattern alone is not enough, since babel-jest, which comes with Jest, leaves `import` and `export` as they
+are when Babel has no config, and a `.babelrc` or a `babel` key in `package.json` is not enough either: Babel
+reads those for your own files, never for one in `node_modules`. Jest's error also offers Node 24.9 or later,
+but there it loads the package as it is only when run with `NODE_OPTIONS=--experimental-vm-modules`, and on
+Node 20 and 22 not even then. CI checks all of it on Jest 30, Next.js 16.3.5 and Node 20.19, except the `babel`
+key and the flag on Node 24.19, which were checked by hand.
+
 **What a release can change while on 0.x.** A minor release, 0.14.0 after 0.13.0, can break things: remove or
 rename an export or an option, change what a report field holds, or raise an oldest version in the table. The
 CHANGELOG says which under Changed or Removed, and `schemaVersion` on a report moves when a field is removed or

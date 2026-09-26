@@ -487,6 +487,14 @@ What CI runs is in the [repository's README](https://github.com/adityareddy-dev/
 peer dependencies are `*` on purpose: npm refuses a canary against any range, so the library checks the versions
 itself and says what is wrong.
 
+Under Jest, whose default runtime loads everything as CommonJS, a test that reaches this package's ES modules
+fails with "Must use import to load ES Module" unless Jest compiles them. With `next/jest`, add
+`transpilePackages: ['react-inp-blame']` to your Next.js config. Anywhere else, install `@babel/preset-env`,
+add `transformIgnorePatterns: ['/node_modules/(?!react-inp-blame/)']` to the Jest config, and put
+`presets: [['@babel/preset-env', { targets: { node: 'current' } }]]` in a `babel.config.js` beside
+`package.json`: a `.babelrc` is never read for a file in `node_modules`. On Node 24.9 and later, running Jest
+with `NODE_OPTIONS=--experimental-vm-modules` also works, with no Babel config or pattern.
+
 While on 0.x a minor release can break things (an export, an option, what a report field holds, an oldest
 version), and the CHANGELOG says which; `schemaVersion` on a report moves when a field is removed or changes
 meaning. A patch only fixes. The component a report blames, and its sentence, can change in any release as the
