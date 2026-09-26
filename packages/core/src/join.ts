@@ -1261,9 +1261,10 @@ function explain(r: InteractionReport): Explanation {
    * the end of the handlers where it came during them. A script Long Animation Frames recorded from the
    * press on shows that work, timed, and so does React's render in the press's own dispatch where it
    * ended by the paint. That end says when the work finished and not when it began, so on it alone the
-   * sentence is hedged. Only where the screen update is the larger part of the interaction, as for
-   * `screenOutranks`, but without the long-task bar: what the next key keeps the last keyup's frame
-   * waiting for can be under one.
+   * sentence is hedged. It is the blame only where the screen update is the larger part of the interaction,
+   * as for `screenOutranks`, but without the long-task bar: what the next key keeps the last keyup's frame
+   * waiting for can be under one. Under that the screen update's note says it all the same: the script
+   * after the handlers is then usually the next press's handler, whose work is the next report's.
    */
   const next = r.nextInput;
   const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
@@ -1271,8 +1272,13 @@ function explain(r: InteractionReport): Explanation {
   // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
   const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;
   const nextShare = WAITED_BEHIND_MIN_SHARE * r.presentation;
-  const waitedOnNext =
-    next && Math.max(nextScriptMs, nextRenderMs) >= nextShare && r.presentation > r.processing && r.presentation >= r.inputDelay ? next : null;
+  const heldByNext = next && Math.max(nextScriptMs, nextRenderMs) >= nextShare ? next : null;
+  const waitedOnNext = heldByNext && r.presentation > r.processing && r.presentation >= r.inputDelay ? heldByNext : null;
+  // The screen update's clause where the frame waited on that press, as the blame or in the note. The
+  // clause about the press is hedged where only its render's end says so.
+  const nextClause = heldByNext
+    ? `: the frame ${nextScriptMs >= nextShare ? '' : `${HEDGE} `}waited on the next ${kindOf(heldByNext.type, heldByNext.pointerType)}, which the page handled first.${longestSaid(lateScript)}`
+    : '';
 
   const ranInside = (x: CommitSummary, s: ScriptSummary) =>
     carriesWork(x) &&
@@ -1283,7 +1289,7 @@ function explain(r: InteractionReport): Explanation {
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
   const insideLate =
-    lateScript && (screenOutranks || r.presentation > PRESENTATION_NOTE_MS) && !waitedOnNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+    lateScript && (screenOutranks || r.presentation > PRESENTATION_NOTE_MS) && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
   const lateRender = insideLate.length ? heaviest(insideLate) : null;
   const lateRenderSaid = !lateRender
     ? ''
@@ -1911,11 +1917,8 @@ function explain(r: InteractionReport): Explanation {
   } else if (waitedOnNext) {
     // The frame waited on the next press, which the page handled first. What it did for that press is the
     // next report's, so there is nothing of this interaction's own to blame, and the wait is the answer.
-    // The blame is the screen update, this interaction's own phase, and stays measured; the clause about
-    // the press is hedged where only its render's end says so.
-    const nextKind = kindOf(waitedOnNext.type, waitedOnNext.pointerType);
-    const hedge = nextScriptMs >= nextShare ? '' : `${HEDGE} `;
-    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update: the frame ${hedge}waited on the next ${nextKind}, which the page handled first.${longestSaid(lateScript)}`;
+    // The blame is the screen update, this interaction's own phase, and stays measured.
+    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${nextClause}`;
     blame = { kind: 'painting', name: lateScript ? scriptName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (screenOutranks) {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot
@@ -2052,7 +2055,7 @@ function explain(r: InteractionReport): Explanation {
   }
 
   if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && blame.kind !== 'painting') {
-    notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`);
+    notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${heldByNext ? nextClause : lateScriptClause}`);
   }
   // The other half of that note: where the screen update did take the blame, the work it outranked
   // is what this report would otherwise never mention. Only where it took it, though — a rung above
