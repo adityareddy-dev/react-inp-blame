@@ -21,14 +21,15 @@ it changes when a field is removed or changes meaning, which a minor release may
 - **A forced layout's sentence no longer says "a layout effect" where none could have held it.** It always
   ended "often in a layout effect", even where the browser charged the layout to a listener no React commit ran
   in, which no layout effect can be. Now, in any build, it says "No React commit ran in the script it was
-  charged to, so it was not in a layout effect but in code outside React, such as a library's listener", and
+  charged to, so it was not in a layout effect but in code outside React, such as the click handler or a
+  library's listener", and
   the blame names that script, where one holds nearly all of it, rather than the subtree React rendered. Where
   the commit ran in the same script and the build times it, the sentence says at most what the commit and its
   effects took was a layout effect's, where that is under half. Where React's render was too short to hold most
   of the rest either, it says at most what the commit and render took was React's and the rest was code outside
   React, and the blame names the script; otherwise the rest is React's render or code outside React, and the
   blame names the subtree that commit rendered. Otherwise the usual line stays. The note about forced layout
-  under another verdict says the same where all of the layout was inside the handlers.
+  under another verdict says the same where all but under 1 ms of the layout was inside the handlers.
 - **Time between an interaction's events is said to be that, not handler time.** Enter on the restyle storm
   ran the keydown's and the click's handlers in 1 ms, then 157 ms went by, the browser restyling the page,
   before the keyup's handler ran. That time sits inside the working time, which runs from the first handler to
