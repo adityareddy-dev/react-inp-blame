@@ -305,7 +305,8 @@ metric's attribution (`{}` where there is none) with a frozen `react` field adde
 library's report for that interaction: the blame with its confidence, the handler, the hot path, the
 heaviest commit's components, and what React rendered before and after the paint. It is `null` when
 nothing is installed and when there is no report for that interaction, one that stayed under
-`threshold` or one already pushed out of the 50 a page keeps; it never guesses, and a metric it cannot
+`threshold` or one already pushed out of the 50 a page keeps (never the INP estimate's or one of the
+ten slowest); it never guesses, and a metric it cannot
 read gives `react: null` rather than throwing in the callback. web-vitals keeps
 which interaction is INP, the percentile, the back/forward cache and soft navigations.
 
@@ -393,7 +394,8 @@ and so can `blame.name`, which for a script can be its URL, or the page's for an
   published it, and returns the unsubscribe. It is the one way to hear reports. A panel that renders
   what it hears is safe: the update your listener makes while it runs is never read as part of an
   interaction. One it schedules for later, with setTimeout or an await, is an ordinary render.
-- The API: `reports()`, `last()`, `inp()` (the INP of the navigation the page is on, estimated the
+- The API: `reports()` (up to 50, keeping the INP estimate's report and the ten slowest past that),
+  `last()`, `inp()` (the INP of the navigation the page is on, estimated the
   way web-vitals does, chosen again when the page is hidden; it starts over at each soft navigation
   and each restore from the back/forward cache), `clear()`, `stats()` (the mode, why a page is
   unsupported, what the library has cost), `dispose()`, and `debug.commits()` and `debug.hook()`,

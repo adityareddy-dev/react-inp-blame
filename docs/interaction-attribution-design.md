@@ -1040,7 +1040,10 @@ lands long after the report was first emitted. Such renders attach to the existi
 revision: a new frozen report with `revision` bumped and its own explanation, the earlier one
 left as it was (before 0.1.0 the same object was changed and handed over again). Long animation
 frames that
-arrive for those later renders fold in the same way, and a report keeps the frames it has joined even
+arrive for those later renders fold in the same way, into every published report whose window or later
+renders they overlap. Until 2026-09-25 only the newest report took one, so on an undo in excalidraw,
+Control pressed 8 ms before z, Control's report never got the frame z's handler ran in and said only
+that its screen took 64 ms to update. A report keeps the frames it has joined even
 once the page's store of the last 60 has let them go: until 2026-09-15 the newest report was rebuilt
 from that store on every frame, so after a minute of scrolling it lost its own frames and its verdict
 fell back to "no long task was recorded". So do late Event Timing entries: an
@@ -1089,6 +1092,10 @@ All of this, from quiet interactions and publishing to late entries, late frames
 and the limits (50 published reports, 20 quiet ones, the entries of the 100 interactions heard
 from most recently), lives in `lifecycle.ts`. It reads no browser globals and its transitions are
 unit-tested one by one; `install()` only wires it to the observers, the DevTools hook and the page.
+Past 50 the oldest report goes first, but never the one the INP estimate points at or one of the ten
+slowest (`KEPT_SLOWEST`, as many as web-vitals keeps candidates for INP). Until 2026-09-25 they went
+first in, first out, and drawing sixty rectangles in excalidraw pushed out the key press that was the
+page's INP, so `inp().report` came back null, and so did the `react` field `attributeINP` adds.
 
 **Output.** An `InteractionReport` object, a listener API, and entries the Chrome Performance
 panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's own
@@ -1429,7 +1436,8 @@ matches nothing rather than being matched on a start time.
 
 - `react` is `null` when nothing is installed on the page, and when the library has no report for the
   interaction web-vitals picked: one that stayed under `threshold` and set off no later render, or one
-  already pushed out of the 50 reports a page keeps (`MAX_REPORTS`). It is never a guess.
+  already pushed out of the 50 reports a page keeps (`MAX_REPORTS`), which the INP estimate's report and
+  the ten slowest never are. It is never a guess.
 - `generateTarget` needs no installation, only React's fiber expando, so it works in a page that never
   calls `install()`. `attributeINP` needs one, though not from the same copy of the library: the
   installation lives on `globalThis` (`session.ts`), so any copy of a compatible version sees it.

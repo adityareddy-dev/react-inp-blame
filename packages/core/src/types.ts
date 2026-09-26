@@ -221,7 +221,10 @@ export interface HookInfo {
 
 /** What install() returns. A page has one: every call, from any copy of the library, returns the same. */
 export interface Api {
-  /** Published reports, oldest first, each at its latest revision. */
+  /**
+   * Published reports, oldest first, each at its latest revision. At most 50: past that the oldest goes,
+   * except the INP estimate's report and the ten slowest.
+   */
   reports(): InteractionReport[];
   /** The newest published report, at its latest revision. */
   last(): InteractionReport | null;

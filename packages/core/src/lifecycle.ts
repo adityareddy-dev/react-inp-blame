@@ -15,8 +15,14 @@ import type { CommitSummary, FrameSummary, InteractionReport, ReactStatus } from
  * page's navigations, and hands it a clock.
  */
 
-/** Published reports kept; the oldest goes first. */
+/** Published reports kept. Past it the oldest goes first, unless it is the INP estimate's or one of the `KEPT_SLOWEST`. */
 export const MAX_REPORTS = 50;
+/**
+ * The slowest published reports, kept however old they are: as many as web-vitals keeps candidates for
+ * INP. Kept first in, first out, the reports of sixty quick rectangles drawn in excalidraw pushed out the
+ * key press that was the page's INP.
+ */
+export const KEPT_SLOWEST = 10;
 /** Interactions under the threshold kept in case a later render makes them worth publishing. */
 export const MAX_QUIET = 20;
 /** Interactions whose raw entries are kept, so a late entry can rebuild the report it belongs to. */
@@ -108,7 +114,11 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
   const worthPublishing = (data: ReportData) => data.duration >= threshold || data.followUps.length > 0;
   const keep = (held: Held) => {
     published.push(held);
-    if (published.length > MAX_REPORTS) published.shift();
+    if (published.length <= MAX_REPORTS) return;
+    const inpId = inp.estimate()?.id;
+    // A stable sort, so of equal durations the older is kept.
+    const slowest = published.slice().sort((a, b) => b.data.duration - a.data.duration).slice(0, KEPT_SLOWEST);
+    published.splice(published.findIndex((h) => h.data.interactionId !== inpId && !slowest.includes(h)), 1);
   };
   const holdBack = (held: Held) => {
     quiet.push(held);
@@ -205,14 +215,16 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     },
 
     onFrame() {
-      // A long animation frame can land after the report was built; fold it into the last report's
-      // window or its later renders and publish the corrected numbers.
-      const last = published[published.length - 1];
-      if (!last || !frames) return;
-      const started = now();
-      const next = refreshFrames(last.data, frames);
-      if (next) publish(revise(last, next, started).report);
-      else spend(started);
+      // A long animation frame can land after the report was built; fold it into the window or the later
+      // renders of every report it overlaps and publish the corrected numbers. Not only the newest one:
+      // Control and z pressed 8 ms apart share the frame the undo ran in, and Control's report is the older.
+      if (!frames) return;
+      for (const held of published) {
+        const started = now();
+        const next = refreshFrames(held.data, frames);
+        if (next) publish(revise(held, next, started).report);
+        else spend(started);
+      }
     },
 
     onNavigation(start) {

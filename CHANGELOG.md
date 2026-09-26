@@ -155,6 +155,20 @@ it changes when a field is removed or changes meaning, which a minor release may
   shadcn/ui Sheet opening had about 80 ms of style recalculation in it against 1 ms of layout. The cause of a
   layout blame, the note beside another blame, the note on a later render and the panel's row now say styles
   and layout. `blame.kind` is still `'layout'` and no field changes name, so `schemaVersion` stays at 3.
+- **Past 50 published reports, the INP estimate's report and the ten slowest are kept.** `reports()` let
+  the oldest go first, whatever it was, and drawing sixty rectangles in excalidraw pushed out the 64 ms key
+  press that was the page's INP: `inp().report` came back null, and `attributeINP` gave `react: null` for
+  the one interaction INP named. The oldest still goes first unless it is the report the INP estimate
+  points at or one of the ten slowest, as many as web-vitals keeps candidates for INP. `reports()` still
+  returns 50 at most, oldest first, and no report changes.
+- **A long animation frame is folded into every published report it overlaps, not only the newest.** On
+  an undo in excalidraw, Control pressed 8 ms before z, z's handler ran for about 59 ms in the frame both
+  key presses painted in, and only z's report, the newer one, took the frame when it arrived. Control's
+  report read "After the key press was handled, the screen took another 64 ms to update." with
+  `blame.name` null. Every report the frame overlaps, in its window or its later renders, now takes it as
+  a new revision. A painting blame like Control's gains ", mostly because a script (...) ran for N ms
+  before the next frame." where a script ran 20 ms or more of the screen update, and `blame.name` becomes
+  that script's name where it was null. `blame.kind` does not change.
 
 ## [0.12.0] - 2026-09-25
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createLifecycle, MAX_ENTRY_SETS, MAX_QUIET, MAX_REPORTS, type LifecycleOptions } from '../src/lifecycle.ts';
+import { createLifecycle, KEPT_SLOWEST, MAX_ENTRY_SETS, MAX_QUIET, MAX_REPORTS, type LifecycleOptions } from '../src/lifecycle.ts';
 import type { CommitSummary, FrameSummary, InteractionReport } from '../src/types.ts';
 
 // Interaction k has id 7k and starts at 1000 × id ms, so no two interactions overlap in time. Its
@@ -163,6 +163,35 @@ test('a long animation frame that lands after the report is published as the nex
   assert.equal(published.length, 2);
 });
 
+test('a long animation frame is folded into every published report it overlaps, not only the newest', () => {
+  // Control and z pressed 8 ms apart for an undo. z's handler ran for 59 ms in the frame both painted in,
+  // and Control's report, the older one, said only that its screen took 70 ms to update.
+  const undo: FrameSummary = Object.freeze({
+    start: 7000,
+    duration: 76,
+    blocking: 26,
+    forcedLayout: 0,
+    scripts: Object.freeze([Object.freeze({ invoker: 'DOCUMENT.onkeydown', name: '', source: '', start: 7009, duration: 59, forcedLayout: 0 })]),
+  });
+  const frames: FrameSummary[] = [];
+  const { life, published } = lifecycle({ frames });
+  life.onEntries([entry(7, 'keydown', 72, { processingStart: 7001, processingEnd: 7002 }), entry(14, 'keydown', 64, { startTime: 7008, processingStart: 7009, processingEnd: 7068 })]);
+  assert.equal(life.reports()[0]?.explanation.blame.name, null);
+  frames.push(undo);
+  life.onFrame();
+  assert.equal(published.length, 4);
+  assert.deepEqual(
+    life.reports().map((r) => [r.interactionId, r.revision, r.frames?.length]),
+    [
+      [7, 1, 1],
+      [14, 1, 1],
+    ],
+  );
+  // Its blame now names the script that held the frame.
+  const blame = life.reports()[0]?.explanation.blame;
+  assert.deepEqual(blame && [blame.kind, blame.name, blame.ms], ['painting', 'DOCUMENT.onkeydown', 70]);
+});
+
 test("a report keeps its long animation frames once the page's store of recent frames has let them go", () => {
   const frames: FrameSummary[] = [slowFrame];
   const { life, published } = lifecycle({ frames });
@@ -204,13 +233,33 @@ test("a click on the library's own badge or panel is never reported, though INP 
   assert.equal(published.length, 1);
 });
 
-test(`only the newest ${MAX_REPORTS} published reports are kept`, () => {
+test(`past ${MAX_REPORTS} published reports the oldest goes first, but never one of the ${KEPT_SLOWEST} slowest`, () => {
+  // A 304 ms key press, then sixty quick interactions, as drawing sixty rectangles in excalidraw makes.
+  // Kept first in, first out, the key press was the first to go.
   const { life } = lifecycle();
-  for (let k = 1; k <= MAX_REPORTS + 5; k++) life.onEntries([entry(7 * k, 'click', 120)]);
-  const kept = life.reports();
+  life.onEntries([entry(7, 'keydown', 304)]);
+  for (let k = 2; k <= MAX_REPORTS + 11; k++) life.onEntries([entry(7 * k, 'click', 48)]);
+  const kept = life.reports().map((r) => r.interactionId);
   assert.equal(kept.length, MAX_REPORTS);
-  assert.equal(kept[0]?.interactionId, 7 * 6);
-  assert.equal(life.last()?.interactionId, 7 * (MAX_REPORTS + 5));
+  // The key press, and of the clicks as slow as each other the oldest.
+  assert.deepEqual(kept.slice(0, KEPT_SLOWEST), Array.from({ length: KEPT_SLOWEST }, (_, i) => 7 * (i + 1)));
+  assert.equal(kept[KEPT_SLOWEST], 7 * 22);
+  assert.equal(life.last()?.interactionId, 7 * (MAX_REPORTS + 11));
+});
+
+test("past the limit the report of the page's INP is kept too, though it is neither new nor among the slowest", () => {
+  const { life } = lifecycle({ interactionCount: () => 1 });
+  // Ten slow clicks before a navigation, then the INP of the page it went to, and quick clicks after it.
+  for (let k = 1; k <= KEPT_SLOWEST; k++) life.onEntries([entry(7 * k, 'click', 304)]);
+  life.onNavigation(7000 * KEPT_SLOWEST + 500);
+  const inpId = 7 * (KEPT_SLOWEST + 1);
+  life.onEntries([entry(inpId, 'click', 104)]);
+  for (let k = KEPT_SLOWEST + 2; k <= MAX_REPORTS + 30; k++) life.onEntries([entry(7 * k, 'click', 48)]);
+  assert.equal(life.inp()?.interactionId, inpId);
+  const kept = life.reports().map((r) => r.interactionId);
+  assert.equal(kept.length, MAX_REPORTS);
+  assert.ok(kept.includes(inpId));
+  assert.equal(life.inp()?.report?.interactionId, inpId);
 });
 
 test(`only the newest ${MAX_QUIET} quiet interactions wait for a later render`, () => {
