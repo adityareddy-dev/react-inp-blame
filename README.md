@@ -562,9 +562,9 @@ above it, which is web-vitals' signal to fall back to its own selector, and it n
 `useReportWebVitals`) with a `react` field added: `{ schemaVersion, interactionId, blame, handler,
 hotPath, components, commits, followUps }`, frozen, from this library's own report for that interaction.
 It is `null` when nothing is installed on the page, and when there is no report for the interaction:
-one that stayed under `threshold` and set off no later render, or one already pushed out of the 50
-reports a page keeps, which the INP estimate's report and the ten slowest never are. It never guesses,
-and like `generateTarget` it never throws: a metric it cannot
+one that stayed under `threshold` and set off no later render INP leaves out, or one already pushed out
+of the 50 reports a page keeps, which the INP estimate's report and the ten slowest never are. It never
+guesses, and like `generateTarget` it never throws: a metric it cannot
 read gives `react: null` rather than an exception inside your analytics callback. web-vitals keeps
 everything else it owns: which interaction is
 the page's INP, at what percentile, over the back/forward cache and soft navigations.
@@ -693,7 +693,7 @@ their first value, with a warning, until `dispose()`.
 | Option | Default | |
 | --- | --- | --- |
 | `overlay` | `false` | `true`, `'query'` or `{ position, open, max }` |
-| `threshold` | `40` | Report interactions from this many ms; shorter ones only when a heavy later render joins them |
+| `threshold` | `40` | Report interactions from this many ms; shorter ones only when a heavy later render INP leaves out joins them |
 | `labels` | `'auto'` | Where `target.label` comes from: see [Labels and personal data](#labels-and-personal-data) |
 | `hook` | `'auto'` | `'chain'` wraps an existing `__REACT_DEVTOOLS_GLOBAL_HOOK__` and never creates one; `'shim'` creates one unless one exists; `'auto'` chains or creates |
 | `sampleRate` | `1` | Share of page loads that install anything |
@@ -1086,7 +1086,9 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
 - **A commit outside any dispatch joins the newest input when it lands within 1.5 s (`inputWindow`) of the end
   of the last commit inside that input's dispatch**, or of the input itself where there was none. An unrelated
   update landing in that window is read as the interaction's follow-up render. One that lands after a newer
-  input arrived is left out of the report, and one that lands past the window is dropped; a dropped commit
+  input arrived is left out of the report, as is one after an `input`, `change` or `submit` a script
+  dispatched once the interaction had painted (Playwright's `selectOption` changes a select that way), and
+  one that lands past the window is dropped; a dropped commit
   that ran while the interaction's own handlers were still running is counted as `unjoinedCommits`, which
   makes everything the report says about React's work `'inferred'`. A commit outside those handlers, a clock
   ticking elsewhere on the page, is not counted against the interaction at all. Some commits are plainly
@@ -1101,7 +1103,10 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   production, a hover or a scroll renders in a task of its own with nothing to say whose it is, so within
   the window it still reads as a follow-up render of whatever interaction came last,
   as does an update with no user input behind it at all, a timer or a message arriving. A click whose own
-  follow-up lands after the window was resized loses it, the rule a newer input already follows.
+  follow-up lands after the window was resized loses it, the rule a newer input already follows. So does a
+  click on a page whose own code dispatches `input`, `change` or `submit` after the paint, from a timer or
+  from an effect React runs in a task of its own (React 17 runs every effect that way): what renders after
+  that event is left out, its own handler's render included.
 - **The window runs from the last commit inside the dispatch, not from the end of the dispatch**, which the
   library cannot see. A handler that works for two seconds and commits nothing leaves the window running from
   the input, so a transition it starts afterwards can fall outside it. That render is then dropped and counted

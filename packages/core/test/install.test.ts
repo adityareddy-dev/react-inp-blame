@@ -1570,7 +1570,10 @@ test('a change 1 s after its click still joins it as a later render, measured fr
     await nextTask();
     // An option picked from a native select a second after the click that opened it. Its render takes
     // 600 ms, so it ends 1.6 s after the click's own work, and the change itself came well inside the window.
-    page.window.event = { isTrusted: true, type: 'change', timeStamp: 2000, target: FIELD };
+    // The browser fired it, so the capture listener that hears it first takes it for no newer input.
+    const change = { isTrusted: true, type: 'change', timeStamp: 2000, target: FIELD };
+    page.fire('change', change);
+    page.window.event = change;
     clock.now = 2600;
     commitAgain(root, 600);
     existing.onCommitFiberRoot(id, root, 1, false);
@@ -1603,7 +1606,9 @@ test('text that arrives with no key pressed, one input event a second after a cl
     // keydown between them to start an interaction of their own. Were each to carry the window forward
     // from its own render, the stream would join the click for as long as it ran.
     for (const at of [2000, 3000, 4000, 5000]) {
-      page.window.event = { isTrusted: true, type: 'input', timeStamp: at, target: FIELD };
+      const typed = { isTrusted: true, type: 'input', timeStamp: at, target: FIELD };
+      page.fire('input', typed);
+      page.window.event = typed;
       clock.now = at + 10;
       commitAgain(root, 10);
       existing.onCommitFiberRoot(id, root, 1, false);
@@ -1611,6 +1616,52 @@ test('text that arrives with no key pressed, one input event a second after a cl
     }
     assert.deepEqual(api.last()?.followUps.map((c) => c.at), [2010, 3010]);
     assert.deepEqual(api.debug.commits().map((c) => c.at), [1003, 2010, 3010]);
+    api.dispose();
+  });
+});
+
+test('a render after an input or change a script dispatched does not join the click before it, as a page size Playwright picked did', async (t) => {
+  // Sorting a table by a click, then picking a page size a second later with Playwright's selectOption,
+  // which fires `input` and `change` from script. No pointer or key goes down, so the ring's newest input
+  // stays the sort click, and the page-size render joined it as its later render.
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', inputWindow: 1500, threshold: 40, devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    const commit = (at: number, priority: number) => {
+      clock.now = at;
+      commitAgain(root, 200);
+      existing.onCommitFiberRoot(id, root, priority, false);
+    };
+    const scripted = (type: string, timeStamp: number) => ({ isTrusted: false, type, timeStamp, target: FIELD });
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    // One the click's own handler dispatches, in its task, is part of the click.
+    page.fire('change', scripted('change', 1001));
+    page.duringClick(() => commit(1100, 1));
+    page.paint([click(7, 1000, 120)]);
+    await nextTask();
+    // An effect of the sort after its paint is its later render.
+    commit(1420, 3);
+    page.fire('input', scripted('input', 2000));
+    page.fire('change', scripted('change', 2000));
+    page.window.event = scripted('change', 2000);
+    commit(2020, 1);
+    delete page.window.event;
+    await nextTask();
+    assert.deepEqual(
+      api.debug.commits().map((c) => [c.at, c.inDispatch]),
+      [
+        [1100, true],
+        [1420, false],
+        [2020, false],
+      ],
+    );
+    assert.deepEqual(api.last()?.followUps.map((c) => c.at), [1420]);
     api.dispose();
   });
 });

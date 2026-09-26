@@ -17,6 +17,11 @@ it changes when a field is removed or changes meaning, which a minor release may
   not a library's layer, that component included, else the one the path ends on. The sentences under Changed
   below are built on them. All three are additive, so `schemaVersion` stays at 3; a report stored by an
   earlier release has none of them and reads as it did.
+- **A commit says whether its input's Event Timing entry holds it.** `CommitSummary.inDispatch` is true
+  where React made the commit while the input it is stamped with was being dispatched, in that input's own
+  task, and false outside any dispatch and in an `input` or `change` from a later task. Whether a quick
+  interaction is published, and what the note on a later render says, read it (under Changed). It is
+  additive, so `schemaVersion` stays at 3.
 
 ### Changed
 
@@ -54,6 +59,19 @@ it changes when a field is removed or changes meaning, which a minor release may
   shadcn/ui Sheet opening had about 80 ms of style recalculation in it against 1 ms of layout. The cause of a
   layout blame, the note beside another blame, the note on a later render and the panel's row now say styles
   and layout. `blame.kind` is still `'layout'` and no field changes name, so `schemaVersion` stays at 3.
+- **A render after an `input`, `change` or `submit` a script dispatched past the paint no longer joins the
+  interaction before it.** Picking a page size with Playwright's `selectOption` after sorting a TanStack
+  Table example by Full Name put the page-size render on the sort click, which read "A second React render
+  landed 1017 ms after the screen updated: 91 ms re-rendering 417 components inside App. INP doesn't count
+  it, but people still wait for it." `selectOption` fires `input` and `change` from script and presses
+  nothing, so the ring had nothing newer than the click. A capture listener on the window now notes those
+  events when a script dispatches one outside any input's task, and a render after one that came after an
+  interaction's paint joins nothing, as after a newer input. Such an event is never an interaction of its
+  own. One the browser fires still carries on the input before it, as an option picked from a native
+  select or dictated text did. The sort click now has no later render and no note. `followUps` loses the
+  render and no blame changes, since a blame never rests on a later render. A page whose own code
+  dispatches one of those events after the paint loses the renders after it too (README, Known limits).
+
 
 
 
