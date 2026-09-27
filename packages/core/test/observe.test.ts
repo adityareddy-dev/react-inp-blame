@@ -132,6 +132,9 @@ test("a script the browser names by a URL is kept without the URL's query and fr
   const invokers = [
     'https://cdn.example/app.js?sig=abc#x',
     'https://shop.example/account#access_token=abc',
+    // An Electron app's page is a file: URL, or one of the app's own, and its query can hand the page a session.
+    'file:///C:/Program%20Files/App/resources/index.html?session=abc&user=ada%40example.com',
+    'app://bundle/index.html?token=abc#ada@example.com',
     // An event listener on an element with no id is named by its src, which Chromium quotes.
     'IMG[src="https://cdn.example/avatars/ada.png?X-Amz-Signature=abc"].onload',
     'SCRIPT[src="https://cdn.example/sdk.js?key=abc"].onload',
@@ -139,8 +142,11 @@ test("a script the browser names by a URL is kept without the URL's query and fr
     // A src can hold a bracket of its own, and one with no query keeps both its quotes.
     'IMG[src="/photos/[1].png?sig=abc"].onload',
     'IMG[src="/avatars/ada.png"].onload',
-    // Unquoted, the same src loses its query too.
+    // Unquoted, the same src loses its query too, a bracket in its path or not.
     'IMG[src=/avatars/ada.png?v=3].onerror',
+    'IMG[src=/photos/[1].png?sig=abc].onload',
+    'IMG[src=https://cdn.example/a/[id]/x.png?X-Amz-Signature=abc].onload',
+    'IMG[src=/photos/[1].png].onload',
     'IMG#avatar.onload',
     '#document.onclick',
     'DIV#root.onclick',
@@ -159,12 +165,17 @@ test("a script the browser names by a URL is kept without the URL's query and fr
     [
       'https://cdn.example/app.js',
       'https://shop.example/account',
+      'file:///C:/Program%20Files/App/resources/index.html',
+      'app://bundle/index.html',
       'IMG[src="https://cdn.example/avatars/ada.png"].onload',
       'SCRIPT[src="https://cdn.example/sdk.js"].onload',
       'IFRAME[src="/frame.html"].onload',
       'IMG[src="/photos/[1].png"].onload',
       'IMG[src="/avatars/ada.png"].onload',
       'IMG[src=/avatars/ada.png].onerror',
+      'IMG[src=/photos/[1].png].onload',
+      'IMG[src=https://cdn.example/a/[id]/x.png].onload',
+      'IMG[src=/photos/[1].png].onload',
       'IMG#avatar.onload',
       '#document.onclick',
       'DIV#root.onclick',
