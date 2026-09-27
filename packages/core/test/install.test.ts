@@ -2217,6 +2217,40 @@ test("a DevTools hook global the library cannot read never reaches the page's er
   }
 });
 
+test("an Event Timing entry the library cannot read never reaches the page's error handlers, whether the observer is handed it or the hide takes it", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  // An entry whose interactionId throws when it is read, which the observer reads before anything else.
+  const unreadable = () =>
+    Object.defineProperty(click(14, 2000, 200), 'interactionId', {
+      get() {
+        throw new TypeError('interactionId moved');
+      },
+    });
+  for (const takes of ['callback', 'hide']) {
+    await inBrowser((page) => {
+      const api = install({ devtoolsTrack: false });
+      try {
+        const heard: number[] = [];
+        onInteraction((r) => heard.push(r.interactionId));
+        page.paint([click(7, 1000, 120)]);
+        if (takes === 'callback') assert.doesNotThrow(() => page.paint([unreadable()]));
+        if (takes === 'hide') {
+          page.queue([unreadable()]);
+          assert.doesNotThrow(() => page.hide());
+          assert.deepEqual(heard, [7], 'the report waiting was not heard at the hide');
+        }
+        assert.equal(caught(warn).length, 1, takes);
+        page.paint([click(21, 3000, 200)]);
+        assert.equal(api.last()?.interactionId, 21, takes);
+      } finally {
+        api.dispose();
+      }
+    });
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+  }
+});
+
 test("an error while reports are handed to listeners never reaches the page's error handlers, and the reports after it are still heard", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
