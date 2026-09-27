@@ -645,10 +645,18 @@ export function installHook(opts: HookOptions): void {
     try {
       defineGlobal(holder, shim);
     } catch {
-      // The page holds the global empty where it cannot be redefined (`var __REACT_DEVTOOLS_GLOBAL_HOOK__;` in a
-      // classic script does), which React reads as no hook at all.
-      locked("the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and cannot be redefined, so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.");
-      return;
+      // The page holds the global empty where it cannot be redefined. After `var __REACT_DEVTOOLS_GLOBAL_HOOK__;` in
+      // a classic script it can still be assigned, and a plain value misses only a replacement as it happens, which
+      // checkHookReplaced still notices at its fixed points. Where it is read-only too, React finds no hook at all.
+      try {
+        holder[HOOK_KEY] = shim;
+      } catch {
+        // Read-only.
+      }
+      if (holder[HOOK_KEY] !== shim) {
+        locked("the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and read-only, so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.");
+        return;
+      }
     }
     attach(shim, 'shim');
   }

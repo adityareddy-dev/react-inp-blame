@@ -865,22 +865,40 @@ test('a page that seals its DevTools hook after install() gets its methods back 
   });
 });
 
-test('a page that holds the global empty where it cannot be redefined still gets reports, without components, and install() does not throw', async (t) => {
-  // `var __REACT_DEVTOOLS_GLOBAL_HOOK__;` in a classic script, and a property defined with nothing in it, which
-  // React reads as no hook. Neither can become the library's accessor.
+test('a page that declares the global with var gets the shim as its value, and a hook assigned over it is noticed at the next Event Timing batch', async (t) => {
+  // `var __REACT_DEVTOOLS_GLOBAL_HOOK__;` in a classic script leaves the global empty and writable, but it cannot
+  // be redefined as the accessor that sees an assignment as it happens.
   const warn = t.mock.method(console, 'warn', () => {});
-  for (const empty of [{ value: undefined, writable: true, enumerable: true }, { value: null }]) {
+  await inBrowser((page) => {
+    Object.defineProperty(page.window, HOOK, { value: undefined, writable: true, enumerable: true });
+    const api = install({ devtoolsTrack: false });
+    assert.equal(api.stats().mode, 'shim');
+    assert.equal(page.window[HOOK]?.reactInpBlame, true, 'React would find no hook');
+    assert.equal(warn.mock.callCount(), 0);
+    page.window[HOOK] = existingHook();
+    assert.equal(api.stats().mode, 'shim');
+    page.paint([slowClick(120)]);
+    assert.equal(api.stats().mode, 'chained');
+    api.dispose();
+  });
+});
+
+test('a page that holds the global empty and read-only still gets reports, without components, and install() does not throw', async (t) => {
+  // A property defined with nothing in it and no way to assign it, which React reads as no hook. It can neither
+  // become the library's accessor nor hold the shim.
+  const warn = t.mock.method(console, 'warn', () => {});
+  for (const empty of [{ value: undefined }, { get: () => undefined }]) {
     session?.slots.warnings?.clear();
     warn.mock.resetCalls();
     await inBrowser((page) => {
       Object.defineProperty(page.window, HOOK, empty);
       const api = install({ devtoolsTrack: false });
       assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
-      assert.equal(page.window[HOOK], empty.value);
+      assert.equal(page.window[HOOK], undefined);
       page.paint([slowClick(120)]);
       assert.equal(api.last()?.duration, 120);
       assert.equal(warn.mock.callCount(), 1);
-      assert.match(warn.mock.calls[0].arguments[0], /cannot be redefined/);
+      assert.match(warn.mock.calls[0].arguments[0], /empty and read-only/);
       api.dispose();
     });
   }
