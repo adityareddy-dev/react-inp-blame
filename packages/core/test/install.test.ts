@@ -2074,39 +2074,38 @@ test("an error while a later render revises a report inside React's commit is no
     try {
       const id = existing.inject(reactDom('19.3.0'));
       const root = mountedRoot(0b11, 4);
-      const heard: number[] = [];
-      onInteraction((r) => heard.push(r.revision));
+      const heard: string[] = [];
+      onInteraction((r) => heard.push(`${r.interactionId}.${r.revision}`));
       clock.now = 1000;
       page.duringClick(() => existing.onCommitFiberRoot(id, root));
       page.paint([click(7, 1000, 120)]);
       await nextTask();
       // Data arrives after the paint and React renders it: a later render, which revises the report inside
-      // React's commit. Asking for an idle callback to draw the revision throws there.
+      // React's commit. Queueing the revision for its listeners throws there, where the timer is refused.
       clock.now = 1300;
       commitAgain(root, 40);
-      Object.defineProperty(globalThis, 'requestIdleCallback', {
-        configurable: true,
-        value: () => {
-          throw new TypeError('idle callback refused');
-        },
+      const refused = t.mock.method(globalThis, 'setTimeout', () => {
+        throw new TypeError('timer refused');
       });
       try {
         assert.doesNotThrow(() => existing.onCommitFiberRoot(id, root));
       } finally {
-        delete (globalThis as any).requestIdleCallback;
+        refused.mock.restore();
       }
       assert.equal(api.stats().mode, 'chained');
       assert.equal(caught(warn).length, 1);
       assert.equal(warn.mock.callCount(), 1);
-      // Only its drawing is lost: the revision is still heard.
       await nextTask();
-      assert.deepEqual(heard, [0, 1]);
-      // The next click's handler renders, and its report has that commit.
+      assert.deepEqual(heard, ['7.0']);
+      // The next click's handler renders, and its report has that commit. The revision was kept, and is
+      // heard with it.
       clock.now = 2000;
       commitAgain(root, 4);
       page.duringClick(() => existing.onCommitFiberRoot(id, root));
       page.paint([click(14, 2000, 120)]);
       assert.deepEqual({ id: api.last()?.interactionId, commits: api.last()?.commits.length, react: api.last()?.reactStatus }, { id: 14, commits: 1, react: 'reading' });
+      await nextTask();
+      assert.deepEqual(heard, ['7.0', '7.1', '14.0']);
     } finally {
       api.dispose();
     }
