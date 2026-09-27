@@ -1740,6 +1740,8 @@ function explain(r: InteractionReport): Explanation {
   // A long wait before the handlers is the answer, on the same test as the handler and render rungs: 26 ms of
   // layout at the end of a 300 ms wait did not make the click slow.
   const layoutMatters = layoutOutruns && !waitingWins && !screenOutranks;
+  // What the handler still ran for, in a closed rung's note: all of the working time where both read the same.
+  const outsideRan = ms(outside) === ms(r.processing) ? `all ${ms(r.processing)}` : `about ${ms(outside)} of the ${ms(r.processing)}`;
 
   /**
    * What the ladder would have named had the screen update not outrun the whole working time. The
@@ -1764,8 +1766,8 @@ function explain(r: InteractionReport): Explanation {
     handlerWins
       ? say(
           measuredFrom(...inWorkingTime),
-          `${cap(outsideName)} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time ${when}.`,
-          `${cap(outsideName)} ${HEDGE} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time ${when}.`,
+          `${cap(outsideName)} still ran for ${outsideRan} of working time ${when}.`,
+          `${cap(outsideName)} ${HEDGE} still ran for ${outsideRan} of working time ${when}.`,
         )
       : c && rc && renderMatters
         ? say(
