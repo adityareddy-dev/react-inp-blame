@@ -1638,7 +1638,9 @@ function explain(r: InteractionReport): Explanation {
   // animation frame recorded a script over the interaction, the browser's own record of it names it, as it did.
   // A click React never dispatched, on server-rendered HTML it had not hydrated, is left out: the handler named
   // there is a hydrated component's above the boundary, which never ran, and the working time can be React's own
-  // attempt at hydrating it.
+  // attempt at hydrating it. "Not loaded yet" is 'waiting', which the page's looks for React's marks decide, so a
+  // react-dom that loaded before install() and mounted after the last look is taken for none: a known limit, the
+  // one every rung that says React rendered nothing already had.
   const reactIdle = !r.commits.length && !blind && !unjoined && r.hydration?.kind !== 'not-hydrated';
   const outsideMatters = (hasDurations || (reactIdle && !anyScript)) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
