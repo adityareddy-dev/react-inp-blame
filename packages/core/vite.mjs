@@ -176,8 +176,10 @@ function setupAdvice(config) {
   }
   // Vite 6 and later build the page from the client environment, whose options are the top-level ones with
   // its own laid over them, so an app or a framework can name its inputs there alone, as RSC setups do. Its
-  // `input` (Vite 8.2) is what Vite builds from when the bundler's options name none.
-  const client = config.environments?.client;
+  // `input` (Vite 8.2) is what Vite builds from when the bundler's options name none. Vite 5 passes an
+  // `environments` block through as written but builds from the top level, so the block is read only when
+  // Vite resolved it, which always sets its `consumer`.
+  const client = config.environments?.client?.consumer ? config.environments.client : undefined;
   const build = client?.build ?? config.build;
   if (build?.lib || build?.ssr) return null;
   const input = build?.rollupOptions?.input ?? build?.rolldownOptions?.input ?? client?.input;
