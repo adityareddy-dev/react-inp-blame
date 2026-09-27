@@ -6,6 +6,7 @@ import { beforeEach, test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, mountOverlay, onInteraction } from '../src/index.ts';
 import { page as installState } from '../src/install-state.ts';
+import { announceNavigation } from '../src/navigation.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 import { attributeINP } from '../src/web-vitals.ts';
 
@@ -1613,7 +1614,7 @@ function caught(warn: { mock: { calls: { arguments: unknown[] }[] } }): unknown[
   return warn.mock.calls.map((call) => call.arguments[0]).filter((message) => /#library-error$/.test(String(message)));
 }
 
-test('a long animation frame the library cannot read never reaches the page, and the frames after it still join their reports', async (t) => {
+test('a long animation frame the library cannot read never reaches the page, and the frames delivered with it and after it still join their reports', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser(
     (page) => {
@@ -1621,14 +1622,14 @@ test('a long animation frame the library cannot read never reaches the page, and
       try {
         page.queue([click(7, 1000, 300)]);
         page.paint([]);
-        // One whose list of scripts holds a null.
-        page.queue([longFrame(1010, [null])]);
+        // One whose list of scripts holds a null, handed over in one list with a frame that can be read.
+        page.queue([longFrame(1010, [null]), longFrame(1010, [])]);
         assert.doesNotThrow(() => page.paint([]));
-        page.queue([longFrame(1010, [])]);
+        page.queue([longFrame(1100, [])]);
         page.paint([]);
         assert.deepEqual(
           api.last()?.frames?.map((f) => f.start),
-          [1010],
+          [1010, 1100],
         );
         assert.equal(caught(warn).length, 1);
       } finally {
@@ -1639,7 +1640,7 @@ test('a long animation frame the library cannot read never reaches the page, and
   );
 });
 
-test('a frame the library cannot read, still queued when the page is hidden, keeps neither the click queued with it from its report nor the reports waiting from being heard', async (t) => {
+test('a frame the library cannot read, still queued when the page is hidden, keeps neither the frame and the click queued with it from their report nor the reports waiting from being heard', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser(
     (page) => {
@@ -1649,11 +1650,14 @@ test('a frame the library cannot read, still queued when the page is hidden, kee
         onInteraction((r) => heard.push(r.interactionId));
         page.queue([click(7, 1000, 300)]);
         page.paint([]);
-        page.queue([longFrame(2010, [null]), click(14, 2000, 300)]);
+        page.queue([longFrame(2010, [null]), longFrame(2010, []), click(14, 2000, 300)]);
         assert.doesNotThrow(() => page.hide());
         assert.deepEqual(
-          api.reports().map((r) => r.interactionId),
-          [7, 14],
+          api.reports().map((r) => ({ id: r.interactionId, frames: r.frames?.map((f) => f.start) })),
+          [
+            { id: 7, frames: [] },
+            { id: 14, frames: [2010] },
+          ],
         );
         assert.deepEqual(heard, [7, 14]);
         assert.equal(caught(warn).length, 1);
@@ -1847,7 +1851,7 @@ test("an error while a report is built never reaches the page's error handlers: 
       assert.equal(warn.mock.callCount(), 1);
       assert.match(
         String(warn.mock.calls[0]?.arguments[0]),
-        /^\[react-inp-blame\] an error inside the library \(TypeError: .+\) was kept from the page, and the report it was building was dropped\. Please open an issue with this message\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#library-error$/,
+        /^\[react-inp-blame\] an error inside the library \(TypeError: .+\) was kept from the page, and what it was working on, usually one report, was dropped\. Please open an issue with this message\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#library-error$/,
       );
     } finally {
       api.dispose();
@@ -1895,26 +1899,6 @@ test('an input the library cannot read the target of is still recorded, so a ren
         ],
       );
       assert.equal(warn.mock.callCount(), 1);
-      assert.equal(caught(warn).length, 1);
-    } finally {
-      delete page.window.event;
-      api.dispose();
-    }
-  });
-});
-
-test("an input on an element the library cannot read never reaches the page's error handlers, from its capture listener or from the navigation the input starts", async (t) => {
-  const warn = t.mock.method(console, 'warn', () => {});
-  // Imported outside the stand-in browser, so its own install() finds no window and does nothing.
-  const { onRouterTransitionStart } = await nextClient('guarded', { install: {}, basePath: '' });
-  await inBrowser((page) => {
-    const api = install({ devtoolsTrack: false });
-    try {
-      const form = formWithFieldNamedTagName();
-      assert.doesNotThrow(() => page.fire('pointerdown', { isTrusted: true, type: 'pointerdown', timeStamp: 1000, target: form, pointerId: 1 }));
-      // Next.js announces a navigation from inside the handler of the click that starts it.
-      page.window.event = { isTrusted: true, type: 'click', timeStamp: 1100, target: form };
-      assert.doesNotThrow(() => onRouterTransitionStart('/cart', 'push', null));
       assert.equal(caught(warn).length, 1);
     } finally {
       delete page.window.event;
@@ -1992,6 +1976,169 @@ test('a sealed DevTools hook without a post-commit call, which the library canno
       api.dispose();
     }
   });
+});
+
+test("a DevTools hook global the library cannot read never reaches the page's error handlers, whether the check 3 s after install, an Event Timing batch or the hide reads it", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const reads of ['check', 'batch', 'hide']) {
+    await inBrowser((page) => {
+      const api = install({ devtoolsTrack: false });
+      try {
+        const heard: number[] = [];
+        onInteraction((r) => heard.push(r.interactionId));
+        page.paint([click(7, 1000, 120)]);
+        // Redefined with a getter that throws, which the shim's accessor cannot see.
+        const shim = page.window[HOOK];
+        Object.defineProperty(page.window, HOOK, {
+          configurable: true,
+          get() {
+            throw new Error('hook locked');
+          },
+        });
+        if (reads === 'check') assert.doesNotThrow(() => t.mock.timers.tick(3000));
+        if (reads === 'batch') assert.doesNotThrow(() => page.paint([click(14, 2000, 200)]));
+        if (reads === 'hide') {
+          page.queue([click(14, 2000, 200)]);
+          assert.doesNotThrow(() => page.hide());
+          assert.deepEqual(heard, [7], 'the report waiting was not heard at the hide');
+        }
+        assert.equal(caught(warn).length, 1, reads);
+        // Once it can be read again, the next interaction is reported.
+        Object.defineProperty(page.window, HOOK, { value: shim, configurable: true, writable: true });
+        page.paint([click(21, 3000, 200)]);
+        assert.equal(api.last()?.interactionId, 21, reads);
+      } finally {
+        api.dispose();
+      }
+    });
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+  }
+});
+
+test("an error while reports are handed to listeners never reaches the page's error handlers, and the reports after it are still heard", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    try {
+      const id = existing.inject(reactDom('19.3.0'));
+      // A root whose lanes cannot be read for a while, which the delivery reads to tell the listeners' renders apart.
+      const root = mountedRoot(0b11, 4);
+      let unreadable = false;
+      Object.defineProperty(root, 'pendingLanes', {
+        get() {
+          if (unreadable) throw new Error('lanes moved');
+          return 0;
+        },
+      });
+      page.duringClick(() => existing.onCommitFiberRoot(id, root));
+      const heard: number[] = [];
+      onInteraction((r) => heard.push(r.interactionId));
+      page.paint([click(7, 1000, 120)]);
+      unreadable = true;
+      assert.doesNotThrow(() => t.mock.timers.tick(0));
+      unreadable = false;
+      assert.deepEqual(heard, []);
+      assert.equal(caught(warn).length, 1);
+      page.paint([click(14, 2000, 120)]);
+      t.mock.timers.tick(0);
+      assert.deepEqual(heard, [14]);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
+test("an error while reports are drawn on the Performance panel never reaches the page's error handlers, and they are drawn at the next chance", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  // A measure that cannot be looked up for a while, which the drawing does before anything else.
+  const drawn: string[] = [];
+  let unreadable = true;
+  Object.defineProperty(performance, 'measure', {
+    configurable: true,
+    get() {
+      if (unreadable) throw new TypeError('measure moved');
+      return (name: string) => drawn.push(name);
+    },
+  });
+  t.after(() => delete (performance as any).measure);
+  await inBrowser((page) => {
+    const api = install();
+    try {
+      page.paint([click(7, 1000, 120)]);
+      assert.doesNotThrow(() => t.mock.timers.tick(0));
+      assert.equal(caught(warn).length, 1);
+      unreadable = false;
+      page.paint([click(14, 2000, 150)]);
+      t.mock.timers.tick(0);
+      assert.deepEqual(drawn, ['120 ms click', '150 ms click']);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
+/** An event the library cannot read: every property asked of it throws. */
+const unreadableEvent = () =>
+  new Proxy(
+    {},
+    {
+      get() {
+        throw new TypeError('unreadable event');
+      },
+    },
+  );
+
+test("an error in a window listener of the library's, or in what it does when a router announces a navigation, never reaches the page's error handlers, and the next interaction is still reported", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const cases: Record<string, (page: Page) => void | Promise<void>> = {
+    input: (page) => page.fire('pointerdown', unreadableEvent()),
+    closer: async (page) => {
+      // Looked at only after an input, and outside its task.
+      page.fire('pointerdown', { isTrusted: true, type: 'pointerdown', timeStamp: 1000, target: FIELD, pointerId: 1 });
+      await nextTask();
+      page.fire('input', unreadableEvent());
+    },
+    resize: (page) => page.fire('resize', unreadableEvent()),
+    pageshow: (page) => page.fire('pageshow', unreadableEvent()),
+    visibilitychange: (page) => {
+      Object.defineProperty((globalThis as any).document, 'visibilityState', {
+        configurable: true,
+        get() {
+          throw new TypeError('unreadable document');
+        },
+      });
+      page.fire('visibilitychange', { type: 'visibilitychange' });
+    },
+    router: (page) => {
+      page.window.event = unreadableEvent();
+      try {
+        announceNavigation({ url: 'https://shop.example/cart', type: 'push', at: 1000 });
+      } finally {
+        delete page.window.event;
+      }
+    },
+  };
+  for (const [listener, fire] of Object.entries(cases)) {
+    await inBrowser(async (page) => {
+      const api = install({ devtoolsTrack: false });
+      try {
+        await assert.doesNotReject(async () => fire(page), listener);
+        assert.equal(caught(warn).length, 1, listener);
+        page.paint([click(7, 2000, 120)]);
+        assert.equal(api.last()?.interactionId, 7, listener);
+      } finally {
+        api.dispose();
+      }
+    });
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+  }
 });
 
 test('a render that a report listener causes is never read, so a panel showing reports never joins the report it shows', async (t) => {

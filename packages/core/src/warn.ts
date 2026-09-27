@@ -18,7 +18,7 @@ export function warnOnce(key: string, message: string, anchor = key): void {
  * where error monitoring would count it as the app's, so this is the only place it shows.
  */
 export function dropped(error: unknown): void {
-  warnOnce('library-error', `an error inside the library (${String(error)}) was kept from the page, and the report it was building was dropped. Please open an issue with this message.`);
+  warnOnce('library-error', `an error inside the library (${String(error)}) was kept from the page, and what it was working on, usually one report, was dropped. Please open an issue with this message.`);
 }
 
 /**
