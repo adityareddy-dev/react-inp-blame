@@ -110,8 +110,8 @@ export interface InputRecord extends InputStamp {
   readonly owners: readonly string[];
   /**
    * The React handler prop for this input's type on the target chain at dispatch, read then for the same reason.
-   * A keydown on server HTML had none to read then, and is read again as its keypress is dispatched, once React
-   * has hydrated the element to run the key (`noteKeypress`).
+   * On server HTML there is none to read then, and it is read again once React has hydrated the target to run the
+   * input, before any handler runs (`hydratedRead`).
    */
   handler: string | null;
   /**
@@ -137,7 +137,13 @@ export interface InputRecord extends InputStamp {
    * dispatched; null when React had hydrated it, and on a page with no React root above the target.
    */
   readonly dehydrated: HydrationBoundary | null;
-  /** What React did about this input. The hook keeps it current as commits arrive; the rest of the record is read at dispatch, the keypress's readings and a keydown's `handler` on server HTML at the keypress's, and does not change. */
+  /**
+   * Whether `handler` was read again at the commit that hydrated `dehydrated`, which React makes inside the input's
+   * own dispatch, to run it, before it runs a handler (`onCommit`). Undefined for an input on HTML React had
+   * hydrated before, and for one React did not hydrate inside its dispatch.
+   */
+  hydratedRead?: boolean;
+  /** What React did about this input. The hook keeps it current as commits arrive; the rest of the record is read at dispatch, the keypress's readings at the keypress's and `handler` on server HTML at the commit that hydrated it, and does not change. */
   readonly work: InputWork;
 }
 
@@ -364,10 +370,9 @@ export function noteInput(e: Event): void {
  * the submit's work, and the submit's own render can give the form another onSubmit before that entry
  * comes: `onSubmit={step < 2 ? goNext : finish}` does on the first step. Read when the entry came, the
  * form named the step after. Server HTML React has not hydrated has no handler to read yet, and the form
- * is read when the entry comes. HTML React hydrated inside the keydown, to run it, is read now, and so is
- * the keydown's element, which had nothing to read at its own dispatch: its entry carries the hydration
- * and can outweigh the keypress's. For Enter the onSubmit is read on its own as well, since a field's
- * onKeyPress comes before it in what the keypress reaches.
+ * is read when the entry comes. HTML React hydrated inside the keydown, to run it, is read now. For Enter
+ * the onSubmit is read on its own as well, since a field's onKeyPress comes before it in what the keypress
+ * reaches.
  */
 export function noteKeypress(e: Event): void {
   const last = newestInput();
@@ -378,8 +383,6 @@ export function noteKeypress(e: Event): void {
   const fiber = fiberFromNode(target);
   last.keypressHandler = handlerOf(fiber, 'keypress', code);
   if (code && ENTER_KEYS.includes(code)) last.keypressSubmit = handlerOf(fiber, 'submit');
-  // From its own element: an onKeyDown that moves focus sends the keypress to the element it focused.
-  if (last.dehydrated) last.handler = handlerOf(fiberFromNode(last.target), 'keydown', last.key);
 }
 
 /** The events that close the newest input's later renders when a script dispatches one (`noteCloser`). */
@@ -957,7 +960,15 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   // after the paint of an earlier entry of the same interaction. A derived event from a later task is not.
   const inDispatch = dispatched !== null && (dispatched === state.inTask || !inDerivedEvent());
   const t0 = performance.now();
-  const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true, hydratedTarget: creditHydration(input) });
+  const hydratedTarget = creditHydration(input);
+  // React hydrates the server HTML an input landed on inside the input's own dispatch, to run it, and commits
+  // that before any handler runs. The target had no handler to read at dispatch and is read now: by the time
+  // the entry comes, the input's own render can have given it another.
+  if (hydratedTarget && dispatched) {
+    input.handler = handlerOf(fiberFromNode(input.target), input.type, input.key);
+    input.hydratedRead = true;
+  }
+  const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true, hydratedTarget });
   const summary: CommitSummary = Object.freeze({ ...walk, walkMs: performance.now() - t0, inDispatch });
   state.walkTotalMs += summary.walkMs;
   state.walks++;
