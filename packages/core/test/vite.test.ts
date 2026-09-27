@@ -212,7 +212,7 @@ test('a build with no page to carry a second script asks for no chunk and keeps 
   assert.deepEqual(server.emitted, []);
 });
 
-test("a page named only in Vite 8.2's input gets a script of its own where pages takes it, at the top level or for the client environment", () => {
+test("a page named only in Vite 8.2's input, at the top level or for the client environment, or by a relative path, gets a script of its own where pages takes it", () => {
   // Whether the build asks for the chunk, and whether the page at `path` gets the inline import besides. With no
   // environment, the context is Vite 5's.
   const decided = (pages: (path: string) => boolean, [config, environment]: readonly [Record<string, any>, Record<string, any>?], path: string) => {
@@ -229,6 +229,7 @@ test("a page named only in Vite 8.2's input gets a script of its own where pages
   };
   const about = (path: string) => path === '/about.html';
   const index = (path: string) => path === '/index.html';
+  const admin = (path: string) => path.startsWith('/admin/');
   const script = { chunk: true, inline: false };
 
   assert.deepEqual(decided(about, named({ main: 'index.html', about: 'about.html' }, 'top'), '/about.html'), script);
@@ -238,6 +239,10 @@ test("a page named only in Vite 8.2's input gets a script of its own where pages
   // The bundler's input, where it names one, is what Vite builds from.
   const bundler = { build: { rollupOptions: { input: '/app/index.html' } } };
   assert.deepEqual(decided(index, [{ ...bundler, input: 'about.html', environments: { client: { consumer: 'client', input: 'about.html', ...bundler } } }, { input: 'about.html', ...bundler }], '/index.html'), script);
+
+  // A relative input is a path from the root, and Vite hands `pages` the page's path below it, folder and all.
+  assert.deepEqual(decided(admin, named({ main: 'index.html', admin: './admin/index.html' }, 'top'), '/admin/index.html'), script);
+  assert.deepEqual(decided(admin, [{ build: { rollupOptions: { input: { main: 'index.html', admin: 'admin/index.html' } } } }, {}], '/admin/index.html'), script);
 
   // Vite 5 passes an `environments` block through as written, with no consumer, and builds the root index.html.
   assert.deepEqual(decided(index, [{ build: { rollupOptions: {} }, environments: { client: { input: 'about.html' } } }], '/index.html'), script);
