@@ -1859,6 +1859,21 @@ test("an error while a report is built never reaches the page's error handlers: 
   });
 });
 
+test("an interaction whose report was dropped after an error of the library's own still counts toward INP, and the INP estimate and attributeINP point at it with no report", async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    try {
+      page.paint([{ ...click(7, 1000, 300), target: formWithFieldNamedTagName() }]);
+      assert.deepEqual(api.reports(), []);
+      assert.deepEqual({ id: api.inp()?.interactionId, report: api.inp()?.report }, { id: 7, report: null });
+      assert.deepEqual(attributeINP({ entries: [{ interactionId: 7 }] }), { react: null });
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test("an error while a report's explanation is built, on its first read, never reaches the page's error handlers: the report blames nothing and says why, the console says so once, and the next report is explained", async (t) => {
   const reported: unknown[] = [];
   const saved = Object.getOwnPropertyDescriptor(globalThis, 'reportError');

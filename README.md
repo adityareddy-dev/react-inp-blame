@@ -562,8 +562,9 @@ above it, which is web-vitals' signal to fall back to its own selector, and it n
 `useReportWebVitals`) with a `react` field added: `{ schemaVersion, interactionId, blame, handler,
 hotPath, components, commits, followUps }`, frozen, from this library's own report for that interaction.
 It is `null` when nothing is installed on the page, and when there is no report for the interaction:
-one that stayed under `threshold` and set off no later render INP leaves out, or one already pushed out
-of the 50 reports a page keeps, which the ten slowest and those INP can still point at never are. It never
+one that stayed under `threshold` and set off no later render INP leaves out, one already pushed out
+of the 50 reports a page keeps, which the ten slowest and those INP can still point at never are, or one
+whose report the library dropped after [an error of its own](#library-error). It never
 guesses, and like `generateTarget` it never throws: a metric it cannot
 read gives `react: null` rather than an exception inside your analytics callback. web-vitals keeps
 everything else it owns: which interaction is

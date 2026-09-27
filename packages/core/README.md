@@ -305,9 +305,9 @@ metric's attribution (`{}` where there is none) with a frozen `react` field adde
 library's report for that interaction: the blame with its confidence, the handler, the hot path, the
 heaviest commit's components, and what React rendered before and after the paint. It is `null` when
 nothing is installed and when there is no report for that interaction, one that stayed under
-`threshold` or one already pushed out of the 50 a page keeps (never one of the ten slowest or one INP
-can still point at); it never guesses, and a metric it cannot
-read gives `react: null` rather than throwing in the callback. web-vitals keeps
+`threshold`, one already pushed out of the 50 a page keeps (never one of the ten slowest or one INP
+can still point at), or one the library dropped after an error of its own; it never guesses, and a
+metric it cannot read gives `react: null` rather than throwing in the callback. web-vitals keeps
 which interaction is INP, the percentile, the back/forward cache and soft navigations.
 
 In production the component names need the `displayName` transform above; without it the minifier

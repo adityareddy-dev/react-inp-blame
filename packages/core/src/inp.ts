@@ -13,7 +13,10 @@ export interface InpEstimate {
   interactionId: number | null;
   /** Interactions on the page so far, counted like web-vitals: `performance.interactionCount` when the browser has it, else estimated from interactionId spacing. */
   interactionCount: number;
-  /** The report for that interaction, or null when it stayed under the reporting threshold and has since been dropped. */
+  /**
+   * The report for that interaction, or null when it stayed under the reporting threshold and has since
+   * been dropped, or when the library dropped it after an error of its own (`library-error`).
+   */
   report: InteractionReport | null;
 }
 
