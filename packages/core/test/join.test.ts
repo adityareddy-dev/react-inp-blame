@@ -3432,6 +3432,29 @@ test('a script after the handlers is what held the screen update only from half 
   assert.equal(half.explanation.blame.name, 'TimerHandler:setTimeout');
   assert.match(half.explanation.cause, /, mostly because a script \(TimerHandler:setTimeout, app\.js\) ran for 185 ms before the next frame\.$/);
   assert.equal(report(click, [handled], timer(184, 300), [input(0, 'click')]).explanation.blame.name, null);
+
+  // Two scripts that held 270 of the 370 ms between them, neither of them half, are said together, as the
+  // scripts between one event's handlers and the next are, and neither is the blame's name.
+  const two = (commits: CommitSummary[]) =>
+    report(
+      click,
+      [handled, ...commits],
+      [frame(0, 400, [script('BUTTON.onclick', 2, 28), script('A.onscroll', 40, 150), script('B.onscroll', 195, 120)], 330)],
+      [input(0, 'click')],
+    ).explanation;
+  assert.deepEqual(two([]).blame, { kind: 'painting', name: null, detail: null, ms: 370, confidence: 'measured' });
+  assert.equal(two([]).cause, 'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest A.onscroll (app.js) for 150 ms.');
+  assert.equal(
+    two([commit(180, 0, { total: 15, startedAt: 150 })]).cause,
+    'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest A.onscroll (app.js) for 150 ms, and React rendered inside it: 15 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).',
+  );
+  // At 180 ms together, with the last 100 ms in no long frame and the browser's own work under half too, the
+  // longest is said on its own.
+  assert.equal(
+    report(click, [handled], [frame(0, 300, [script('BUTTON.onclick', 2, 28), script('A.onscroll', 40, 150), script('B.onscroll', 195, 30)], 280)], [input(0, 'click')]).explanation
+      .cause,
+    'After the click was handled, the screen took another 370 ms to update. The longest script the browser recorded in that time was A.onscroll (app.js), 150 ms.',
+  );
 });
 
 test('a screen update over 100 ms gets its note under another verdict where the working time was longer too', () => {

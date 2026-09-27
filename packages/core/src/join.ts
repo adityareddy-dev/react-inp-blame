@@ -1081,13 +1081,15 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
   return best && best.ms >= SCRIPT_MIN_MS ? best : null;
 }
 
+/** "DIV.onscroll (app.js)": a script by its name and file, and one the browser gave no name as "one with no name (app.js)". */
+const namedWithFile = (s: ScriptSummary): string => `${scriptName(s) ?? 'one with no name'}${s.source ? ` (${s.source})` : ''}`;
+
 /**
  * A sentence naming the longest script the browser recorded, where it has a name, and `also` what it did.
  * Where it has none the sentence is said only `unnamed`, for a script whose time is worth saying anyway.
  */
 function longestSaid(p: ScriptPart | null, also = '', unnamed = false): string {
-  const name = p && (scriptName(p.script) ?? (unnamed ? 'one with no name' : null));
-  return p && name ? ` The longest script the browser recorded in that time was ${name}${p.script.source ? ` (${p.script.source})` : ''}, ${ms(p.ms)}${also}.` : '';
+  return p && (unnamed || scriptName(p.script)) ? ` The longest script the browser recorded in that time was ${namedWithFile(p.script)}, ${ms(p.ms)}${also}.` : '';
 }
 
 /**
@@ -1337,23 +1339,28 @@ function explain(r: InteractionReport): Explanation {
     const scripted = scriptParts([f], Math.max(from, processingEnd), Math.min(f.start + f.duration, r.end)).reduce((b, p) => b + Math.max(0, p.ms), 0);
     return a + Math.max(0, afterHandlers(from, f.start + f.duration) - scripted);
   }, 0);
-  const unscripted =
-    frames.reduce((a, f) => a + afterHandlers(f.start, f.start + f.duration), 0) - scriptParts(frames, processingEnd, r.end).reduce((a, p) => a + p.ms, 0);
+  const lateScripted = scriptParts(frames, processingEnd, r.end).reduce((a, p) => a + p.ms, 0);
+  const unscripted = frames.reduce((a, f) => a + afterHandlers(f.start, f.start + f.duration), 0) - lateScripted;
   const browserShare = BROWSER_WORK_MIN_SHARE * r.presentation;
   const browserClause =
     frameLayout >= browserShare
       ? `, mostly the browser recalculating styles and layout and painting the frame: ${ms(frameLayout)}.`
       : unscripted >= browserShare
         ? `${lateScript ? ':' : '. No script ran for long in that time:'} ${ms(unscripted)} of it was the browser's own work on the main thread, ${HEDGE} recalculating styles and layout for what changed.`
-        : '.';
+        : null;
   // The script is what the screen update waited on from half of it. Under that it is said after the
   // browser's own work, with any render inside it, and said where the browser gave it no name too: a 20 ms
   // timer in a frame that spent 250 ms on style and layout is not why the screen took 370 ms to update, but
-  // a 150 ms script is time in it all the same, with a name or without.
+  // a 150 ms script is time in it all the same, with a name or without. Where neither the browser nor any
+  // one script held half, the scripts together can have, and are said the way the scripts between one
+  // event's handlers and the next are: two of 150 and 120 ms in a 370 ms screen update were otherwise left
+  // with the longest one's figure and no cause at all.
   const lateLeads = lateScript && lateScript.ms >= WAITED_BEHIND_MIN_SHARE * r.presentation ? lateScript : null;
   const lateScriptClause = lateLeads
     ? `, mostly because ${scriptPhrase(lateLeads.script)} ran for ${ms(lateLeads.ms)} before the next frame${lateRenderSaid}.`
-    : `${browserClause}${longestSaid(lateScript, lateRenderSaid, true)}`;
+    : !browserClause && lateScripted >= WAITED_BEHIND_MIN_SHARE * r.presentation
+      ? `. Scripts ran for ${ms(lateScripted)} of it${lateScript ? `, the longest ${namedWithFile(lateScript.script)} for ${ms(lateScript.ms)}${lateRenderSaid}` : ''}.`
+      : `${browserClause ?? '.'}${longestSaid(lateScript, lateRenderSaid, true)}`;
 
   // The commits of the working time. One the screen update's clause ties to the script it ran in is that
   // script's, or the same render is said twice, once as the script's and once as the handlers'.
