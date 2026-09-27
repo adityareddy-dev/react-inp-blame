@@ -88,6 +88,21 @@ test('a node with no fiber of its own is placed by the nearest element that has 
   assert.equal(generateTarget(asNode(element('span', { parentNode: tile }))), 'ProfilePage > PhotoTile (span)');
 });
 
+test('inside an icon, a node with no fiber of its own is named as the icon is, not by the element holding it', () => {
+  // `<button className="delete"><Icon /></button>`, where Icon renders `<span className="icon">` with an
+  // svg string set through dangerouslySetInnerHTML, so the `<svg>` has no fiber.
+  const buttonFiber: Record<string, unknown> = { tag: 5, elementType: 'button', type: 'button', memoizedProps: {}, return: owners('Toolbar', 'DeleteButton'), sibling: null };
+  const iconFiber = component('Icon', buttonFiber);
+  const spanFiber: Record<string, unknown> = { tag: 5, elementType: 'span', type: 'span', memoizedProps: {}, return: iconFiber, child: null, sibling: null };
+  buttonFiber.child = iconFiber;
+  iconFiber.child = spanFiber;
+  buttonFiber.stateNode = element('button', { classes: ['delete'], fiber: buttonFiber });
+  spanFiber.stateNode = element('span', { classes: ['icon'], fiber: spanFiber, parentNode: buttonFiber.stateNode });
+  const svg = element('svg', { classes: ['glyph'], parentNode: spanFiber.stateNode });
+  assert.equal(generateTarget(asNode(spanFiber.stateNode)), 'Toolbar > DeleteButton > Icon (span.icon)');
+  assert.equal(generateTarget(asNode(svg)), 'Toolbar > DeleteButton (svg.glyph)');
+});
+
 test('text a component returned adds that component to the path of the element holding it', () => {
   const button = { tag: 5, elementType: 'button', type: 'button', memoizedProps: {}, return: owners('ProfilePage', 'PhotoTile') };
   const tile = element('button', { classes: ['tile'], fiber: button });
@@ -97,9 +112,9 @@ test('text a component returned adds that component to the path of the element h
     node[FIBER_KEY] = { tag: 6, elementType: null, type: null, memoizedProps: value, return: returnedBy };
     return node;
   };
-  // `<button><FormattedMessage id="open" /></button>`, where the component returns a string.
-  const message = text('Open', component('FormattedMessage', button));
-  assert.equal(generateTarget(asNode(message)), 'ProfilePage > PhotoTile > FormattedMessage (button.tile)');
+  // `<button><Label /></button>`, where the component returns a string.
+  const label = text('Open', component('Label', button));
+  assert.equal(generateTarget(asNode(label)), 'ProfilePage > PhotoTile > Label (button.tile)');
   // Text beside the element's other children is the element's own: `<button>{icon} Open</button>`.
   assert.equal(generateTarget(asNode(text(' Open', button))), 'ProfilePage > PhotoTile (button.tile)');
 });
