@@ -1951,6 +1951,50 @@ test('an input the library cannot read the target of is still recorded, so a ren
   });
 });
 
+test("an error while a later render revises a report inside React's commit is not the walk's, so that react-dom's commits after it are still read", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    try {
+      const id = existing.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      clock.now = 1000;
+      page.duringClick(() => existing.onCommitFiberRoot(id, root));
+      page.paint([click(7, 1000, 120)]);
+      await nextTask();
+      // Data arrives after the paint and React renders it: a later render, which revises the report inside
+      // React's commit. Asking for an idle callback to draw the revision throws there.
+      clock.now = 1300;
+      commitAgain(root, 40);
+      Object.defineProperty(globalThis, 'requestIdleCallback', {
+        configurable: true,
+        value: () => {
+          throw new TypeError('idle callback refused');
+        },
+      });
+      try {
+        assert.doesNotThrow(() => existing.onCommitFiberRoot(id, root));
+      } finally {
+        delete (globalThis as any).requestIdleCallback;
+      }
+      assert.equal(api.stats().mode, 'chained');
+      assert.equal(caught(warn).length, 1);
+      assert.equal(warn.mock.callCount(), 1);
+      // The next click's handler renders, and its report has that commit.
+      clock.now = 2000;
+      commitAgain(root, 4);
+      page.duringClick(() => existing.onCommitFiberRoot(id, root));
+      page.paint([click(14, 2000, 120)]);
+      assert.deepEqual({ id: api.last()?.interactionId, commits: api.last()?.commits.length, react: api.last()?.reactStatus }, { id: 14, commits: 1, react: 'reading' });
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test("a DevTools hook the library cannot chain onto, such as a frozen one, leaves the page 'unsupported' with the reason, whether install() finds it, it is assigned over the shim, or the check 3 s after install, an Event Timing batch or the hide finds it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });

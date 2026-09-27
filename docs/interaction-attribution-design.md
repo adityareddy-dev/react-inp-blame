@@ -454,8 +454,11 @@ components, and only its own report is dropped. Before, recording it threw again
 handler rendered, and stopped that renderer for good as a walk that threw. Each guard has a test that
 forces an error through it, except the setter's: now that a hook that cannot be chained onto is reported
 as above, nothing in it is known to throw, and its guard is only in case. React's calls into the hook
-were guarded already: a walk that throws stops that renderer, as above. An error a report listener
-throws is the page's own, and still goes to `reportError`.
+were guarded already: a walk that throws stops that renderer, as above. A report taking in a commit once
+its walk is done, as a later render revises it, is guarded apart from the walk, so an error there is a
+`library-error` and that react-dom's commits are still read. Before, it was taken for a walk that threw,
+and none of them was read again. An error a report listener throws is the page's own, and still goes to
+`reportError`.
 
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
