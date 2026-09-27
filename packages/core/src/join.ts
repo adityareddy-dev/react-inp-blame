@@ -1813,8 +1813,12 @@ function explain(r: InteractionReport): Explanation {
    * milliseconds as a leftover would say them twice. A `waiting` verdict can take the blame with a
    * rung closed, and there `closedByTheWait` says it instead, worded for the wait. The handler a
    * production build cannot time is said only there: its rung already asks for working time at least
-   * as long as the screen update, so the screen update never closes it.
+   * as long as the screen update, so the screen update never closes it. A render committed after the
+   * handlers ran after them, and is said to have, not to have been in the working time: a 43 ms render
+   * in the task after 15 ms of handlers read "43 ms ... in the 15 ms of working time after the wait".
    */
+  const spentIn = (when: string) =>
+    rc && rc.at > processingEnd + STAMP_TOLERANCE ? 'after the handlers, before the next frame' : `in the ${ms(r.processing)} of working time ${when}`;
   const closedOff = (when: string): string | null =>
     handlerWins
       ? say(
@@ -1825,12 +1829,12 @@ function explain(r: InteractionReport): Explanation {
       : c && rc && renderMatters
         ? say(
             measuredFrom(rc),
-            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time ${when}.`,
+            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} ${spentIn(when)}.`,
             hasDurations
-              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time ${when}.`
+              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} ${spentIn(when)}.`
               : effectsFigure >= 1
-                ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldAll ? ',' : ''} in the ${ms(r.processing)} of working time ${when}.`
-                : `React was ${HEDGE} still ${renderPhrase(rc)}, in the ${ms(r.processing)} of working time ${when}.`,
+                ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldAll ? ',' : ''} ${spentIn(when)}.`
+                : `React was ${HEDGE} still ${renderPhrase(rc)}, ${spentIn(when)}.`,
           )
         : untimedHandler
           ? `${cap(handler)} ${HEDGE} still took ${untimedTook} of working time ${when}.`

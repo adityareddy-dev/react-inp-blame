@@ -2266,6 +2266,29 @@ test('a handler, a render or a forced layout shorter than a long wait before the
   assert.deepEqual(briefLayout.explanation.blame, { kind: 'layout', name: 'BUTTON.onclick', detail: null, ms: 40, confidence: 'measured' });
 });
 
+test('a render committed after the handlers a closed verdict does not take is said to have run after them, not in the working time', () => {
+  // The click waited 300 ms, ran handleSave for 15, and React rendered for 43 ms in the task after the handlers.
+  // The render was said to be 43 ms in the 15 ms of working time, a part larger than the whole.
+  const save = loginClick('handleSave');
+  const late = report([entry('click', 0, 360, 300, 315)], [commit(358, 0, { total: 43 })], [], save);
+  assert.deepEqual(late.explanation.blame, { kind: 'waiting', name: null, detail: null, ms: 300, confidence: 'measured' });
+  assert.deepEqual(late.explanation.notes, ['React still spent 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.']);
+  // The same under a screen update that closed the render's rung, and for a production build's render.
+  const painted = report([entry('click', 0, 400, 100, 130)], [commit(200, 0, { total: 40 })], [], save);
+  assert.equal(painted.explanation.blame.kind, 'painting');
+  assert.equal(painted.explanation.notes[0], 'React still spent 40 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.');
+  const counted = { hasDurations: false, total: 0, rendered: 60, components: [{ name: 'Row', count: 60, self: null, total: null }] };
+  assert.deepEqual(report([entry('click', 0, 380, 300, 360)], [commit(375, 0, counted)], [], save).explanation.notes, [
+    'React was most likely still re-rendering 60 components inside List, mostly Row (60 of them), after the handlers, before the next frame.',
+  ]);
+  // One committed inside the handlers is still in the working time.
+  const inside = report([entry('click', 0, 360, 300, 350)], [commit(349, 0, { total: 43 })], [], save);
+  assert.deepEqual(inside.explanation.notes, ['React still spent 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) in the 50 ms of working time after the wait.']);
+  assert.deepEqual(report([entry('click', 0, 380, 300, 360)], [commit(359, 0, counted)], [], save).explanation.notes, [
+    'React was most likely still re-rendering 60 components inside List, mostly Row (60 of them), in the 60 ms of working time after the wait.',
+  ]);
+});
+
 test("a render between one event's handlers and the next's is working time a long wait before them has to outlast", () => {
   // Typing fast: the key press waited 60 ms behind the last key's work, then React rendered for 85 ms before the
   // keyup was handled, all in one frame. The render is the verdict, as it is after a 45 ms wait, and the wait is
