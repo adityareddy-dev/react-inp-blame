@@ -3589,7 +3589,8 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   assert.equal(painted.cause, 'After the click was handled, the screen took another 257 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 250 ms before the next frame.');
   // React's own task after the same handlers is React rendering what they scheduled, a transition started from
   // the click, and not a script that forced a render. With the working time the longer part, that render stays
-  // in it, measured or read from the counts, and the note says only how long the task ran.
+  // in it, measured or read from the counts, and the note says it ran inside the task: named alone, the task
+  // read as a script that held the screen update, with nothing to say it was the render the verdict names.
   const transition = (rows: Partial<CommitSummary>) =>
     report(
       [entry('click', 0, 360, 3, 203)],
@@ -3600,10 +3601,13 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   const measured = transition({ total: 100, startedAt: 210 });
   assert.deepEqual(measured.blame, { kind: 'render', name: 'TableBody', detail: '721 components', ms: 100, confidence: 'measured' });
   assert.deepEqual(measured.notes, [
-    'After the handler finished, the screen took another 157 ms to update, mostly because a script (MessagePort.onmessage, app.js) ran for 150 ms before the next frame.',
+    'After the handler finished, the screen took another 157 ms to update, mostly because a script (MessagePort.onmessage, app.js) ran for 150 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
   ]);
   const counted = transition({ total: 0, hasDurations: false, components: [{ name: 'Row', count: 700, self: null, total: null }] });
   assert.deepEqual(counted.blame, { kind: 'render', name: 'TableBody', detail: 'Row ×700', ms: null, confidence: 'inferred' });
+  assert.deepEqual(counted.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly because a script (MessagePort.onmessage, app.js) ran for 150 ms before the next frame, and React rendered inside it: re-rendering 721 components inside TableBody, mostly Row (700 of them).',
+  ]);
   // Ranked by where they ran, ten click handlers of 20 ms took the verdict from the 150 ms listener that ten of
   // 19 ms left it to. By length, neither does, and a handler longer than the listener takes it.
   const tenClicks = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15));
