@@ -1363,7 +1363,9 @@ that way only where a render ran in it, a 70 ms listener with none was a `script
 `none`. Where React rendered nothing in the working time, the handlers are weighed first, as where it
 rendered nothing at all, and take the verdict where they ran long enough. Where the frame waited on the next
 press, the verdict does not take the script after the handlers even from half, since it is usually that
-press's handler: a keyup's verdict once named the next key's 50 ms handler. A script after the handlers is said as
+press's handler, and the screen update's note says so at any length: a keyup's verdict once named the next key's
+50 ms handler, and a keydown's under a 90 ms screen update named the next key's 70 ms one, with no note at all.
+A script after the handlers is said as
 after the handler finished wherever a verdict names it. The browser's own work is the frame's style, layout and
 paint where the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does
 after a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a

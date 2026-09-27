@@ -1543,21 +1543,22 @@ function explain(r: InteractionReport): Explanation {
   // What the build records, which a report whose every commit was the late script's still says.
   const hasDurations = (c ?? r.commits[0])?.hasDurations ?? false;
   /**
-   * The script a verdict names once React is ruled out: the longest anywhere in the interaction, except
-   * where the screen update's note names the late script, which it does wherever a render ran in it and,
-   * with none, over PRESENTATION_NOTE_MS. The verdict then takes that script only where it held half of
-   * the screen update: a 40 ms listener in a 157 ms screen update that spent 110 ms on style and layout is
-   * under half of either phase, and is left to the note, with a render in it or without. Taken without, a
-   * 60 ms listener was a `script` verdict where the same listener with a render in it was `none`. Where the
-   * frame waited on the next press, the note says so and the verdict does not take the script at all: it is
-   * usually that press's handler, whose work waitedOnNext leaves to the next report. Taken, a keyup's
-   * verdict named the next key's 50 ms handler. The rest is ranked by length, not by where it ran, against
-   * every script up to the end of the handlers: ranked by where, a 20 ms click handler took the verdict from
-   * the 150 ms listener, and a 25 ms pointerdown listener from a 120 ms timer the click waited behind, which
-   * was then said nowhere.
+   * The script a verdict names once React is ruled out: the longest anywhere in the interaction, except where
+   * the screen update's note names the late script, which it does wherever a render ran in it or the frame
+   * waited on the next press and, with neither, over PRESENTATION_NOTE_MS. The verdict then takes that script
+   * only where it held half of the screen update: a 40 ms listener in a 157 ms screen update that spent 110 ms
+   * on style and layout is under half of either phase, and is left to the note, with a render in it or without.
+   * Taken without, a 60 ms listener was a `script` verdict where the same listener with a render in it was
+   * `none`. Where the frame waited on the next press, the note says so and the verdict does not take the script
+   * at all: it is usually that press's handler, whose work waitedOnNext leaves to the next report. Taken, a
+   * keyup's verdict named the next key's 50 ms handler, and under a 90 ms screen update, with no note, a
+   * keydown's named the next key's 70 ms handler as having run after its own. The rest is ranked by length, not
+   * by where it ran, against every script up to the end of the handlers: ranked by where, a 20 ms click handler
+   * took the verdict from the 150 ms listener, and a 25 ms pointerdown listener from a 120 ms timer the click
+   * waited behind, which was then said nowhere.
    */
   const lateOnly = insideLate.length > 0 && !c;
-  const lateNoted = insideLate.length > 0 || (!!lateScript && r.presentation > PRESENTATION_NOTE_MS);
+  const lateNoted = insideLate.length > 0 || (!!lateScript && (r.presentation > PRESENTATION_NOTE_MS || !!heldByNext));
   const lateTaken = heldByNext ? null : lateLeads;
   const earlyScript = lateNoted ? longestPart(scriptParts(frames, r.start, processingEnd)) : null;
   const ranScript = !lateNoted ? anyScript : lateTaken && (!earlyScript || lateTaken.ms > earlyScript.ms) ? lateTaken : earlyScript;
@@ -2436,9 +2437,9 @@ function explain(r: InteractionReport): Explanation {
   // insideLate says, and not left in the working time as an effect's. Over PRESENTATION_NOTE_MS the note
   // is kept with no such render too, the way closedByTheScreen keeps a render the screen update outranked:
   // on twenty's select-all, 762 ms of the screen updating went unsaid behind 947 ms of rendering. Where the
-  // frame waited on the next press the note says that, as the blame would: typing fast, the script after
-  // the handlers is the next key's handler, and not why this key's screen update was slow.
-  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && blame.kind !== 'painting') {
+  // frame waited on the next press the note says that at any length, as the blame would: typing fast, the
+  // script after the handlers is the next key's handler, and not why this key's screen update was slow.
+  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length || (heldByNext && lateScript)) && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${heldByNext ? nextClause : lateScriptClause}`);
   }
   if (betweenMatters && !betweenWins) notes.push(`${cap(ms(between))} of the working time also went by ${whereBetween}, with no handler running.`);

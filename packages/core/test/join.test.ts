@@ -759,6 +759,23 @@ test("where the working time was longer, the screen update's note says the frame
   const under = shortKeys(50);
   assert.deepEqual([under.blame, under.cause], [held.blame, held.cause]);
   assert.match(under.notes[0], /: the frame most likely waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 50 ms\.$/);
+  // Nor where the screen update is 100 ms or under, which gets no note of its own: the next key's handler read as this
+  // key's script, "after the handler finished", and nothing said the frame waited on it.
+  const quickKeys = (ms: number) =>
+    report(
+      [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
+      [three],
+      [frame(1000, 272, [...keys, script('DIV#root.onkeydown', 1200, ms)], 1262)],
+      [...ring.slice(0, 2), input(1100, 'keydown', worked(1265))],
+    ).explanation;
+  const quick = quickKeys(70);
+  assert.deepEqual([quick.blame, quick.cause], [held.blame, held.cause]);
+  assert.deepEqual(quick.notes, [
+    'After the handler finished, the screen took another 90 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 70 ms.',
+  ]);
+  const quickUnder = quickKeys(40);
+  assert.deepEqual([quickUnder.blame, quickUnder.cause], [held.blame, held.cause]);
+  assert.match(quickUnder.notes[0], /^After the handler finished, the screen took another 90 ms to update: the frame most likely waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 40 ms\.$/);
 });
 
 test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {
