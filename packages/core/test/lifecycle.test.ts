@@ -222,7 +222,7 @@ test('a quiet key press published for the render it set off keeps that render in
   assert.equal(published.length, 2);
   assert.equal(published[1]?.duration, 48);
   assert.deepEqual(published[1]?.followUps.map((c) => c.at), [7150]);
-  assert.match(published[1]?.verdict ?? '', /A second React render landed 126 ms after the screen updated/);
+  assert.match(published[1]?.verdict ?? '', /A React render landed 126 ms after the press updated the screen, before the release/);
 });
 
 test('a quiet key press is not published for a render stamped with its keyup when another key went down in between', () => {

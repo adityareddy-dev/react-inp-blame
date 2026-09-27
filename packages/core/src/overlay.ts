@@ -239,7 +239,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
         h('div', { class: 'r1', 'data-rating': r.explanation.rating }, h('i', 'dot'), h('span', 't', titleFor(r)), h('span', 'ms', `${Math.round(r.duration)} ms`)),
         n > 1 && h('div', 'meta', `${n} key presses${DOT}slowest ${Math.round(r.duration)} ms${DOT}typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms`),
         h('div', 'blame', ...blameLine(r)),
-        later && h('div', 'blame later', 'then ', b(where(later)), ` ${renderedVerb(later)} after the paint${DOT}${laterDetail(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
+        later && h('div', 'blame later', later.at < r.end ? 'earlier, ' : 'then ', b(where(later)), ` ${renderedVerb(later)} ${laterWhen(r, later)}${DOT}${laterDetail(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
         h('div', 'bar', ...phaseBar(r.explanation.phases, total)),
       ),
       isExpanded && more(r),
@@ -260,7 +260,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       h('p', '', x.cause),
       ...x.notes.map((note) => h('p', 'note', note)),
       ...(before ? comps('Rendered before the paint', before) : []),
-      ...(later ? comps('Rendered after the paint', later) : []),
+      ...(later ? comps(`Rendered ${laterWhen(r, later)}`, later) : []),
       h('p', 'cost', `Measuring this cost ${costText(r.overheadMs)}.`),
     );
   }
@@ -506,6 +506,8 @@ function where(c: CommitSummary): string {
 }
 /** What a later render was made of, in the words its blame's `detail` would use, and the count for one component. */
 export const laterDetail = (c: CommitSummary): string => mostlyOf(c) ?? renderedCount(c);
+/** When a later render came, as the panel says it: after the paint, or after the press painted where it came before the release. */
+export const laterWhen = (r: Pick<InteractionReport, 'end'>, c: CommitSummary): string => (c.at < r.end ? 'after the press painted' : 'after the paint');
 
 /** The row's line under its title: what took the time, or why nothing is blamed. */
 export function blameLine(r: InteractionReport): Child[] {

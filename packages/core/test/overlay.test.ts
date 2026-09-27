@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildReport, laterRenderOf, renderedVerb, sealReport } from '../src/join.ts';
-import { blameLine, createOverlay, laterDetail, titleFor } from '../src/overlay.ts';
+import { blameLine, createOverlay, laterDetail, laterWhen, titleFor } from '../src/overlay.ts';
 import type { CommitSummary, InteractionReport } from '../src/types.ts';
 
 // Only what a row's title reads: the report's type, its target's label and the names of its entries.
@@ -140,4 +140,12 @@ test('a badge and panel that cannot be drawn, for an error with no string form, 
     /^\[react-inp-blame\] the badge and panel could not be drawn \(a value that cannot be printed\)\. Reports still come through onInteraction\(\)\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#overlay-draw$/,
   );
   overlay?.dispose();
+});
+
+test("the panel's line for a press's render before a slower release says it came after the press painted", () => {
+  // A 120 ms click that painted at 320, whose pointerdown set off a render at 100 while the pointer was held.
+  const r = { end: 320 } as unknown as InteractionReport;
+  const at = (at: number) => ({ at }) as unknown as CommitSummary;
+  assert.equal(laterWhen(r, at(100)), 'after the press painted');
+  assert.equal(laterWhen(r, at(700)), 'after the paint');
 });
