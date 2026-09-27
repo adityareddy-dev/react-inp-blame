@@ -2248,6 +2248,16 @@ test("a key on server HTML is named by the handler React hydrated the element wi
     button.__reactProps$demo = buttonFiber.memoizedProps = { onKeyDown: closeMenu };
     page.paint([{ ...pointer('keydown', 3, 1000, 140), processingEnd: 1126, target: button }]);
     assert.equal(api.last()?.target?.handler, 'openMenu');
+    // Hydrated by the next key, which is read at dispatch. A commit inside its dispatch is one its handler made, with
+    // flushSync, after it ran, and the render put openMenu back: that commit hydrated nothing and is not read.
+    const again = { ...pressed, timeStamp: 2000 };
+    page.fire('keydown', again);
+    page.window.event = again;
+    button.__reactProps$demo = buttonFiber.memoizedProps = { onKeyDown: openMenu };
+    existing.onCommitFiberRoot(renderer, mountedRoot(0b11, 4));
+    delete page.window.event;
+    page.paint([{ ...pointer('keydown', 4, 2000, 140), processingEnd: 2126, target: button }]);
+    assert.equal(api.last()?.target?.handler, 'closeMenu');
     api.dispose();
   });
 });
