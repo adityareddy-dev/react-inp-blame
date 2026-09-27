@@ -3556,11 +3556,15 @@ test("an icon a script drew outside React is placed by the element holding it, w
     return { el, fiber };
   };
   const ownersFor = (target: Record<string, unknown>) => report([entry('click', 0, 120, 3, 100, { target })], [], []).target?.owners;
-  /** `<IconButton onClick={close} />` beside a title in Page, IconButton rendering `<tag onClick={onClick}>` around `rendered`. */
-  const inIconButton = (tag: string, drawn: Record<string, unknown>, rendered: Record<string, unknown>) => {
+  /**
+   * `<IconButton onClick={close} />` beside a title in Page, IconButton rendering `<tag onClick={onClick}>` around
+   * `rendered`: a fiber, or text React writes into the element itself with no fiber for it.
+   */
+  const inIconButton = (tag: string, drawn: Record<string, unknown>, rendered: Record<string, unknown> | string | number | bigint) => {
     const close = () => {};
-    const holder = host(tag, { onClick: close }, [drawn]);
-    children(holder.fiber, rendered);
+    const written = typeof rendered !== 'object';
+    const holder = host(tag, written ? { onClick: close, children: rendered } : { onClick: close }, written ? [drawn, text(String(rendered))] : [drawn]);
+    if (!written) children(holder.fiber, rendered);
     const iconButton = component('IconButton', { onClick: close });
     children(iconButton, holder.fiber);
     const title = host('h1');
@@ -3581,6 +3585,14 @@ test("an icon a script drew outside React is placed by the element holding it, w
   const rendered = host('svg');
   inIconButton('button', rendered.el, rendered.fiber);
   assert.deepEqual(ownersFor(rendered.el), ['IconButton', 'Page']);
+  // So is one where the button's only child is text, which React writes into it with no fiber: the `<svg>`
+  // Font Awesome's searchPseudoElements draws for an icon a stylesheet puts before `Close`, or before a count
+  // of likes, a number or in React 19 a bigint.
+  for (const written of ['Close', 12, 12n]) {
+    const drawn = element('svg', []);
+    inIconButton('button', drawn, written);
+    assert.deepEqual(ownersFor(drawn), ['IconButton', 'Page']);
+  }
 
   // Markup set through dangerouslySetInnerHTML is the element's own, as the svg an icon library renders is:
   // an onClick the app's Icon handed its `<span>` names the component that wrote `<Icon onClick>`.

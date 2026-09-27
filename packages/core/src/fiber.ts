@@ -504,8 +504,9 @@ export function namingFiber(node: Node | null): Fiber | null {
   // An icon with no fiber is read from the element around it. That element's handler is the icon's only where
   // React rendered nothing in it, as with markup set through dangerouslySetInnerHTML. Where React rendered
   // something there, an `<i>` that feather.replace() or Font Awesome's autoReplaceSvg swapped for an `<svg>`,
-  // the element holds the icon and the handler is its own: IconButton's `<button onClick>` names IconButton.
-  const handled = handlesInput(start) && (fiberOn(icon) === start || start.child === null);
+  // or the text of `<button onClick>Close</button>`, the element holds the icon and the handler is its own:
+  // IconButton's `<button onClick>` names IconButton.
+  const handled = handlesInput(start) && (fiberOn(icon) === start || rendersNothing(start));
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {
@@ -531,6 +532,14 @@ function onlyChild(parent: Fiber): Fiber | null {
 function isControlHost(f: Fiber): boolean {
   const el = f.stateNode as Element | null | undefined;
   return f.tag === HostComponent && !!el && typeof el.getAttribute === 'function' && isControl(el);
+}
+
+/**
+ * Whether React rendered nothing in a host element. Text it rendered there has no fiber: React writes a
+ * string or a number that is an element's only child (in React 19 a bigint too) straight into it.
+ */
+function rendersNothing(f: Fiber): boolean {
+  return f.child === null && !['string', 'number', 'bigint'].includes(typeof f.memoizedProps?.children);
 }
 
 function handlesInput(f: Fiber): boolean {

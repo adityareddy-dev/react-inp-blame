@@ -114,19 +114,24 @@ test('an icon a script drew outside React is placed by the button holding it, un
   // and feather.replace() swaps the `<i>` for an `<svg>` React never saw, so the svg has no fiber and the
   // button's is read.
   const close = () => {};
-  /** Page's IconButton, whose button holds `inside` in the tree React rendered. */
-  const iconButton = (inside: Record<string, unknown>): Record<string, unknown> => {
+  /** Page's IconButton, whose button holds `inside` in the tree React rendered: a fiber, or text React wrote in with none. */
+  const iconButton = (inside: Record<string, unknown> | string): Record<string, unknown> => {
     const iconButtonFiber = component('IconButton', component('Page'));
     iconButtonFiber.memoizedProps = { onClick: close };
-    const buttonFiber: Record<string, unknown> = { tag: 5, elementType: 'button', type: 'button', memoizedProps: { onClick: close }, return: iconButtonFiber, child: inside, sibling: null };
+    const written = typeof inside === 'string';
+    const buttonFiber: Record<string, unknown> = { tag: 5, elementType: 'button', type: 'button', memoizedProps: written ? { onClick: close, children: inside } : { onClick: close }, return: iconButtonFiber, child: written ? null : inside, sibling: null };
     iconButtonFiber.child = buttonFiber;
-    inside.return = buttonFiber;
+    if (!written) inside.return = buttonFiber;
     buttonFiber.stateNode = element('button', { fiber: buttonFiber });
     return buttonFiber.stateNode as Record<string, unknown>;
   };
   const drawnOver = { tag: 5, elementType: 'i', type: 'i', memoizedProps: { 'data-feather': 'x' }, child: null, sibling: null };
   const feather = element('svg', { classes: ['feather', 'feather-x'], parentNode: iconButton(drawnOver) });
   assert.equal(generateTarget(asNode(feather)), 'Page > IconButton (svg.feather.feather-x)');
+  // So is an icon a script drew beside the button's text, which React writes in with no fiber for it:
+  // twemoji.parse() swaps the emoji in `<button onClick={onClick}>👍 Like</button>` for an `<img class="emoji">`.
+  const emoji = element('img', { classes: ['emoji'], parentNode: iconButton('👍 Like') });
+  assert.equal(generateTarget(asNode(emoji)), 'Page > IconButton (img.emoji)');
   // An svg React rendered in the same button is placed there as well.
   const svgFiber: Record<string, unknown> = { tag: 5, elementType: 'svg', type: 'svg', memoizedProps: {}, child: null, sibling: null };
   svgFiber.stateNode = element('svg', { classes: ['lucide'], fiber: svgFiber, parentNode: iconButton(svgFiber) });
