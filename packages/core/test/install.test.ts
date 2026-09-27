@@ -1855,6 +1855,54 @@ test("an error while a report is built never reaches the page's error handlers: 
   });
 });
 
+test('an input the library cannot read the target of is still recorded, so a render in its handler is read as its own and the reports after it keep their components', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    try {
+      const id = existing.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      existing.onCommitFiberRoot(id, root);
+      // A key typed in one of the form's fields, then a click on its submit button whose handler renders. Looking
+      // up from either for an icon they are part of reads the form's `tagName`.
+      const form = formWithFieldNamedTagName();
+      const field = { nodeType: 1, tagName: 'INPUT', id: '', classList: { length: 0 }, parentNode: form, parentElement: form, firstChild: null, getAttribute: () => null };
+      clock.now = 1000;
+      assert.doesNotThrow(() => page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 1000, target: field, code: 'KeyA' }));
+      await nextTask();
+      const submit = { ...saveButton(), parentNode: form, parentElement: form };
+      for (const [interactionId, at, target] of [
+        [14, 2000, submit],
+        [21, 3000, saveButton()],
+      ] as const) {
+        clock.now = at;
+        page.window.event = { isTrusted: true, type: 'click', timeStamp: at, target };
+        commitAgain(root, 4);
+        assert.doesNotThrow(() => existing.onCommitFiberRoot(id, root));
+        delete page.window.event;
+        page.paint([{ ...click(interactionId, at, 120), target }]);
+        await nextTask();
+      }
+      assert.equal(api.stats().mode, 'chained');
+      assert.deepEqual(
+        api.reports().map((r) => ({ id: r.interactionId, commits: r.commits.length })),
+        [
+          { id: 14, commits: 1 },
+          { id: 21, commits: 1 },
+        ],
+      );
+      assert.equal(warn.mock.callCount(), 1);
+      assert.equal(caught(warn).length, 1);
+    } finally {
+      delete page.window.event;
+      api.dispose();
+    }
+  });
+});
+
 test("an input on an element the library cannot read never reaches the page's error handlers, from its capture listener or from the navigation the input starts", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   // Imported outside the stand-in browser, so its own install() finds no window and does nothing.
