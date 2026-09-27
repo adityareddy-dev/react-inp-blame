@@ -699,7 +699,15 @@ export function checkHookReplaced(): void {
     state.turnedOffHook = attached;
     warnOnce('hook-disabled', message);
   } else if (attached === shim) {
-    const current = (window as unknown as HookHolder)[HOOK_KEY];
+    let current: unknown;
+    try {
+      current = (window as unknown as HookHolder)[HOOK_KEY];
+    } catch (error) {
+      // A getter a script put there to lock the page down, after install(): the page's doing, not an error of
+      // the library's. A React that registered with the shim keeps reporting to it, so there is nothing to say.
+      if (!registryOf(shim).size) globalUnusable(error);
+      return;
+    }
     if (current === shim) return;
     if (Object(current) !== current && !reactDomOn(shim)) {
       // Not an object or function: the page emptied the global (undefined, false, or a delete) before react-dom

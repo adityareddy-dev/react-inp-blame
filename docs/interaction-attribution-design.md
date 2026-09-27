@@ -308,8 +308,11 @@ checked for at the same points, where before that was put down to `install()` ru
 declared with `var` cannot be redefined but can be assigned, so it gets the shim as a plain value, and a
 hook assigned over it is noticed at the next Event Timing batch rather than as it happens. A global, or
 the hook on it, that throws when `install()` reads it is `'unsupported'` the same way, with a warning
-that says it cannot be read or replaced, where before `install()` threw. On a hook the page locks after
-`install()`, `dispose()` puts back what it still can, and a method it cannot put back only passes calls on.
+that says it cannot be read or replaced, where before `install()` threw. A global the page makes throw
+when read after `install()` is the page's doing too, not an error of the library's: before React
+registers with the shim it is reported the same way, and after, React keeps reporting to the shim and
+nothing is said. On a hook the page locks after `install()`, `dispose()` puts back what it still can, and
+a method it cannot put back only passes calls on.
 
 React DevTools never installs over an existing hook: its `installHook` returns as soon as
 `window` has the property, reading and writing nothing. So a shim that loads before it locks
@@ -451,23 +454,24 @@ draw under a guard of their own (`overlay-draw`). Where one error could take mor
 finer. The interactions in one batch are built one at a time, and long animation frames are read one at
 a time, so each drops only itself. So does the batch's count toward INP, each quiet report a batch or
 the hide publishes, and each report a frame revises. A report is queued for its listeners before it is
-drawn, so an idle callback the page refuses costs it the drawing alone. The check each batch makes on
-the DevTools hook global is housekeeping, under a guard of its own, so one that goes on throwing never
-keeps a batch from its reports. At hide neither flush throws, and the reports waiting are heard whatever
-the hide itself throws, so a frame that cannot be read keeps neither the entries from their reports nor
-the reports from being heard. An input's target is read under a guard of its own when the input is
-recorded. An input in a form with a field named `tagName` still throws in there, since a form's fields
-shadow its own properties, and building its report can throw too, as a click's on the form does. It is
-recorded naming nothing, so the commits in its dispatch are still read as its own and the page's other
-reports keep their components, and at most its own report is dropped. Before, recording it threw again
-inside the commit its handler rendered, and stopped that renderer for good as a walk that threw. Each
-guard has a test that forces an error through it, except the setter's: now that a hook that cannot be
-chained onto is reported as above, nothing in it is known to throw, and its guard is only in case.
-React's calls into the hook were guarded already: a walk that throws stops that renderer, as above. A
-report taking in a commit once its walk is done, as a later render revises it, is guarded apart from the
-walk, so an error there is a `library-error` and that react-dom's commits are still read. Before, it was
-taken for a walk that threw, and none of them was read again. An error a report listener throws is the
-page's own, and still goes to `reportError`.
+drawn, so an idle callback the page refuses costs it the drawing alone. The checks each batch makes, on
+the DevTools hook global and for react-dom, are housekeeping, under a guard of their own, so one that
+goes on throwing never keeps a batch from its reports. A global that throws when read is not one of
+those errors: the check catches that read itself, as above. At hide neither flush throws, and the
+reports waiting are heard whatever the hide itself throws, so a frame that cannot be read keeps neither
+the entries from their reports nor the reports from being heard. An input's target is read under a guard
+of its own when the input is recorded. An input in a form with a field named `tagName` still throws in
+there, since a form's fields shadow its own properties, and building its report can throw too, as a
+click's on the form does. It is recorded naming nothing, so the commits in its dispatch are still read
+as its own and the page's other reports keep their components, and at most its own report is dropped.
+Before, recording it threw again inside the commit its handler rendered, and stopped that renderer for
+good as a walk that threw. Each guard has a test that forces an error through it, except the setter's:
+now that a hook that cannot be chained onto is reported as above, nothing in it is known to throw, and
+its guard is only in case. React's calls into the hook were guarded already: a walk that throws stops
+that renderer, as above. A report taking in a commit once its walk is done, as a later render revises
+it, is guarded apart from the walk, so an error there is a `library-error` and that react-dom's commits
+are still read. Before, it was taken for a walk that threw, and none of them was read again. An error a
+report listener throws is the page's own, and still goes to `reportError`.
 
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list

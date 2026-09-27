@@ -2330,7 +2330,9 @@ test("a DevTools hook global the library cannot read, or a hook on it it cannot 
         const heard: number[] = [];
         onInteraction((r) => heard.push(r.interactionId));
         page.paint([click(7, 1000, 120)]);
-        // Redefined with a getter that throws, which the shim's accessor cannot see.
+        // Redefined with a getter that throws, which the shim's accessor cannot see. That is the page's doing,
+        // not an error of the library's: no React has registered with the shim, and none can reach it through
+        // the global now, so the page is 'unsupported' and the console is told as it would be at install().
         const shim = page.window[HOOK];
         Object.defineProperty(page.window, HOOK, locked);
         if (reads === 'check') assert.doesNotThrow(() => t.mock.timers.tick(3000));
@@ -2340,8 +2342,9 @@ test("a DevTools hook global the library cannot read, or a hook on it it cannot 
           assert.doesNotThrow(() => page.hide());
           assert.deepEqual(heard, [7, 14], 'the reports waiting were not heard at the hide');
         }
-        // The check is housekeeping: while it goes on throwing, and once the global can be read again, every
-        // interaction is reported and counted toward INP, and the console is told once.
+        assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' }, reads);
+        // While the global goes on throwing, and once it can be read again, every interaction is reported and
+        // counted toward INP, and the console is told once.
         page.paint([click(21, 3000, 300)]);
         Object.defineProperty(page.window, HOOK, { value: shim, configurable: true, writable: true });
         page.paint([click(28, 4000, 400)]);
@@ -2351,7 +2354,45 @@ test("a DevTools hook global the library cannot read, or a hook on it it cannot 
           reads,
         );
         assert.equal(api.inp()?.interactionId, 28, reads);
-        assert.equal(caught(warn).length, 1, reads);
+        assert.deepEqual(
+          warn.mock.calls.map((call) => String(call.arguments[0])),
+          [
+            "[react-inp-blame] the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be read or replaced (Error: hook locked), so React's commits cannot be read. Interactions are still reported, without components. See https://github.com/adityareddy-dev/react-inp-blame#hook-disabled",
+          ],
+          reads,
+        );
+      } finally {
+        api.dispose();
+      }
+    });
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+  }
+});
+
+test("an error while the library checks for react-dom, 3 s after install or at the batch after that, never reaches the page's error handlers, and the batch still has its reports", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const now = t.mock.method(performance, 'now');
+  const throwOnce = () =>
+    now.mock.mockImplementationOnce(() => {
+      throw new TypeError('clock moved');
+    });
+  for (const checks of ['timer', 'batch']) {
+    await inBrowser((page) => {
+      const api = install({ devtoolsTrack: false });
+      try {
+        // No react-dom registers and none has rendered, so the check looks for React on the page, and where
+        // it found none 3 s after install, once more at the next batch. There the first clock read throws.
+        if (checks === 'timer') throwOnce();
+        assert.doesNotThrow(() => t.mock.timers.tick(3000), checks);
+        if (checks === 'batch') throwOnce();
+        assert.doesNotThrow(() => page.paint([click(7, 1000, 120)]), checks);
+        page.paint([click(14, 2000, 200)]);
+        assert.deepEqual(api.reports().map((r) => r.interactionId), [7, 14], checks);
+        assert.equal(api.inp()?.interactionId, 14, checks);
+        assert.equal(caught(warn).length, 1, checks);
+        assert.match(String(caught(warn)[0]), /an error inside the library \(TypeError: clock moved\) was kept from the page/, checks);
       } finally {
         api.dispose();
       }
@@ -3284,6 +3325,48 @@ test('the shim follows a hook that replaces it before React registers, and repor
     assert.match(warn.mock.calls[0].arguments[0], /will not see this React/);
     api.dispose();
   });
+});
+
+test("a DevTools hook global the page makes throw when read, after React registered with the shim, is the page's doing: React goes on reporting to the shim, and the console is not told of an error of the library's", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const reads of ['check', 'batch', 'hide']) {
+    await inBrowser((page) => {
+      const api = install({ devtoolsTrack: false });
+      try {
+        const heard: number[] = [];
+        onInteraction((r) => heard.push(r.interactionId));
+        const shim = page.window[HOOK];
+        shim.inject(reactDom('19.3.0'));
+        page.paint([click(7, 1000, 120)]);
+        // The only order in which such a lock leaves React itself working: React holds the shim already.
+        Object.defineProperty(page.window, HOOK, {
+          configurable: true,
+          get() {
+            throw new Error('React DevTools is disabled on this site');
+          },
+        });
+        if (reads === 'check') assert.doesNotThrow(() => t.mock.timers.tick(3000));
+        if (reads === 'batch') assert.doesNotThrow(() => page.paint([click(14, 2000, 200)]));
+        if (reads === 'hide') {
+          page.queue([click(14, 2000, 200)]);
+          assert.doesNotThrow(() => page.hide());
+          assert.deepEqual(heard, [7, 14], 'the reports waiting were not heard at the hide');
+        }
+        page.paint([click(21, 3000, 300)]);
+        assert.deepEqual(
+          api.reports().map((r) => ({ id: r.interactionId, react: r.reactStatus })),
+          (reads === 'check' ? [7, 21] : [7, 14, 21]).map((id) => ({ id, react: 'reading' })),
+          reads,
+        );
+        assert.deepEqual({ mode: api.stats().mode, reason: api.stats().unsupportedReason }, { mode: 'shim', reason: null }, reads);
+        assert.equal(warn.mock.callCount(), 0, reads);
+      } finally {
+        api.dispose();
+      }
+    });
+    session?.slots.warnings?.clear();
+  }
 });
 
 test("a commit React makes inside an input's dispatch is that input's, however long the dispatch has been running", async (t) => {

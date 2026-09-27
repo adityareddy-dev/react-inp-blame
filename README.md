@@ -1330,7 +1330,7 @@ getter, or a setter that drops what it is given. The library cannot wrap a hook 
 it was, and reports come without components the same way. Others define the global empty and read-only, or
 empty it before react-dom loads, and React reads that as no hook at all. Where the warning says the hook
 cannot be read or replaced, a script made the global, or the hook on it, throw when read before the library
-loaded, so no hook can be reached through it.
+loaded, so no hook can be reached through it, or made the global throw after that but before React registered.
 
 <a id="shim-over-hook"></a>
 #### hook: 'shim' found a React DevTools hook already installed
