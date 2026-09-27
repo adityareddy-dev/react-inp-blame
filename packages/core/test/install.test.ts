@@ -1883,6 +1883,52 @@ test('a commit an effect flushes with flushSync gets its own post-commit, which 
   });
 });
 
+test("after dispose() and another install(), a commit and its post-commit are read once where another tool wrapped the library's methods", async (t) => {
+  // Fast Refresh wraps onCommitFiberRoot when it runs after the library, and dispose() leaves a method wrapped
+  // since where it is. The next install() wraps the hook again, so the old methods sit under the new ones.
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain' });
+    const id = existing.inject(reactDom('19.3.0'));
+    const hook = page.window[HOOK];
+    const commit = hook.onCommitFiberRoot;
+    hook.onCommitFiberRoot = (...args: unknown[]) => {
+      commit(...args);
+      // The tool's own work on the commit, which React's effects wait for as well.
+      clock.now += 2;
+    };
+    const postCommit = hook.onPostCommitFiberRoot;
+    hook.onPostCommitFiberRoot = (...args: unknown[]) => postCommit(...args);
+    api.dispose();
+
+    const again = install({ hook: 'chain' });
+    const root = mountedRoot(0b11, 4);
+    hook.onCommitFiberRoot(id, root);
+    clock.now = 1000;
+    page.duringClick(() => {
+      clock.now = 1010;
+      commitAgain(root, 5);
+      withEffects(root);
+      hook.onCommitFiberRoot(id, root, 1, false);
+      // An effect calls flushSync, and that commit's post-commit comes first.
+      clock.now = 1200;
+      commitAgain(root, 40);
+      withEffects(root);
+      hook.onCommitFiberRoot(id, root, 1, false);
+      clock.now = 1210;
+      hook.onPostCommitFiberRoot(id, root);
+      clock.now = 1215;
+      hook.onPostCommitFiberRoot(id, root);
+    });
+    // Each commit once, its effects from when the tool's work on it ended, and each post-commit to its own commit.
+    assert.deepEqual(again.debug.commits().map((c) => [c.at, c.effectsStartedAt, c.effectsEndedAt]), [[1010, 1012, 1215], [1200, 1202, 1210]]);
+    assert.deepEqual(existing.calls, [id, id, id], 'the hook it wrapped no longer hears about commits');
+    again.dispose();
+  });
+});
+
 test("a layout effect's update without effects of its own never takes the call for the commit it was made in", async (t) => {
   const clock = useClock(t);
   await inBrowser((page) => {
