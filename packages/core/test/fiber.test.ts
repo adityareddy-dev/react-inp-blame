@@ -778,17 +778,21 @@ test('only Enter in a field reaches onSubmit: every other keystroke in a form ne
   assert.equal(handlerOf(area as any, 'keydown', 'Enter'), null);
   const div = host('div', {}, host('form', { onSubmit: anon() }));
   assert.equal(handlerOf(div as any, 'keydown', 'Enter'), null);
-  // The release is never the submission: the browser submits on the keydown.
+  // The release is never the submission: the browser submits on the press.
   assert.equal(handlerOf(field as any, 'keyup', 'Enter'), null);
-  // The field's own handlers come first, whatever the key.
+  // The field's own onChange comes first for any other key.
   const typed = host('input', { type: 'text', onChange: anon() }, host('form', { onSubmit: anon() }));
-  assert.equal(handlerOf(typed as any, 'keydown', 'Enter'), 'onChange');
   assert.equal(handlerOf(typed as any, 'keydown', 'KeyA'), 'onChange');
-  // But Enter's keypress changes no value in a field: it submits the form, and a controlled field's onChange
-  // does not run. In a textarea it is a newline, which does.
-  assert.equal(handlerOf(typed as any, 'keypress', 'Enter'), 'onSubmit');
   assert.equal(handlerOf(typed as any, 'keypress', 'KeyA'), 'onChange');
-  assert.equal(handlerOf(host('textarea', { onChange: anon() }, host('form', { onSubmit: anon() })) as any, 'keypress', 'Enter'), 'onChange');
+  assert.equal(handlerOf(typed as any, 'keyup', 'KeyA'), 'onChange');
+  // But Enter changes no value in a field: it submits the form, and a controlled field's onChange runs in none
+  // of its three events. In a textarea it is a newline, which does.
+  assert.equal(handlerOf(typed as any, 'keydown', 'Enter'), 'onSubmit');
+  assert.equal(handlerOf(typed as any, 'keypress', 'Enter'), 'onSubmit');
+  assert.equal(handlerOf(typed as any, 'keyup', 'Enter'), null);
+  const typedArea = host('textarea', { onChange: anon() }, host('form', { onSubmit: anon() }));
+  assert.equal(handlerOf(typedArea as any, 'keydown', 'Enter'), 'onChange');
+  assert.equal(handlerOf(typedArea as any, 'keypress', 'Enter'), 'onChange');
   assert.equal(handlerOf(host('input', { type: 'text', onKeyDown: anon() }) as any, 'keydown', 'KeyA'), 'onKeyDown');
   // A keystroke outside a control fires no onChange of React's, so an onChange up the tree is not it.
   assert.equal(handlerOf(host('div', {}, host('form', { onChange: anon() })) as any, 'keydown', 'KeyA'), null);

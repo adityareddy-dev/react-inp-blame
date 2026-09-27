@@ -522,8 +522,8 @@ climbs the fiber chain, taking the first of these props it finds:
 | `pointerdown` / `pointerup` | `onPointerDown`, `onMouseDown` / `onPointerUp`, `onMouseUp` |
 | `keydown` | `onKeyDown` |
 | `keydown` in a form control | `onKeyDown`, `onChange`, `onInput` |
-| `keydown` of Enter in a field or on a button | the same, then `onSubmit` |
-| `keyup` | `onKeyUp`, then `onChange`, `onInput` in a form control |
+| `keydown` of Enter in a field or on a button | `onKeyDown`, `onSubmit` |
+| `keyup` | `onKeyUp`, then `onChange`, `onInput` in a form control, but not for Enter in a field or on a button |
 | `keypress` | `onKeyPress`, then `onChange`, `onInput` in a form control, or `onSubmit` in their place for Enter in a field or on a button |
 | `input` | `onChange`, `onInput` |
 | `change` | `onChange` |
@@ -573,11 +573,13 @@ apart. A keypress has no record of its own, and it matters more than it looks: E
 the form from the keypress, so Chromium puts the submit's work in the keypress entry. A capture listener
 reads what the keypress reaches onto its keydown's record as the keypress is dispatched. Read from the
 form after the commit instead, `onSubmit={step < 2 ? goNext : finish}` named finish for the first step's
-Enter. That keypress looks for no `onChange` in a field, since Enter changes no value: in the usual
-controlled field, `<input value={email} onChange={setEmail}>`, it named setEmail until 2026-09-26, and
-React runs no onChange for Enter. The element is read when the entry arrives only for an event the ring
-keeps no reading of, such as the `input` an input method sends, and for one on server HTML, which had no
-handler to read until React hydrated it to run the event.
+Enter. None of Enter's three events looks for an `onChange` in a field, since Enter changes no value: in
+the usual controlled field, `<input value={email} onChange={setEmail}>`, they named setEmail until
+2026-09-26, and React runs no onChange for Enter. The keydown matters as much as the keypress: an async
+onSubmit does little in the keypress, so its entry ties with the keydown's, which comes first. The
+element is read when the entry arrives only for an event the ring keeps no reading of, such as the
+`input` an input method sends, and for one on server HTML, which had no handler to read until React
+hydrated it to run the event.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every

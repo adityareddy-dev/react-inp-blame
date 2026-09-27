@@ -656,19 +656,20 @@ function submitsOnEnter(fiber: Fiber | null, key: string | null | undefined): bo
 /**
  * The props this event can reach on `fiber`'s chain: its own prop always, plus the ones React
  * dispatches from it on this particular element. `key` is the `code` or `key` of a key event, and
- * decides whether `onSubmit` is among them.
+ * decides whether it is an Enter, which reaches `onSubmit` and no `onChange`.
  */
 function propsFor(fiber: Fiber | null, eventType: string, key: string | null | undefined): readonly string[] | undefined {
   const base = handlerProp[eventType];
   if (!base) return undefined;
   if (eventType === 'keydown' || eventType === 'keyup' || eventType === 'keypress') {
     const props = base.slice();
-    const submits = eventType !== 'keyup' && submitsOnEnter(fiber, key);
+    const enter = submitsOnEnter(fiber, key);
     // A keystroke fires onChange only in something React watches for changes; on a div it fires none.
-    // Nor does the keypress of an Enter that submits: it changes no value, so a controlled field's onChange
-    // would take the name of the onSubmit that ran.
-    if (isFormControl(fiber) && !(submits && eventType === 'keypress')) props.push(...TYPING);
-    if (submits) props.push('onSubmit');
+    // Nor does any of the three events of an Enter that submits: it changes no value, so a controlled
+    // field's onChange would take the name of the onSubmit that ran.
+    if (isFormControl(fiber) && !enter) props.push(...TYPING);
+    // The release is never the submission.
+    if (enter && eventType !== 'keyup') props.push('onSubmit');
     return props;
   }
   if (base.includes('onChange') || !firesChange(fiber, eventType)) return base;
