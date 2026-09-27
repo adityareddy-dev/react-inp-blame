@@ -802,10 +802,14 @@ find. The boundary named is the one the input was inside, so a boundary streamin
 page is never blamed, and where an outer boundary hydrates first the inner one around the target is
 still the one named. The time is React's render duration for the credited commit, reported as a named
 part of the working time rather than as a fourth phase: `Phase.parts` was added for it, and the three
-phases add up to the interaction exactly as before, so reports stay at `schemaVersion: 1`. It takes the
-blame only when it is what the working time went on, at least `RENDER_MIN_MS` and more than the time
-outside React's render; a boundary that hydrated in 2 ms ahead of a 400 ms handler is a note beside the
-ordinary verdict instead. One that falls short while React's time as a whole outweighs the rest can
+phases add up to the interaction exactly as before, so reports stay at `schemaVersion: 1`. The part is
+that duration up to the working time, all the working time can hold of it, and the sentence and the
+blame's milliseconds give the same figure, with the whole beside it where the hydration was longer: "all
+20 ms of working time, in a hydration that took 90 ms in all". Until 2026-09-27 that read "90 ms of the
+20 ms of working time" beside a part of 20, and the blame said 90. `hydration.ms` keeps the whole. It
+takes the blame only when it is what the working time went on, at least `RENDER_MIN_MS` and more than
+the time outside React's render; a boundary that hydrated in 2 ms ahead of a 400 ms handler is a note
+beside the ordinary verdict instead. One that falls short while React's time as a whole outweighs the rest can
 still be the commit the render blame names, and then the note says where the click landed without
 adding that the hydration was not what took the time.
 
@@ -1081,7 +1085,8 @@ they are worth a mention, and a sentence that names one commit gives what the ot
 is worth saying, so none of it goes unsaid under the wrong name. The handler, for its part, now has
 to outrun all of React's time to be the blame, committing and effects included, not only the render
 durations it was held against before spans existed. A render blame's milliseconds are the commit's in
-all, render, committing and effects, since that is what it accounts for.
+all, render, committing and effects, since that is what it accounts for, with the render counted for
+what the working time could hold of it (below), so no render is blamed for more than the interaction.
 
 React commits some updates once a commit's effects are done and before it says they ran: one an
 effect made with `flushSync`, and one a layout effect made, the measure-then-`setState` a tooltip
@@ -1281,9 +1286,15 @@ after them. The render verdict places its render the same way, alone, in a produ
 from React's task after the handlers, a 43 ms render read "about 43 ms of the 15 ms of working time",
 and until 2026-09-27 a production build's 800 rows committed after the handlers "then ran useEffect
 callbacks" that had run inside them. One that began before the handlers, or ran longer than they did
-and committed with them, was not all in the working time either, and is given no place: a 43 ms render
-in the task the click waited behind, committed as its handlers began, was said as that wait and again
-as 43 ms in the 15 ms of working time after it. Where the screen update outranks the working time too,
+and committed with them, was not all in the working time either, and is given no place. React does
+not yield inside the handlers, so it is weighed and blamed on what the working time could hold of it:
+from their start to its commit where it began before them, and no more than the working time where it
+committed with them. The sentence gives the render whole and then that part: "The render began before
+the handlers, so at most 17 ms of it was in the 27 ms of working time." Until 2026-09-27 a 120 ms
+render that began 100 ms before a click's 27 ms of handlers was weighed whole and blamed for 120 ms of
+the 64 ms click. A 43 ms render in the task the click waited behind, committed as its handlers began,
+was said as that wait and again as 43 ms in the 15 ms of working time after it. None of it was in
+there, so no note names it now. Where the screen update outranks the working time too,
 the working time is the smallest of the three phases, and no note is added. The wait itself is said
 in a note under every verdict but its own, whatever React rendered: "It also waited 70 ms before the
 handler could start, because the main thread was busy." Until 2026-09-26 that note needed a render big
