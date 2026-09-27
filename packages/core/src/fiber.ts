@@ -501,7 +501,11 @@ export function namingFiber(node: Node | null): Fiber | null {
   const start = icon && fiberFromNode(icon);
   if (!start) return fiberFromNode(node);
   let f = start;
-  const handled = handlesInput(start);
+  // An icon with no fiber is read from the element around it. That element's handler is the icon's only where
+  // React rendered nothing in it, as with markup set through dangerouslySetInnerHTML. Where React rendered
+  // something there, an `<i>` that feather.replace() or Font Awesome's autoReplaceSvg swapped for an `<svg>`,
+  // the element holds the icon and the handler is its own: IconButton's `<button onClick>` names IconButton.
+  const handled = handlesInput(start) && (fiberOn(icon) === start || start.child === null);
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {

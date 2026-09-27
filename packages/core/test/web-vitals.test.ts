@@ -109,6 +109,46 @@ test('inside an icon, a node with no fiber of its own is named as the icon is, n
   assert.equal(generateTarget(asNode(element('path', { parentNode: g }))), 'Toolbar > DeleteButton > Icon (path)');
 });
 
+test('an icon a script drew outside React is placed by the button holding it, under the component that handed the button its onClick', () => {
+  // `<IconButton onClick={close} />` in Page, where IconButton renders `<button onClick={onClick}><i data-feather="x" /></button>`
+  // and feather.replace() swaps the `<i>` for an `<svg>` React never saw, so the svg has no fiber and the
+  // button's is read.
+  const close = () => {};
+  /** Page's IconButton, whose button holds `inside` in the tree React rendered. */
+  const iconButton = (inside: Record<string, unknown>): Record<string, unknown> => {
+    const iconButtonFiber = component('IconButton', component('Page'));
+    iconButtonFiber.memoizedProps = { onClick: close };
+    const buttonFiber: Record<string, unknown> = { tag: 5, elementType: 'button', type: 'button', memoizedProps: { onClick: close }, return: iconButtonFiber, child: inside, sibling: null };
+    iconButtonFiber.child = buttonFiber;
+    inside.return = buttonFiber;
+    buttonFiber.stateNode = element('button', { fiber: buttonFiber });
+    return buttonFiber.stateNode as Record<string, unknown>;
+  };
+  const drawnOver = { tag: 5, elementType: 'i', type: 'i', memoizedProps: { 'data-feather': 'x' }, child: null, sibling: null };
+  const feather = element('svg', { classes: ['feather', 'feather-x'], parentNode: iconButton(drawnOver) });
+  assert.equal(generateTarget(asNode(feather)), 'Page > IconButton (svg.feather.feather-x)');
+  // An svg React rendered in the same button is placed there as well.
+  const svgFiber: Record<string, unknown> = { tag: 5, elementType: 'svg', type: 'svg', memoizedProps: {}, child: null, sibling: null };
+  svgFiber.stateNode = element('svg', { classes: ['lucide'], fiber: svgFiber, parentNode: iconButton(svgFiber) });
+  assert.equal(generateTarget(asNode(svgFiber.stateNode)), 'Page > IconButton (svg.lucide)');
+  // So is one set through dangerouslySetInnerHTML in an Icon of the app's own, in that button or in a card
+  // that shows it beside a title.
+  const setInto = (iconFiber: Record<string, unknown>, holder: () => unknown) => {
+    const spanFiber: Record<string, unknown> = { tag: 5, elementType: 'span', type: 'span', memoizedProps: { dangerouslySetInnerHTML: { __html: '<svg></svg>' } }, return: iconFiber, child: null, sibling: null };
+    iconFiber.child = spanFiber;
+    spanFiber.stateNode = element('span', { fiber: spanFiber, parentNode: holder() });
+    return element('svg', { parentNode: spanFiber.stateNode });
+  };
+  const inButton = component('Icon');
+  assert.equal(generateTarget(asNode(setInto(inButton, () => iconButton(inButton)))), 'Page > IconButton (svg)');
+  const cardFiber: Record<string, unknown> = { tag: 5, elementType: 'div', type: 'div', memoizedProps: {}, return: component('Card', component('Page')), sibling: null };
+  const inCard = component('Icon', cardFiber);
+  inCard.sibling = { tag: 5, elementType: 'h3', type: 'h3', memoizedProps: {}, return: cardFiber, child: null, sibling: null };
+  cardFiber.child = inCard;
+  cardFiber.stateNode = element('div', { fiber: cardFiber });
+  assert.equal(generateTarget(asNode(setInto(inCard, () => cardFiber.stateNode))), 'Page > Card (svg)');
+});
+
 test('text a component returned adds that component to the path of the element holding it', () => {
   const button = { tag: 5, elementType: 'button', type: 'button', memoizedProps: {}, return: owners('ProfilePage', 'PhotoTile') };
   const tile = element('button', { classes: ['tile'], fiber: button });

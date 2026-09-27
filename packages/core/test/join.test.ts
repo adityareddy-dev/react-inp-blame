@@ -3504,7 +3504,9 @@ test('what an icon belongs to is read from the fiber tree: a card\'s photo is th
   // component that wrote `<Trash2 onClick>`, beside a label or alone.
   const trashWith = (parentProps: Record<string, unknown>) => {
     const remove = () => {};
-    const svg = host('svg');
+    const stroke = host('path');
+    const svg = host('svg', {}, [stroke]);
+    children(svg.fiber, stroke.fiber);
     (svg.fiber.memoizedProps as Record<string, unknown>).onClick = remove;
     const lucideIcon = icon('Icon');
     lucideIcon.memoizedProps = { onClick: remove };
@@ -3536,6 +3538,64 @@ test('what an icon belongs to is read from the fiber tree: a card\'s photo is th
   children(buttonRow.fiber, asButton.writer, host('span').fiber);
   children(component('Rows'), buttonRow.fiber);
   assert.deepEqual(ownersFor(asButton.svg.el), ['RemoveRow', 'Rows']);
+});
+
+test("an icon a script drew outside React is placed by the element holding it, whose handler is that element's own", () => {
+  // feather.replace() and Font Awesome's autoReplaceSvg swap the `<i>` React rendered for an `<svg>` React
+  // never saw, so the svg has no fiber and is read from the element around it. IconButton handed that element
+  // its onClick, but the click is still on IconButton's button.
+  const fiberOf = (tag: number, type: unknown, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: null, child: null, sibling: null, alternate: null }) as Record<string, unknown>;
+  const component = (name: string, props: Record<string, unknown> | null = null) => fiberOf(0, Object.defineProperty(function () {}, 'name', { value: name }), props);
+  /** A host fiber and the element it stands for, which holds `nodes` in the page whatever React rendered in it. */
+  const host = (tag: string, props: Record<string, unknown> = {}, nodes: Record<string, unknown>[] = []) => {
+    const el = element(tag, nodes);
+    const fiber = fiberOf(5, tag, props);
+    fiber.stateNode = el;
+    el.__reactFiber$k1 = fiber;
+    return { el, fiber };
+  };
+  const ownersFor = (target: Record<string, unknown>) => report([entry('click', 0, 120, 3, 100, { target })], [], []).target?.owners;
+  /** `<IconButton onClick={close} />` beside a title in Page, IconButton rendering `<tag onClick={onClick}>` around `rendered`. */
+  const inIconButton = (tag: string, drawn: Record<string, unknown>, rendered: Record<string, unknown>) => {
+    const close = () => {};
+    const holder = host(tag, { onClick: close }, [drawn]);
+    children(holder.fiber, rendered);
+    const iconButton = component('IconButton', { onClick: close });
+    children(iconButton, holder.fiber);
+    const title = host('h1');
+    const header = host('header', {}, [holder.el, title.el]);
+    children(header.fiber, iconButton, title.fiber);
+    children(component('Page'), header.fiber);
+  };
+  const drawnOver = () => fiberOf(5, 'i', { 'data-feather': 'x' });
+
+  const stroke = element('path', []);
+  inIconButton('button', element('svg', [stroke]), drawnOver());
+  assert.deepEqual(ownersFor(stroke), ['IconButton', 'Page']);
+  // The same where IconButton's element is a `<div onClick>`, which is not a control.
+  const inDiv = element('svg', []);
+  inIconButton('div', inDiv, drawnOver());
+  assert.deepEqual(ownersFor(inDiv), ['IconButton', 'Page']);
+  // An svg React rendered in the same button was placed there already.
+  const rendered = host('svg');
+  inIconButton('button', rendered.el, rendered.fiber);
+  assert.deepEqual(ownersFor(rendered.el), ['IconButton', 'Page']);
+
+  // Markup set through dangerouslySetInnerHTML is the element's own, as the svg an icon library renders is:
+  // an onClick the app's Icon handed its `<span>` names the component that wrote `<Icon onClick>`.
+  const remove = () => {};
+  const glyph = element('svg', []);
+  const span = host('span', { onClick: remove, dangerouslySetInnerHTML: { __html: '<svg></svg>' } }, [glyph]);
+  const icon = component('Icon', { name: 'trash', onClick: remove });
+  children(icon, span.fiber);
+  const writer = component('RemoveRow');
+  children(writer, icon);
+  const label = host('span');
+  const row = host('div', {}, [span.el, label.el]);
+  children(row.fiber, writer, label.fiber);
+  children(component('Rows'), row.fiber);
+  assert.deepEqual(ownersFor(glyph), ['RemoveRow', 'Rows']);
 });
 
 test("Enter's work in the keypress entry is named by the form's onSubmit, from the key its keydown recorded", () => {
