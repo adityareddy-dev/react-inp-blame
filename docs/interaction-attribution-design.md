@@ -1139,7 +1139,14 @@ steps back. Sorting a table in the TanStack Table example and then changing its 
 later made exactly that report, where the sort click was told it had re-rendered 417 components a
 second after its paint, when the page-size change had done it. So when an input that is not one of
 this interaction's own arrived after all of them and before the commit, the commit is attached to
-nothing: the library cannot tell whose it is, and a wrong attachment reads as a finding. The ring is
+nothing: the library cannot tell whose it is, and a wrong attachment reads as a finding. A press in
+between does the same for a commit made outside any dispatch and stamped with a keyup or a pointerup:
+a keydown, pointerdown or click that is not the interaction's own, between that release and its own
+press, attaches the commit to nothing (since 2026-09-27). Typing fast, keys roll over, B going down
+before A comes up, and the results B's keystroke asked for rendered stamped with A's keyup. A's quick
+report was published for them as its later render, and B's held nothing. A Shift let go after a click
+put the click's render on Shift's keyup the same way. A render stamped with a click stays: a pointer
+held down through a key press ends in one, and the render is the pointer's. The ring is
 the whole of that evidence, which bounds the check: an update with no user input behind it at all, a
 timer firing or a message from a socket, is invisible to it and is still read as this interaction's
 follow-up render. So, until 2026-09-25, was a test script setting a select's value and dispatching

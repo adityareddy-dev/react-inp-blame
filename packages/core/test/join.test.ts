@@ -1030,6 +1030,48 @@ test('a click made from the keyboard is not a later render of the mouse click be
   assert.deepEqual(buildReport(mouse, [enter], [], ring, 'attributes', [], 500).followUps, []);
 });
 
+test('a render stamped with a release is attached to nothing when another press came between that release and its own press', () => {
+  // Keys rolled over: B went down at 50, before A came up at 80. The results list rendered outside any
+  // dispatch, stamped with the newest input, A's keyup, and joined A's report as its later render, while B,
+  // whose keystroke it showed, held nothing. No input came after all of A's own, so nothing closed it.
+  const keyA = [entry('keydown', 0, 40, 1, 20)];
+  const rollover = [input(0, 'keydown', { press: 'KeyA' }), input(50, 'keydown', { press: 'KeyB' }), input(80, 'keyup', { press: 'KeyA', gestureTs: 0 })];
+  const results = commit(110, 80, { inputType: 'keyup', gestureTs: 0, inDispatch: false, rendered: 400, total: 60 });
+  assert.equal(isLaterRender(buildReport(keyA, [], [], rollover), results, rollover), false);
+  assert.deepEqual(buildReport(keyA, [results], [], rollover).followUps, []);
+  // Shift+click with Shift let go after the click: the click's data render was stamped with Shift's keyup.
+  const mouse = { pointerType: 'mouse', press: 1 };
+  const shiftClick = [
+    input(0, 'keydown', { press: 'ShiftLeft' }),
+    input(500, 'pointerdown', mouse),
+    input(510, 'pointerup', { ...mouse, gestureTs: 500 }),
+    input(510.5, 'click', { ...mouse, gestureTs: 500 }),
+    input(600, 'keyup', { press: 'ShiftLeft', gestureTs: 0 }),
+  ];
+  const shift = [entry('keydown', 0, 48, 1, 30)];
+  const data = commit(800, 600, { inputType: 'keyup', gestureTs: 0, inDispatch: false, rendered: 400, total: 60 });
+  assert.equal(isLaterRender(buildReport(shift, [], [], shiftClick), data, shiftClick), false);
+  assert.deepEqual(buildReport(shift, [data], [], shiftClick).followUps, []);
+  // With nothing else pressed in between, the keyup's render is still the key's, and so is one React made
+  // inside the keyup's own dispatch, whoever went down before it.
+  const alone = [input(0, 'keydown', { press: 'KeyA' }), input(80, 'keyup', { press: 'KeyA', gestureTs: 0 })];
+  assert.deepEqual(buildReport(keyA, [results], [], alone).followUps.map((c) => c.at), [110]);
+  assert.deepEqual(buildReport(keyA, [{ ...results, inDispatch: true }], [], rollover).followUps.map((c) => c.at), [110]);
+  // The click Enter makes comes between its keydown and its keyup, and it is the key's own.
+  const enter = [input(0, 'keydown', { press: 'Enter' }), input(0.5, 'click', { gestureTs: 0, press: -1 }), input(80, 'keyup', { press: 'Enter', gestureTs: 0 })];
+  assert.deepEqual(buildReport(keyA, [results], [], enter).followUps.map((c) => c.at), [110]);
+  // A click's render after a pointer held down through a key press keeps its report as well.
+  const through = [
+    input(0, 'pointerdown', mouse),
+    input(100, 'keydown', { press: 'KeyA' }),
+    input(150, 'keyup', { press: 'KeyA', gestureTs: 100 }),
+    input(600, 'pointerup', { ...mouse, gestureTs: 0 }),
+    input(600, 'click', { ...mouse, gestureTs: 0 }),
+  ];
+  const held = [entry('pointerdown', 0, 24, 1, 10)];
+  assert.equal(isLaterRender(buildReport(held, [], [], through), commit(900, 600, { gestureTs: 0, total: 40 }), through), true);
+});
+
 test("the rating follows INP's thresholds", () => {
   assert.equal(report([entry('click', 0, 200, 1, 2)], [], []).explanation.rating, 'good');
   assert.equal(report([entry('click', 0, 208, 1, 2)], [], []).explanation.rating, 'needs-improvement');

@@ -748,7 +748,23 @@ export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): R
  * gets the renders it pays to walk and one that sets it shorter keeps the ones it walked.
  */
 function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: readonly Stamp[], inputWindow: number): boolean {
-  return c.at - followUpFrom(c, end, inputs, stamps) <= inputWindow && worthMentioning(c) && !newerInputBefore(inputs, stamps, end, c.at);
+  return c.at - followUpFrom(c, end, inputs, stamps) <= inputWindow && worthMentioning(c) && !newerInputBefore(inputs, stamps, end, c.at) && !releaseAfterOtherPress(c, inputs, stamps);
+}
+
+/**
+ * Whether a commit made outside any dispatch is stamped with a keyup or a pointerup, and another press, one
+ * that is not this interaction's own, went down between that release and its own press. The hook stamps
+ * such a commit with the newest input, and typing fast, keys roll over: B goes down before A comes
+ * up, and the results B's keystroke asked for render stamped with A's keyup. A Shift let go after a click
+ * puts the click's render on Shift's keyup the same way. The press came before the interaction's last input,
+ * so `newerInputBefore` never sees it, and whose render it is cannot be told, so it is attached to nothing.
+ * A render stamped with a click is left alone: a pointer held down through a key press ends in one, and the
+ * render is the pointer's.
+ */
+function releaseAfterOtherPress(c: CommitSummary, inputs: readonly InputRecord[], stamps: readonly Stamp[]): boolean {
+  if (c.inDispatch || (c.inputType !== 'keyup' && c.inputType !== 'pointerup')) return false;
+  const own = ringInputs(inputs, stamps);
+  return inputs.some((i) => (PRESSES.includes(i.type) || i.type === 'click') && i.ts > c.gestureTs && i.ts < c.inputTs && !own.includes(i));
 }
 
 /**

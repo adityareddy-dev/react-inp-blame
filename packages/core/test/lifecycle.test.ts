@@ -225,6 +225,17 @@ test('a quiet key press published for the render it set off keeps that render in
   assert.match(published[1]?.verdict ?? '', /A second React render landed 126 ms after the screen updated/);
 });
 
+test('a quiet key press is not published for a render stamped with its keyup when another key went down in between', () => {
+  // Keys rolled over: B went down at 7050, before A came up at 7080. The results list rendered outside any
+  // dispatch at 7180, stamped with A's keyup, and published A's 32 ms key press as its later render.
+  const input = (ts: number, type: string, gestureTs: number, press: string) => ({ ts, type, gestureTs, press, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const ring = [input(7000, 'keydown', 7000, 'KeyA'), input(7050, 'keydown', 7050, 'KeyB'), input(7080, 'keyup', 7000, 'KeyA')];
+  const { life, published, render } = lifecycle({ inputs: () => ring });
+  life.onEntries([entry(7, 'keydown', 32)]);
+  render({ ...commit(7180, 7080), gestureTs: 7000, inputType: 'keyup', inDispatch: false });
+  assert.deepEqual(published, []);
+});
+
 test("the page's first input, heard as its first-input entry and then as its event entry, is one entry in its report", () => {
   const { life, published } = lifecycle();
   life.onEntries([entry(7, 'pointerdown', 56, { entryType: 'first-input' })]);
