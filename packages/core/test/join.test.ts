@@ -2869,6 +2869,20 @@ test("a render the verdict keeps from React's task after the handlers is said to
     report([entry('click', 0, 116, 1, 61)], [commit(67, 0, rows)], task, save).explanation.cause,
     /^React was most likely re-rendering 800 components inside List, mostly Row \(800 of them\), after the handlers, before the next frame\. This React build/,
   );
+  // So with another commit's effects in the handlers, which the sentence led with, then placed after the render: the
+  // 800 rows "then ran useEffect callbacks for about 35 ms of the 100 ms of working time in another commit".
+  const few = { ...rows, rendered: 5, components: [{ name: 'Row', count: 5, self: null, total: null }], effectsStartedAt: 40.2, effectsEndedAt: 75 };
+  const beside = report([entry('click', 0, 130, 5, 105)], [commit(40, 0, few), commit(115, 0, rows)], null, save).explanation;
+  assert.deepEqual(beside.blame, { kind: 'render', name: 'List', detail: 'Row ×800', ms: null, confidence: 'inferred' });
+  assert.equal(
+    beside.cause,
+    'React was most likely re-rendering 800 components inside List, mostly Row (800 of them), after the handlers, before the next frame. This React build records no render durations, so that is read from the component counts, not measured. A profiling build of React would give exact numbers.',
+  );
+  // Where the 800 rows committed in the handlers too, the effects still lead.
+  assert.match(
+    report([entry('click', 0, 130, 5, 105)], [commit(40, 0, few), commit(100, 0, rows)], null, save).explanation.cause,
+    /, then ran useEffect callbacks for about 35 ms of the 100 ms of working time in another commit, before the screen could update\./,
+  );
   // One that began before the handlers is given no place, and one that ran in them is still said against them.
   const early = report([entry('click', 0, 70, 20, 60)], [commit(55, 0, { total: 30, startedAt: 10 })], [], save, 'attributes', [], undefined, 'unreadable');
   assert.equal(early.explanation.cause, 'React most likely spent about 30 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');

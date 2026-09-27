@@ -2017,6 +2017,10 @@ function explain(r: InteractionReport): Explanation {
    * inside the handlers.
    */
   const spentWith = (when: string) => (renderRan === 'after' ? placed(' ', '') : `${committed}${spentIn(when, `${committedEnd} `)}`);
+  // A production build's effects are said as what React then did, where the render ran in the working time. After the
+  // handlers the render came after them, and they are left out as above: the render verdict read 800 rows committed
+  // after the handlers "then ran useEffect callbacks for about 35 ms", effects that had run inside the handlers.
+  const effectsThen = effectsFigure >= 1 && renderRan !== 'after';
   const closedOff = (when: string): string | null =>
     handlerWins
       ? say(
@@ -2030,7 +2034,7 @@ function explain(r: InteractionReport): Explanation {
             `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}.`,
             hasDurations
               ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}.`
-              : effectsFigure >= 1 && renderRan !== 'after'
+              : effectsThen
                 ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${spentIn(when, heldAll ? ', ' : ' ')}.`
                 : `React was ${HEDGE} still ${renderPhrase(rc)}${spentIn(when, ', ')}.`,
           )
@@ -2227,7 +2231,7 @@ function explain(r: InteractionReport): Explanation {
       : `React was ${HEDGE} ${renderPhrase(rc)}${placed(', ', `in the ${ms(r.processing)} of working time`)}. This React build records no render durations, so that is read from the component counts, not measured.`;
     // A production build times the effects but not the render, so there the effects lead.
     cause =
-      !hasDurations && effectsFigure >= 1
+      !hasDurations && effectsThen
         ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}`
         : say(confidence, `React spent ${ms(rc.total)} ${renderPhrase(rc)}.`, `${likely}${profiling}`);
     if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
