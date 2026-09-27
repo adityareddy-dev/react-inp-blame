@@ -239,7 +239,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
         h('div', { class: 'r1', 'data-rating': r.explanation.rating }, h('i', 'dot'), h('span', 't', titleFor(r)), h('span', 'ms', `${Math.round(r.duration)} ms`)),
         n > 1 && h('div', 'meta', `${n} key presses${DOT}slowest ${Math.round(r.duration)} ms${DOT}typical ${Math.round(median(g.reports.map((x) => x.duration)))} ms`),
         h('div', 'blame', ...blameLine(r)),
-        later && h('div', 'blame later', later.at < r.end ? 'earlier, ' : 'then ', b(where(later)), ` ${renderedVerb(later)} ${laterWhen(r, later)}${DOT}${laterDetail(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
+        later && h('div', 'blame later', laterLead(r, later), b(where(later)), ` ${renderedVerb(later)} ${laterWhen(r, later)}${DOT}${laterDetail(later)}${later.hasDurations ? `${DOT}${Math.round(later.total)} ms` : ''}`),
         h('div', 'bar', ...phaseBar(r.explanation.phases, total)),
       ),
       isExpanded && more(r),
@@ -508,6 +508,8 @@ function where(c: CommitSummary): string {
 export const laterDetail = (c: CommitSummary): string => mostlyOf(c) ?? renderedCount(c);
 /** When a later render came, as the panel says it: after the paint, or after the press painted where it came before the release. */
 export const laterWhen = (r: Pick<InteractionReport, 'end'>, c: CommitSummary): string => (c.at < r.end ? 'after the press painted' : 'after the paint');
+/** How the panel's line for a later render opens: "earlier" for one before the release, "then" for one after the paint. */
+export const laterLead = (r: Pick<InteractionReport, 'end'>, c: CommitSummary): string => (c.at < r.end ? 'earlier, ' : 'then ');
 
 /** The row's line under its title: what took the time, or why nothing is blamed. */
 export function blameLine(r: InteractionReport): Child[] {
