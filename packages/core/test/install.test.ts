@@ -1603,6 +1603,68 @@ test("the blame attributeINP hands to analytics names a script by its URL withou
   );
 });
 
+/** A long animation frame of 280 ms from `startTime`, holding `scripts`. */
+function longFrame(startTime: number, scripts: unknown[]) {
+  return { entryType: 'long-animation-frame', startTime, duration: 280, blockingDuration: 230, styleAndLayoutStart: startTime + 260, scripts };
+}
+
+/** The warnings that say the library caught an error of its own. */
+function caught(warn: { mock: { calls: { arguments: unknown[] }[] } }): unknown[] {
+  return warn.mock.calls.map((call) => call.arguments[0]).filter((message) => /#library-error$/.test(String(message)));
+}
+
+test('a long animation frame the library cannot read never reaches the page, and the frames after it still join their reports', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser(
+    (page) => {
+      const api = install({ devtoolsTrack: false });
+      try {
+        page.queue([click(7, 1000, 300)]);
+        page.paint([]);
+        // One whose list of scripts holds a null.
+        page.queue([longFrame(1010, [null])]);
+        assert.doesNotThrow(() => page.paint([]));
+        page.queue([longFrame(1010, [])]);
+        page.paint([]);
+        assert.deepEqual(
+          api.last()?.frames?.map((f) => f.start),
+          [1010],
+        );
+        assert.equal(caught(warn).length, 1);
+      } finally {
+        api.dispose();
+      }
+    },
+    { entryTypes: ['event', 'first-input', 'long-animation-frame'] },
+  );
+});
+
+test('a frame the library cannot read, still queued when the page is hidden, keeps neither the click queued with it from its report nor the reports waiting from being heard', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser(
+    (page) => {
+      const api = install({ devtoolsTrack: false });
+      try {
+        const heard: number[] = [];
+        onInteraction((r) => heard.push(r.interactionId));
+        page.queue([click(7, 1000, 300)]);
+        page.paint([]);
+        page.queue([longFrame(2010, [null]), click(14, 2000, 300)]);
+        assert.doesNotThrow(() => page.hide());
+        assert.deepEqual(
+          api.reports().map((r) => r.interactionId),
+          [7, 14],
+        );
+        assert.deepEqual(heard, [7, 14]);
+        assert.equal(caught(warn).length, 1);
+      } finally {
+        api.dispose();
+      }
+    },
+    { entryTypes: ['event', 'first-input', 'long-animation-frame'] },
+  );
+});
+
 test('listeners hear a report in a task after the one that published it, never inside the React commit that revised it', async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {
@@ -1756,6 +1818,94 @@ test('where there is no reportError, the error a listener throws is thrown again
     assert.deepEqual(heard, [7]);
     api.dispose();
   });
+});
+
+/**
+ * A form with a field named `tagName`. A form's fields shadow its own properties, so its `tagName` is that
+ * field, and reading the form as an element throws inside the library.
+ */
+function formWithFieldNamedTagName() {
+  const form: Record<string, unknown> = { nodeType: 1, id: '', classList: { length: 0 }, parentNode: null, parentElement: null, firstChild: null, getAttribute: () => null };
+  form.tagName = { nodeType: 1, tagName: 'INPUT', name: 'tagName', form };
+  return form;
+}
+
+test("an error while a report is built never reaches the page's error handlers: that report is dropped, the console says so once, and the others still come", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    try {
+      const onForm = (interactionId: number, startTime: number) => ({ ...click(interactionId, startTime, 120), target: formWithFieldNamedTagName() });
+      // A click on the form's padding, and a key pressed in the same frame, handed over in one batch.
+      assert.doesNotThrow(() => page.paint([onForm(7, 1000), pointer('keydown', 14, 1010, 110)]));
+      page.paint([click(21, 2000, 200)]);
+      assert.doesNotThrow(() => page.paint([onForm(28, 3000)]));
+      assert.deepEqual(
+        api.reports().map((r) => r.interactionId),
+        [14, 21],
+      );
+      assert.equal(warn.mock.callCount(), 1);
+      assert.match(
+        String(warn.mock.calls[0]?.arguments[0]),
+        /^\[react-inp-blame\] an error inside the library \(TypeError: .+\) was kept from the page, and the report it was building was dropped\. Please open an issue with this message\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#library-error$/,
+      );
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
+test("an input on an element the library cannot read never reaches the page's error handlers, from its capture listener or from the navigation the input starts", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  // Imported outside the stand-in browser, so its own install() finds no window and does nothing.
+  const { onRouterTransitionStart } = await nextClient('guarded', { install: {}, basePath: '' });
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    try {
+      const form = formWithFieldNamedTagName();
+      assert.doesNotThrow(() => page.fire('pointerdown', { isTrusted: true, type: 'pointerdown', timeStamp: 1000, target: form, pointerId: 1 }));
+      // Next.js announces a navigation from inside the handler of the click that starts it.
+      page.window.event = { isTrusted: true, type: 'click', timeStamp: 1100, target: form };
+      assert.doesNotThrow(() => onRouterTransitionStart('/cart', 'push', null));
+      assert.equal(caught(warn).length, 1);
+    } finally {
+      delete page.window.event;
+      api.dispose();
+    }
+  });
+});
+
+test("a hook the library cannot chain onto never reaches the page's error handlers, whether the check 3 s after install, an Event Timing batch or the hide finds it", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const finds of ['check', 'batch', 'hide']) {
+    await inBrowser((page) => {
+      const api = install({ devtoolsTrack: false });
+      try {
+        const heard: number[] = [];
+        onInteraction((r) => heard.push(r.interactionId));
+        page.paint([click(7, 1000, 120)]);
+        // A script that locks the page down redefines the hook as a frozen object before React loads.
+        Object.defineProperty(page.window, HOOK, { value: Object.freeze(existingHook()), configurable: true, writable: true });
+        if (finds === 'check') assert.doesNotThrow(() => t.mock.timers.tick(3000));
+        if (finds === 'batch') assert.doesNotThrow(() => page.paint([click(14, 2000, 200)]));
+        if (finds === 'hide') {
+          page.queue([click(14, 2000, 200)]);
+          assert.doesNotThrow(() => page.hide());
+          assert.deepEqual(heard, [7, 14], 'the report waiting was not heard at the hide');
+        }
+        // A hook that cannot be wrapped is the page's doing, which the locked hook warning says, not an error
+        // of the library's own.
+        assert.deepEqual({ caught: caught(warn).length, warnings: warn.mock.callCount() }, { caught: 0, warnings: 1 }, finds);
+        page.paint([click(21, 3000, 200)]);
+        assert.equal(api.last()?.interactionId, 21, finds);
+      } finally {
+        api.dispose();
+      }
+    });
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+  }
 });
 
 test('a render that a report listener causes is never read, so a panel showing reports never joins the report it shows', async (t) => {

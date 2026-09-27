@@ -1,4 +1,5 @@
 import type { FrameSummary, ScriptSummary } from './types.js';
+import { guarded } from './warn.js';
 
 /** The browser sends no `event` entry for an interaction under this many ms, whatever threshold an observer asks for. */
 const EVENT_TIMING_FLOOR_MS = 16;
@@ -31,7 +32,11 @@ interface PerformanceScriptTiming extends PerformanceEntry {
   readonly forcedStyleAndLayoutDuration: number;
 }
 
-/** A connected observer: `flush` hands over at once what the browser has queued for it and not delivered yet. */
+/**
+ * A connected observer: `flush` hands over at once what the browser has queued for it and not delivered yet.
+ * An error while entries are handed over, by the browser's callback or by `flush`, goes to `dropped` and
+ * never to the page.
+ */
 export interface Observing {
   stop(): void;
   flush(): void;
@@ -85,7 +90,7 @@ export function observeEventTiming(onBatch: (entries: InteractionTiming[]) => vo
     });
     if (batch.length) onBatch(batch);
   };
-  const po = new PerformanceObserver((list) => take(list.getEntries() as InteractionTiming[]));
+  const po = new PerformanceObserver(guarded((list: PerformanceObserverEntryList) => take(list.getEntries() as InteractionTiming[])));
   const events: EventTimingObserverInit = { type: 'event', buffered: true, durationThreshold: EVENT_TIMING_FLOOR_MS };
   try {
     po.observe(events);
@@ -93,7 +98,7 @@ export function observeEventTiming(onBatch: (entries: InteractionTiming[]) => vo
     return NOT_OBSERVING;
   }
   if (firstInput) po.observe({ type: 'first-input', buffered: true });
-  return { stop: () => po.disconnect(), flush: () => take(po.takeRecords() as InteractionTiming[]) };
+  return { stop: () => po.disconnect(), flush: guarded(() => take(po.takeRecords() as InteractionTiming[])) };
 }
 
 export function observeFrames(store: FrameSummary[], onFrame: (f: FrameSummary) => void): Observing {
@@ -106,9 +111,9 @@ export function observeFrames(store: FrameSummary[], onFrame: (f: FrameSummary) 
       onFrame(f);
     }
   };
-  const po = new PerformanceObserver((list) => take(list.getEntries() as PerformanceLongAnimationFrameTiming[]));
+  const po = new PerformanceObserver(guarded((list: PerformanceObserverEntryList) => take(list.getEntries() as PerformanceLongAnimationFrameTiming[])));
   po.observe({ type: 'long-animation-frame', buffered: true });
-  return { stop: () => po.disconnect(), flush: () => take(po.takeRecords() as PerformanceLongAnimationFrameTiming[]) };
+  return { stop: () => po.disconnect(), flush: guarded(() => take(po.takeRecords() as PerformanceLongAnimationFrameTiming[])) };
 }
 
 /** A frame summary is frozen: reports hold the same object from the revision it joins onwards. */
