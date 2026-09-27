@@ -592,6 +592,35 @@ test('without entry, a framework that writes its own HTML and a build of scripts
   assert.equal(warnings.length, 5, warnings.slice(5).join('\n'));
 });
 
+test('a build of scripts only is told what to do where its inputs are named for the client environment alone, as RSC setups do', async () => {
+  // Each message is said once per process, so each config gets a copy of the plugin of its own.
+  let copies = 0;
+  const warningsFor = async (config: Record<string, any>) => {
+    const { inpBlame: fresh } = await import(`../vite.mjs?client-environment-${++copies}`);
+    const warnings: string[] = [];
+    const runtime = (fresh({ enabled: true }) as Plugin[]).find((p) => p.name === INSTALL)!;
+    runtime.configResolved(resolved({ command: 'serve', logger: { warn: (message: string) => warnings.push(message) }, ...config }));
+    return warnings;
+  };
+  // What Vite 6 and later resolve: the top-level build lists nothing, and the client environment's build
+  // is the top-level one with the environment's own laid over it.
+  const client = (environment: Record<string, any>, build: Record<string, any> = { rollupOptions: {} }) => ({ build, environments: { client: environment } });
+  const scriptsOnly = /^\[react-inp-blame\] this build has no HTML page, only scripts.*#install-with-vite$/;
+
+  assert.match((await warningsFor(client({ build: { rollupOptions: { input: { index: 'virtual:vite-rsc/entry-browser' } } } })))[0]!, scriptsOnly);
+  assert.match((await warningsFor(client({ build: { rolldownOptions: { input: 'src/entry.browser.tsx' } } })))[0]!, scriptsOnly);
+  // Vite 8.3's own `input`, which it reads after the bundler's.
+  assert.match((await warningsFor(client({ input: 'src/entry.browser.tsx', build: { rollupOptions: {} } })))[0]!, scriptsOnly);
+  // The client environment replacing the top-level page with a script builds no page.
+  assert.match((await warningsFor(client({ build: { rollupOptions: { input: 'src/entry.browser.tsx' } } }, { rollupOptions: { input: 'index.html' } })))[0]!, scriptsOnly);
+
+  assert.deepEqual(await warningsFor(client({ build: { rollupOptions: { input: { index: 'index.html', browser: 'src/entry.browser.tsx' } } } })), []);
+  assert.deepEqual(await warningsFor(client({ input: 'index.html', build: { rollupOptions: {} } })), []);
+  assert.deepEqual(await warningsFor(client({ build: { rollupOptions: {} } })), []);
+  assert.deepEqual(await warningsFor(client({ build: { lib: { entry: 'src/index.ts' }, rollupOptions: { input: 'src/index.ts' } } })), []);
+  assert.deepEqual(await warningsFor(client({ build: { ssr: 'src/server.ts', rollupOptions: { input: 'src/server.ts' } } })), []);
+});
+
 test("on an HTML page, an app's own manualChunks cannot put the library in its vendor chunk", () => {
   const runtime = pluginsFor('build', { enabled: true }).find((p) => p.name === INSTALL)!;
   runtime.configResolved(resolved());
