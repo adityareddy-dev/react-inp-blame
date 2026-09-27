@@ -4384,6 +4384,37 @@ test('text that arrives with no key pressed, one input event a second after a cl
   });
 });
 
+test("a click or a key a script dispatches is not taken for the user's input, so a render after it is still the click's before it", async (t) => {
+  // A page that calls el.click() or dispatchEvent() from code: analytics, a focus trap, a test harness left in.
+  // The event has no Event Timing entry. Taken for the newest input, it would stamp the renders after it with an
+  // input no report has, and the click's report would lose them.
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    const commit = (at: number) => {
+      clock.now = at;
+      commitAgain(root, 40);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    };
+    clock.now = 1000;
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+    page.duringClick(() => commit(1010));
+    await nextTask();
+    page.fire('click', { isTrusted: false, type: 'click', timeStamp: 1100, target: null, pointerId: -1 });
+    commit(1120);
+    await nextTask();
+    page.fire('keydown', { isTrusted: false, type: 'keydown', timeStamp: 1200, target: null, code: 'KeyA' });
+    commit(1220);
+    assert.deepEqual(api.debug.commits().map((c) => c.inputTs), [1000, 1000, 1000]);
+    api.dispose();
+  });
+});
+
 test('a render after an input or change a script dispatched does not join the click before it, as a page size Playwright picked did', async (t) => {
   // Sorting a table by a click, then picking a page size a second later with Playwright's selectOption,
   // which fires `input` and `change` from script. No pointer or key goes down, so the ring's newest input
