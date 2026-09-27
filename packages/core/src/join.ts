@@ -579,9 +579,10 @@ export function buildReport(
         // another of the interaction's entries (a press held before a click), or before its press can
         // have painted, `holdMs` covers it. After one of them painted it is a later render of that paint,
         // as one after the headline's is: a keydown's render before its slower keyup, or a pointerdown's
-        // while the pointer was held. Anything newer is looked for from that paint.
+        // while the pointer was held. Anything newer is looked for from that paint. An entry runs to its
+        // paint as `timed` has it, or a render INP timed would be kept as one it left out.
         const from = paintBefore(entries, c);
-        const inEntry = entries.some((e) => c.at >= e.startTime - STAMP_TOLERANCE && c.at <= paintOf(e));
+        const inEntry = entries.some((e) => c.at >= e.startTime - STAMP_TOLERANCE && c.at <= paintOf(e) + STAMP_TOLERANCE);
         if (from > -Infinity && !inEntry && isFollowUp(c, from, inputs, stamps, inputWindow, from)) followUps.push(joined(c, 'exact'));
         continue;
       }

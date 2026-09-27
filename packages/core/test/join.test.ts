@@ -1084,6 +1084,10 @@ test("a render a held pointer's press set off after it painted is a later render
   // Past the pointerdown's paint as its duration rounds it, but still in its handlers, which ended at 26.
   const rounded = commit(25.5, 0, { inputType: 'pointerdown', total: 40 });
   assert.deepEqual(buildReport([entry('pointerdown', 0, 24, 1, 26), entry('click', 200, 120, 201, 300)], [rounded], [], ring).followUps, []);
+  // Within a millisecond of that paint INP timed it as the pointerdown's, so it is not a later render INP left
+  // out: kept, its note dropped "INP doesn't count it", as though it had.
+  const atPaint = commit(24.5, 0, { inputType: 'pointerdown', rendered: 400, total: 60 });
+  assert.deepEqual(buildReport([entry('pointerdown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [atPaint], [], ring).followUps, []);
   // The pointerup's handlers made one after the pointerdown painted, and it is inside the pointerup's entry:
   // `holdMs` covers it, as it does the pointerdown's own.
   const slowUp = [input(0, 'pointerdown'), input(200, 'pointerup', { gestureTs: 0 }), input(230, 'click', { gestureTs: 0 })];
