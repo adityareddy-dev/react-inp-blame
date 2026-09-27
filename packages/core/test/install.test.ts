@@ -6,6 +6,7 @@ import { beforeEach, test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, mountOverlay, onInteraction } from '../src/index.ts';
 import { page as installState } from '../src/install-state.ts';
+import { MAX_QUIET, MAX_REPORTS } from '../src/lifecycle.ts';
 import { announceNavigation } from '../src/navigation.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 import { attributeINP } from '../src/web-vitals.ts';
@@ -2539,6 +2540,41 @@ test("an error while reports are drawn on the Performance panel never reaches th
       page.paint([click(14, 2000, 150)]);
       t.mock.timers.tick(0);
       assert.deepEqual(drawn, ['120 ms click', '150 ms click']);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
+test('drawing on the Performance panel that goes on throwing holds only the reports the lifecycle can still revise, and draws no more than those once it stops', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  // A measure that cannot be looked up until the last click, which the drawing does before anything else.
+  const drawn: string[] = [];
+  let unreadable = true;
+  Object.defineProperty(performance, 'measure', {
+    configurable: true,
+    get() {
+      if (unreadable) throw new TypeError('measure moved');
+      return (name: string) => drawn.push(name);
+    },
+  });
+  t.after(() => delete (performance as any).measure);
+  await inBrowser((page) => {
+    const api = install();
+    try {
+      for (let i = 1; i <= 300; i++) {
+        page.paint([click(i, i * 1000, 120)]);
+        t.mock.timers.tick(0);
+      }
+      assert.equal(caught(warn).length, 1);
+      unreadable = false;
+      page.paint([click(301, 301_000, 150)]);
+      t.mock.timers.tick(0);
+      // The newest of the reports that could not be drawn, and the one after them.
+      assert.equal(drawn.length, MAX_REPORTS + MAX_QUIET);
+      assert.deepEqual(drawn.slice(-2), ['120 ms click', '150 ms click']);
+      assert.equal(caught(warn).length, 1);
     } finally {
       api.dispose();
     }
