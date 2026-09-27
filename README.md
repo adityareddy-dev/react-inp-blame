@@ -1367,10 +1367,11 @@ issue with the warning text, your versions and, if you can, the component that w
 <a id="library-error"></a>
 #### An error inside the library was caught
 
-The library hit an error of its own while it read an input or a frame, or built a report, and caught it
-before it reached the page, so the page's error handlers and error monitoring never count it as the app's.
-What it was working on, usually one report, was dropped, and the interactions after it are reported as
-usual. This is a bug in the library. Please open a
+The library hit an error of its own while it read an input or a frame, or built or explained a report,
+and caught it before it reached the page, so the page's error handlers and error monitoring never count it
+as the app's. What it was working on, usually one report, was dropped, and the interactions after it are
+reported as usual. A report it could not explain is kept, blaming nothing (`blame.kind` is `'none'`), with
+a cause that says so. This is a bug in the library. Please open a
 [wrong or missing blame](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=wrong-or-missing-blame.yml)
 issue with the warning text, your versions and, if you can, the element that was clicked.
 

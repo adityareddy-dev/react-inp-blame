@@ -6,6 +6,7 @@ import { rateInp } from './inp.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InteractionReport, Phase, ReactStatus, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
+import { dropped } from './warn.js';
 
 // A commit's input stamp and an entry's startTime are the same clock (Event.timeStamp), so
 // they agree to the timer's resolution; 1 ms covers the coarsening.
@@ -619,7 +620,15 @@ const explanations = new WeakMap<InteractionReport, { explanation: Explanation; 
 function explained(r: InteractionReport): { explanation: Explanation; verdict: string } {
   let built = explanations.get(r);
   if (!built) {
-    const explanation = explain(r);
+    let explanation: Explanation;
+    try {
+      explanation = explain(r);
+    } catch (error) {
+      // Built where the page reads it, in the page's own code, so an error of the library's own is kept
+      // from the page here too. The report stays, blaming nothing, and says why.
+      dropped(error);
+      explanation = unexplained(r);
+    }
     built = { explanation, verdict: toVerdict(explanation) };
     explanations.set(r, built);
   }
@@ -2365,12 +2374,6 @@ function explain(r: InteractionReport): Explanation {
   // Hydrating runs inside the event's own dispatch, so it is part of the working time rather than a
   // fourth phase beside it: the three phases go on adding up to the interaction the way they always did.
   const hydrationMs = waited && waited.boundary.ms != null ? Math.min(waited.boundary.ms, r.processing) : 0;
-  const working: Phase = { label: 'Working', ms: r.processing, hint: 'Event handlers and React rendering.' };
-  const phases: Phase[] = [
-    { label: 'Waiting', ms: r.inputDelay, hint: 'Before the handler could start. The main thread was busy.' },
-    hydrationMs > 0 ? { ...working, parts: Object.freeze([Object.freeze({ label: 'Hydrating', ms: hydrationMs, hint: 'React hydrating server-rendered HTML the interaction landed on, before it could be handled.' })]) } : working,
-    { label: 'Updating the screen', ms: r.presentation, hint: 'From the end of the handlers to the next painted frame.' },
-  ];
   return Object.freeze({
     headline,
     blame: Object.freeze(blame),
@@ -2378,7 +2381,35 @@ function explain(r: InteractionReport): Explanation {
     where,
     cause,
     notes: Object.freeze(notes),
-    phases: Object.freeze(phases.map((p) => Object.freeze(p))),
+    phases: phasesOf(r, hydrationMs),
+  });
+}
+
+/** Waiting, working and updating the screen, of which `hydrationMs` of the working time went to hydrating. */
+function phasesOf(r: InteractionReport, hydrationMs: number): readonly Phase[] {
+  const working: Phase = { label: 'Working', ms: r.processing, hint: 'Event handlers and React rendering.' };
+  const phases: Phase[] = [
+    { label: 'Waiting', ms: r.inputDelay, hint: 'Before the handler could start. The main thread was busy.' },
+    hydrationMs > 0 ? { ...working, parts: Object.freeze([Object.freeze({ label: 'Hydrating', ms: hydrationMs, hint: 'React hydrating server-rendered HTML the interaction landed on, before it could be handled.' })]) } : working,
+    { label: 'Updating the screen', ms: r.presentation, hint: 'From the end of the handlers to the next painted frame.' },
+  ];
+  return Object.freeze(phases.map((p) => Object.freeze(p)));
+}
+
+/**
+ * What a report reads as where building its explanation threw: its headline and phases, nothing blamed,
+ * and a cause that says so. The console has the error (`dropped`).
+ */
+function unexplained(r: InteractionReport): Explanation {
+  const kind = kindOf(r.type, r.pointerType);
+  return Object.freeze({
+    headline: `${ms(r.duration)} ${kind}`,
+    blame: Object.freeze<Blame>({ kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' }),
+    rating: rateInp(r.duration),
+    where: null,
+    cause: `Where the time went is unknown: this library hit an error of its own while it worked that out for this ${kind}, so nothing is blamed. The console has the error.`,
+    notes: Object.freeze([]),
+    phases: phasesOf(r, 0),
   });
 }
 

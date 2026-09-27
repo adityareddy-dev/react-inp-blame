@@ -1859,6 +1859,50 @@ test("an error while a report is built never reaches the page's error handlers: 
   });
 });
 
+test("an error while a report's explanation is built, on its first read, never reaches the page's error handlers: the report blames nothing and says why, the console says so once, and the next report is explained", async (t) => {
+  const reported: unknown[] = [];
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'reportError');
+  Object.defineProperty(globalThis, 'reportError', { value: (error: unknown) => reported.push(error), configurable: true, writable: true });
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'reportError', saved);
+    else delete (globalThis as any).reportError;
+  });
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    try {
+      // An analytics forwarder, which reads every field of a report, the explanation and the verdict with them.
+      const sent: InteractionReport[] = [];
+      onInteraction((r) => sent.push(JSON.parse(JSON.stringify(r))));
+      page.paint([click(7, 1000, 120)]);
+      // The report is built, and its explanation is not until it is read. There the first number it rounds throws.
+      t.mock.method(Math, 'round').mock.mockImplementationOnce(() => {
+        throw new TypeError('rounding moved');
+      });
+      assert.doesNotThrow(() => t.mock.timers.tick(0));
+      assert.deepEqual(reported, []);
+      assert.equal(caught(warn).length, 1);
+      const cause = 'Where the time went is unknown: this library hit an error of its own while it worked that out for this click, so nothing is blamed. The console has the error.';
+      assert.deepEqual(
+        sent.map((r) => ({ id: r.interactionId, blame: r.explanation.blame, cause: r.explanation.cause, phases: r.explanation.phases.map((p) => p.ms), verdict: r.verdict })),
+        [{ id: 7, blame: { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' }, cause, phases: [2, 110, 8], verdict: `120 ms click. ${cause}` }],
+      );
+      // Read again, it is the same, and the console is not told twice.
+      assert.equal(api.last()?.verdict, `120 ms click. ${cause}`);
+      page.paint([click(14, 2000, 150)]);
+      t.mock.timers.tick(0);
+      assert.equal(sent.length, 2);
+      assert.notEqual(sent[1]?.explanation.cause, cause);
+      assert.match(String(sent[1]?.verdict), /^150 ms click\. /);
+      assert.deepEqual(reported, []);
+      assert.equal(caught(warn).length, 1);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test('an input the library cannot read the target of is still recorded, so a render in its handler is read as its own and the reports after it keep their components', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   const clock = useClock(t);
