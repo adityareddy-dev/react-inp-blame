@@ -1296,7 +1296,10 @@ function explain(r: InteractionReport): Explanation {
     x.at <= s.start + s.duration + STAMP_TOLERANCE &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
-  const insideLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  const insideLate =
+    lateScript && !heldByNext && (screenOutranks || lateScript.script.invoker !== REACT_TASK)
+      ? r.commits.filter((x) => ranInside(x, lateScript.script))
+      : [];
   const lateRender = insideLate.length ? heaviest(insideLate) : null;
   const lateRenderSaid = !lateRender
     ? ''
