@@ -454,7 +454,9 @@ draw under a guard of their own (`overlay-draw`). Where one error could take mor
 finer. The interactions in one batch are built one at a time, and long animation frames are read one at
 a time, so each drops only itself. So does the batch's count toward INP, each quiet report a batch or
 the hide publishes, and each report a frame revises. A report is queued for its listeners before it is
-drawn, so an idle callback the page refuses costs it the drawing alone. The checks each batch makes, on
+drawn. An idle callback the page refuses costs the reports waiting for it their drawing and nothing
+else: they are let go rather than kept for one that may never come, so a page that goes on refusing
+holds none of them, and one that stops draws only what comes after. The checks each batch makes, on
 the DevTools hook global and for react-dom, are housekeeping, under a guard of their own, so one that
 goes on throwing never keeps a batch from its reports. A global that throws when read is not one of
 those errors: the check catches that read itself, as above. At hide neither flush throws, and the
