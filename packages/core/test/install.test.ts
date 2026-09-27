@@ -1033,9 +1033,11 @@ test('a page that turns the DevTools hook off where it is after install() is uns
       assert.equal(warn.mock.callCount(), 1);
       assert.match(warn.mock.calls[0].arguments[0], /off after install\(\)/);
       api.dispose();
-      // Installed again over it, the page is unsupported from the start rather than from the next batch.
+      // Installed again over it, the page is unsupported from the start rather than from the next batch, and React,
+      // which registered with the hook, is not said to have registered with none.
       const again = install({ threshold: 40, devtoolsTrack: false });
       assert.equal(again.stats().mode, 'unsupported');
+      assert.match(again.stats().unsupportedReason?.message ?? '', /off after react-dom registered with it/);
       again.dispose();
     });
   }
@@ -1315,6 +1317,7 @@ test('a chained hook the page turns off between dispose() and another install() 
     const again = install({ devtoolsTrack: false });
     assert.deepEqual({ mode: again.stats().mode, kind: again.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
     assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /off after react-dom registered with it/);
     again.dispose();
   });
 });

@@ -734,9 +734,11 @@ function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   if (turnedOff(hook)) {
     // React checks both before registering, so it registers with no hook at all. That is as true of a hook
     // assigned over the shim, which an app does when its first import keeps developer tools out, and of the
-    // shim itself once the page has turned it off (checkHookReplaced).
-    const message =
-      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ turns React's developer tools support off (isDisabled, or no supportsFiber), so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.";
+    // shim itself once the page has turned it off (checkHookReplaced). A react-dom that registered before that
+    // goes on calling the hook, and finds the page's methods in place of the library's.
+    const message = reactDomOn(hook)
+      ? "the page turned its __REACT_DEVTOOLS_GLOBAL_HOOK__ off after react-dom registered with it (isDisabled, or no supportsFiber, with its methods replaced), so React's commits cannot be read. Interactions are still reported, without components."
+      : "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ turns React's developer tools support off (isDisabled, or no supportsFiber), so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.";
     unusable(message);
     warnOnce('hook-disabled', message);
     return;
