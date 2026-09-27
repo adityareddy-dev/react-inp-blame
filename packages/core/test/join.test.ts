@@ -1669,6 +1669,14 @@ test('where React is read and rendered nothing, all of the working time is outsi
   const timer = [frame(-60, 90, [script('TimerHandler:setTimeout', -58, 88)])];
   for (const frames of [timer, [], null]) assert.deepEqual(report(saved, [], frames, save).explanation.blame, { ...handler, ms: 45 });
   assert.equal(report(saved, [commit(74, 0, { total: 1, rendered: 1 })], timer, save).explanation.blame.kind, 'handler');
+  // A frame over the handlers that lists no script of 20 ms or more says nothing of what ran in them, so the handler
+  // is still named there rather than the time going to waiting and painting: three listeners of 15 ms each, and the
+  // 300 ms handleSave in a frame that lists no script at all.
+  const listeners = [frame(0, 60, [script('DOCUMENT.onclick', 2, 15), script('DOCUMENT.onclick', 17, 15), script('WINDOW.onclick', 32, 15)])];
+  const heard = report([entry('click', 0, 64, 2, 47)], [], listeners, save);
+  assert.deepEqual(heard.explanation.blame, { ...handler, ms: 45 });
+  assert.equal(heard.explanation.cause, "The click handler handleSave ran for about 45 ms; React didn't render anything.");
+  assert.deepEqual(report(click, [], [frame(0, 318, [])], save).explanation.blame, handler);
   // Where React is not read, or rendered in commits that could not be tied to the click, its time is unknown.
   assert.equal(report(click, [], null, save, 'attributes', [], undefined, 'installed-late').explanation.blame.kind, 'none');
   const unjoinable = [{ ...save[0]!, work: { endedAt: 0, unjoined: [50] } }];
