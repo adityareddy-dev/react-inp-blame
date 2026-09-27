@@ -2176,6 +2176,30 @@ test('a DevTools hook whose inject cannot be replaced, though its other calls ca
   });
 });
 
+test('a DevTools hook whose renderers cannot be read once its calls are wrapped is put back as it was, as its warning says', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const hook = existingHook();
+    Object.defineProperty(hook, 'renderers', {
+      get() {
+        throw new TypeError('renderers moved');
+      },
+    });
+    const { inject, onCommitFiberRoot } = hook;
+    page.window[HOOK] = hook;
+    const api = install({ devtoolsTrack: false });
+    try {
+      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      assert.match(String(warn.mock.calls[0]?.arguments[0]), /__REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen, or has a method that cannot be assigned or added, so it cannot be wrapped/);
+      assert.equal(hook.inject, inject);
+      assert.equal(hook.onCommitFiberRoot, onCommitFiberRoot);
+      assert.equal('onPostCommitFiberRoot' in hook, false);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test("a DevTools hook global the library cannot read never reaches the page's error handlers, whether the check 3 s after install, an Event Timing batch or the hide reads it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });

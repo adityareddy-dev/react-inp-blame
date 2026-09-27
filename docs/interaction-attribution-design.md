@@ -299,15 +299,16 @@ after `install()` and the page then sets only `isDisabled`, the hook reads as sw
 commits are no longer read though they still reach it. A hook the page has locked against developer
 tools, frozen, sealed without `onPostCommitFiberRoot`, or with a method that has only a getter or a
 setter that drops what it is given, cannot be wrapped: each method is read back after it is assigned, and
-one that still reads as the page's own did not take. The methods already wrapped are put back, and the
-page is `'unsupported'` with the same kind and its own warning, where before `install()` threw into the
-page's entry module, or read no commits at all. A page that holds the global empty and read-only is
-`'unsupported'` the same way, since React finds no hook there either, and so is a page that empties it
-over the shim before react-dom loads, checked for at the same points, where before that was put down to
-`install()` running late. A global declared with `var` cannot be redefined but can be assigned, so it
-gets the shim as a plain value, and a hook assigned over it is noticed at the next Event Timing batch
-rather than as it happens. On a hook the page locks after `install()`, `dispose()` puts back what it
-still can, and a method it cannot put back only passes calls on.
+one that still reads as the page's own did not take. So is one whose `renderers` cannot be read once its
+methods are wrapped. The methods already wrapped are put back, and the page is `'unsupported'` with the
+same kind and its own warning, where before `install()` threw into the page's entry module, or read no
+commits at all. A page that holds the global empty and read-only is `'unsupported'` the same way, since
+React finds no hook there either, and so is a page that empties it over the shim before react-dom loads,
+checked for at the same points, where before that was put down to `install()` running late. A global
+declared with `var` cannot be redefined but can be assigned, so it gets the shim as a plain value, and a
+hook assigned over it is noticed at the next Event Timing batch rather than as it happens. On a hook the
+page locks after `install()`, `dispose()` puts back what it still can, and a method it cannot put back
+only passes calls on.
 
 React DevTools never installs over an existing hook: its `installHook` returns as soon as
 `window` has the property, reading and writing nothing. So a shim that loads before it locks
