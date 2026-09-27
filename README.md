@@ -1370,11 +1370,12 @@ issue with the warning text, your versions and, if you can, the component that w
 
 The library hit an error of its own while it read an input or a frame, or built or explained a report,
 and caught it before it reached the page, so the page's error handlers and error monitoring never count it
-as the app's. What it was working on, usually one report, was dropped, and the interactions after it are
-reported as usual. A report it could not explain is kept, blaming nothing (`blame.kind` is `'none'`), with
-a cause that says so. This is a bug in the library. Please open a
+as the app's. Only the step it threw in was skipped, so a report may be missing, and the interactions after
+it are reported as usual. A report it could not explain is kept, blaming nothing (`blame.kind` is `'none'`),
+with a cause that says so, and `attributeINP` gives `react: null` for it. The warning shows once a page,
+quoting the first such error and logging it after the message. This is a bug in the library. Please open a
 [wrong or missing blame](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=wrong-or-missing-blame.yml)
-issue with the warning text, your versions and, if you can, the element that was clicked.
+issue with the warning and its error, your versions and, if you can, the element that was clicked.
 
 <a id="overlay-failed"></a>
 #### The badge and panel could not be shown
