@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createTimeline } from '../src/devtools.ts';
+import type { InputRecord } from '../src/hook.ts';
 import { attachLaterRender, buildReport, sealReport } from '../src/join.ts';
 import type { CommitSummary, RendererInfo } from '../src/types.ts';
 
@@ -14,6 +15,8 @@ interface Drawn {
   track: string;
   group: string;
   color: string;
+  start: number;
+  end: number;
   tooltip?: string;
   properties?: [string, string][];
 }
@@ -29,14 +32,14 @@ function recording(userAgent: string, draw: () => void): { drawn: Drawn[]; left:
   const navigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
   const timeStamp = console.timeStamp;
   Object.defineProperty(globalThis, 'navigator', { value: { userAgent }, configurable: true, writable: true });
-  console.timeStamp = ((label: string, _start: number, _end: number, track: string, group: string, color: string) => {
-    drawn.push({ via: 'timeStamp', label, track, group, color });
+  console.timeStamp = ((label: string, start: number, end: number, track: string, group: string, color: string) => {
+    drawn.push({ via: 'timeStamp', label, track, group, color, start, end });
   }) as typeof console.timeStamp;
   Object.defineProperty(performance, 'measure', {
     configurable: true,
-    value: (name: string, options: { detail: { devtools: { track: string; trackGroup: string; color: string; tooltipText: string; properties: [string, string][] } } }) => {
+    value: (name: string, options: { start: number; end: number; detail: { devtools: { track: string; trackGroup: string; color: string; tooltipText: string; properties: [string, string][] } } }) => {
       const { track, trackGroup, color, tooltipText, properties } = options.detail.devtools;
-      drawn.push({ via: 'measure', label: name, track, group: trackGroup, color, tooltip: tooltipText, properties });
+      drawn.push({ via: 'measure', label: name, track, group: trackGroup, color, start: options.start, end: options.end, tooltip: tooltipText, properties });
       buffer.push(name);
     },
   });
@@ -159,6 +162,23 @@ test('beside React 17, which passes the same priority with every commit, a rende
   assert.deepEqual(
     drawn.filter((d) => d.track === 'React renders').map((d) => `${d.color} ${d.label}`),
     ['primary React render · OrderSummary (801 components)', 'tertiary Later render · OrderSummary (801 components)'],
+  );
+});
+
+test('a render a key press set off before its slower keyup is drawn as a later render, from where it began', () => {
+  // The keydown painted at 24 and its render landed at 150, before the key came up at 300. Where both entries
+  // were in the report the first time it was drawn, the render was the keyup's own, drawn from 300 back to 150.
+  const key = (ts: number, type: string): InputRecord => ({ ts, type, gestureTs: 0, press: 'KeyA', target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const entries = [
+    { ...click, name: 'keydown', startTime: 0, duration: 24, processingStart: 1, processingEnd: 10 },
+    { ...click, name: 'keyup', startTime: 300, duration: 48, processingStart: 301, processingEnd: 340 },
+  ];
+  const r = sealReport(buildReport(entries, [commit(150, { inputType: 'keydown' })], null, [key(0, 'keydown'), key(300, 'keyup')]));
+  assert.deepEqual(r.followUps.map((c) => c.at), [150]);
+  const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+  assert.deepEqual(
+    drawn.filter((d) => d.track === 'React renders').map(({ label, start, end, color }) => ({ label, start, end, color })),
+    [{ label: 'Later render · OrderSummary (801 components)', start: 149.5, end: 150, color: 'tertiary' }],
   );
 });
 
