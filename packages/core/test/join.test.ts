@@ -2752,20 +2752,20 @@ test('a render a closed verdict does not take is said to have run after the hand
   assert.deepEqual(report([entry('click', 0, 380, 300, 360)], [commit(375, 0, counted)], [], save).explanation.notes, [
     'React was most likely still re-rendering 60 components inside List, mostly Row (60 of them), after the handlers, before the next frame.',
   ]);
-  // Another commit's effects, which ran inside the handlers, are said in the working time after the render's place,
-  // not before it, where "after the handlers" read as where they ran: 30 ms of them beside a 43 ms render in the task
-  // after the handlers, and 35 ms beside a production render of 800 rows there.
+  // Nor is another commit's committing or effects, which ran inside the handlers, said before the render's place,
+  // where "after the handlers" read as where they ran: 30 ms of them beside a 43 ms render in the task after the
+  // handlers, and 35 ms beside a production render of 800 rows there. The render is said with its place alone.
   const effects = { effectsStartedAt: 120.5, effectsEndedAt: 150.5 };
   const beside = report([entry('click', 0, 400, 100, 160)], [commit(120, 0, { total: 2, rendered: 3, ...effects }), commit(250, 0, { total: 43 })], [], save);
   assert.equal(beside.explanation.blame.kind, 'painting');
   assert.equal(
     beside.explanation.notes[0],
-    'React still spent 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame, and 30 ms running useEffect callbacks in another commit in the 60 ms of working time before that.',
+    'React still spent 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.',
   );
   const few = { hasDurations: false, total: 0, rendered: 5, components: [{ name: 'Row', count: 5, self: null, total: null }], effectsStartedAt: 330.2, effectsEndedAt: 365 };
   const rows = { ...counted, rendered: 800, components: [{ name: 'Row', count: 800, self: null, total: null }] };
   assert.deepEqual(report([entry('click', 0, 500, 300, 400)], [commit(330, 0, few), commit(450, 0, rows)], null, save).explanation.notes, [
-    'React was most likely still re-rendering 800 components inside List, mostly Row (800 of them), after the handlers, before the next frame, and spent 35 ms running useEffect callbacks in another commit in the 100 ms of working time after the wait.',
+    'React was most likely still re-rendering 800 components inside List, mostly Row (800 of them), after the handlers, before the next frame.',
   ]);
   // One committed inside the handlers is still in the working time.
   const inside = report([entry('click', 0, 360, 300, 350)], [commit(349, 0, { total: 43 })], [], save);
