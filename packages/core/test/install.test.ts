@@ -943,6 +943,28 @@ test('a frozen hook that replaces the shim before React registers is not followe
   });
 });
 
+test("a hook that turns React's support off and replaces the shim before React registers is not followed, and stats() says why", async (t) => {
+  // The plugin's shim goes in ahead of the app, so an app whose first import keeps developer tools out assigns its hook over it.
+  const warn = t.mock.method(console, 'warn', () => {});
+  for (const off of [{ isDisabled: true }, { ...existingHook(), isDisabled: true }, { ...existingHook(), supportsFiber: false }]) {
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+    await inBrowser((page) => {
+      const api = install({ devtoolsTrack: false });
+      const { inject } = off as { inject?: unknown };
+      page.window[HOOK] = off;
+      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      assert.equal((off as { inject?: unknown }).inject, inject, 'the hook was wrapped');
+      page.paint([slowClick(120)]);
+      assert.equal(api.last()?.duration, 120);
+      assert.match(api.last()?.explanation.notes.join('\n') ?? '', /the page turns its DevTools hook off or locks it/);
+      assert.equal(warn.mock.callCount(), 1);
+      assert.match(warn.mock.calls[0].arguments[0], /turns React's developer tools support off/);
+      api.dispose();
+    });
+  }
+});
+
 test("hook: 'shim' over a frozen hook says only that it cannot be wrapped, not that it chained onto it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {

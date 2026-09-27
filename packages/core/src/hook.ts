@@ -625,16 +625,9 @@ export function installHook(opts: HookOptions): void {
   const existing = holder[HOOK_KEY] as DevtoolsHook | undefined;
   if (existing && existing === state.shim) {
     attach(existing, 'shim');
-  } else if (existing && (existing.isDisabled || !existing.supportsFiber)) {
-    // React checks both before registering, so it registers with no hook at all.
-    const message =
-      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ turns React's developer tools support off (isDisabled, or no supportsFiber), so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.";
-    state.mode = 'unsupported';
-    state.unsupported = { kind: 'hook-disabled', message };
-    warnOnce('hook-disabled', message);
   } else if (existing) {
     attach(existing, 'chained');
-    // Not where the hook could not be wrapped: that has a warning of its own.
+    // Not where the hook turns React's support off or could not be wrapped: those have warnings of their own.
     if (opts.hook === 'shim' && state.mode === 'chained') {
       warnOnce('shim-over-hook', "hook: 'shim' found a React DevTools hook already installed and chained onto it instead: replacing it would lock out whatever installed it.");
     }
@@ -654,7 +647,10 @@ export function installHook(opts: HookOptions): void {
         // Read-only.
       }
       if (holder[HOOK_KEY] !== shim) {
-        locked("the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and read-only, so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.");
+        const message =
+          "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and read-only, so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.";
+        unusable(message);
+        warnOnce('hook-locked', message);
         return;
       }
     }
@@ -685,12 +681,24 @@ export function uninstallHook(): void {
 
 function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   let detach: (() => void) | null = null;
+  if (as === 'chained' && (hook.isDisabled || !hook.supportsFiber)) {
+    // React checks both before registering, so it registers with no hook at all. That is as true of a hook
+    // assigned over the shim, which an app does when its first import keeps developer tools out.
+    const message =
+      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ turns React's developer tools support off (isDisabled, or no supportsFiber), so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.";
+    unusable(message);
+    warnOnce('hook-disabled', message);
+    return;
+  }
   try {
     if (as === 'chained') detach = chain(hook);
   } catch {
     // Pages that keep developer tools out of production can freeze the hook, or seal one without
     // onPostCommitFiberRoot, or give a method only a getter, or a setter that drops what it is given.
-    locked("the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen, or has a method that cannot be assigned or added, so it cannot be wrapped and React's commits cannot be read. Interactions are still reported, without components.");
+    const message =
+      "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen, or has a method that cannot be assigned or added, so it cannot be wrapped and React's commits cannot be read. Interactions are still reported, without components.";
+    unusable(message);
+    warnOnce('hook-locked', message);
     return;
   }
   state.attached = hook;
@@ -700,13 +708,12 @@ function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   for (const renderer of registryOf(hook).values()) admit(renderer);
 }
 
-/** The page has locked the hook, or the global, against developer tools: nothing is attached, and the page is unsupported. */
-function locked(message: string): void {
+/** The page has turned the hook off, or locked it or the global, against developer tools: nothing is attached, and the page is unsupported. */
+function unusable(message: string): void {
   state.attached = null;
   state.detach = null;
   state.mode = 'unsupported';
   state.unsupported = { kind: 'hook-disabled', message };
-  warnOnce('hook-locked', message);
 }
 
 function registryOf(hook: DevtoolsHook): Map<number, Renderer> {
@@ -1155,7 +1162,8 @@ function replaced(hook: DevtoolsHook, next: unknown): void {
     state.devtoolsLockedOut = true;
     warnOnce('locked-out', "__REACT_DEVTOOLS_GLOBAL_HOOK__ was replaced after React registered with react-inp-blame's hook, so the tool that replaced it will not see this React. Load that tool before react-inp-blame, or install with hook: 'chain'.");
   } else if (next && typeof next === 'object') {
-    // Nothing has registered yet, so React will register with the replacement: follow it.
+    // Nothing has registered yet, so React will register with the replacement, unless it turns React's support
+    // off: follow it, the way install() takes a hook it finds.
     attach(next as DevtoolsHook, 'chained');
   }
 }
