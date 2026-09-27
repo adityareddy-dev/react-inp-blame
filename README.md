@@ -1214,11 +1214,11 @@ tag and name included: the first of the element and its five nearest ancestors t
 `menuitemcheckbox`, `menuitemradio`, `tab`, `option`, `checkbox`, `radio` or `switch`. A click on the `path`
 of an icon button reads `button "Close"`, not `path`, and `target.selector` stays the element the browser
 reported. Under a production build of React the label uses only what your code wrote on the element:
-`aria-label`, a form field's `placeholder`, `aria-placeholder`, `name` or `type`, or `data-testid` or
-`data-test`. An element's text can be a person's name or email, and reports are made to be forwarded to error
-trackers and analytics, so text is opt-in there: with `install({ labels: 'text' })` an element with no
-`aria-label` that is not a form field is named by its first run of text. Anything a person types in counts as
-a form field: an element inside a `contenteditable` editor, or one with the role `textbox`, `searchbox`,
+`aria-label`, a form field's `placeholder`, `aria-placeholder` or `name`, an input's `type`, or `data-testid`
+or `data-test`. An element's text can be a person's name or email, and reports are made to be forwarded to
+error trackers and analytics, so text is opt-in there: with `install({ labels: 'text' })` an element with
+no `aria-label` that is not a form field is named by its first run of text. Anything a person types in counts
+as a form field: an element inside a `contenteditable` editor, or one with the role `textbox`, `searchbox`,
 `combobox` or `spinbutton`. That first run of text is never read from inside one, or from inside a `textarea`.
 Development builds use text by default. Whatever `labels` says, `target.selector` has the tag, the `id` if
 there is one, and `data-test` or `data-testid` or else two classes, and `navigationURL` and

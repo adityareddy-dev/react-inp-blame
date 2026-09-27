@@ -823,11 +823,12 @@ function describeTarget(node: Node, owners: readonly string[], handler: string |
 
 /**
  * 'button "Add to cart"': the element's kind and what names it. The name comes from what the page's
- * code wrote on the element: its aria-label, a form field's placeholder, aria-placeholder, name or
- * type, or its data-testid or data-test. Where `labels` is 'text', an element with no aria-label that
- * is not a form field is named by its first run of text before those data attributes are tried. What a
- * person types in is a form field wherever it is: an element with a text field's role, and anything
- * inside an editor, whose text is what they typed.
+ * code wrote on the element: its aria-label, a form field's placeholder, aria-placeholder or name, an
+ * input's type, or its data-testid or data-test. Where `labels` is 'text', an element with no aria-label
+ * that is not a form field is named by its first run of text before those data attributes are tried.
+ * What a person types in is a form field wherever it is: an element with a text field's role, and
+ * anything inside an editor, whose text is what they typed. Only an input is named by its type: a select
+ * trigger with the role combobox is a button, and the type on a button names nothing.
  */
 export function labelOf(node: Node, labels: LabelSource): string | null {
   const landed = elementOf(node);
@@ -839,7 +840,7 @@ export function labelOf(node: Node, labels: LabelSource): string | null {
   const written = (name: string) => el.getAttribute(name);
   const name =
     written('aria-label') ||
-    (field ? written('placeholder') || written('aria-placeholder') || written('name') || written('type') : labels === 'text' ? firstText(el) : null) ||
+    (field ? written('placeholder') || written('aria-placeholder') || written('name') || (tag === 'input' && written('type')) : labels === 'text' ? firstText(el) : null) ||
     written('data-testid') ||
     written('data-test');
   const label = name ? clip(name) : '';
