@@ -1374,7 +1374,7 @@ function explain(r: InteractionReport): Explanation {
    * where a render ran in the late script. The screen update's note says that script and the render in
    * it, so the verdict takes it only where it held half of the screen update, and says it ran after the
    * handler finished: a scroll listener that forced a 100 ms render in its 150 ms, after a pointerdown,
-   * pointerup and click of 60, 60 and 70 ms, was once put on as though it had run in the working time. A
+   * pointerup and click of 60, 60 and 70 ms, was once named as though it had run in the working time. A
    * 40 ms listener in a 157 ms screen update that spent 110 ms on style and layout is under half of either
    * phase, and is left to the note. The rest is ranked by length, not by where it ran, against every script
    * up to the end of the handlers: ranked by where, a 20 ms click handler took the verdict from the 150 ms
