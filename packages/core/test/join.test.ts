@@ -2082,11 +2082,19 @@ test('a wait that is the verdict is not said again in a note, and one under anot
   const rendered = report([entry('click', 0, 400, 150, 380)], [commit(370, 0, { total: 200 })], []);
   assert.equal(rendered.explanation.blame.kind, 'render');
   assert.ok(rendered.explanation.notes.includes('It also waited 150 ms before the handler could start, because the main thread was busy.'));
-  // So does the screen update, beside the render it outranked.
+  // So does the screen update, beside the render it outranked. The render comes first, so its "before that" is
+  // read as before the screen update rather than before the wait, and the same with a 2 ms render beside the
+  // code outside React it left.
   const painted = report([entry('click', 0, 400, 100, 130)], [commit(125, 0, { total: 20 })], []);
   assert.equal(painted.explanation.blame.kind, 'painting');
-  assert.match(painted.verdict, /It also waited 100 ms before the handler could start/);
-  assert.match(painted.verdict, /React still spent 20 ms/);
+  assert.deepEqual(painted.explanation.notes, [
+    'React still spent 20 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) in the 30 ms of working time before that.',
+    'It also waited 100 ms before the handler could start, because the main thread was busy.',
+  ]);
+  assert.deepEqual(report([entry('click', 0, 400, 100, 130)], [commit(125, 0, { total: 2 })], []).explanation.notes, [
+    'Code outside React (the click handler or other scripts) still ran for about 28 ms of the 30 ms of working time before that.',
+    'It also waited 100 ms before the handler could start, because the main thread was busy.',
+  ]);
   // So does a wait between the handlers, whose sentence is about that wait and not the 60 ms before them.
   const between = report(
     [entry('keydown', 0, 232, 60, 70), entry('click', 0, 232, 70, 70.7), entry('keyup', 1, 232, 220, 220.2)],

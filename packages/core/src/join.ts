@@ -2166,6 +2166,11 @@ function explain(r: InteractionReport): Explanation {
   // not in its sentence.
   const waitIsTheVerdict = blame.kind === 'waiting' && blame.detail === null;
   if (closedByTheWait && waitIsTheVerdict) notes.push(closedByTheWait);
+  // Where the screen update did take the blame, the work it outranked is what this report would otherwise never
+  // mention. Only where it took it, though: a rung above the comparison that won anyway had nothing closed off,
+  // and its own time is already in the cause. It goes ahead of the wait's note, so its "before that" is not read
+  // as before the wait.
+  if (closedByTheScreen && blame.kind === 'painting') notes.push(closedByTheScreen);
   // A long wait under any other verdict is said whatever React rendered: a 70 ms wait before a 98 ms handler went
   // unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. Under a verdict that is the wait, it
   // is already said.
@@ -2200,10 +2205,6 @@ function explain(r: InteractionReport): Explanation {
   if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length) && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${heldByNext ? nextClause : lateScriptClause}`);
   }
-  // The other half of that note: where the screen update did take the blame, the work it outranked
-  // is what this report would otherwise never mention. Only where it took it, though — a rung above
-  // the comparison that won anyway had nothing closed off, and its own time is already in the cause.
-  if (closedByTheScreen && blame.kind === 'painting') notes.push(closedByTheScreen);
   if (betweenMatters && !betweenWins) notes.push(`${cap(ms(between))} of the working time also went by ${whereBetween}, with no handler running.`);
   if (r.holdMs >= HOLD_NOTE_MS) {
     notes.push(`The whole ${kind}, from press to release, spanned ${ms(r.duration + r.holdMs)}; INP counts only its slowest part, so the rest is left out of the headline.`);
