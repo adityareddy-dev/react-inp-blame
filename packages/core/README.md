@@ -490,16 +490,23 @@ itself and says what is wrong.
 Under Jest, whose default runtime loads everything as CommonJS, a test that reaches this package's ES modules
 fails with "Cannot use import statement outside a module" (from Jest 30.5, "Must use import to load ES Module")
 unless Jest compiles them. With `next/jest`, add `transpilePackages: ['react-inp-blame']` to your Next.js config.
-Anywhere else, add `transformIgnorePatterns: ['/node_modules/(?!(.pnpm/)?react-inp-blame[@/])']` to the Jest
-config, which covers npm's `node_modules` and pnpm's (where the config already has a pattern, put
-`react-inp-blame` inside its `(?!...)` instead, since Jest leaves a file uncompiled when any one matches),
-install `@babel/preset-env@7`, since Jest is on Babel 7, and put
-`presets: [['@babel/preset-env', { targets: { node: 'current' } }]]` in a `babel.config.cjs` beside
-`package.json`: a `.babelrc` is never read for a file in `node_modules`, and `.cjs` keeps the file CommonJS
-where `package.json` says `"type": "module"`. A Jest config that sets its own `transform` has to compile `.js`
-files as well; ts-jest's preset compiles only TypeScript, and `preset: 'ts-jest/presets/js-with-babel'` hands
-the rest to babel-jest. With Jest 30.4 or later on Node 24.9 or later, running Jest with
-`NODE_OPTIONS=--experimental-vm-modules` also works, with no Babel config or pattern.
+Anywhere else, install `@babel/preset-env@7`, since Jest is on Babel 7, and add these two keys to the Jest
+config:
+
+```js
+transform: {
+  '\\.[jt]sx?$': ['babel-jest', { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }],
+},
+transformIgnorePatterns: ['/node_modules/(?!(.pnpm/)?react-inp-blame[@/])'],
+```
+
+The pattern covers npm's `node_modules` and pnpm's; where the config already has one, put `react-inp-blame`
+inside its `(?!...)` instead, since Jest leaves a file uncompiled when any one matches. The presets go here and
+not in a Babel config file: a `.babelrc` is never read for a file in `node_modules`, and Next.js builds the app
+with any Babel config file it finds, so one that holds only these presets breaks `next build`. Where the config
+or its preset already sets a `transform`, give the presets to its babel-jest entry, or beside ts-jest add this
+one with `'\\.jsx?$'` as its key, so the `.ts` files stay with ts-jest. With Jest 30.4 or later on Node 24.9 or
+later, running Jest with `NODE_OPTIONS=--experimental-vm-modules` also works, with neither key.
 
 While on 0.x a minor release can break things (an export, an option, what a report field holds, an oldest
 version), and the CHANGELOG says which; `schemaVersion` on a report moves when a field is removed or changes
