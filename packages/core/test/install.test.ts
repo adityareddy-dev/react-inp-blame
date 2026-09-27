@@ -2143,10 +2143,10 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
       delete field.__reactFiber$demo;
       delete field.__reactProps$demo;
     };
-    const hydrate = () => {
+    const hydrate = (onSubmit = finish, props: Record<string, unknown> = fieldProps) => {
       rootFiber.memoizedState = { isDehydrated: false };
-      Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit: finish } });
-      Object.assign(field, { __reactFiber$demo: fieldFiber, __reactProps$demo: fieldProps });
+      Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit } });
+      Object.assign(field, { __reactFiber$demo: fieldFiber, __reactProps$demo: props });
     };
     dehydrate();
     assert.equal(enter(11, 4000, hydrate), 'finish');
@@ -2156,6 +2156,23 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     hydrate();
     page.paint([{ ...pointer('keydown', 12, 5000, 140), target: field }]);
     assert.equal(api.last()?.target?.handler, 'setEmail');
+    // React hydrates the HTML a key lands on inside the keydown, and then the keydown's entry carries the hydration
+    // and outweighs the keypress's. Its element is read again as the keypress is dispatched: hydrated by then, and
+    // not yet rendered by the submit.
+    const hydratedInKeydown = (id: number, ts: number, props: Record<string, unknown>) => {
+      dehydrate();
+      page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' });
+      hydrate(goNext, props);
+      page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: field, code: 'Enter' });
+      form.__reactProps$demo = { onSubmit: finish };
+      const keydown = { ...pointer('keydown', id, ts, 400), processingEnd: ts + 361, target: field };
+      page.paint([keydown, { ...keydown, name: 'keypress', processingStart: ts + 361, processingEnd: ts + 393 }]);
+      return api.last()?.target?.handler;
+    };
+    assert.equal(hydratedInKeydown(13, 6000, fieldProps), 'goNext');
+    // A field with its own onKeyDown ran it in the keydown, and that is what the keydown is named by.
+    function checkShortcut() {}
+    assert.equal(hydratedInKeydown(14, 7000, { ...fieldProps, onKeyDown: checkShortcut }), 'checkShortcut');
     api.dispose();
   });
 });
