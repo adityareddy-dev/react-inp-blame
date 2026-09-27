@@ -3562,6 +3562,23 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   assert.deepEqual(split.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 150 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
   ]);
+  // React's own task after the same handlers is React rendering what they scheduled, a transition started from
+  // the click, and not a script that forced a render. With the working time the longer part, that render stays
+  // in it, measured or read from the counts, and the note says only how long the task ran.
+  const transition = (rows: Partial<CommitSummary>) =>
+    report(
+      [entry('click', 0, 360, 3, 203)],
+      [commit(340, 0, { rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], priority: 3, ...rows })],
+      [frame(0, 360, [...threeListeners, script('MessagePort.onmessage', 205, 150)], 356)],
+      [input(0, 'click')],
+    ).explanation;
+  const measured = transition({ total: 100, startedAt: 210 });
+  assert.deepEqual(measured.blame, { kind: 'render', name: 'TableBody', detail: '721 components', ms: 100, confidence: 'measured' });
+  assert.deepEqual(measured.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly because a script (MessagePort.onmessage, app.js) ran for 150 ms before the next frame.',
+  ]);
+  const counted = transition({ total: 0, hasDurations: false, components: [{ name: 'Row', count: 700, self: null, total: null }] });
+  assert.deepEqual(counted.blame, { kind: 'render', name: 'TableBody', detail: 'Row ×700', ms: null, confidence: 'inferred' });
   // Ranked by where they ran, ten click handlers of 20 ms took the verdict from the 150 ms listener that ten of
   // 19 ms left it to. By length, neither does, and a handler longer than the listener takes it.
   const tenClicks = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15));

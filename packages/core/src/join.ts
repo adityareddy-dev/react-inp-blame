@@ -1305,9 +1305,13 @@ function explain(r: InteractionReport): Explanation {
    * calls flushSync, or React's own task for an update it scheduled. On TanStack Table's virtualized rows at
    * 4x a checkbox's frame waited on `DIV.onscroll` for 174 ms, a render of the 721 rows it forced, which the
    * report held and the sentence never tied to the script. Tied only over 100 ms, the same render in a 96 ms
-   * screen update stayed in the working time and was put down to an effect. Where the build keeps when a
-   * render began, it has to have begun inside the script too, and a render duration longer than the script
-   * cannot have been in it. A hydration is left where it was: it has a sentence of its own.
+   * screen update stayed in the working time and was put down to an effect. React's own task is tied only
+   * where the screen update outranks the working time. Under that, its render is the one the handlers
+   * scheduled, a transition started from the click, and stays in the working time as the interaction's
+   * render: tied to the task, a 100 ms render of 721 rows after 200 ms of handlers was put on a script named
+   * `MessagePort.onmessage`, as though React had rendered nothing. Where the build keeps when a render began,
+   * it has to have begun inside the script too, and a render duration longer than the script cannot have
+   * been in it. A hydration is left where it was: it has a sentence of its own.
    */
   const ranInside = (x: CommitSummary, s: ScriptSummary) =>
     carriesWork(x) &&
@@ -1317,7 +1321,10 @@ function explain(r: InteractionReport): Explanation {
     x.at <= s.start + s.duration + STAMP_TOLERANCE &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
-  const insideLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  const insideLate =
+    lateScript && !heldByNext && (screenOutranks || lateScript.script.invoker !== REACT_TASK)
+      ? r.commits.filter((x) => ranInside(x, lateScript.script))
+      : [];
   const lateRender = insideLate.length ? heaviest(insideLate) : null;
   const lateRenderSaid = !lateRender
     ? ''
