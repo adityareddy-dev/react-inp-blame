@@ -6,7 +6,7 @@ import { beforeEach, test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { install, mountOverlay, onInteraction } from '../src/index.ts';
 import { page as installState } from '../src/install-state.ts';
-import { MAX_QUIET, MAX_REPORTS } from '../src/lifecycle.ts';
+import { MAX_REPORTS } from '../src/lifecycle.ts';
 import { announceNavigation } from '../src/navigation.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 import { attributeINP } from '../src/web-vitals.ts';
@@ -2567,24 +2567,28 @@ test("an error while reports are drawn on the Performance panel never reaches th
   });
 });
 
-test('drawing on the Performance panel that goes on throwing holds only the reports the lifecycle can still revise, and draws no more than those once it stops', async (t) => {
+test("drawing on the Performance panel that goes on throwing holds only the reports the lifecycle can still revise, the page's INP among them however old, and draws no more than those once it stops", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
   // A measure that cannot be looked up until the last click, which the drawing does before anything else.
-  const drawn: string[] = [];
+  // Each entry is known by where it starts.
+  const drawn: number[] = [];
   let unreadable = true;
   Object.defineProperty(performance, 'measure', {
     configurable: true,
     get() {
       if (unreadable) throw new TypeError('measure moved');
-      return (name: string) => drawn.push(name);
+      return (_name: string, opts: { start: number }) => drawn.push(opts.start);
     },
   });
   t.after(() => delete (performance as any).measure);
   await inBrowser((page) => {
     const api = install();
     try {
-      for (let i = 1; i <= 300; i++) {
+      // The page's INP first, then quicker clicks enough to push it out were the oldest let go first.
+      page.paint([click(1, 1000, 900)]);
+      t.mock.timers.tick(0);
+      for (let i = 2; i <= 300; i++) {
         page.paint([click(i, i * 1000, 120)]);
         t.mock.timers.tick(0);
       }
@@ -2592,9 +2596,13 @@ test('drawing on the Performance panel that goes on throwing holds only the repo
       unreadable = false;
       page.paint([click(301, 301_000, 150)]);
       t.mock.timers.tick(0);
-      // The newest of the reports that could not be drawn, and the one after them.
-      assert.equal(drawn.length, MAX_REPORTS + MAX_QUIET);
-      assert.deepEqual(drawn.slice(-2), ['120 ms click', '150 ms click']);
+      // Each report the lifecycle still holds, the INP one and the one after the drawing stopped throwing
+      // among them, and none it has let go.
+      assert.equal(api.inp()?.interactionId, 1);
+      assert.equal(drawn.length, MAX_REPORTS);
+      assert.deepEqual(drawn.slice().sort((a, b) => a - b), api.reports().map((r) => r.start).sort((a, b) => a - b));
+      assert.ok(drawn.includes(1000));
+      assert.equal(drawn.at(-1), 301_000);
       assert.equal(caught(warn).length, 1);
     } finally {
       api.dispose();
