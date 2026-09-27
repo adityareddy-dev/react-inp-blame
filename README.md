@@ -1310,9 +1310,8 @@ no hook, so reports come without components. Remove that script where you want b
 
 Some freeze the hook instead, or seal one that has no `onPostCommitFiberRoot`, or give its methods only a
 getter, or a setter that drops what it is given. The library cannot wrap a hook like that, so it leaves it as
-it was, and reports come without components the same way. Others leave the global empty where it cannot be
-redefined (`var __REACT_DEVTOOLS_GLOBAL_HOOK__;` in a classic script does that), and React reads that as no
-hook at all.
+it was, and reports come without components the same way. Others define the global empty and read-only, and
+React reads that as no hook at all.
 
 <a id="shim-over-hook"></a>
 #### hook: 'shim' found a React DevTools hook already installed
