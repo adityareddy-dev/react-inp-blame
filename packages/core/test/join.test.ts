@@ -1664,6 +1664,10 @@ test('where React stopped being read after the only render it read, in a listene
   const bare = stopped([frame(0, 280, [listener])]);
   assert.deepEqual(bare.blame, handler);
   assert.equal(bare.cause, "The click handler handleSave most likely took about 200 ms; React didn't render anything in the working time.");
+  // A layout forced in handleSave is put in code outside React, as it is where React is read, not often in a layout effect.
+  const forced = stopped([frame(0, 280, [script('BUTTON.onclick', 20, 200, 150), listener])]);
+  assert.deepEqual(forced.blame, { kind: 'layout', name: 'handleSave', detail: null, ms: 150, confidence: 'measured' });
+  assert.match(forced.cause, /No React commit ran in the script it was charged to, so it was not in a layout effect but in code outside React, such as the click handler handleSave/);
   // With no render read, what React did is still unknown.
   const unread = report(click, [], [frame(0, 280, [script('BUTTON.onclick', 20, 200), listener])], save, 'attributes', [], undefined, 'unreadable').explanation;
   assert.deepEqual(unread.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });

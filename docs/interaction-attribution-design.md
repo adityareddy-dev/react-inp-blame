@@ -1153,7 +1153,9 @@ render. Where install() ran too late or react-dom cannot be read, the setup is s
 every render read ran in the script after the handlers: those were read once the handlers had ended, so
 React was read all through them and rendered nothing there, and the handler or the script is named as
 where React is read, hedged. Taken as unknown, 200 ms of handleSave before a scroll listener that
-rendered would be blamed on nothing, and the render the note names said to be unseen. A click React never
+rendered would be blamed on nothing, and the render the note names said to be unseen. The forced layout's
+sentence reads the handlers the same way: layout charged to a script no commit ran in was in code outside
+React, not "often in a layout effect" as it said when that was taken as unknown. A click React never
 dispatched, on server-rendered HTML it had not hydrated yet, is left as it was: the handler named there
 is a hydrated component's above the boundary, which never ran, and the working time can be React's own
 attempt at hydrating it. One limit is known. No react-dom having loaded yet is the status `'waiting'`,

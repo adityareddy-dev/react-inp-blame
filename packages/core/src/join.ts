@@ -1516,9 +1516,9 @@ function explain(r: InteractionReport): Explanation {
    * is charged that microtask's layout). So layout charged to scripts no commit of this interaction ran in
    * was in no layout effect, in any build. Where a commit did run in the script, a build that times the
    * commit bounds how much of it the commit and its effects could have held: at most what they took, so a
-   * 2 ms commit held at most 2 of 70 ms. With React unread, or a commit not tied to this interaction, only the usual place is said. It is only
-   * asked of the working time: after it, a commit another input made can run in the same script, and that
-   * commit is not in this report.
+   * 2 ms commit held at most 2 of 70 ms. With React unread through the handlers (`unseen`), or a commit not
+   * tied to this interaction, only the usual place is said. It is only asked of the working time: after it,
+   * a commit another input made can run in the same script, and that commit is not in this report.
    */
   // Whose handlers a script ran in, from its start, and a commit, from its stamp: the innermost event's, the one
   // that began last and, of two that began together, ends first, since Chromium dispatches the click a key sets off
@@ -1553,14 +1553,14 @@ function explain(r: InteractionReport): Explanation {
   // React's own scheduler task can hold a render and no commit, a transition's time slice, so it is never counted
   // as outside React.
   const outsideReact = (parts: readonly ScriptPart[]) =>
-    blind || unjoined ? [] : parts.filter((p) => p.forcedLayout > 0 && p.script.invoker !== REACT_TASK && !r.commits.some((x) => committedIn(x, p.script)));
+    unseen || unjoined ? [] : parts.filter((p) => p.forcedLayout > 0 && p.script.invoker !== REACT_TASK && !r.commits.some((x) => committedIn(x, p.script)));
   /**
    * The sentence; whether the layout could still be in the subtree React rendered, which the blame names only
    * then; and the commit in the scripts that forced it, whose subtree that is.
    */
   const whereRead = (parts: readonly ScriptPart[]): { said: string; inTheSubtree: boolean; commit: CommitSummary | null } => {
     const usual = { said: USUAL_READ, inTheSubtree: true, commit: null };
-    if (blind || unjoined) return usual;
+    if (unseen || unjoined) return usual;
     const handlerOrListener = `code outside React, such as ${handler ?? `the ${kind} handler`} or a library's listener`;
     if (r.commits.length === 0) return { ...usual, said: `${READS_SIZE}. React did not render, so it was ${handlerOrListener}.`, inTheSubtree: false };
     const forced = forcedLayoutOf(parts);
@@ -1645,13 +1645,13 @@ function explain(r: InteractionReport): Explanation {
   // as waiting and painting. So is one where React stopped being read after that render: it was read once the
   // handlers had ended, so React was read all through them. Taken as unknown, 200 ms of handleSave before a scroll
   // listener that rendered was blamed on nothing and the render said to be unseen, so the rung for a react-dom that
-  // is not read passes such a report on too. Where a long animation frame was recorded over the handlers, the
-  // browser's own record decides, in any build, where it names a script of 20 ms or more that a verdict would name,
-  // as it did. Where it lists only shorter ones, or none, or only the one the note names after the handlers, it
-  // names nothing that ran in them, so the handler keeps its verdict rather than the time reading as waiting and
-  // painting. A frame that ended as they began holds only what the click waited behind: a 30 ms timer there no
-  // longer takes a 45 ms handler's verdict, which the handler keeps before that frame arrives and beside a 1 ms
-  // render.
+  // is not read passes such a report on too, and the forced layout's sentence, in `whereRead`, takes the handlers
+  // as read. Where a long animation frame was recorded over the handlers, the browser's own record decides, in any
+  // build, where it names a script of 20 ms or more that a verdict would name, as it did. Where it lists only
+  // shorter ones, or none, or only the one the note names after the handlers, it names nothing that ran in them, so
+  // the handler keeps its verdict rather than the time reading as waiting and painting. A frame that ended as they
+  // began holds only what the click waited behind: a 30 ms timer there no longer takes a 45 ms handler's verdict,
+  // which the handler keeps before that frame arrives and beside a 1 ms render.
   // A click React never dispatched, on server-rendered HTML it had not hydrated, is left out: the handler named
   // there is a hydrated component's above the boundary, which never ran, and the working time can be React's own
   // attempt at hydrating it. "Not loaded yet" is 'waiting', which the page's looks for React's marks decide, so a
