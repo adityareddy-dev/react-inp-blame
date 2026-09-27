@@ -116,7 +116,7 @@ function summarizeFrame(e: PerformanceLongAnimationFrameTiming): FrameSummary {
   const scripts = (e.scripts || []).map(
     (s): ScriptSummary =>
       Object.freeze({
-        invoker: s.invoker || '',
+        invoker: invokerOf(s.invoker || ''),
         name: s.sourceFunctionName || '',
         source: shortSource(s.sourceURL || ''),
         start: s.startTime,
@@ -132,6 +132,17 @@ function summarizeFrame(e: PerformanceLongAnimationFrameTiming): FrameSummary {
     scripts: Object.freeze(scripts),
     styleAndLayoutStart: e.styleAndLayoutStart > 0 ? e.styleAndLayoutStart : null,
   });
+}
+
+/**
+ * What ran a script, as the browser names it, less any URL's query and fragment, which can carry a
+ * signed parameter, a reset token or an email. The browser names a script by its URL, or by the page's
+ * for an inline script, and an event listener on an element without an id by the element's src:
+ * `IMG[src=/avatar.png?sig=abc].onload`. Any other name, `#document.onclick` or
+ * `TimerHandler:setTimeout`, is kept as it is.
+ */
+function invokerOf(invoker: string): string {
+  return /^https?:/i.test(invoker) ? invoker.replace(/[?#][^]*/, '') : invoker.replace(/(\[src=[^?#\]]*)[?#][^]*(\]\.on)/, '$1$2');
 }
 
 function shortSource(url: string): string {

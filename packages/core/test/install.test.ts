@@ -1565,6 +1565,26 @@ test('a long animation frame still queued when the page is hidden is taken befor
   );
 });
 
+test("the blame attributeINP hands to analytics names a script by its URL without the query, so a reset link's token never goes with it", async () => {
+  await inBrowser(
+    (page) => {
+      const api = install({ devtoolsTrack: false });
+      // A click that waited 300 ms behind the reset page's inline script, which the browser names by the page's URL.
+      const url = 'https://shop.example/reset-password?token=s3cr3t-reset-token&email=ada%40example.com';
+      const inline = { invoker: url, sourceFunctionName: '', sourceURL: url, startTime: 1000, duration: 300, forcedStyleAndLayoutDuration: 0 };
+      const frame = { entryType: 'long-animation-frame', startTime: 1000, duration: 352, blockingDuration: 302, styleAndLayoutStart: 1350, scripts: [inline] };
+      page.queue([{ ...click(7, 1000, 352), processingStart: 1300, processingEnd: 1350 }, frame]);
+      page.hide();
+      const { react } = attributeINP({ entries: [{ interactionId: 7 }] });
+      assert.deepEqual(react?.blame, { kind: 'waiting', name: 'https://shop.example/reset-password', detail: null, ms: 300, confidence: 'measured' });
+      assert.equal(JSON.stringify(react).includes('s3cr3t'), false);
+      assert.equal(JSON.stringify(api.reports()).includes('s3cr3t'), false);
+      api.dispose();
+    },
+    { entryTypes: ['event', 'first-input', 'long-animation-frame'] },
+  );
+});
+
 test('listeners hear a report in a task after the one that published it, never inside the React commit that revised it', async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {

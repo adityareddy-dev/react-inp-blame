@@ -643,8 +643,8 @@ Neither recipe sends a label or a sentence. `attributeINP` holds component, hand
 other sentences can hold text the page shows: under `labels: 'text'`, and by default in a development build
 (see [Labels and personal data](#labels-and-personal-data)). If you forward those as well, install with
 `labels: 'attributes'`, so a label comes only from what your code wrote on the element. `navigationURL`,
-sent above as `page_location`, keeps its query string. So can `blame.name`: when a script takes the blame it
-can be the script's URL, or the page's for an inline script, as the browser reports it.
+sent above as `page_location`, keeps its query string. `blame.name` does not: when a script takes the blame it
+can be the script's URL, or the page's for an inline script, without the query and fragment.
 
 ## The badge and panel
 
@@ -1222,8 +1222,8 @@ a form field: an element inside a `contenteditable` editor, or one with the role
 `combobox` or `spinbutton`. That first run of text is never read from inside one, or from inside a `textarea`.
 Development builds use text by default. Whatever `labels` says, `target.selector` has the tag, the `id` if
 there is one, and `data-test` or `data-testid` or else two classes, and `navigationURL` and
-`startedNavigation.url` are full URLs, query string included. So is a script the browser names by its URL,
-or by the page's for an inline script, in a blame's `name` and the sentences.
+`startedNavigation.url` are full URLs, query string included. A script the browser names by its URL, or by
+the page's for an inline script, loses the query and fragment in a blame's `name`, the sentences and `frames`.
 
 ## Troubleshooting
 

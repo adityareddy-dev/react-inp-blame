@@ -858,7 +858,12 @@ handleSave ran for 300 ms", with confidence `measured`. LoAF can only say "React
 for 80ms"; the fiber walk is what turns that into a component. Together they separate "your
 render was slow" from "your layout effect forced layout 400 times". Only Chromium has LoAF. In
 Firefox and Safari a report's `frames` and `laterFrames` are `null`, and the explanation leaves
-out the forced-layout and script sentences rather than implying none happened.
+out the forced-layout and script sentences rather than implying none happened. A script's invoker
+is kept as the browser names it, less the query and fragment of any URL in it: the browser names a
+script by its URL, an inline one by the page's, and a listener on an element without an id by the
+element's src, and a query can hold a signed parameter, a reset token or an email. The invoker is
+`blame.name` wherever a script takes the blame, and goes to analytics from there. Its `sourceURL` is
+cut to its last two path segments.
 
 Forced layout inside the handlers, which Long Animation Frames counts together with style recalculation
 (a Chrome trace of a shadcn/ui Sheet opening had about 80 ms of style against 1 ms of layout, so the
