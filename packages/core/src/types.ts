@@ -651,8 +651,8 @@ export interface InstallOptions {
   /**
    * Where a report's `target.label` may come from. Every label names the element by its tag and a
    * name of at most 40 characters, and none ever reads an element's whole `textContent` or a form
-   * field's value. Anything a person types in counts as a form field: an element inside a
-   * `contenteditable` editor, or one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`.
+   * field's value. An element inside a `contenteditable` editor, or inside one with the role `textbox`,
+   * `searchbox`, `combobox` or `spinbutton`, counts as a form field, since its text is what a person typed.
    *
    * `'attributes'`: only what the page's code wrote on the element: its `aria-label`, a form field's
    * `placeholder`, `aria-placeholder` or `name`, an input's `type`, or its `data-testid` or `data-test`.
