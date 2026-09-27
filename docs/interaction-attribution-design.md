@@ -1189,10 +1189,11 @@ unless the script is React's own task, which Long Animation Frames names `Messag
 screen update did not outrank the working time: that render is one the handlers scheduled, a transition
 started from the click, and it stays the interaction's render. The sentence still says React rendered inside
 that task, or the task reads as a script that held the screen update, and not as the render the verdict names.
-A render is inside a script where its commit is stamped, give or take a millisecond, only where no other
-script the browser recorded holds the stamp: taken a millisecond wide regardless, a production render
-committed at the end of React's own task goes into a timer that started under a millisecond later, and so out
-of the working time, as though React had rendered nothing there. Where it is taken out, or where the screen
+A render is inside a script where its commit is stamped, give or take a millisecond, only where no other script
+the browser recorded holds the stamp, one on the tick a script ends and the next begins being the first one's,
+as for the forced layout's commits: taken a millisecond wide regardless, a production render committed at the
+end of React's own task goes into a timer that started on that tick or under a millisecond later, and so out of
+the working time, as though React had rendered nothing there. Where it is taken out, or where the screen
 update's note names the script after the handlers without a render in it, as it does over 100 ms, a `script`
 verdict names the longest of the scripts up to the end of the handlers and, only where it held half the
 screen update, the script after them, ranked by length and not by where they ran. A timer the input waited

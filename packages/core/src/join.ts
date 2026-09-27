@@ -1298,6 +1298,20 @@ function explain(r: InteractionReport): Explanation {
   const nextClause = heldByNext
     ? `: the frame ${nextScriptMs >= nextShare ? '' : `${HEDGE} `}waited on the next ${kindOf(heldByNext.type, heldByNext.pointerType)}, which the page handled first.${longestSaid(lateScript)}`
     : '';
+  // Each commit ran in the script whose span holds its stamp, after its start and up to its end, and in no other.
+  // In Chromium a commit stamped at the end of a listener's microtask is that listener's end exactly, and the next
+  // listener starts on the same tick or later. Long Animation Frames lists only scripts over 5 ms, so a short React
+  // listener can be missing, and its commit is then in no script listed, not in the one before or after it. A stamp
+  // on a script's first tick is that script's only where the effects React ran straight after it, a click's or a
+  // key's, ended inside it: React's own listener can commit on its first tick, and a commit stamped where the
+  // listener before it ended has run its effects by the time the next one starts. (The end is compared a hair
+  // wide, for a start and a duration that do not add up to the end exactly in floating point.)
+  const scriptsRun = (r.frames ?? []).flatMap((f) => f.scripts);
+  const holderOf = (x: CommitSummary) =>
+    scriptsRun.find((s) => {
+      const end = s.start + s.duration + 1e-6;
+      return x.at <= end && (x.at > s.start || (x.at === s.start && x.effectsEndedAt !== null && x.effectsEndedAt > s.start && x.effectsEndedAt <= end));
+    }) ?? null;
   /**
    * React's renders that committed inside that script, after the handlers, however long the screen update
    * and whichever phase was the longer: the screen update's clause says them, as its blame or in the note
@@ -1313,20 +1327,19 @@ function explain(r: InteractionReport): Explanation {
    * the task, though, or the note put 150 ms on `MessagePort.onmessage` and never said that the render the
    * verdict named was what it did. Where the build keeps when a render began, it has to have begun inside the
    * script too, and a render duration longer than the script cannot have been in it. A stamp up to a
-   * millisecond either side of the script is its only where no other script the browser recorded holds it: a
-   * production render committed at the end of React's own task was put in a timer that started under a
-   * millisecond later, and so out of the working time, as though React had rendered nothing there. (The end is
-   * compared a hair wide, as for the layout's commits below.) A hydration is left where it was: it has a
-   * sentence of its own.
+   * millisecond either side of the script is its only where no other script the browser recorded holds it, by
+   * the rule above, so a stamp on the tick one script ends and the next begins is the first one's: a production
+   * render committed at the end of React's own task was put in a timer that started on that tick or under a
+   * millisecond later, and so out of the working time, as though React had rendered nothing there. A hydration
+   * is left where it was: it has a sentence of its own.
    */
-  const holds = (s: ScriptSummary, t: number) => t >= s.start && t <= s.start + s.duration + 1e-6;
   const ranInside = (x: CommitSummary, s: ScriptSummary) =>
     carriesWork(x) &&
     x.hydratedTarget == null &&
     x.at > processingEnd + STAMP_TOLERANCE &&
     x.at >= s.start - STAMP_TOLERANCE &&
     x.at <= s.start + s.duration + STAMP_TOLERANCE &&
-    (holds(s, x.at) || !frames.some((f) => f.scripts.some((o) => o !== s && holds(o, x.at)))) &&
+    (holderOf(x) ?? s) === s &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
   const ranInLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
@@ -1507,20 +1520,6 @@ function explain(r: InteractionReport): Explanation {
    * asked of the working time: after it, a commit another input made can run in the same script, and that
    * commit is not in this report.
    */
-  // Each commit ran in the script whose span holds its stamp, after its start and up to its end, and in no other.
-  // In Chromium a commit stamped at the end of a listener's microtask is that listener's end exactly, and the next
-  // listener starts on the same tick or later. Long Animation Frames lists only scripts over 5 ms, so a short React
-  // listener can be missing, and its commit is then in no script listed, not in the one before or after it. A stamp
-  // on a script's first tick is that script's only where the effects React ran straight after it, a click's or a
-  // key's, ended inside it: React's own listener can commit on its first tick, and a commit stamped where the
-  // listener before it ended has run its effects by the time the next one starts. (The end is compared a hair
-  // wide, for a start and a duration that do not add up to the end exactly in floating point.)
-  const scriptsRun = (r.frames ?? []).flatMap((f) => f.scripts);
-  const holderOf = (x: CommitSummary) =>
-    scriptsRun.find((s) => {
-      const end = s.start + s.duration + 1e-6;
-      return x.at <= end && (x.at > s.start || (x.at === s.start && x.effectsEndedAt !== null && x.effectsEndedAt > s.start && x.effectsEndedAt <= end));
-    }) ?? null;
   // Whose handlers a script ran in, from its start, and a commit, from its stamp: the innermost event's, the one
   // that began last and, of two that began together, ends first, since Chromium dispatches the click a key sets off
   // inside that key's own handlers. A script starting where an event's handlers ended is not that event's, and a

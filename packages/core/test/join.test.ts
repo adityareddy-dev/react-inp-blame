@@ -4055,6 +4055,10 @@ test("a render stamped inside React's own task stays there, not in a longer scri
   assert.doesNotMatch(tie.verdict, /React rendered inside/);
   // A stamp at the end of React's task is in it, though 62.3 + 4.6 adds up to a hair under 66.9.
   assert.deepEqual(run(66.9, [script('MessagePort.onmessage', 62.3, 4.6), script('TimerHandler:setTimeout', 67.5, 22)]).explanation.blame, counted);
+  // And where the timer started on the tick React's task ended, which is the task's, not the timer's.
+  const tick = run(67, [script('MessagePort.onmessage', 62, 5), script('TimerHandler:setTimeout', 67, 22)]);
+  assert.deepEqual(tick.explanation.blame, counted);
+  assert.doesNotMatch(tick.verdict, /React rendered inside/);
   // The same a millisecond past the end of a longer script before React's task.
   const past = run(84.8, [script('TimerHandler:setTimeout', 62, 22), script('MessagePort.onmessage', 84.5, 5.5)]);
   assert.deepEqual(past.explanation.blame, counted);
