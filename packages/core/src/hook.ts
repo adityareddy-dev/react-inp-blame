@@ -628,6 +628,8 @@ export function checkHookReplaced(): void {
  */
 function turnedOff(hook: DevtoolsHook): boolean {
   if (!hook.isDisabled && hook.supportsFiber) return false;
+  // A global that holds no object has neither field, and nothing registers with it.
+  if (typeof hook !== 'object' && typeof hook !== 'function') return true;
   for (const renderer of registryOf(hook).values()) {
     if (!renderer.isReactDom) continue;
     const left = state.commitMethods?.get(hook);

@@ -702,6 +702,21 @@ test("a page whose DevTools hook turns React's support off still gets reports, w
     assert.equal(warn.mock.callCount(), 1);
     api.dispose();
   });
+  // A global that holds no object has neither field, and React registers with nothing there too.
+  for (const value of [true, 1, 'disabled']) {
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+    await inBrowser((page) => {
+      page.window[HOOK] = value;
+      const api = install({ devtoolsTrack: false });
+      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      page.paint([slowClick(120)]);
+      assert.equal(api.last()?.duration, 120);
+      assert.equal(warn.mock.callCount(), 1);
+      assert.match(warn.mock.calls[0].arguments[0], /turns React's developer tools support off/);
+      api.dispose();
+    });
+  }
 });
 
 /**
