@@ -2009,7 +2009,7 @@ function explain(r: InteractionReport): Explanation {
     );
   } else if (r.reactStatus === 'unreadable') {
     notes.push(
-      "No react-dom on this page is being read, so nothing React did is in this report: either no React DevTools hook is in use (hook: 'chain' found none to wrap), or the react-dom that registered cannot be read, which stats().unsupportedReason then says.",
+      "No react-dom on this page is being read, so nothing React did is in this report: either no React DevTools hook is in use (hook: 'chain' found none to wrap), or stats().unsupportedReason says why (the page turns its DevTools hook off or locks it, or the react-dom that registered cannot be read).",
     );
   }
   if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
