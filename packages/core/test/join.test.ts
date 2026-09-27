@@ -1659,7 +1659,7 @@ test('where React is read and rendered nothing, all of the working time is outsi
   // Where the screen update outranks the working time, the handler is the note it leaves.
   const painted = report([entry('click', 0, 200, 2, 62)], [], null, save);
   assert.equal(painted.explanation.blame.kind, 'painting');
-  assert.ok(painted.explanation.notes.includes('The click handler handleSave still ran for about 60 ms of the 60 ms of working time before that.'));
+  assert.ok(painted.explanation.notes.includes('The click handler handleSave still ran for all 60 ms of working time before that.'));
   // Where a frame recorded the listener, the browser's own record of the script is named, as before.
   assert.deepEqual(report(click, [], [frame(0, 320, [script('BUTTON.onclick', 2, 300)])], save).explanation.blame, { ...handler, kind: 'script' });
   // A frame that ended as the handlers began records only what the click waited behind: a 30 ms timer, then a 45 ms
@@ -3571,7 +3571,7 @@ test('a render that committed inside the script the screen update waited on is s
   // Where every render was the script's, the working time is still said to have been the handlers'.
   const onlyForced = report([entry('click', 0, 368, 2, 171)], [forced], frames, [input(0, 'click')]);
   assert.match(onlyForced.explanation.cause, /React rendered inside it: 150 ms /);
-  assert.deepEqual(onlyForced.explanation.notes, ['Code outside React (the click handler or other scripts) still ran for about 169 ms of the 169 ms of working time before that.']);
+  assert.deepEqual(onlyForced.explanation.notes, ['Code outside React (the click handler or other scripts) still ran for all 169 ms of working time before that.']);
 
   // A production build: no render times and no priority, and the script's render still left out of the count.
   const prod = (x: CommitSummary) => ({ ...x, hasDurations: false, total: 0, priority: undefined, components: [{ name: 'TableBodyRow', count: 36, self: 0, total: 0 }] });
