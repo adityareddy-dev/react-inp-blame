@@ -2225,6 +2225,31 @@ test('a DevTools hook whose renderers cannot be read once its calls are wrapped 
   });
 });
 
+test('a DevTools hook that refuses a call by throwing a value with no string form is still reported as one that cannot be chained onto, and install() does not throw', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const hook = existingHook();
+    // Its post-commit call is guarded by a setter that throws an object with no prototype.
+    Object.defineProperty(hook, 'onPostCommitFiberRoot', {
+      get: () => undefined,
+      set() {
+        throw Object.create(null);
+      },
+    });
+    const { inject, onCommitFiberRoot } = hook;
+    page.window[HOOK] = hook;
+    const api = install({ devtoolsTrack: false });
+    try {
+      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      assert.match(String(warn.mock.calls[0]?.arguments[0]), /__REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be chained onto \(a value that cannot be printed\), so React reports to it alone/);
+      assert.equal(hook.inject, inject);
+      assert.equal(hook.onCommitFiberRoot, onCommitFiberRoot);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test("a DevTools hook global the library cannot read never reaches the page's error handlers, whether install(), the check 3 s after install, an Event Timing batch or the hide reads it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -2446,6 +2471,26 @@ test('a page that refuses the idle callback the Performance panel is drawn in ke
       );
       assert.deepEqual(heard, [7, 14, 21]);
       assert.equal(caught(warn).length, 1);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
+test('a badge and panel that fail to show by throwing a value with no string form are said to have failed, and leave no rejected promise', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser(async () => {
+    // The page will not make the badge's first element, and throws an object with no prototype.
+    (globalThis as any).document.createElement = () => {
+      throw Object.create(null);
+    };
+    const api = install({ devtoolsTrack: false });
+    try {
+      assert.equal(await mountOverlay(), null);
+      assert.match(
+        String(warn.mock.calls.at(-1)?.arguments[0]),
+        /^\[react-inp-blame\] the badge and panel could not be shown \(a value that cannot be printed\)\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#overlay-failed$/,
+      );
     } finally {
       api.dispose();
     }
