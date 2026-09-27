@@ -1327,6 +1327,31 @@ test('a chained hook the page turns off between dispose() and another install() 
   });
 });
 
+test('a hook the page turns off right before dispose(), with no interaction between, is unsupported from the start of the next install()', async (t) => {
+  // dispose() records what React calls on the hook from then on, but not the no-ops on a hook turned off since the
+  // last look, or the next install() would read them as React rendering nothing.
+  const warn = t.mock.method(console, 'warn', () => {});
+  ownShim(t);
+  for (const existing of [null, existingHook()]) {
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+    await inBrowser((page) => {
+      if (existing) page.window[HOOK] = existing;
+      const api = install({ devtoolsTrack: false });
+      const hook = page.window[HOOK];
+      const id = hook.inject(reactDom('19.3.0'));
+      hook.onCommitFiberRoot(id, mountedRoot(0b11, 4));
+      turnOff(hook);
+      api.dispose();
+      const again = install({ devtoolsTrack: false });
+      assert.deepEqual({ mode: again.stats().mode, kind: again.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      assert.equal(warn.mock.callCount(), 1);
+      assert.match(warn.mock.calls[0].arguments[0], /off after react-dom registered with it/);
+      again.dispose();
+    });
+  }
+});
+
 test("hook: 'shim' over a frozen hook says only that it cannot be wrapped, not that it chained onto it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
