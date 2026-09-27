@@ -2221,6 +2221,18 @@ test('a click whose only render ran after the handlers is weighed as one React r
   for (const commits of [[], [commit(270, 0, table)]]) {
     assert.deepEqual(listened(commits, 80, 290).blame, { kind: 'script', name: 'DIV.onscroll', detail: null, ms: 80, confidence: 'measured' });
   }
+  // One under half of it leaves the handlers the verdict where the screen update is 100 ms or under too, which no
+  // note names it in: 110 ms of short handlers before a 30 ms timer went to the timer under a 99 ms screen update,
+  // and to handleSave under a 104 ms one, or beside a 1 ms render.
+  const sevenClicks = Array.from({ length: 7 }, (_, i) => script('BUTTON.onclick', 3 + i * 15, 12));
+  const timed = (paint: number, commits: CommitSummary[] = []) =>
+    report([entry('click', 0, 112 + paint, 2, 112)], commits, [frame(0, 112 + paint, [...sevenClicks, script('TimerHandler:setTimeout', 115, 30)], 92 + paint)], save).explanation;
+  const unnoted = timed(99);
+  assert.deepEqual(unnoted.blame, { ...handler, ms: 110 });
+  assert.equal(unnoted.cause, "The click handler handleSave ran for about 110 ms; React didn't render anything.");
+  assert.deepEqual(unnoted.notes, []);
+  assert.deepEqual(timed(104).blame, unnoted.blame);
+  assert.deepEqual(timed(99, [commit(100, 0, { total: 1, rendered: 1 })]).blame, { ...handler, ms: 109 });
 });
 
 test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {

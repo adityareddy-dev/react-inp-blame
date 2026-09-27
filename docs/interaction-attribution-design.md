@@ -1298,15 +1298,18 @@ ties to the script after the handlers is not in the working time, so a click who
 is weighed the same way: until 2026-09-26, 200 ms of short click handlers before a 40 ms scroll listener
 that rendered read as waiting and painting. Where a long animation frame was recorded over the handlers
 and names a script of 20 ms or more that a verdict would name, the browser's record still decides, in any
-build. One that lists only shorter scripts, or none, or only the one after the handlers that the note
-names, names nothing that ran in them, so the handler keeps its verdict rather than the time going to
-waiting and painting. One that ended as they began holds only what the click waited behind, so a 30 ms
-timer there leaves a 45 ms handler its verdict, as it has before that frame arrives and beside a 1 ms
-render. Where install() ran too late or react-dom cannot be read, the setup is still the verdict, unless
-every render read ran in the script after the handlers: those were read once the handlers had ended, so
-React was read all through them and rendered nothing there, and the handler or the script is named as
-where React is read, hedged. Taken as unknown, 200 ms of handleSave before a scroll listener that
-rendered would be blamed on nothing, and the render the note names said to be unseen. The forced layout's
+build. One that lists only shorter scripts, or none, or only one after the handlers that held under half
+the screen update, whether or not the note names it, names nothing that ran in them, so the handler keeps
+its verdict rather than the time going to waiting and painting. Until 2026-09-27 a 30 ms timer after 110 ms
+of short handlers took it under a 99 ms screen update, which has no note, and not under a 104 ms one. One
+that ended as they began holds only what the click waited behind, so a 30 ms timer there leaves a 45 ms
+handler its verdict, as it has before that frame arrives and beside a 1 ms render. Where install() ran too
+late or react-dom cannot be read, the setup is still the verdict, unless a render was read after the
+handlers, in the script after them or in React's own task: it was read once the handlers had ended, so
+React was read all through them, and the verdict is found as where React is read, hedged. Taken as unknown,
+200 ms of handleSave before a scroll listener that rendered would be blamed on nothing, and the render the
+note names said to be unseen. Where React was read before it stopped, and not after the handlers, the
+verdict says only that what it did after it stopped is unknown. The forced layout's
 sentence reads the handlers the same way: layout charged to a script no commit ran in was in code outside
 React, not "often in a layout effect" as it said when that was taken as unknown. A click React never
 dispatched, on server-rendered HTML it had not hydrated yet, is left as it was: the handler named there
