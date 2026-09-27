@@ -57,7 +57,10 @@ export interface LifecycleOptions {
   now(): number;
   /** Called with each report when it is published, and with every later revision of it: a new frozen report each time. */
   publish(r: InteractionReport): void;
-  /** Called with what building one interaction's report threw. That report is dropped, and the others in the batch are not. */
+  /**
+   * Called with what one step of the work threw: building or revising one report, publishing one quiet
+   * report, or counting a batch toward INP. Only that step's work is lost, and the others still run.
+   */
   dropped(error: unknown): void;
 }
 
@@ -136,6 +139,14 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     const slowest = published.slice().sort((a, b) => b.data.duration - a.data.duration).slice(0, KEPT_SLOWEST);
     published.splice(published.findIndex((h) => !inpIds.includes(h.data.interactionId) && !slowest.includes(h)), 1);
   };
+  /** Runs `step` on its own: what it throws goes to `dropped`, and the steps after it still run. */
+  const alone = (step: () => void) => {
+    try {
+      step();
+    } catch (error) {
+      options.dropped(error);
+    }
+  };
   const holdBack = (held: Held) => {
     quiet.push(held);
     if (quiet.length > MAX_QUIET) quiet.shift();
@@ -145,16 +156,19 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
    * entry will not come. A newer interaction's entry never comes before it, so one in `batch` means the
    * release painted under the 16 ms floor and sent none, and once the page is hidden (`batch` null)
    * nothing waits. An interaction with entries in the batch is judged on those instead. The untimed
-   * renders of a quiet interaction are all waiting ones: any other would have published it.
+   * renders of a quiet interaction are all waiting ones: any other would have published it. Each is
+   * settled on its own, so one that cannot be published keeps back neither the others nor the batch.
    */
-  const settle = (batch: readonly InteractionTiming[] | null) => {
+  const settle =(batch: readonly InteractionTiming[] | null) => {
     for (const held of quiet.slice()) {
-      const { interactionId, entries, followUps } = held.data;
-      if (batch?.some((e) => e.interactionId === interactionId)) continue;
-      if (!followUps.some((c) => !timed(c, entries) && (!batch || batch.some((e) => e.startTime > c.inputTs)))) continue;
-      quiet.splice(quiet.indexOf(held), 1);
-      keep(held);
-      publish(held.report);
+      alone(() => {
+        const { interactionId, entries, followUps } = held.data;
+        if (batch?.some((e) => e.interactionId === interactionId)) return;
+        if (!followUps.some((c) => !timed(c, entries) && (!batch || batch.some((e) => e.startTime > c.inputTs)))) return;
+        quiet.splice(quiet.indexOf(held), 1);
+        keep(held);
+        publish(held.report);
+      });
     }
   };
   const find = (id: number): Held | null => {
@@ -209,7 +223,9 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
   return {
     onEntries(batch) {
       const started = now();
-      inp.add(batch.filter((e) => e.startTime >= navigationStart));
+      // Counted toward INP apart from the reports, so an error in the count keeps none of them from being
+      // built.
+      alone(() => inp.add(batch.filter((e) => e.startTime >= navigationStart)));
       spend(started);
       // Before the batch's own interactions, so the newest report is still the last published.
       settle(batch);
@@ -220,13 +236,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
         else byId.set(e.interactionId, [e]);
       }
       // One at a time, so a report that cannot be built drops only itself, and not the others painted with it.
-      for (const [id, group] of byId) {
-        try {
-          onInteraction(id, group);
-        } catch (error) {
-          options.dropped(error);
-        }
-      }
+      for (const [id, group] of byId) alone(() => onInteraction(id, group));
     },
 
     onCommit(c) {
@@ -263,12 +273,15 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       // A long animation frame can land after the report was built; fold it into the window or the later
       // renders of every report it overlaps and publish the corrected numbers. Not only the newest one:
       // Control and z pressed 8 ms apart share the frame the undo ran in, and Control's report is the older.
+      // One at a time, so a report that cannot be revised keeps the frame from none of the others.
       if (!frames) return;
       for (const held of published) {
-        const started = now();
-        const next = refreshFrames(held.data, frames);
-        if (next) publish(revise(held, next, started).report);
-        else spend(started);
+        alone(() => {
+          const started = now();
+          const next = refreshFrames(held.data, frames);
+          if (next) publish(revise(held, next, started).report);
+          else spend(started);
+        });
       }
     },
 
@@ -282,7 +295,8 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
 
     onHidden() {
       const started = now();
-      inp.update();
+      // An error while INP is chosen again keeps no quiet report from being published.
+      alone(() => inp.update());
       spend(started);
       settle(null);
     },

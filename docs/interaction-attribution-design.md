@@ -445,8 +445,10 @@ hit an error of its own. Before, the error went out of the page's listener to `r
 page's. The badge and panel, which a developer turns on, draw under a guard of their own
 (`overlay-draw`). Where one error could take more with it, the guard is finer. The interactions in one
 batch are built one at a time, and long animation frames are read one at a time, so each drops only
-itself. At hide neither flush throws, so a frame that cannot be read keeps neither the entries from
-their reports nor the reports from being heard. An input's target is read under a guard of its own when
+itself. So does the batch's count toward INP, each quiet report a batch or the hide publishes,
+and each report a frame revises. At hide neither flush throws, and the reports waiting are heard
+whatever the hide itself throws, so a frame that cannot be read keeps neither the entries from their
+reports nor the reports from being heard. An input's target is read under a guard of its own when
 the input is recorded. An input in a form with a field named `tagName` still throws in there, since a
 form's fields shadow its own properties, and so does building its report. It is recorded naming nothing,
 so the commits in its dispatch are still read as its own and the page's other reports keep their

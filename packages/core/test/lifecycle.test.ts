@@ -315,6 +315,78 @@ test('an interaction whose report cannot be built goes to dropped on its own, an
   assert.ok(errors[0] instanceof TypeError, String(errors[0]));
 });
 
+test('an error while INP counts a batch, or chooses again at the hide, goes to dropped on its own, and every report is still built and published', () => {
+  const errors: unknown[] = [];
+  let countable = true;
+  const { life, published, render } = lifecycle({
+    interactionCount: () => {
+      if (!countable) throw new TypeError('interactionCount moved');
+      return 1;
+    },
+    dropped: (error) => errors.push(error),
+  });
+  // A 32 ms keydown whose render, stamped with its keyup, waits for the keyup's entry until the hide.
+  life.onEntries([entry(7, 'keydown', 32)]);
+  render({ ...commit(7120, 7100), gestureTs: 7000, inputType: 'keyup', inDispatch: false });
+  assert.deepEqual(published, []);
+  countable = false;
+  life.onHidden();
+  life.onEntries([entry(14, 'click', 120)]);
+  assert.deepEqual(
+    published.map((r) => r.interactionId),
+    [7, 14],
+  );
+  assert.equal(errors.length, 2);
+  // The click was counted all the same, and once the count can be read again INP points at it.
+  countable = true;
+  life.onEntries([entry(21, 'click', 48)]);
+  assert.equal(life.inp()?.interactionId, 14);
+});
+
+test('a quiet report that cannot be published as it settles goes to dropped on its own, and the others settled with it and the batch still are', () => {
+  const errors: unknown[] = [];
+  const published: number[] = [];
+  const { life, render } = lifecycle({
+    publish: (r) => {
+      if (r.interactionId === 7) throw new TypeError('publish moved');
+      published.push(r.interactionId);
+    },
+    dropped: (error) => errors.push(error),
+  });
+  // Two keydowns in one frame, each with a render waiting for its keyup's entry, and then a slow click.
+  life.onEntries([entry(7, 'keydown', 32), entry(14, 'keydown', 32, { startTime: 7010, processingStart: 7011, processingEnd: 7034 })]);
+  render({ ...commit(7120, 7100), gestureTs: 7000, inputType: 'keyup', inDispatch: false });
+  render({ ...commit(7130, 7110), gestureTs: 7010, inputType: 'keyup', inDispatch: false });
+  assert.deepEqual(published, []);
+  life.onEntries([entry(21, 'click', 120)]);
+  assert.deepEqual(published, [14, 21]);
+  assert.equal(errors.length, 1);
+});
+
+test('a report that cannot be revised for a long animation frame goes to dropped on its own, and the other reports the frame overlaps still take it in', () => {
+  const errors: unknown[] = [];
+  const published: [number, number][] = [];
+  const frames: FrameSummary[] = [];
+  const { life } = lifecycle({
+    frames,
+    publish: (r) => {
+      if (r.interactionId === 7 && r.revision > 0) throw new TypeError('publish moved');
+      published.push([r.interactionId, r.frames?.length ?? -1]);
+    },
+    dropped: (error) => errors.push(error),
+  });
+  // Two slow clicks 50 ms apart, and one frame that holds them both.
+  life.onEntries([entry(7, 'click', 120), entry(8, 'click', 120, { startTime: 7050, processingStart: 7052, processingEnd: 7162 })]);
+  frames.push(Object.freeze({ ...slowFrame, start: 7000, duration: 200 }));
+  life.onFrame();
+  assert.deepEqual(published, [
+    [7, 0],
+    [8, 0],
+    [8, 1],
+  ]);
+  assert.equal(errors.length, 1);
+});
+
 test(`past ${MAX_REPORTS} published reports the oldest goes first, but never one of the ${KEPT_SLOWEST} slowest`, () => {
   // A 304 ms key press, then sixty quick interactions, as drawing sixty rectangles in excalidraw makes.
   // Kept first in, first out, the key press was the first to go.

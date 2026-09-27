@@ -266,12 +266,15 @@ function installNow(opts: InstallOptions): Api {
     if (document.visibilityState !== 'hidden') return;
     frameObserver.flush();
     eventObserver.flush();
-    lifecycle.onHidden();
-    // What waits to be heard is heard now: a tab that closes runs no later task. A visibilitychange
-    // handler never runs inside a React commit.
-    if (delivery !== null) {
-      clearTimeout(delivery);
-      deliver();
+    try {
+      lifecycle.onHidden();
+    } finally {
+      // What waits to be heard is heard now, even after an error at the hide: a tab that closes runs no
+      // later task. A visibilitychange handler never runs inside a React commit.
+      if (delivery !== null) {
+        clearTimeout(delivery);
+        deliver();
+      }
     }
   });
   // The App Router announces a navigation from inside the handler that starts it, so the input
