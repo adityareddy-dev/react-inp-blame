@@ -3446,7 +3446,7 @@ test('a script after the handlers is what held the screen update only from half 
   assert.equal(two([]).cause, 'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest A.onscroll (app.js) for 150 ms.');
   assert.equal(
     two([commit(180, 0, { total: 15, startedAt: 150 })]).cause,
-    'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest A.onscroll (app.js) for 150 ms, and React rendered inside it: 15 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).',
+    'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest A.onscroll (app.js) for 150 ms, and React rendered inside that one: 15 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).',
   );
   // At 180 ms together, with the last 100 ms in no long frame and the browser's own work under half too, the
   // longest is said on its own.

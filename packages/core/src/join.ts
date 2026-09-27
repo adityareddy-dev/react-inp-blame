@@ -1326,11 +1326,14 @@ function explain(r: InteractionReport): Explanation {
       ? r.commits.filter((x) => ranInside(x, lateScript.script))
       : [];
   const lateRender = insideLate.length ? heaviest(insideLate) : null;
-  const lateRenderSaid = !lateRender
-    ? ''
-    : insideLate.length === 1
-      ? `, and React rendered inside it: ${lateRender.hasDurations ? `${ms(lateRender.total)} ` : ''}${renderPhrase(lateRender)}`
-      : `, and React rendered inside it ${insideLate.length} times, the ${lateRender.hasDurations ? `heaviest ${ms(lateRender.total)}` : 'largest'} ${renderPhrase(lateRender)}`;
+  // Said right after the script, the render is "inside it". After all the scripts together, "inside that one".
+  const renderedInside = (it: string) =>
+    !lateRender
+      ? ''
+      : insideLate.length === 1
+        ? `, and React rendered inside ${it}: ${lateRender.hasDurations ? `${ms(lateRender.total)} ` : ''}${renderPhrase(lateRender)}`
+        : `, and React rendered inside ${it} ${insideLate.length} times, the ${lateRender.hasDurations ? `heaviest ${ms(lateRender.total)}` : 'largest'} ${renderPhrase(lateRender)}`;
+  const lateRenderSaid = renderedInside('it');
   /**
    * Where no script took the screen update, the browser's own work on the main thread did, where Long
    * Animation Frames saw it. A key press's style and layout is timed as the frame's own, from its
@@ -1366,7 +1369,7 @@ function explain(r: InteractionReport): Explanation {
   const lateScriptClause = lateLeads
     ? `, mostly because ${scriptPhrase(lateLeads.script)} ran for ${ms(lateLeads.ms)} before the next frame${lateRenderSaid}.`
     : !browserClause && lateScripted >= WAITED_BEHIND_MIN_SHARE * r.presentation
-      ? `. Scripts ran for ${ms(lateScripted)} of it${lateScript ? `, the longest ${namedWithFile(lateScript.script)} for ${ms(lateScript.ms)}${lateRenderSaid}` : ''}.`
+      ? `. Scripts ran for ${ms(lateScripted)} of it${lateScript ? `, the longest ${namedWithFile(lateScript.script)} for ${ms(lateScript.ms)}${renderedInside('that one')}` : ''}.`
       : `${browserClause ?? '.'}${longestSaid(lateScript, lateRenderSaid, true)}`;
 
   // The commits of the working time. One the screen update's clause ties to the script it ran in is that
