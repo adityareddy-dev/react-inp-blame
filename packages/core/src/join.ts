@@ -866,8 +866,14 @@ function coverage(intervals: readonly Interval[], less: readonly Interval[] = []
 }
 /** What the browser says ran a script: its invoker, else its function's name; null when it gives neither. */
 const scriptName = (s: ScriptSummary): string | null => s.invoker || s.name || null;
-/** "a script (handleClick, app.js)": a script by what ran it and the file it came from. */
-const aScript = (s: ScriptSummary): string => `a script (${scriptName(s) ?? 'unknown'}${s.source ? `, ${s.source}` : ''})`;
+/**
+ * "a script (handleClick, app.js)": a script by what ran it and the file it came from. One the browser gave
+ * no name is "a script with no name (app.js)", as `longestSaid` says it.
+ */
+const aScript = (s: ScriptSummary): string => {
+  const name = scriptName(s);
+  return name ? `a script (${name}${s.source ? `, ${s.source}` : ''})` : `a script with no name${s.source ? ` (${s.source})` : ''}`;
+};
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A URL the way a link on `page` shows it: its path, query and fragment when it stays on that page's origin. */

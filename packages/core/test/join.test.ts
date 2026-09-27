@@ -3418,6 +3418,14 @@ test('a script after the handlers is what held the screen update only from half 
     [input(0, 'click')],
   );
   assert.match(unnamed.explanation.cause, /\. The longest script the browser recorded in that time was one with no name \(app\.js\), 150 ms\.$/);
+  // And from half of the screen update, in the same words.
+  const nameless200 = report(
+    click,
+    [handled],
+    [frame(0, 400, [script('BUTTON.onclick', 2, 28), { invoker: '', name: '', source: 'app.js', start: 100, duration: 200, forcedLayout: 0 }], 330)],
+    [input(0, 'click')],
+  );
+  assert.match(nameless200.explanation.cause, /, mostly because a script with no name \(app\.js\) ran for 200 ms before the next frame\.$/);
 
   // From half of the 370 ms the timer is the reason, and the blame's name.
   const half = report(click, [handled], timer(185, 300), [input(0, 'click')]);
