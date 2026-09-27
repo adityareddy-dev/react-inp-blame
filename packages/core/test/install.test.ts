@@ -1966,7 +1966,7 @@ test("an error while a report's explanation is built, on its first read, never r
       // An analytics forwarder, which reads every field of a report, the explanation and the verdict with them.
       const sent: InteractionReport[] = [];
       onInteraction((r) => sent.push(JSON.parse(JSON.stringify(r))));
-      page.paint([click(7, 1000, 120)]);
+      page.paint([{ ...click(7, 1000, 120), target: saveButton() }]);
       // The report is built, and its explanation is not until it is read. There the first number it rounds throws.
       t.mock.method(Math, 'round').mock.mockImplementationOnce(() => {
         throw new TypeError('rounding moved');
@@ -1975,12 +1975,13 @@ test("an error while a report's explanation is built, on its first read, never r
       assert.deepEqual(reported, []);
       assert.equal(caught(warn).length, 1);
       const cause = 'Where the time went is unknown: this library hit an error of its own while it worked that out for this click, so nothing is blamed. See the library-error warning in the console.';
+      // Where it happened is still said, so the issue the warning asks for can name the control.
       assert.deepEqual(
-        sent.map((r) => ({ id: r.interactionId, blame: r.explanation.blame, cause: r.explanation.cause, phases: r.explanation.phases.map((p) => p.ms), verdict: r.verdict })),
-        [{ id: 7, blame: { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' }, cause, phases: [2, 110, 8], verdict: `120 ms click. ${cause}` }],
+        sent.map((r) => ({ id: r.interactionId, blame: r.explanation.blame, where: r.explanation.where, cause: r.explanation.cause, phases: r.explanation.phases.map((p) => p.ms), verdict: r.verdict })),
+        [{ id: 7, blame: { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' }, where: 'button "save"', cause, phases: [2, 110, 8], verdict: `120 ms click on button "save". ${cause}` }],
       );
       // Read again, it is the same, and the console is not told twice.
-      assert.equal(api.last()?.verdict, `120 ms click. ${cause}`);
+      assert.equal(api.last()?.verdict, `120 ms click on button "save". ${cause}`);
       // Its 'none' is the library's error, not a finding, so analytics are not handed it as one.
       assert.deepEqual(attributeINP({ entries: [{ interactionId: 7 }] }), { react: null });
       page.paint([click(14, 2000, 150)]);

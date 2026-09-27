@@ -1206,7 +1206,7 @@ function explain(r: InteractionReport): Explanation {
   const rating = rateInp(r.duration);
   const kind = kindOf(r.type, r.pointerType);
   const headline = `${ms(r.duration)} ${kind}`;
-  const where = r.target ? [r.target.label || r.target.selector, r.target.component ? `in ${r.target.component}` : ''].filter(Boolean).join(' ') || null : null;
+  const where = placeOf(r);
   const notes: string[] = [];
   const handlerName = r.target?.handler ?? null;
   const component = r.target?.component ?? null;
@@ -2387,6 +2387,11 @@ function explain(r: InteractionReport): Explanation {
   });
 }
 
+/** Where the interaction happened, as its verdict names it after 'on': the target, and the component it is in. */
+function placeOf(r: InteractionReport): string | null {
+  return r.target ? [r.target.label || r.target.selector, r.target.component ? `in ${r.target.component}` : ''].filter(Boolean).join(' ') || null : null;
+}
+
 /** Waiting, working and updating the screen, of which `hydrationMs` of the working time went to hydrating. */
 function phasesOf(r: InteractionReport, hydrationMs: number): readonly Phase[] {
   const working: Phase = { label: 'Working', ms: r.processing, hint: 'Event handlers and React rendering.' };
@@ -2399,9 +2404,9 @@ function phasesOf(r: InteractionReport, hydrationMs: number): readonly Phase[] {
 }
 
 /**
- * What a report reads as where building its explanation threw: its headline and phases, nothing blamed,
- * and a cause that says so. It points to the library-error warning (`dropped`) rather than to its own
- * error, since that warning shows once a page and quotes the first error caught.
+ * What a report reads as where building its explanation threw: its headline, where it happened and its
+ * phases, nothing blamed, and a cause that says so. It points to the library-error warning (`dropped`)
+ * rather than to its own error, since that warning shows once a page and quotes the first error caught.
  */
 function unexplained(r: InteractionReport): Explanation {
   const kind = kindOf(r.type, r.pointerType);
@@ -2409,7 +2414,7 @@ function unexplained(r: InteractionReport): Explanation {
     headline: `${ms(r.duration)} ${kind}`,
     blame: Object.freeze<Blame>({ kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' }),
     rating: rateInp(r.duration),
-    where: null,
+    where: placeOf(r),
     cause: `Where the time went is unknown: this library hit an error of its own while it worked that out for this ${kind}, so nothing is blamed. See the library-error warning in the console.`,
     notes: Object.freeze([]),
     phases: phasesOf(r, 0),
