@@ -73,6 +73,7 @@ interface DispatchedInput {
   readonly pointerId?: number;
   readonly pointerType?: string;
   readonly code?: string;
+  readonly keyCode?: number;
 }
 
 /** An input stamped on a commit: the event being dispatched when it ran, else the newest one seen. */
@@ -325,6 +326,10 @@ const MAX_AWAITING_EFFECTS = 8;
 const MIN_PRUNE_AT = 64;
 // A press can be held this long and its release still counts as the same gesture.
 const PRESS_WINDOW = 5000;
+// The keyCode browsers give a keydown an input method took, and React's own test for one. Its Enter
+// commits the text and submits nothing, and the field's onChange runs from the input event that ends the
+// composition, so the handler is read as for a key that is not Enter.
+const IME_KEY_CODE = 229;
 
 /** The last 8 inputs seen, oldest first. Live array, do not mutate. */
 export function recentInputs(): InputRecord[] {
@@ -407,7 +412,7 @@ function record(e: DispatchedInput): InputRecord {
     control,
     label: control && state.options?.label?.(control),
     owners: Object.freeze(ownersOf(namingFiber(target))),
-    handler: handlerOf(fiber, e.type, isKey ? e.code : null),
+    handler: handlerOf(fiber, e.type, isKey && e.keyCode !== IME_KEY_CODE ? e.code : null),
     work: { endedAt: e.timeStamp, ownEndedAt: e.timeStamp, unjoined: [] },
     // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting
     // inside a page React has otherwise hydrated, and then the target's nearest fiber is the hydrated
