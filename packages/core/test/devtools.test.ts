@@ -180,6 +180,17 @@ test('a render a key press set off before its slower keyup is drawn as a later r
     drawn.filter((d) => d.track === 'React renders').map(({ label, start, end, color }) => ({ label, start, end, color })),
     [{ label: 'Later render · OrderSummary (801 components)', start: 149.5, end: 150, color: 'tertiary' }],
   );
+  // Drawn as a measure, its tooltip said it rendered after the screen updated, and the interaction's count
+  // said it was one of the renders after the paint, which read as after the keyup's.
+  const { drawn: measures } = recording(CHROME_133, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+  assert.equal(measures.find((d) => d.track === 'React renders')?.tooltip, '801 components rendered after the press painted; heaviest path OrderSummary');
+  assert.deepEqual(measures[0]?.properties?.find(([name]) => name.includes('after') || name.startsWith('Later')), ['Later React renders', '1']);
+  // A render after the paint the report is about still says so.
+  const clicked = buildReport([click], [commit(150)], null);
+  const after = attachLaterRender(clicked, commit(400), null);
+  assert.ok(after);
+  const { drawn: late } = recording(CHROME_133, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(sealReport(after)));
+  assert.equal(late.find((d) => d.label.startsWith('Later render'))?.tooltip, '801 components rendered after the screen updated; heaviest path OrderSummary');
 });
 
 test('the interaction entry is named after the heaviest render before the paint, the one its tooltip blames', () => {
