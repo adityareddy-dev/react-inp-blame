@@ -1696,6 +1696,27 @@ test('a frame the library cannot read, still queued when the page is hidden, kee
   );
 });
 
+test("an error of the library's own at the hide never keeps the reports waiting from being heard, since a closing tab runs no later task", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    try {
+      const heard: number[] = [];
+      onInteraction((r) => heard.push(r.interactionId));
+      page.paint([click(7, 1000, 300)]);
+      // The clock throws the first time the hide reads it, before the INP estimate is chosen again.
+      t.mock.method(performance, 'now').mock.mockImplementationOnce(() => {
+        throw new TypeError('clock moved');
+      });
+      assert.doesNotThrow(() => page.hide());
+      assert.deepEqual(heard, [7]);
+      assert.equal(caught(warn).length, 1);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test('listeners hear a report in a task after the one that published it, never inside the React commit that revised it', async (t) => {
   const clock = useClock(t);
   await inBrowser(async (page) => {
