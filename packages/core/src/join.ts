@@ -3,6 +3,7 @@ import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, INPUT_TYPES, joinWindow, type InputRecord } from './hook.js';
 import { rateInp } from './inp.js';
+import { unexplainedReports } from './install-state.js';
 import type { PageNavigation } from './navigation.js';
 import type { InteractionTiming } from './observe.js';
 import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InteractionReport, Phase, ReactStatus, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
@@ -628,6 +629,7 @@ function explained(r: InteractionReport): { explanation: Explanation; verdict: s
       // from the page here too. The report stays, blaming nothing, and says why.
       dropped(error);
       explanation = unexplained(r);
+      unexplainedReports.add(r);
     }
     built = { explanation, verdict: toVerdict(explanation) };
     explanations.set(r, built);

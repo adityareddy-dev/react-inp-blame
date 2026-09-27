@@ -29,3 +29,10 @@ export interface InstallState {
 }
 
 export const page = shared<InstallState>('install', () => ({ installed: null, sampledOut: null, listeners: new Set(), overlay: null, installMs: 0 }));
+
+/**
+ * Reports whose explanation threw as it was built (`join.ts`), so that they blame nothing for an error of
+ * the library's own rather than because nothing stood out. `attributeINP` leaves them out. Beside the
+ * installation for the same reason: whichever copy of the library built a report, every copy can tell.
+ */
+export const unexplainedReports = shared('unexplained', () => new WeakSet<InteractionReport>());

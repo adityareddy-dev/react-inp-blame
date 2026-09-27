@@ -1904,8 +1904,8 @@ matches nothing rather than being matched on a start time.
 - `react` is `null` when nothing is installed on the page, and when the library has no report for the
   interaction web-vitals picked: one that stayed under `threshold` and set off no later render INP
   leaves out, one already pushed out of the 50 reports a page keeps (`MAX_REPORTS`), which the ten
-  slowest and those INP can still point at never are, or one whose report was dropped after an error of
-  the library's own ("Errors of its own"). It is never a guess.
+  slowest and those INP can still point at never are, or one whose report was dropped, or could not be
+  explained, after an error of the library's own ("Errors of its own"). It is never a guess.
 - `generateTarget` needs no installation, only React's fiber expando, so it works in a page that never
   calls `install()`. `attributeINP` needs one, though not from the same copy of the library: the
   installation lives on `globalThis` (`session.ts`), so any copy of a compatible version sees it.
