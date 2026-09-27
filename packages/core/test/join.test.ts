@@ -761,12 +761,12 @@ test("where the working time was longer, the screen update's note says the frame
   assert.match(under.notes[0], /: the frame most likely waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 50 ms\.$/);
   // Nor where the screen update is 100 ms or under, which gets no note of its own: the next key's handler read as this
   // key's script, "after the handler finished", and nothing said the frame waited on it.
-  const quickKeys = (ms: number) =>
+  const quickKeys = (ms: number, next = input(1100, 'keydown', worked(1265))) =>
     report(
       [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
       [three],
       [frame(1000, 272, [...keys, script('DIV#root.onkeydown', 1200, ms)], 1262)],
-      [...ring.slice(0, 2), input(1100, 'keydown', worked(1265))],
+      [...ring.slice(0, 2), next],
     ).explanation;
   const quick = quickKeys(70);
   assert.deepEqual([quick.blame, quick.cause], [held.blame, held.cause]);
@@ -776,6 +776,28 @@ test("where the working time was longer, the screen update's note says the frame
   const quickUnder = quickKeys(40);
   assert.deepEqual([quickUnder.blame, quickUnder.cause], [held.blame, held.cause]);
   assert.match(quickUnder.notes[0], /^After the handler finished, the screen took another 90 ms to update: the frame most likely waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 40 ms\.$/);
+  // Nor where nothing shows the frame waited on it: the next key's 44 ms handler, under half of the 90 ms, with that
+  // key's render not on record or ending after the paint, read as this key's script too. It is the next key's work
+  // all the same, and the working time had no long task in it.
+  for (const next of [input(1100, 'keydown'), input(1100, 'keydown', worked(1400))]) {
+    const unheld = quickKeys(44, next);
+    assert.deepEqual([unheld.blame, unheld.cause], [held.blame, held.cause]);
+    assert.deepEqual(unheld.notes, []);
+  }
+  // And where the frame did wait on it, a 30 ms timer that ran after this key's handlers, before the next key came, is
+  // no more the verdict under a 90 ms screen update than under a 104 ms one: under 90 it was.
+  const timerFirst = (paint: number) =>
+    report(
+      [entry('keydown', 1000, 182 + paint, 1001, 1180), entry('keyup', 1060, 122 + paint, 1181, 1182)],
+      [three],
+      [frame(1000, 182 + paint, [...keys, script('TimerHandler:setTimeout', 1183, 30), script('DIV#root.onkeydown', 1216, 55)])],
+      [...ring.slice(0, 2), input(1215, 'keydown')],
+    ).explanation;
+  for (const paint of [90, 104]) {
+    const waitedOn = timerFirst(paint);
+    assert.deepEqual([waitedOn.blame, waitedOn.cause], [held.blame, held.cause], `${paint} ms`);
+    assert.match(waitedOn.notes[0]!, /: the frame waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 55 ms\.$/);
+  }
 });
 
 test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {

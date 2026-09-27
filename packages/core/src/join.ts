@@ -1396,7 +1396,6 @@ function explain(r: InteractionReport): Explanation {
   const forcedWhileHandling = forcedLayoutOf(whileHandling);
   const forcedAfterInput = forcedLayoutOf(scriptParts(frames, processingStart, r.end));
   const lateScript = longestPart(scriptParts(frames, processingEnd, r.end));
-  const anyScript = longestPart(scriptParts(frames, r.start, r.end));
   /**
    * Does the screen update outrank everything the working time holds? Nothing that happened in
    * there can account for more of the interaction than the working time it ran in, so that is what
@@ -1543,11 +1542,14 @@ function explain(r: InteractionReport): Explanation {
   // What the build records, which a report whose every commit was the late script's still says.
   const hasDurations = (c ?? r.commits[0])?.hasDurations ?? false;
   /**
-   * The script a verdict names once React is ruled out: the longest anywhere in the interaction, except where
-   * the screen update's note names the late script, which it does wherever a render ran in it or the frame
-   * waited on the next press and, with neither, over PRESENTATION_NOTE_MS. The verdict then takes that script
-   * only where it held half of the screen update: a 40 ms listener in a 157 ms screen update that spent 110 ms
-   * on style and layout is under half of either phase, and is left to the note, with a render in it or without.
+   * The script a verdict names once React is ruled out: the longest anywhere in the interaction but the next
+   * press's, except where the screen update's note names the late script, which it does wherever a render ran in
+   * it or the frame waited on the next press and, with neither, over PRESENTATION_NOTE_MS. The next press's is a
+   * script that started once it came and the handlers had ended, which `nextScriptMs` counts as its work and no
+   * verdict takes: ranked with the rest, a keydown's verdict named the next key's 44 ms handler, under half of a
+   * 90 ms screen update, as having run after its own. Where the note names the late script, the verdict takes it
+   * only where it held half of the screen update: a 40 ms listener in a 157 ms screen update that spent 110 ms on
+   * style and layout is under half of either phase, and is left to the note, with a render in it or without.
    * Taken without, a 60 ms listener was a `script` verdict where the same listener with a render in it was
    * `none`. Where the frame waited on the next press, the note says so and the verdict does not take the script
    * at all: it is usually that press's handler, whose work waitedOnNext leaves to the next report. Taken, a
@@ -1563,7 +1565,8 @@ function explain(r: InteractionReport): Explanation {
   const lateTaken = heldByNext ? null : lateLeads;
   const earlyScript = longestPart(scriptParts(frames, r.start, processingEnd));
   const ledScript = lateTaken && (!earlyScript || lateTaken.ms > earlyScript.ms) ? lateTaken : earlyScript;
-  const ranScript = !lateNoted ? anyScript : ledScript;
+  const ownScript = longestPart(scriptParts(frames, r.start, r.end).filter((p) => !next || p.script.start < nextFrom - STAMP_TOLERANCE));
+  const ranScript = !lateNoted ? ownScript : ledScript;
   // Where every render ran in the script after the handlers, the screen update's note says it: React did
   // render, just not in the working time, and a verdict that names no render says that much. So it does where
   // a press rendered after it painted, before a slower release: the later render's note, right after it, says
@@ -2328,8 +2331,9 @@ function explain(r: InteractionReport): Explanation {
     // A count under the library's own bars reads as it did, in any build.
     const unmeasured = r.frames.length === 0 ? ` No long animation frame covered the ${kind}, so how much of the working time went to any styles and layout it forced is unmeasured.` : '';
     // Where the screen update's note names the script after the handlers, 70 ms of it in a 157 ms screen
-    // update, the sentence says only that none ran long before it.
-    const noLongTask = `no long task was recorded${lateNoted ? ` in ${workingOnly ? 'it' : 'the working time'}` : ''}`;
+    // update, the sentence says only that none ran long before it, and so it does where the one after them is the next
+    // press's, which no note names under a screen update of 100 ms or less.
+    const noLongTask = `no long task was recorded${lateScript ? ` in ${workingOnly ? 'it' : 'the working time'}` : ''}`;
     cause = shortOf
       ? `${shortOf}; the rest went to waiting and painting.${unmeasured}`
       : c
