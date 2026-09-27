@@ -2225,9 +2225,45 @@ test('a DevTools hook whose renderers cannot be read once its calls are wrapped 
   });
 });
 
-test("a DevTools hook global the library cannot read never reaches the page's error handlers, whether the check 3 s after install, an Event Timing batch or the hide reads it", async (t) => {
+test("a DevTools hook global the library cannot read never reaches the page's error handlers, whether install(), the check 3 s after install, an Event Timing batch or the hide reads it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
+  const locked = {
+    configurable: true,
+    get() {
+      throw new Error('hook locked');
+    },
+  };
+  // There before install(), which reads it first: no hook can be reached through it, so the page is
+  // 'unsupported' and says why, rather than install() throwing out of the app's entry module.
+  await inBrowser((page) => {
+    Object.defineProperty(page.window, HOOK, locked);
+    const api = install({ devtoolsTrack: false });
+    try {
+      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      assert.equal(warn.mock.callCount(), 1);
+      assert.match(
+        String(warn.mock.calls[0]?.arguments[0]),
+        /^\[react-inp-blame\] the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be read or replaced \(Error: hook locked\), so React's commits cannot be read\. Interactions are still reported, without components\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#hook-disabled$/,
+      );
+      page.paint([click(7, 1000, 120)]);
+      t.mock.timers.tick(3000);
+      page.queue([click(14, 2000, 200)]);
+      page.hide();
+      assert.deepEqual(
+        api.reports().map((r) => ({ id: r.interactionId, react: r.reactStatus })),
+        [
+          { id: 7, react: 'unreadable' },
+          { id: 14, react: 'unreadable' },
+        ],
+      );
+      assert.equal(warn.mock.callCount(), 1);
+    } finally {
+      api.dispose();
+    }
+  });
+  session?.slots.warnings?.clear();
+  warn.mock.resetCalls();
   for (const reads of ['check', 'batch', 'hide']) {
     await inBrowser((page) => {
       const api = install({ devtoolsTrack: false });
@@ -2237,12 +2273,7 @@ test("a DevTools hook global the library cannot read never reaches the page's er
         page.paint([click(7, 1000, 120)]);
         // Redefined with a getter that throws, which the shim's accessor cannot see.
         const shim = page.window[HOOK];
-        Object.defineProperty(page.window, HOOK, {
-          configurable: true,
-          get() {
-            throw new Error('hook locked');
-          },
-        });
+        Object.defineProperty(page.window, HOOK, locked);
         if (reads === 'check') assert.doesNotThrow(() => t.mock.timers.tick(3000));
         if (reads === 'batch') assert.doesNotThrow(() => page.paint([click(14, 2000, 200)]));
         if (reads === 'hide') {
@@ -2269,6 +2300,22 @@ test("a DevTools hook global the library cannot read never reaches the page's er
     session?.slots.warnings?.clear();
     warn.mock.resetCalls();
   }
+});
+
+test("a DevTools hook global the shim cannot replace, such as one locked as null, leaves the page 'unsupported' rather than install() throwing", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    Object.defineProperty(page.window, HOOK, { value: null, writable: false, configurable: false });
+    const api = install({ devtoolsTrack: false });
+    try {
+      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      assert.match(String(warn.mock.calls[0]?.arguments[0]), /__REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and read-only, so React registers with no hook and its commits cannot be read\./);
+      page.paint([click(7, 1000, 120)]);
+      assert.deepEqual({ id: api.last()?.interactionId, react: api.last()?.reactStatus }, { id: 7, react: 'unreadable' });
+    } finally {
+      api.dispose();
+    }
+  });
 });
 
 test("an Event Timing entry the library cannot read never reaches the page's error handlers, whether the observer is handed it or the hide takes it", async (t) => {
