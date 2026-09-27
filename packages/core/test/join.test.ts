@@ -3196,6 +3196,13 @@ test("Enter's submit is named by the onSubmit its keypress reached at dispatch, 
   // A form the submit took off the page: the entries have no target, and the reading still names it.
   const gone = press.map((e) => ({ ...e, target: null }));
   assert.equal(report(gone, [], [], keydown({ keypressHandler: 'goNext' })).target?.handler, 'goNext');
+  // A step the submit took off the page, with focus on the next step's field: the keydown and keypress have no
+  // target, and they tie, so the keydown's is looked for first. The keyup's target is the field that has focus
+  // now, in a form that would run finish. The keydown's own record is still the one read.
+  const next = Object.assign(element('input', [], { name: 'name' }), { __reactFiber$k1: fiberOf(5, 'input', form, { type: 'text', name: 'name' }) }) as unknown as Node;
+  const moved = [entry('keydown', 0, 140, 1, 3), entry('keypress', 0, 140, 3, 5), entry('keyup', 80, 16, 81, 81.5, { target: next })];
+  const keyup = input(80, 'keyup', { target: next, press: 'Enter', gestureTs: 0, owners: ['Wizard'] });
+  assert.equal(report(moved, [], [], [...keydown({ handler: 'goNext', keypressHandler: 'goNext' }), keyup]).target?.handler, 'goNext');
 });
 
 test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {
