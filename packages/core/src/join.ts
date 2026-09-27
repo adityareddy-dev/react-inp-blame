@@ -1726,9 +1726,10 @@ function explain(r: InteractionReport): Explanation {
   const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
   // A wait before the handlers that is a long task itself, and at least the handlers' own time and the screen
   // update, is the answer over anything inside them: a 58 ms handler or a 40 ms render after a 400 ms wait did
-  // not make the click slow. The same test opens the waiting rung, so a rung this closes is one the wait takes. A
-  // wait short of a long task closes nothing, or a 38 ms handler after a 45 ms wait would be nobody's. What a
-  // closed rung would have named is not said under the wait, for the reason `closedByTheScreen` gives.
+  // not make the click slow. The same test opens the waiting rung and closes every rung between here and it, the
+  // handler a production build cannot time included, so a rung this closes is one the wait takes. A wait short of
+  // a long task closes nothing, or a 38 ms handler after a 45 ms wait would be nobody's. What a closed rung would
+  // have named is said under the wait, in `closedByTheWait`.
   const waitingWins = r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing - between && r.inputDelay >= r.presentation;
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
@@ -1763,27 +1764,32 @@ function explain(r: InteractionReport): Explanation {
    * where the verdict really is the screen update, because its wording ("... before that") is about
    * the screen update. Hydration sits above the comparison and closes nothing, so repeating its
    * milliseconds as a leftover would say them twice. A `waiting` verdict can take the blame with a
-   * rung closed, and there the note is dropped: known, and it wants its own phrasing, not this one.
+   * rung closed, and there `closedByTheWait` says it instead, worded for the wait.
    */
-  const closedByTheScreen: string | null = !screenOutranks
-    ? null
-    : handlerWins
+  const closedOff = (when: string): string | null =>
+    handlerWins
+      ? say(
+          measuredFrom(...inWorkingTime),
+          `${cap(outsideName)} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time ${when}.`,
+          `${cap(outsideName)} ${HEDGE} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time ${when}.`,
+        )
+      : c && rc && renderMatters
         ? say(
-            measuredFrom(...inWorkingTime),
-            `${cap(outsideName)} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time before that.`,
-            `${cap(outsideName)} ${HEDGE} still ran for about ${ms(outside)} of the ${ms(r.processing)} of working time before that.`,
+            measuredFrom(rc),
+            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time ${when}.`,
+            hasDurations
+              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time ${when}.`
+              : effectsFigure >= 1
+                ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldAll ? ',' : ''} in the ${ms(r.processing)} of working time ${when}.`
+                : `React was ${HEDGE} still ${renderPhrase(rc)}, in the ${ms(r.processing)} of working time ${when}.`,
           )
-        : c && rc && renderMatters
-          ? say(
-              measuredFrom(rc),
-              `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time before that.`,
-              hasDurations
-                ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} in the ${ms(r.processing)} of working time before that.`
-                : effectsFigure >= 1
-                  ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldAll ? ',' : ''} in the ${ms(r.processing)} of working time before that.`
-                  : `React was ${HEDGE} still ${renderPhrase(rc)}, in the ${ms(r.processing)} of working time before that.`,
-            )
-          : null;
+        : null;
+  const closedByTheScreen = screenOutranks ? closedOff('before that') : null;
+  // The same for a wait before the handlers that took the verdict: a 380 ms render after a 400 ms wait is worth
+  // knowing about too. It says "after the wait" rather than "after that", since other notes can come between it
+  // and the cause. Where the screen update closed the rung as well, the working time is the smallest of the three
+  // phases, and it is left to them.
+  const closedByTheWait = waitingWins && !screenOutranks ? closedOff('after the wait') : null;
 
   // A click can land on server-rendered HTML React has not reached yet, which is the commonest cause
   // of a slow first interaction in a server-rendered app. When React hydrated it inside the
@@ -1973,7 +1979,7 @@ function explain(r: InteractionReport): Explanation {
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
     blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
-  } else if (c && !hasDurations && handler && longTaskOfWork && r.processing >= r.inputDelay && r.processing >= r.presentation) {
+  } else if (c && !hasDurations && handler && longTaskOfWork && r.processing >= r.inputDelay && r.processing >= r.presentation && !waitingWins) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list
     // among the components, and more of the working time than a tree accounts for.
     const howLittle =
@@ -2133,6 +2139,7 @@ function explain(r: InteractionReport): Explanation {
   // A wait between the handlers is `waiting` too, with where it came as its detail, and the wait before them is
   // not in its sentence.
   const waitIsTheVerdict = blame.kind === 'waiting' && blame.detail === null;
+  if (closedByTheWait && waitIsTheVerdict) notes.push(closedByTheWait);
   if (c) {
     // Under a verdict that is the wait, it is already said.
     if (r.inputDelay > LONG_TASK_MS && renderMatters && !waitIsTheVerdict) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);

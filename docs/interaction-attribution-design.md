@@ -1099,7 +1099,10 @@ asks, so a branch it closes is one the wait takes, and a wait under 50 ms closes
 handler after a 45 ms wait stays the handler's. Until 2026-09-26 only a forced layout, and a handler a
 production build could not time, stepped aside for it: a 480 ms click that waited 400 ms and then ran
 its handler for 58 ms was blamed on the handler, with the wait said nowhere but the phases, and optimising
-that handler would barely have moved it.
+that handler would barely have moved it. What ran after the wait is still said, in a note with the figure
+and the hedge the closed branch would have given it: "The click handler handleSave still ran for about
+58 ms of the 60 ms of working time after the wait." Where the screen update outranks the working time
+too, the working time is the smallest of the three phases, and no note is added.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click

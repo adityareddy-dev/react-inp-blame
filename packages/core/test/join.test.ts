@@ -2063,6 +2063,8 @@ test('a wait that is the verdict is not said again in a note, and one under anot
   assert.equal(waited.explanation.blame.kind, 'waiting');
   assert.equal(waited.verdict.match(/waited 200 ms/g)?.length, 1);
   assert.doesNotMatch(waited.verdict, /also waited/);
+  // The working time is the smallest of the three phases there, so the render is not said after the wait either.
+  assert.doesNotMatch(waited.verdict, /still spent/);
   // A render that is the verdict after a 150 ms wait still carries the wait as a note.
   const rendered = report([entry('click', 0, 400, 150, 380)], [commit(370, 0, { total: 200 })], []);
   assert.equal(rendered.explanation.blame.kind, 'render');
@@ -2093,6 +2095,8 @@ test('a handler or a render shorter than a long wait before the handlers does no
     const r = report(click, [commit(450, 0, { total: 2 })], frames, save);
     assert.deepEqual(r.explanation.blame, waited);
     assert.equal(r.explanation.cause, 'The click waited 400 ms before its handler could start: the main thread was busy with something else.');
+    // What the handler took is still said, after the wait.
+    assert.deepEqual(r.explanation.notes, ['The click handler handleSave still ran for about 58 ms of the 60 ms of working time after the wait.']);
   }
   // Where a long animation frame recorded the timer the click waited behind, the timer is named, not the handler after it.
   const behind = [frame(0, 470, [script('TimerHandler:setTimeout', 0, 398), script('BUTTON.onclick', 400, 58)])];
@@ -2104,6 +2108,21 @@ test('a handler or a render shorter than a long wait before the handlers does no
   const rendered = report(click, [commit(450, 0, { total: 40 })], []);
   assert.deepEqual(rendered.explanation.blame, waited);
   assert.doesNotMatch(rendered.verdict, /also waited/);
+  assert.deepEqual(rendered.explanation.notes, ['React still spent 40 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) in the 60 ms of working time after the wait.']);
+  // Nor is a 380 ms render right after a 400 ms wait, though near a tie it is said as much as the wait is.
+  const near = report([entry('click', 0, 816, 400, 790)], [commit(785, 0, { total: 380 })], [], save);
+  assert.deepEqual(near.explanation.blame, waited);
+  assert.deepEqual(near.explanation.notes, ['React still spent 380 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) in the 390 ms of working time after the wait.']);
+  // A production build's handler, which it cannot time, steps aside on the same test, where the wait ties the
+  // working time and where a keyup handled later in the frame puts time between the handlers. Its sentence is
+  // for a count that does not explain the working time, and 60 of one component does.
+  const rows = { hasDurations: false, total: 0, rendered: 60, components: [{ name: 'Row', count: 60, self: null, total: null }] };
+  const tied = report([entry('click', 0, 216, 100, 200)], [commit(190, 0, rows)], [], save);
+  assert.deepEqual(tied.explanation.blame, { ...waited, ms: 100 });
+  assert.deepEqual(tied.explanation.notes, ['React was most likely still re-rendering 60 components inside List, mostly Row (60 of them), in the 100 ms of working time after the wait.']);
+  const keyed = report([entry('keydown', 0, 192, 90, 150), entry('keyup', 100, 92, 180, 181)], [commit(149, 0, rows)], [], [{ ...loginClick('handleKey')[0]!, type: 'keydown' }]);
+  assert.deepEqual(keyed.explanation.blame, { ...waited, ms: 90 });
+  assert.doesNotMatch(keyed.verdict, /handleKey/);
   // A wait shorter than the working time leaves the render its verdict, and one short of a long task
   // leaves the handler its own: a 38 ms handler after 45 ms is not nothing.
   assert.equal(report([entry('click', 0, 110, 30, 90)], [commit(80, 0, { total: 40 })], []).explanation.blame.kind, 'render');
