@@ -760,8 +760,12 @@ export function installHook(opts: HookOptions): void {
   let existing: DevtoolsHook | undefined;
   try {
     existing = holder[HOOK_KEY] as DevtoolsHook | undefined;
+    // attach() first asks a hook other than the shim whether the page turned it off, which reads isDisabled
+    // and supportsFiber, and a script can make those throw too.
+    if (existing && existing !== state.shim) turnedOff(existing);
   } catch (error) {
-    // A getter a script put there to lock the page down: no hook can be reached through it.
+    // A getter a script put there to lock the page down, on the global or on the hook it holds: no hook
+    // can be reached through it.
     globalUnusable(error);
     return;
   }
@@ -875,7 +879,7 @@ function unusable(message: string): void {
   state.unsupported = { kind: 'hook-disabled', message };
 }
 
-/** The global cannot be read, so no hook the library can reach hears React's commits. */
+/** The global, or the hook on it, cannot be read, so no hook the library can reach hears React's commits. */
 function globalUnusable(error: unknown): void {
   const message = `the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be read or replaced (${errorText(error)}), so React's commits cannot be read. Interactions are still reported, without components.`;
   unusable(message);

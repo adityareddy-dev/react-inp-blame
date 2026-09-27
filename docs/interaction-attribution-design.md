@@ -306,10 +306,10 @@ commits at all. A page that holds the global empty and read-only is `'unsupporte
 React finds no hook there either, and so is a page that empties it over the shim before react-dom loads,
 checked for at the same points, where before that was put down to `install()` running late. A global
 declared with `var` cannot be redefined but can be assigned, so it gets the shim as a plain value, and a
-hook assigned over it is noticed at the next Event Timing batch rather than as it happens. A global that
-throws when `install()` reads it is `'unsupported'` the same way, with a warning that says it cannot be
-read or replaced, where before `install()` threw. On a hook the page locks after `install()`, `dispose()`
-puts back what it still can, and a method it cannot put back only passes calls on.
+hook assigned over it is noticed at the next Event Timing batch rather than as it happens. A global, or
+the hook on it, that throws when `install()` reads it is `'unsupported'` the same way, with a warning
+that says it cannot be read or replaced, where before `install()` threw. On a hook the page locks after
+`install()`, `dispose()` puts back what it still can, and a method it cannot put back only passes calls on.
 
 React DevTools never installs over an existing hook: its `installHook` returns as soon as
 `window` has the property, reading and writing nothing. So a shim that loads before it locks

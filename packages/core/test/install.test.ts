@@ -2250,7 +2250,7 @@ test('a DevTools hook that refuses a call by throwing a value with no string for
   });
 });
 
-test("a DevTools hook global the library cannot read never reaches the page's error handlers, whether install(), the check 3 s after install, an Event Timing batch or the hide reads it", async (t) => {
+test("a DevTools hook global the library cannot read, or a hook on it it cannot read, never reaches the page's error handlers, whether install(), the check 3 s after install, an Event Timing batch or the hide reads it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const locked = {
@@ -2260,35 +2260,69 @@ test("a DevTools hook global the library cannot read never reaches the page's er
     },
   };
   // There before install(), which reads it first: no hook can be reached through it, so the page is
-  // 'unsupported' and says why, rather than install() throwing out of the app's entry module.
-  await inBrowser((page) => {
-    Object.defineProperty(page.window, HOOK, locked);
-    const api = install({ devtoolsTrack: false });
-    try {
-      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
-      assert.equal(warn.mock.callCount(), 1);
-      assert.match(
-        String(warn.mock.calls[0]?.arguments[0]),
-        /^\[react-inp-blame\] the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be read or replaced \(Error: hook locked\), so React's commits cannot be read\. Interactions are still reported, without components\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#hook-disabled$/,
-      );
-      page.paint([click(7, 1000, 120)]);
-      t.mock.timers.tick(3000);
-      page.queue([click(14, 2000, 200)]);
-      page.hide();
-      assert.deepEqual(
-        api.reports().map((r) => ({ id: r.interactionId, react: r.reactStatus })),
-        [
-          { id: 7, react: 'unreadable' },
-          { id: 14, react: 'unreadable' },
-        ],
-      );
-      assert.equal(warn.mock.callCount(), 1);
-    } finally {
-      api.dispose();
-    }
-  });
-  session?.slots.warnings?.clear();
-  warn.mock.resetCalls();
+  // 'unsupported' and says why, rather than install() throwing out of the app's entry module. So too for a
+  // global that can be read holding a hook that cannot, and for a getter that throws a value with no string form.
+  const unreadable: [string, PropertyDescriptor, string][] = [
+    ['the global', locked, 'Error: hook locked'],
+    [
+      'the hook on it',
+      {
+        configurable: true,
+        writable: true,
+        value: new Proxy(
+          {},
+          {
+            get() {
+              throw new Error('hook locked');
+            },
+          },
+        ),
+      },
+      'Error: hook locked',
+    ],
+    [
+      'no string form',
+      {
+        configurable: true,
+        get() {
+          throw Object.create(null);
+        },
+      },
+      'a value that cannot be printed',
+    ],
+  ];
+  for (const [name, descriptor, quoted] of unreadable) {
+    await inBrowser((page) => {
+      Object.defineProperty(page.window, HOOK, descriptor);
+      const api = install({ devtoolsTrack: false });
+      try {
+        assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' }, name);
+        assert.equal(warn.mock.callCount(), 1, name);
+        assert.equal(
+          String(warn.mock.calls[0]?.arguments[0]),
+          `[react-inp-blame] the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be read or replaced (${quoted}), so React's commits cannot be read. Interactions are still reported, without components. See https://github.com/adityareddy-dev/react-inp-blame#hook-disabled`,
+          name,
+        );
+        page.paint([click(7, 1000, 120)]);
+        t.mock.timers.tick(3000);
+        page.queue([click(14, 2000, 200)]);
+        page.hide();
+        assert.deepEqual(
+          api.reports().map((r) => ({ id: r.interactionId, react: r.reactStatus })),
+          [
+            { id: 7, react: 'unreadable' },
+            { id: 14, react: 'unreadable' },
+          ],
+          name,
+        );
+        assert.equal(warn.mock.callCount(), 1, name);
+      } finally {
+        api.dispose();
+      }
+    });
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+  }
   for (const reads of ['check', 'batch', 'hide']) {
     await inBrowser((page) => {
       const api = install({ devtoolsTrack: false });
