@@ -1093,20 +1093,25 @@ site, paging a calendar forward one month (5 ms of working time, 82 of the scree
 shape, one offered as a guess and the other as a measurement. They now read the same.
 
 **A long wait before the handlers outranks what ran in them.** A wait over 50 ms, a long task itself,
-that is at least the handlers' own time and the screen update is the verdict over a handler, a render
-or a forced layout inside the working time. It is the test the waiting branch asks, so a branch it
-closes is one the wait takes, and a wait of 50 ms or less closes nothing: a 38 ms handler after a 45 ms
-wait stays the handler's, and 40 ms of forced layout after a 48 ms wait stays the layout's. Until
-2026-09-26 only a forced layout, and a handler a production build could not time, stepped aside for it,
-on a test of their own: any wait longer than the working time, under 50 ms too, and never one shorter,
-even where part of the working time went by between the handlers. A 480 ms click that waited 400 ms and
-then ran its handler for 58 ms was blamed on the handler, with the wait said nowhere but the phases, and
-optimising that handler would barely have moved it. What ran after the wait is still said, in a note
-with the figure and the hedge the closed branch would have given it: "The click handler handleSave still
-ran for about 58 ms of the 60 ms of working time after the wait." A production build names the handler
-the same way, hedged, and a forced layout keeps the note it has under any verdict but its own. Where the
-screen update outranks the working time too, the working time is the smallest of the three phases, and
-no note is added.
+that is at least the screen update, and at least the handlers' own time with React's renders between
+one event's handlers and the next's added, is the verdict over a handler, a render or a forced layout
+inside the working time. It is the test the waiting branch asks, so a branch it closes is one the wait
+takes, and a wait of 50 ms or less closes nothing: a 38 ms handler after a 45 ms wait stays the
+handler's, and 40 ms of forced layout after a 48 ms wait stays the layout's. The renders between the
+handlers are added because the render branch is judged on them: an 85 ms render between a keydown's
+handlers and its keyup's, after a 60 ms wait, stays the render's. One that kept no durations is timed
+by React's scheduler tasks where long animation frames recorded them, and where no frame says what
+ran, the wait has to outlast all of the time between the handlers. Until 2026-09-26 only a forced
+layout, and a handler a production build could not time, stepped aside for it, on a test of their own:
+any wait longer than the working time, under 50 ms too, and never one shorter, even where part of the
+working time went by between the handlers. A 480 ms click that waited 400 ms and then ran its handler
+for 58 ms was blamed on the handler, with the wait said nowhere but the phases, and optimising that
+handler would barely have moved it. What ran after the wait is still said, in a note with the figure
+and the hedge the closed branch would have given it: "The click handler handleSave still ran for about
+58 ms of the 60 ms of working time after the wait." A production build names the handler the same way,
+hedged, and a forced layout keeps the note it has under any verdict but its own. Where the screen
+update outranks the working time too, the working time is the smallest of the three phases, and no
+note is added.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click

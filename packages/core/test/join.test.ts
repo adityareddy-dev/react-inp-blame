@@ -4278,7 +4278,7 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   assert.deepEqual([delayed.explanation.blame.kind, delayed.explanation.blame.detail], ['waiting', null]);
   assert.match(gapNote(delayed), /^88 ms of the working time also went by between the click's handlers and the keyup's/);
   // A wait before the handlers longer than the handlers themselves is the verdict, whatever the working time
-  // held between them.
+  // held between them other than a render.
   const shortHandlers = report(
     [entry('keydown', 0, 128, 60, 65), entry('keyup', 1, 128, 120, 125)],
     [commit(64, 0, { total: 0.3, rendered: 2 })],
@@ -4289,4 +4289,48 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   assert.match(gapNote(shortHandlers), /^55 ms of the working time also went by between the keydown's handlers and the keyup's/);
   // Where the wait is the verdict, it is not said twice.
   assert.equal(gapNote(quiet), '');
+});
+
+test("a render between one event's handlers and the next's is working time a long wait before them has to outlast", () => {
+  // Typing fast: the key press waited 60 ms behind the last key's work, then React rendered for 85 ms before the
+  // keyup was handled, all in one frame. The render is the verdict, as it is after a 45 ms wait, and the wait is
+  // the note it always was, not a verdict followed by a note giving the 85 ms.
+  const typed = (wait: number) => [entry('keydown', 0, wait + 110, wait + 0.2, wait + 1.2), entry('keyup', wait + 100, 10, wait + 100.1, wait + 100.3)];
+  const list = { kind: 'render', name: 'List', detail: 'Row ×30', ms: 85, confidence: 'measured' };
+  for (const wait of [60, 45]) {
+    for (const frames of [[], null]) {
+      const r = report(typed(wait), [commit(wait + 90, 0, { total: 85 })], frames, [input(0, 'keydown')]);
+      assert.deepEqual(r.explanation.blame, list, `${wait} ms`);
+      assert.doesNotMatch(r.verdict, /after the wait/);
+    }
+  }
+  assert.equal(
+    report(typed(60), [commit(150, 0, { total: 85 })], [], [input(0, 'keydown')]).verdict,
+    '170 ms key press. React spent 85 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). It also waited 60 ms before the handler could start, because the main thread was busy.',
+  );
+  // A 190 ms render after a 100 ms wait, the same.
+  const longer = report([entry('keydown', 0, 332, 100, 110), entry('keyup', 305, 27, 310, 311)], [commit(300, 0, { total: 190 })], [], [input(0, 'keydown')]);
+  assert.deepEqual(longer.explanation.blame, { ...list, ms: 190 });
+  // A production build's render, time-sliced into 15 of React's scheduler tasks: long frames time it by those
+  // tasks, and without the frames nothing times it, so the wait has to outlast all of the time between.
+  const slices = Array.from({ length: 15 }, (_, i) => script('MessagePort.onmessage', 61.3 + i * 5.8, 5.5));
+  const counted = (rendered: number, at: number) => [commit(at, 0, { total: 0, hasDurations: false, rendered })];
+  for (const frames of [[frame(60.2, 105, slices, 165)], [], null]) {
+    assert.equal(report(typed(60), counted(300, 147.5), frames, [input(0, 'keydown')]).explanation.blame.kind, 'render');
+  }
+  // Where React's part of that time is shorter than the wait, the wait is still the verdict: a frame that says
+  // React's task took 10 ms, a render that kept its durations and took 20, and a render of 2 components, which
+  // does not count as one. The key was down for the rest of it, with nothing running.
+  const held = [entry('keydown', 0, 176, 60.2, 61.2), entry('keyup', 130, 46, 130.1, 130.3)];
+  const waited = { kind: 'waiting', name: null, detail: null, ms: 60.2, confidence: 'measured' };
+  const framed = report(held, counted(300, 72), [frame(60.2, 110, [script('MessagePort.onmessage', 62, 10.5)], 165)], [input(0, 'keydown')]).explanation;
+  assert.deepEqual(framed.blame, waited);
+  // Without the frame nothing says how long the render took, and it is the verdict again.
+  assert.equal(report(held, counted(300, 72), null, [input(0, 'keydown')]).explanation.blame.kind, 'render');
+  const timed = report(held, [commit(90, 0, { total: 20 })], null, [input(0, 'keydown')]).explanation;
+  assert.deepEqual(timed.blame, waited);
+  assert.deepEqual(timed.notes, ['React still spent 20 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) in the 70 ms of working time after the wait.']);
+  for (const frames of [[], null]) {
+    assert.deepEqual(report(held, counted(2, 90), frames, [input(0, 'keydown')]).explanation.blame, waited);
+  }
 });
