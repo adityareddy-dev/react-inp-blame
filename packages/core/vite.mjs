@@ -69,6 +69,15 @@ function clientBuild(config, environment) {
 }
 
 /**
+ * The client environment's options (Vite 6 and later), which Vite builds the page from: the top-level ones
+ * with its own laid over them. Vite 5 passes an `environments` block through as written but builds from the
+ * top level, so the block counts only where Vite resolved it, which always sets its `consumer`.
+ */
+function clientEnvironment(config) {
+  return config?.environments?.client?.consumer ? config.environments.client : undefined;
+}
+
+/**
  * The install module and every module it imports statically: what its chunk has to hold, so that an app's
  * own manualChunks cannot send the library to a vendor chunk beside react-dom. Not what it loads with
  * import(), which is the badge, loaded later on its own.
@@ -174,12 +183,9 @@ function setupAdvice(config) {
     const add = framework.create ? `Create ${framework.entry} as the README shows and add entry: '${framework.entry}'` : `Add entry: '${framework.entry}'`;
     return `${framework.name} writes its own HTML, so this plugin's install script never reaches a page and nothing installs. ${add} to inpBlame(): ${README}${framework.section}`;
   }
-  // Vite 6 and later build the page from the client environment, whose options are the top-level ones with
-  // its own laid over them, so an app or a framework can name its inputs there alone, as RSC setups do. Its
-  // `input` (Vite 8.2) is what Vite builds from when the bundler's options name none. Vite 5 passes an
-  // `environments` block through as written but builds from the top level, so the block is read only when
-  // Vite resolved it, which always sets its `consumer`.
-  const client = config.environments?.client?.consumer ? config.environments.client : undefined;
+  // An app or a framework can name its inputs for the client environment alone, as RSC setups do. Its `input`
+  // (Vite 8.2) is what Vite builds from when the bundler's options name none.
+  const client = clientEnvironment(config);
   const build = client?.build ?? config.build;
   if (build?.lib || build?.ssr) return null;
   const input = build?.rollupOptions?.input ?? build?.rolldownOptions?.input ?? client?.input;
@@ -319,7 +325,10 @@ function separateScript(config, environment) {
 function buildsPages(config, environment, pages) {
   if (!separateScript(config, environment)) return false;
   const build = environment?.config?.build ?? config.build;
-  const input = build.rollupOptions?.input;
+  // Vite 8.2's `input`, written at the top level or for the client environment, is what Vite builds from
+  // when the bundler's options name none. The page transform has no environment to hand, and its pages are
+  // the client environment's.
+  const input = build.rollupOptions?.input ?? build.rolldownOptions?.input ?? (environment?.config ?? clientEnvironment(config))?.input;
   // Vite's own default, when the config names no input, is the root index.html.
   const entries = input === undefined ? [`${config.root}/index.html`] : typeof input === 'string' ? [input] : Array.isArray(input) ? input : Object.values(input);
   return entries.some((entry) => typeof entry === 'string' && entry.endsWith('.html') && pages(pagePath(config.root, entry)));

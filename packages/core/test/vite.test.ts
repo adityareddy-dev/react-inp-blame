@@ -104,12 +104,12 @@ function resolved(overrides: Record<string, any> = {}): Record<string, any> {
   return { command: 'build', base: '/', root: '/app', plugins: [], build: { rollupOptions: { input: '/app/index.html' } }, ...overrides };
 }
 
-/** A rollup plugin context that records what the plugin emitted, for `consumer` builds. */
-function buildContext(consumer: 'client' | 'server') {
+/** A rollup plugin context that records what the plugin emitted, for `consumer` builds whose environment also has `config`. */
+function buildContext(consumer: 'client' | 'server', config: Record<string, any> = {}) {
   const emitted: Record<string, unknown>[] = [];
   return {
     emitted,
-    environment: { config: { consumer } },
+    environment: { config: { consumer, ...config } },
     emitFile(file: Record<string, unknown>) {
       emitted.push(file);
       return `ref-${emitted.length}`;
@@ -210,6 +210,37 @@ test('a build with no page to carry a second script asks for no chunk and keeps 
   const server = buildContext('server');
   install.buildStart.call(server);
   assert.deepEqual(server.emitted, []);
+});
+
+test("a page named only in Vite 8.2's input gets a script of its own where pages takes it, at the top level or for the client environment", () => {
+  // Whether the build asks for the chunk, and whether the page at `path` gets the inline import besides. With no
+  // environment, the context is Vite 5's.
+  const decided = (pages: (path: string) => boolean, [config, environment]: readonly [Record<string, any>, Record<string, any>?], path: string) => {
+    const install = buildPlugins({ pages }, config).find((p) => p.name === INSTALL)!;
+    const ctx = environment ? buildContext('client', environment) : { ...buildContext('client'), environment: undefined };
+    install.buildStart.call(ctx);
+    return { chunk: ctx.emitted.length > 0, inline: install.transformIndexHtml.handler('<!doctype html>', { path }) !== undefined };
+  };
+  // What Vite 8.2 and later resolve where the pages are named in `input`: the bundler's options name none, and
+  // the client environment has the input, from the top level unless it was written for the environment alone.
+  const named = (input: unknown, where: 'top' | 'client') => {
+    const environment = { input, build: { rollupOptions: {} } };
+    return [{ ...(where === 'top' ? { input } : {}), build: { rollupOptions: {} }, environments: { client: { consumer: 'client', ...environment } } }, environment] as const;
+  };
+  const about = (path: string) => path === '/about.html';
+  const index = (path: string) => path === '/index.html';
+  const script = { chunk: true, inline: false };
+
+  assert.deepEqual(decided(about, named({ main: 'index.html', about: 'about.html' }, 'top'), '/about.html'), script);
+  assert.deepEqual(decided(about, named('about.html', 'client'), '/about.html'), script);
+  // Where the only page pages takes is one this build does not have, nothing is asked for.
+  assert.deepEqual(decided(index, named('about.html', 'top'), '/about.html'), { chunk: false, inline: false });
+  // The bundler's input, where it names one, is what Vite builds from.
+  const bundler = { build: { rollupOptions: { input: '/app/index.html' } } };
+  assert.deepEqual(decided(index, [{ ...bundler, input: 'about.html', environments: { client: { consumer: 'client', input: 'about.html', ...bundler } } }, { input: 'about.html', ...bundler }], '/index.html'), script);
+
+  // Vite 5 passes an `environments` block through as written, with no consumer, and builds the root index.html.
+  assert.deepEqual(decided(index, [{ build: { rollupOptions: {} }, environments: { client: { input: 'about.html' } } }], '/index.html'), script);
 });
 
 test('pages picks the pages that get the runtime, and runtime: false keeps only the transform', () => {
