@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildReport, laterRenderOf, renderedVerb, sealReport } from '../src/join.ts';
-import { blameLine, laterDetail, titleFor } from '../src/overlay.ts';
+import { blameLine, createOverlay, laterDetail, titleFor } from '../src/overlay.ts';
 import type { CommitSummary, InteractionReport } from '../src/types.ts';
 
 // Only what a row's title reads: the report's type, its target's label and the names of its entries.
@@ -84,4 +84,60 @@ test('a row whose report the library could not explain says the library hit an e
     assert.deepEqual(blameLine(r), ['nothing is blamed: the library hit an error of its own'], status);
     assert.equal(r.explanation.blame.kind, 'none', status);
   }
+});
+
+/** Just enough of a document for the badge and panel to be built: elements that keep nothing and hear nothing. */
+function standInDocument() {
+  class Element {
+    className = '';
+    hidden = false;
+    isConnected = false;
+    textContent = '';
+    dataset: Record<string, string> = {};
+    style: Record<string, string> = {};
+    setAttribute() {}
+    replaceChildren() {}
+    append() {}
+    prepend() {}
+    addEventListener() {}
+    attachShadow() {
+      return new Element();
+    }
+    appendChild(child: Element) {
+      child.isConnected = true;
+    }
+    remove() {
+      this.isConnected = false;
+    }
+  }
+  return { body: new Element(), createElement: () => new Element(), addEventListener() {}, removeEventListener() {} };
+}
+
+test('a badge and panel that cannot be drawn, for an error with no string form, say so once and never throw into the page', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  Object.defineProperty(globalThis, 'document', { value: standInDocument(), configurable: true, writable: true });
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'document', saved);
+    else delete (globalThis as any).document;
+  });
+  // Reports that throw an object with no prototype when the draw asks for them, which it does first.
+  const source = {
+    reports() {
+      throw Object.create(null);
+    },
+    onInteraction: () => () => {},
+  } as unknown as Parameters<typeof createOverlay>[0];
+  let overlay: ReturnType<typeof createOverlay> | undefined;
+  // Drawn as soon as it is made, and again on refresh(), as a timer or a click on the badge would.
+  assert.doesNotThrow(() => {
+    overlay = createOverlay(source);
+  });
+  assert.doesNotThrow(() => overlay?.refresh());
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(
+    String(warn.mock.calls[0]?.arguments[0]),
+    /^\[react-inp-blame\] the badge and panel could not be drawn \(a value that cannot be printed\)\. Reports still come through onInteraction\(\)\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#overlay-draw$/,
+  );
+  overlay?.dispose();
 });
