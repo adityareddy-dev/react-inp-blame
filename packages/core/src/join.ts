@@ -2008,8 +2008,12 @@ function explain(r: InteractionReport): Explanation {
       "React has rendered on this page, but no react-dom registered with this library's DevTools hook: install() ran after react-dom loaded, so nothing React did is in this report. Install ahead of the app: react-inp-blame/vite, react-inp-blame/next or react-inp-blame/astro, or `import 'react-inp-blame/auto'` as the first import of the entry module.",
     );
   } else if (r.reactStatus === 'unreadable') {
+    // The page can turn its hook off, or a walk throw, after this interaction's commits were read and before its
+    // report was built, and the commits read by then stay in it.
     notes.push(
-      "No react-dom on this page is being read, so nothing React did is in this report: either no React DevTools hook is in use (hook: 'chain' found none to wrap), or stats().unsupportedReason says why (the page turns its DevTools hook off or locks it, or the react-dom that registered cannot be read).",
+      r.commits.length || r.followUps.length
+        ? `React stopped being read partway through this ${kind}, so only what it did before that is in this report, and stats().unsupportedReason says why.`
+        : "No react-dom on this page is being read, so nothing React did is in this report: either no React DevTools hook is in use (hook: 'chain' found none to wrap), or stats().unsupportedReason says why (the page turns its DevTools hook off or locks it, or the react-dom that registered cannot be read).",
     );
   }
   if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);

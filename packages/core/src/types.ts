@@ -502,7 +502,8 @@ export interface InteractionReport {
   /**
    * Whether this library could see what React did when the report was built (`Stats.react`). Under
    * 'installed-late' and 'unreadable', `commits` is empty whatever React did, and the explanation says
-   * React's work is unknown rather than that it rendered nothing.
+   * React's work is unknown rather than that it rendered nothing. Where React stopped being read partway
+   * through the interaction, the commits read before that stay, and a note says so.
    */
   readonly reactStatus: ReactStatus;
   /**

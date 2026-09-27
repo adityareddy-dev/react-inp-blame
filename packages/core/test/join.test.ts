@@ -1565,6 +1565,22 @@ test('where React is not being read, the verdict says the setup is the cause rat
   assert.deepEqual(report(click, [], listener, ring).explanation.blame, { kind: 'script', name: 'handleSave', detail: 'SignInPage', ms: 200, confidence: 'measured' });
 });
 
+test('where React stopped being read partway through an interaction, the note says only what came before is in the report', () => {
+  // The page turned its DevTools hook off, or a walk threw, once the commits here were read and before the report
+  // was built. The verdict names them, so the note cannot say that nothing React did is in it.
+  const click = [entry('click', 0, 120, 3, 100)];
+  const notesOf = (r: InteractionReport) => r.explanation.notes.join('\n');
+  const stopped = /React stopped being read partway through this click, so only what it did before that is in this report/;
+  const inside = report(click, [commit(50, 0)], [], [], 'attributes', [], undefined, 'unreadable');
+  assert.match(notesOf(inside), stopped);
+  assert.doesNotMatch(notesOf(inside), /nothing React did is in this report/);
+  const after = attachLaterRender(buildReport(click, [], [], [], 'attributes', [], undefined, 'unreadable'), commit(400, 0, { total: 40 }), []);
+  assert.ok(after);
+  assert.match(notesOf(sealReport(after)), stopped);
+  // With nothing read, nothing React did is in it.
+  assert.match(notesOf(report(click, [], [], [], 'attributes', [], undefined, 'unreadable')), /^No react-dom on this page is being read, so nothing React did is in this report/m);
+});
+
 test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {
   // A click at 1000 waited behind an analytics task that ran from 745 to 1045. Its own handler ran from
   // 1045 to 1065, rendering 2 components in 1 ms, and the screen updated at 1096.
