@@ -1993,7 +1993,10 @@ function explain(r: InteractionReport): Explanation {
    * update after it is worth more. So the rung the comparison closed leaves a note behind, the way a
    * forced layout that lost to a bigger claim already does. It follows the ladder's own order below
    * the layout rung, which needs no entry here because the forced-layout note further down already
-   * fires on every blame that is not a layout; so the note never names a rung the comparison did not
+   * fires on every blame that is not a layout. Where the layout outran the rest, the rung closed is
+   * the layout's, and that note is all there is to say, under the screen update or the wait: said
+   * there, a production build's handleSave "still took the 200 ms" of which the layout took 160, and
+   * 800 rows were "still" re-rendering in them. So the note never names a rung the comparison did not
    * close.
    *
    * It is held to the standard of the rung it stands in for: the same commit, the same duration that
@@ -2003,10 +2006,8 @@ function explain(r: InteractionReport): Explanation {
    * milliseconds as a leftover would say them twice. A `waiting` verdict can take the blame with a
    * rung closed, and there `closedByTheWait` says it instead, worded for the wait. The handler a
    * production build cannot time is said only there: its rung already asks for working time at least
-   * as long as the screen update, so the screen update never closes it. Nor is it said where a forced
-   * layout outran it, which closed the layout's rung and not the handler's, and whose note says that
-   * time: said, handleSave "still took the 200 ms" of which the layout took 160. The render is placed
-   * where `renderRan` puts it.
+   * as long as the screen update, so the screen update never closes it. The render is placed where
+   * `renderRan` puts it.
    */
   const spentIn = (when: string, lead: string) => placed(lead, `in the ${ms(r.processing)} of working time ${when}`);
   /**
@@ -2033,15 +2034,15 @@ function explain(r: InteractionReport): Explanation {
                 ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${spentIn(when, heldAll ? ', ' : ' ')}.`
                 : `React was ${HEDGE} still ${renderPhrase(rc)}${spentIn(when, ', ')}.`,
           )
-        : untimedHandler && !layoutOutruns
+        : untimedHandler
           ? `${cap(handler)} ${HEDGE} still took ${untimedTook} of working time ${when}.`
           : null;
-  const closedByTheScreen = screenOutranks ? closedOff('before that') : null;
+  const closedByTheScreen = screenOutranks && !layoutOutruns ? closedOff('before that') : null;
   // The same for a wait before the handlers that took the verdict: a 380 ms render after a 400 ms wait is worth
   // knowing about too. It says "after the wait" rather than "after that", since other notes can come between it
   // and the cause. Where the screen update closed the rung as well, the working time is the smallest of the three
   // phases, and it is left to them.
-  const closedByTheWait = waitingWins && !screenOutranks ? closedOff('after the wait') : null;
+  const closedByTheWait = waitingWins && !screenOutranks && !layoutOutruns ? closedOff('after the wait') : null;
 
   // A click can land on server-rendered HTML React has not reached yet, which is the commonest cause
   // of a slow first interaction in a server-rendered app. When React hydrated it inside the

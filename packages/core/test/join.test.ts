@@ -2772,6 +2772,17 @@ test('a handler, a render or a forced layout shorter than a long wait before the
   const forced = report([entry('click', 0, 420, 200, 400)], [commit(395, 0, counted(3))], [frame(-10, 430, [script('BUTTON.onclick', 200, 200, 160)])], save).explanation;
   assert.deepEqual(forced.blame, { ...waited, ms: 200 });
   assert.deepEqual(forced.notes, ["The browser also spent 160 ms recalculating styles and layout in scripts before the paint. That happens when code reads an element's size right after changing styles, often in a layout effect."]);
+  // Nor is a render it outran, in either build: 800 rows read as React "still re-rendering" in all 200 ms of the working
+  // time, then 160 ms of it went on styles and layout. The rung the wait closed was the layout's, and so is the one a
+  // screen update closes, where 15 ms of rendering was said beside 80 ms of layout in 100 ms of working time.
+  for (const rendered of [counted(800), { total: 15, rendered: 800 }]) {
+    const outrun = report([entry('click', 0, 420, 200, 400)], [commit(395, 0, rendered)], [frame(-10, 430, [script('BUTTON.onclick', 200, 200, 160)])], save).explanation;
+    assert.deepEqual(outrun.blame, { ...waited, ms: 200 });
+    assert.deepEqual(outrun.notes, forced.notes);
+    const painted = report([entry('click', 0, 300, 1, 101)], [commit(99, 0, rendered)], [frame(0, 300, [script('BUTTON.onclick', 1, 100, 80)])], save).explanation;
+    assert.equal(painted.blame.kind, 'painting');
+    assert.deepEqual(painted.notes, ["The browser also spent 80 ms recalculating styles and layout in scripts before the paint. That happens when code reads an element's size right after changing styles, often in a layout effect."]);
+  }
   // A wait shorter than the working time leaves the render its verdict, and one short of a long task
   // leaves the handler its own: a 38 ms handler after 45 ms is not nothing. A wait of 50 ms is not over
   // a long task either.
@@ -2809,6 +2820,9 @@ test('a render a closed verdict does not take is said to have run after the hand
     beside.explanation.notes[0],
     'React still spent 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.',
   );
+  // So where that render is only a reading, walked short of its end.
+  const cut = report([entry('click', 0, 400, 100, 160)], [commit(120, 0, { total: 2, rendered: 3, ...effects }), commit(250, 0, { total: 43, truncated: true })], [], save);
+  assert.equal(cut.explanation.notes[0], 'React most likely still spent about 43 ms re-rendering at least 30 components inside List after the handlers, before the next frame.');
   const few = { hasDurations: false, total: 0, rendered: 5, components: [{ name: 'Row', count: 5, self: null, total: null }], effectsStartedAt: 330.2, effectsEndedAt: 365 };
   const rows = { ...counted, rendered: 800, components: [{ name: 'Row', count: 800, self: null, total: null }] };
   assert.deepEqual(report([entry('click', 0, 500, 300, 400)], [commit(330, 0, few), commit(450, 0, rows)], null, save).explanation.notes, [

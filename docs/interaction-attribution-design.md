@@ -1268,25 +1268,28 @@ said nowhere but the phases, and optimising that handler would barely have moved
 the wait is still said, in a note with the figure and the hedge the closed branch would have given it:
 "The click handler handleSave still ran for about 58 ms of the 60 ms of working time after the wait."
 A production build names the handler the same way, hedged, and a forced layout keeps the note it has
-under any verdict but its own. A render that committed after the handlers ran after them, and the
-note says so, "after the handlers, before the next frame", here and under a screen update that closed
-the render's branch: until 2026-09-26 a 43 ms render in the task after 15 ms of handlers was said to
-be "in the 15 ms of working time after the wait", a part larger than the whole. The note says it with
-that place alone, without another commit's effects, which ran inside the handlers but read as though
-they had run after them. The render verdict
-places its render the same way, in a production build too: kept from React's task after the handlers,
-a 43 ms render read "about 43 ms of the 15 ms of working time". One that began before the handlers,
-or ran longer than they did and committed with them, was not all in the working time either, and is
-given no place: a 43 ms render in the task the click waited behind, committed as its handlers began,
-was said as that wait and again as 43 ms in the 15 ms of working time after it. Where the screen
-update outranks the working time too, the working time is the smallest of the three phases, and no
-note is added. The wait itself is said in a note under every verdict but its own, whatever React
-rendered: "It also waited 70 ms before the handler could start, because the main thread was busy."
-Until 2026-09-26 that note needed a render big enough to be the verdict, so a 70 ms wait before a
-98 ms handler went unsaid beside a 2 ms render, or none, and was said beside a 10 ms one.
-The one exception is a `script` verdict on a timer the input waited behind, said as before the handler
-started, where that timer held half of the wait: it is the wait, and the note would say it twice. A 62 ms
-timer in a 63 ms wait leaves the note out, and a 30 ms timer in a 120 ms wait keeps it.
+under any verdict but its own. Where the forced layout outran the rest, the branch the wait closed was
+the layout's, and that note is all that is said: until 2026-09-27 the note under the wait, or under a
+screen update that closed the layout's branch, said a production build's handleSave "still took the
+200 ms of working time after the wait" of which the layout took 160, or that 800 rows were "still
+re-rendering" in it. A render that committed after the handlers ran after them, and the note says so,
+"after the handlers, before the next frame", here and under a screen update that closed the render's
+branch: until 2026-09-26 a 43 ms render in the task after 15 ms of handlers was said to be "in the 15
+ms of working time after the wait", a part larger than the whole. The note says it with that place
+alone, without another commit's effects, which ran inside the handlers but read as though they had run
+after them. The render verdict places its render the same way, in a production build too: kept from
+React's task after the handlers, a 43 ms render read "about 43 ms of the 15 ms of working time". One
+that began before the handlers, or ran longer than they did and committed with them, was not all in
+the working time either, and is given no place: a 43 ms render in the task the click waited behind,
+committed as its handlers began, was said as that wait and again as 43 ms in the 15 ms of working time
+after it. Where the screen update outranks the working time too, the working time is the smallest of
+the three phases, and no note is added. The wait itself is said in a note under every verdict but its
+own, whatever React rendered: "It also waited 70 ms before the handler could start, because the main
+thread was busy." Until 2026-09-26 that note needed a render big enough to be the verdict, so a 70 ms
+wait before a 98 ms handler went unsaid beside a 2 ms render, or none, and was said beside a 10 ms
+one. The one exception is a `script` verdict on a timer the input waited behind, said as before the
+handler started, where that timer held half of the wait: it is the wait, and the note would say it
+twice. A 62 ms timer in a 63 ms wait leaves the note out, and a 30 ms timer in a 120 ms wait keeps it.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click
