@@ -34,6 +34,13 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run test:unit
+      # The registry shows each version's commit as gitHead. npm read it from .git while the release was
+      # published as a directory, through 0.15.0, and a tarball has no .git, so the commit goes into the
+      # packed package.json. One line after the opening brace, since `npm pkg set` would rewrite the
+      # whole file.
+      - name: Write the commit into the package.json being packed
+        run: |
+          sed -i "1a\\  \"gitHead\": \"$(git rev-parse HEAD)\"," packages/core/package.json
       # Packs the build the unit tests just ran against, so `prepack` does not build it a second time.
       - run: npm pack -w packages/core --ignore-scripts --pack-destination "$RUNNER_TEMP"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
