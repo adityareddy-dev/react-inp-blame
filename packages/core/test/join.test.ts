@@ -2096,6 +2096,15 @@ test('a wait that is the verdict is not said again in a note, and one under anot
   );
   assert.equal(between.explanation.blame.detail, 'between click and keyup');
   assert.ok(between.explanation.notes.includes('It also waited 60 ms before the handler could start, because the main thread was busy.'));
+  // And a handler after a 70 ms wait, whatever React rendered: beside a 2 ms render, and none, as beside a 10 ms one.
+  const save = loginClick('handleSave');
+  for (const commits of [[commit(168, 0, { total: 2 })], [], [commit(168, 0, { total: 10 })]]) {
+    for (const frames of [[], null]) {
+      const handled = report([entry('click', 0, 176, 70, 170)], commits, frames, save);
+      assert.equal(handled.explanation.blame.kind, 'handler');
+      assert.ok(handled.explanation.notes.includes('It also waited 70 ms before the handler could start, because the main thread was busy.'));
+    }
+  }
 });
 
 test('a handler, a render or a forced layout shorter than a long wait before the handlers does not take the verdict from it', () => {

@@ -2166,11 +2166,11 @@ function explain(r: InteractionReport): Explanation {
   // not in its sentence.
   const waitIsTheVerdict = blame.kind === 'waiting' && blame.detail === null;
   if (closedByTheWait && waitIsTheVerdict) notes.push(closedByTheWait);
-  if (c) {
-    // Under a verdict that is the wait, it is already said.
-    if (r.inputDelay > LONG_TASK_MS && renderMatters && !waitIsTheVerdict) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
-    if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
-  }
+  // A long wait under any other verdict is said whatever React rendered: a 70 ms wait before a 98 ms handler went
+  // unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. Under a verdict that is the wait, it
+  // is already said.
+  if (r.inputDelay > LONG_TASK_MS && !waitIsTheVerdict) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
+  if (c?.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   const walked = [...r.commits, ...r.followUps];
   if (namesLookMinified(walked)) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
