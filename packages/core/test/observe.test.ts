@@ -132,8 +132,14 @@ test("a script the browser names by a URL is kept without the URL's query and fr
   const invokers = [
     'https://cdn.example/app.js?sig=abc#x',
     'https://shop.example/account#access_token=abc',
-    // An event listener on an element with no id is named by its src.
-    'IMG[src=https://cdn.example/avatars/ada.png?X-Amz-Signature=abc].onload',
+    // An event listener on an element with no id is named by its src, which Chromium quotes.
+    'IMG[src="https://cdn.example/avatars/ada.png?X-Amz-Signature=abc"].onload',
+    'SCRIPT[src="https://cdn.example/sdk.js?key=abc"].onload',
+    'IFRAME[src="/frame.html?tok=abc#top"].onload',
+    // A src can hold a bracket of its own, and one with no query keeps both its quotes.
+    'IMG[src="/photos/[1].png?sig=abc"].onload',
+    'IMG[src="/avatars/ada.png"].onload',
+    // Unquoted, the same src loses its query too.
     'IMG[src=/avatars/ada.png?v=3].onerror',
     'IMG#avatar.onload',
     '#document.onclick',
@@ -146,14 +152,18 @@ test("a script the browser names by a URL is kept without the URL's query and fr
   ];
   inBrowser((paint) => {
     observeFrames(frames, () => {});
-    paint([loaf(1000, 240, invokers.map((invoker, i) => [invoker, 1000 + i * 20, 20]))]);
+    paint([loaf(1000, invokers.length * 20, invokers.map((invoker, i) => [invoker, 1000 + i * 20, 20]))]);
   });
   assert.deepEqual(
     frames[0]?.scripts.map((s) => s.invoker),
     [
       'https://cdn.example/app.js',
       'https://shop.example/account',
-      'IMG[src=https://cdn.example/avatars/ada.png].onload',
+      'IMG[src="https://cdn.example/avatars/ada.png"].onload',
+      'SCRIPT[src="https://cdn.example/sdk.js"].onload',
+      'IFRAME[src="/frame.html"].onload',
+      'IMG[src="/photos/[1].png"].onload',
+      'IMG[src="/avatars/ada.png"].onload',
       'IMG[src=/avatars/ada.png].onerror',
       'IMG#avatar.onload',
       '#document.onclick',

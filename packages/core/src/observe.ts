@@ -137,12 +137,13 @@ function summarizeFrame(e: PerformanceLongAnimationFrameTiming): FrameSummary {
 /**
  * What ran a script, as the browser names it, less any URL's query and fragment, which can carry a
  * signed parameter, a reset token or an email. The browser names a script by its URL, or by the page's
- * for an inline script, and an event listener on an element without an id by the element's src:
- * `IMG[src=/avatar.png?sig=abc].onload`. Any other name, `#document.onclick` or
- * `TimerHandler:setTimeout`, is kept as it is.
+ * for an inline script, and an event listener on an element without an id by the element's src, which
+ * Chromium quotes: `IMG[src="/avatar.png?sig=abc"].onload` is kept as `IMG[src="/avatar.png"].onload`,
+ * its quotes still paired, and the same src unquoted loses its query too. Any other name,
+ * `#document.onclick` or `TimerHandler:setTimeout`, is kept as it is.
  */
 function invokerOf(invoker: string): string {
-  return /^https?:/i.test(invoker) ? invoker.replace(/[?#][^]*/, '') : invoker.replace(/(\[src=[^?#\]]*)[?#][^]*(\]\.on)/, '$1$2');
+  return /^https?:/i.test(invoker) ? invoker.replace(/[?#][^]*/, '') : invoker.replace(/(\[src=(?:(")[^?#"]*|[^?#"\]]*))[?#][^]*(\2\]\.on)/, '$1$3');
 }
 
 function shortSource(url: string): string {
