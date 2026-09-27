@@ -1095,6 +1095,48 @@ test("a tool that wraps the shim's methods after install() leaves it the hook in
   });
 });
 
+test('a page that only sets isDisabled on the hook once react-dom has registered is still read, since React goes on calling it', async (t) => {
+  // React reads isDisabled and supportsFiber only as a react-dom registers. A page that sets the first in its entry
+  // module, after its imports, sets it after react-dom registered, and React's commits still come to the hook.
+  const warn = t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  ownShim(t);
+  for (const existing of [null, existingHook()]) {
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+    await inBrowser(async (page) => {
+      if (existing) page.window[HOOK] = existing;
+      let api = install({ threshold: 40, devtoolsTrack: false });
+      const hook = page.window[HOOK];
+      const id = hook.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      hook.onCommitFiberRoot(id, root);
+      hook.isDisabled = true;
+      for (const at of [1000, 2000, 3000]) {
+        // The last click comes after dispose() and another install(), which finds the same hook.
+        if (at === 3000) {
+          api.dispose();
+          api = install({ threshold: 40, devtoolsTrack: false });
+        }
+        clock.now = at;
+        page.fire('click', { isTrusted: true, type: 'click', timeStamp: at, target: null });
+        page.duringClick(() => {
+          clock.now = at + 150;
+          commitAgain(root, 150);
+          hook.onCommitFiberRoot(id, root, 1, false);
+        });
+        page.paint([click(at, at, 200)]);
+        await nextTask();
+        const stats = api.stats();
+        assert.deepEqual({ mode: stats.mode, react: stats.react }, { mode: existing ? 'chained' : 'shim', react: 'reading' });
+        assert.match(api.last()?.explanation.cause ?? '', /150 ms .*Counter/);
+      }
+      assert.equal(warn.mock.callCount(), 0);
+      api.dispose();
+    });
+  }
+});
+
 test("hook: 'shim' over a frozen hook says only that it cannot be wrapped, not that it chained onto it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
