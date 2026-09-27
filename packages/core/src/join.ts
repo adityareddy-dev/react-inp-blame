@@ -2130,9 +2130,12 @@ function explain(r: InteractionReport): Explanation {
     : [];
   const real = r.commits.filter((x) => carriesWork(x) && x.hydratedTarget == null && !forcedByScript.includes(x)).length;
   if (real > 1) notes.push(`React rendered ${real} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
+  // A wait between the handlers is `waiting` too, with where it came as its detail, and the wait before them is
+  // not in its sentence.
+  const waitIsTheVerdict = blame.kind === 'waiting' && blame.detail === null;
   if (c) {
     // Under a verdict that is the wait, it is already said.
-    if (r.inputDelay > LONG_TASK_MS && renderMatters && blame.kind !== 'waiting') notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
+    if (r.inputDelay > LONG_TASK_MS && renderMatters && !waitIsTheVerdict) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
     if (c.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   }
   const walked = [...r.commits, ...r.followUps];

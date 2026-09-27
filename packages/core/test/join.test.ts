@@ -2072,6 +2072,15 @@ test('a wait that is the verdict is not said again in a note, and one under anot
   assert.equal(painted.explanation.blame.kind, 'painting');
   assert.match(painted.verdict, /It also waited 100 ms before the handler could start/);
   assert.match(painted.verdict, /React still spent 20 ms/);
+  // So does a wait between the handlers, whose sentence is about that wait and not the 60 ms before them.
+  const between = report(
+    [entry('keydown', 0, 232, 60, 70), entry('click', 0, 232, 70, 70.7), entry('keyup', 1, 232, 220, 220.2)],
+    [commit(69, 0, { total: 8, rendered: 5 })],
+    [frame(0, 225, [], 220)],
+    [input(0, 'keydown')],
+  );
+  assert.equal(between.explanation.blame.detail, 'between click and keyup');
+  assert.ok(between.explanation.notes.includes('It also waited 60 ms before the handler could start, because the main thread was busy.'));
 });
 
 test('a handler or a render shorter than a long wait before the handlers does not take the verdict from it', () => {
