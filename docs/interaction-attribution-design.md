@@ -1105,6 +1105,9 @@ branch at all: a 55 ms wait before 52 ms of handlers, with a 4 ms render between
 stays the wait's. Nor can one be the verdict beside a handler or a forced layout that outruns React's
 render, since that branch is asked first and leaves the time between the handlers out of its figure: a
 60 ms wait before a keydown's 38 ms handler, with a 30 ms render before the keyup's, stays the wait's.
+Nor can one be the verdict under a screen update longer than the working time, which closes the render
+branch too: a 150 ms wait before a keydown, with a 170 ms transition render begun before it committing
+between its handlers and the keyup's and a 145 ms screen update after them, stays the wait's.
 A render there that kept no durations is timed by React's scheduler tasks where long animation frames
 recorded them, and where no frame says what ran, the wait has to outlast all of the time between the
 handlers. Until 2026-09-26 only a forced layout, and a handler a production build could not time,

@@ -2251,6 +2251,13 @@ test("a render between one event's handlers and the next's is working time a lon
   );
   assert.deepEqual(forced.explanation.blame, { ...waited, ms: 60 });
   assert.match(forced.verdict, /The browser also spent 52 ms recalculating styles and layout in scripts before the paint\./);
+  // Nor is one under a screen update longer than the working time, which closes the render rung: a transition render
+  // that began before the keydown and committed between its handlers and the keyup's, 170 ms of it in a 130 ms gap,
+  // after a 150 ms wait and before a 145 ms screen update. The wait is the longest phase, and the verdict.
+  for (const frames of [[], null]) {
+    const transition = report([entry('keydown', 0, 436, 150, 160), entry('keyup', 280, 156, 290, 291)], [commit(285, 0, { total: 170 })], frames, [input(0, 'keydown')]);
+    assert.deepEqual(transition.explanation.blame, { ...waited, ms: 150 });
+  }
 });
 
 test('the render blame names the commit whose committing took the time', () => {

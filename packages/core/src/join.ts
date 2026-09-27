@@ -1753,10 +1753,11 @@ function explain(r: InteractionReport): Explanation {
   // closes nothing, and adding it would only leave the wait short of the handlers' own time with no rung to take
   // it. Nor does one beside a handler or a forced layout that outruns React's render, since that rung is asked
   // first and leaves the time between out of its figure: a 30 ms render there handed a 38 ms handler the verdict
-  // over a 60 ms wait. One that kept no durations is timed by React's tasks, where long frames recorded them;
-  // where no frame says what ran, nothing times it, and all of the time between is counted, as `waitBetween`
-  // counts none of it.
-  const renderedInGaps = !(c && rc && renderMatters) || handlerWins || layoutOutruns
+  // over a 60 ms wait. Nor one under a screen update longer than the working time, which closes the render rung
+  // too: a 170 ms transition render begun before the keydown gave a 145 ms screen update the verdict over a 150 ms
+  // wait. One that kept no durations is timed by React's tasks, where long frames recorded them; where no frame
+  // says what ran, nothing times it, and all of the time between is counted, as `waitBetween` counts none of it.
+  const renderedInGaps = !(c && rc && renderMatters) || handlerWins || layoutOutruns || screenOutranks
     ? 0
     : !framesSay && renderedBetween.some((x) => !x.hasDurations && carriesWork(x))
       ? between
