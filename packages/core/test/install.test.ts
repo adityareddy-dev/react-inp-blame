@@ -2081,6 +2081,24 @@ test('a sealed DevTools hook without a post-commit call, which the library canno
   });
 });
 
+test('a DevTools hook whose inject cannot be replaced, though its other calls can, is left as it was rather than partly wrapped', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const hook = existingHook();
+    Object.defineProperty(hook, 'inject', { value: hook.inject, writable: false });
+    const { onCommitFiberRoot } = hook;
+    page.window[HOOK] = hook;
+    const api = install({ devtoolsTrack: false });
+    try {
+      assert.equal(api.stats().unsupportedReason?.kind, 'hook-disabled');
+      assert.equal(hook.onCommitFiberRoot, onCommitFiberRoot);
+      assert.equal('onPostCommitFiberRoot' in hook, false);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test("a DevTools hook global the library cannot read never reaches the page's error handlers, whether the check 3 s after install, an Event Timing batch or the hide reads it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
