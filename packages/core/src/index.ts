@@ -11,7 +11,7 @@ import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
 import { incompatibleCopy, shared } from './session.js';
 import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, ReactStatus, RendererInfo } from './types.js';
-import { dropped, guarded, warnOnce } from './warn.js';
+import { dropped, errorText, guarded, warnOnce } from './warn.js';
 
 export type * from './types.js';
 export type { InpEstimate } from './inp.js';
@@ -461,7 +461,7 @@ function showOverlay(api: Api, opts: OverlayOptions): Promise<OverlayHandle | nu
     // Asked again on arrival: hidden or replaced while the code was on its way.
     .then((code) => (code && page.overlay === shown ? code.createOverlay(api, opts) : null))
     .catch((error: unknown) => {
-      warnOnce('overlay-failed', `the badge and panel could not be shown (${String(error)}).`);
+      warnOnce('overlay-failed', `the badge and panel could not be shown (${errorText(error)}).`);
       // The next mountOverlay() tries again, rather than getting this null for as long as the page is open.
       if (page.overlay === shown) page.overlay = null;
       return null;

@@ -3,7 +3,7 @@ import type { InpEstimate } from './inp.js';
 import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
-import { warnOnce } from './warn.js';
+import { errorText, warnOnce } from './warn.js';
 
 /**
  * The on-page badge and panel. Plain DOM inside a shadow root: no React, so it renders even
@@ -161,7 +161,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     try {
       draw();
     } catch (error) {
-      warnOnce('overlay-draw', `the badge and panel could not be drawn (${String(error)}). Reports still come through onInteraction().`);
+      warnOnce('overlay-draw', `the badge and panel could not be drawn (${errorText(error)}). Reports still come through onInteraction().`);
     }
   }
 
