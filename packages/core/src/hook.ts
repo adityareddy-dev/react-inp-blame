@@ -1005,8 +1005,8 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   if (state.commits.length >= MAX_COMMITS) state.commits.shift();
   state.commits.push(summary);
   place.summary = summary;
-  // The walk is done. An error while a report takes the commit in is not the walk's, so it drops that
-  // report's revision and leaves this react-dom read.
+  // The walk is done. An error while a report takes the commit in is not the walk's: at most that report's
+  // revision is lost, and this react-dom is still read.
   try {
     options.onSummary(summary);
   } catch (error) {
