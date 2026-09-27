@@ -135,18 +135,21 @@ function summarizeFrame(e: PerformanceLongAnimationFrameTiming): FrameSummary {
 }
 
 /**
- * What ran a script, as the browser names it, less any URL's query and fragment, which can carry a
- * signed parameter, a reset token or an email. The browser names a script by its URL, or by the page's
- * for an inline script, which in an Electron app is a file: URL or one of the app's own, such as app://,
- * that can carry a session in its query as well. A URL is told by the `//` after its scheme, since
- * `TimerHandler:setTimeout` reads as one too. An event listener on an element without an id is named by
- * the element's src, which Chromium quotes: `IMG[src="/avatar.png?sig=abc"].onload` is kept as
+ * What ran a script, as the browser names it, less any URL's `user:password@`, query and fragment, which
+ * can carry the password to a shared preview, a signed parameter, a reset token or an email. The browser
+ * names a script by its URL, or by the page's for an inline script, which keeps the password Chromium
+ * drops from location.href, and in an Electron app is a file: URL or one of the app's own, such as
+ * app://, that can carry a session in its query as well. A URL is told by the `//` after its scheme,
+ * since `TimerHandler:setTimeout` reads as one too. An event listener on an element without an id is
+ * named by the element's src, which Chromium quotes: `IMG[src="/avatar.png?sig=abc"].onload` is kept as
  * `IMG[src="/avatar.png"].onload`, its quotes still paired, and the same src unquoted loses its query
- * too, a bracket in its path or not. Any other name, `#document.onclick`, `TimerHandler:setTimeout` or a
- * blob: URL, is kept as it is.
+ * too, a bracket in its path or not. A src is the attribute as written, so its password runs to the last
+ * `@` before the path, as the browser reads it. Any other name, `#document.onclick`,
+ * `TimerHandler:setTimeout` or a blob: URL, is kept as it is.
  */
 function invokerOf(invoker: string): string {
-  return /^[a-z][a-z\d+.-]*:\/\//i.test(invoker) ? invoker.replace(/[?#][^]*/, '') : invoker.replace(/(\[src=(")?[^?#"]*)[?#][^]*(\2\]\.on)/, '$1$3');
+  const cut = /^[a-z][a-z\d+.-]*:\/\//i.test(invoker) ? invoker.replace(/[?#][^]*/, '') : invoker.replace(/(\[src=(")?[^?#"]*)[?#][^]*(\2\]\.on)/, '$1$3');
+  return cut.replace(/((?:^|\[src="?)(?:[a-z][a-z\d+.-]*:)?\/\/)[^/]*@/i, '$1');
 }
 
 function shortSource(url: string): string {

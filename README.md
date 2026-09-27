@@ -644,7 +644,7 @@ other sentences can hold text the page shows: under `labels: 'text'`, and by def
 (see [Labels and personal data](#labels-and-personal-data)). If you forward those as well, install with
 `labels: 'attributes'`, so a label comes only from what your code wrote on the element. `navigationURL`,
 sent above as `page_location`, keeps its query string. `blame.name` does not: when a script takes the blame it
-can be the script's URL, or the page's for an inline script, without the query and fragment.
+can be the script's URL, or the page's for an inline script, without any password, query or fragment.
 
 ## The badge and panel
 
@@ -1222,11 +1222,11 @@ no `aria-label` that is not a form field is named by its first run of text. An e
 counts as a form field, and so does an element an `EditContext` is attached to, or one up to five elements
 inside it. The search for that first run of text never goes into any of them, or into a `textarea`. An
 editor that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco does,
-cannot be told from the rest of the page, so a click on that text can be named by it.
-Development builds use text by default. Whatever `labels` says, `target.selector` has the tag, the `id` if
-there is one, and `data-test` or `data-testid` or else two classes, and `navigationURL` and
-`startedNavigation.url` are full URLs, query string included. A script the browser names by its URL, or by
-the page's for an inline script, loses the query and fragment in a blame's `name`, the sentences and `frames`.
+cannot be told from the rest of the page, so a click on that text can be named by it. Development builds use
+text by default. Whatever `labels` says, `target.selector` has the tag, the `id` if there is one, and
+`data-test` or `data-testid` or else two classes, and `navigationURL` and `startedNavigation.url` are full
+URLs, query string included. A script the browser names by its URL, or by the page's for an inline script,
+loses any password, query or fragment in a blame's `name`, the sentences and `frames`.
 
 ## Troubleshooting
 

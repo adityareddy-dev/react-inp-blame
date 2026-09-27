@@ -369,7 +369,8 @@ On Next.js the body of either `onINP` callback goes in the `useReportWebVitals` 
 Neither recipe sends a label or a sentence: a report's `target.label`, `verdict` and other sentences
 can hold text the page shows, under `labels: 'text'` and by default in a development build, so forward
 those only from an app installed with `labels: 'attributes'`. `page_location` keeps its query string.
-`blame.name` can be a script's URL, or the page's for an inline script, and never has a query or fragment.
+`blame.name` can be a script's URL, or the page's for an inline script, and never has a password, query
+or fragment.
 
 ## API
 
