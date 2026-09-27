@@ -156,15 +156,23 @@ function installNow(opts: InstallOptions): Api {
     if (!timeline) return;
     undrawn.set(r.interactionId, r);
     if (cancelDraw) return;
-    cancelDraw = whenIdle(
-      guarded(() => {
-        cancelDraw = null;
-        const started = performance.now();
-        for (const pending of undrawn.values()) timeline.draw(pending);
-        undrawn.clear();
-        drawMs += performance.now() - started;
-      }),
-    );
+    try {
+      cancelDraw = whenIdle(
+        guarded(() => {
+          cancelDraw = null;
+          const started = performance.now();
+          for (const pending of undrawn.values()) timeline.draw(pending);
+          undrawn.clear();
+          drawMs += performance.now() - started;
+        }),
+      );
+    } catch (error) {
+      // An idle callback the page refuses costs the reports waiting for it their drawing. They are let go
+      // rather than kept for a callback that may never come, so a page that goes on refusing holds none of
+      // them, and one that stops refusing draws only what is published after.
+      undrawn.clear();
+      dropped(error);
+    }
   };
 
   // Reports reach listeners in a task of their own. A later render revises a report inside React's
@@ -239,8 +247,7 @@ function installNow(opts: InstallOptions): Api {
     now: () => performance.now(),
     dropped,
     publish: (r) => {
-      // Queued to be heard first, so an error in what follows, such as an idle callback the page refuses,
-      // costs the report its drawing and nothing else.
+      // Queued to be heard first, so nothing that follows can keep it from its listeners.
       undelivered.push(r);
       delivery ??= setTimeout(deliver, 0);
       if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', MINIFIED_NAMES_CONSOLE);

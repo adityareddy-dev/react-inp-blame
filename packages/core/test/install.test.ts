@@ -2546,17 +2546,27 @@ test("an error while reports are drawn on the Performance panel never reaches th
   });
 });
 
-test('a page that refuses the idle callback the Performance panel is drawn in keeps no report from its listeners, before the hide or at it', async (t) => {
+test('a page that refuses the idle callback the Performance panel is drawn in keeps no report from its listeners, before the hide or at it, and holds none back to draw once it stops refusing', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  // Asked for as each report is published, and refused every time.
+  // Asked for as each report is published, and refused every time until the page stops refusing.
+  let refused = true;
+  const idle: (() => void)[] = [];
   Object.defineProperty(globalThis, 'requestIdleCallback', {
     configurable: true,
-    value: () => {
-      throw new TypeError('idle callback refused');
+    value: (task: () => void) => {
+      if (refused) throw new TypeError('idle callback refused');
+      return idle.push(task);
     },
   });
-  t.after(() => delete (globalThis as any).requestIdleCallback);
+  Object.defineProperty(globalThis, 'cancelIdleCallback', { configurable: true, value: () => {} });
+  const drawn: string[] = [];
+  Object.defineProperty(performance, 'measure', { configurable: true, value: (name: string) => drawn.push(name) });
+  t.after(() => {
+    delete (globalThis as any).requestIdleCallback;
+    delete (globalThis as any).cancelIdleCallback;
+    delete (performance as any).measure;
+  });
   await inBrowser((page) => {
     const api = install();
     try {
@@ -2574,6 +2584,14 @@ test('a page that refuses the idle callback the Performance panel is drawn in ke
       );
       assert.deepEqual(heard, [7, 14, 21]);
       assert.equal(caught(warn).length, 1);
+      // The page takes idle callbacks again. The reports from the refusal were let go, so the one
+      // idle callback draws the next report alone.
+      refused = false;
+      page.paint([click(28, 4000, 150)]);
+      assert.equal(idle.length, 1);
+      idle[0]!();
+      assert.deepEqual(drawn, ['150 ms click']);
+      assert.equal(warn.mock.callCount(), 1);
     } finally {
       api.dispose();
     }
