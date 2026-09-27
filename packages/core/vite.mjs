@@ -293,14 +293,20 @@ function singleFile(build) {
   return [build.rollupOptions?.output].flat().some((output) => output?.format === 'iife' || output?.format === 'umd');
 }
 
-/** The path Vite hands `pages` for an HTML input: the file's path below the project root. */
+/**
+ * The path Vite hands `pages` for an HTML input: the file's path below the project root. A relative input is
+ * the file the bundler opens, which has to be inside the root: Rolldown (Vite 8) looks for it from the root
+ * and then from the working directory, and Rollup (Vite 7 and before) from the working directory, which is
+ * above the root where the config sets `root` to a folder of the project.
+ */
 function pagePath(root, input) {
-  const file = input.replaceAll('\\', '/');
-  const within = `${String(root).replaceAll('\\', '/').replace(/\/$/, '')}/`;
-  if (file.startsWith(within)) return file.slice(within.length - 1);
-  // A relative path is one from the root: Vite 8 reads it from there, and Rollup (Vite 7 and before) from the
-  // working directory, which is the root when Vite runs in the project's folder.
-  return /^([a-z]:)?\//i.test(file) ? `/${file.split('/').pop()}` : posix.normalize(`/${file}`);
+  const base = String(root).replaceAll('\\', '/').replace(/\/$/, '');
+  let file = input.replaceAll('\\', '/');
+  if (!/^([a-z]:)?\//i.test(file)) {
+    const opened = [base, process.cwd().replaceAll('\\', '/')].map((folder) => posix.join(`${folder}/`, file));
+    file = opened.find((candidate) => fs.existsSync(candidate)) ?? opened[0];
+  }
+  return file.startsWith(`${base}/`) ? file.slice(base.length) : `/${file.split('/').pop()}`;
 }
 
 /**
