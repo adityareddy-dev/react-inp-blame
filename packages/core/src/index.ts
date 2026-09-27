@@ -239,10 +239,12 @@ function installNow(opts: InstallOptions): Api {
     now: () => performance.now(),
     dropped,
     publish: (r) => {
-      if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', MINIFIED_NAMES_CONSOLE);
-      drawWhenIdle(r);
+      // Queued to be heard first, so an error in what follows, such as an idle callback the page refuses,
+      // costs the report its drawing and nothing else.
       undelivered.push(r);
       delivery ??= setTimeout(deliver, 0);
+      if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', MINIFIED_NAMES_CONSOLE);
+      drawWhenIdle(r);
     },
   });
 
