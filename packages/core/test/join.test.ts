@@ -3731,6 +3731,7 @@ test("a verdict does not say no long task was recorded where the screen update's
   ).explanation;
   assert.deepEqual(behind.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 62, confidence: 'measured' });
   assert.equal(behind.cause, "React didn't render anything in the working time; a script (TimerHandler:setTimeout, app.js) ran for 62 ms before the handler started.");
+  // That is the 63 ms the click waited, so no note says the wait again.
   assert.deepEqual(behind.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 110 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
   ]);
@@ -3743,6 +3744,9 @@ test("a verdict does not say no long task was recorded where the screen update's
   ).explanation;
   assert.deepEqual(behindBare.blame, behind.blame);
   assert.equal(behindBare.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 62 ms before the handler started.");
+  assert.deepEqual(behindBare.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 110 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms.',
+  ]);
 
   // A 120 ms timer the click waited 121 ms behind, a 25 ms pointerdown listener, then a 40 ms scroll listener
   // that held the 61 ms screen update and forced a render. The timer is the longest, and is not dropped for the
