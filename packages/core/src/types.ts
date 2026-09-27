@@ -423,21 +423,21 @@ export interface Blame {
   readonly detail: string | null;
   /**
    * How much of the interaction it accounts for, in ms; null for 'none', and for a render, a hydration
-   * or a handler where the build records no durations and React committed during the interaction.
+   * or a handler where the build records no durations and React committed in the working time.
    */
   readonly ms: number | null;
   /**
-   * 'measured': the blame follows from timings of this interaction. A render or handler blame
-   * rests on React's render durations for commits joined by their exact input stamp and walked in
-   * full, or a handler blame on React committing nothing where it is read or not yet loaded, in
-   * any build; waiting and painting on the browser's own phases; a script on its Long Animation Frames
-   * entry; 'none' on Long Animation Frames showing no long script. A painting blame whose cause says
-   * the frame waited on the next press (`InteractionReport.nextInput`) is still the screen update's own
-   * time. The clause about the press rests on that press's timings, which are not this interaction's,
-   * so it says "most likely" unless a long animation frame over this interaction recorded a script
-   * from the press on that shows the work, the way it records the script a wait was behind. Where the
-   * screen update's note names a long script after the handlers, a 'none' rests on there being no long
-   * script in the working time.
+   * 'measured': the blame follows from timings of this interaction. A render or handler blame rests
+   * on React's render durations for commits joined by their exact input stamp and walked in full,
+   * or a handler blame on React committing nothing in the working time where it is read or not yet
+   * loaded, in any build; waiting and painting on the browser's own phases; a script on its Long
+   * Animation Frames entry; 'none' on Long Animation Frames showing no long script. A painting
+   * blame whose cause says the frame waited on the next press (`InteractionReport.nextInput`) is
+   * still the screen update's own time. The clause about the press rests on that press's timings,
+   * which are not this interaction's, so it says "most likely" unless a long animation frame over
+   * this interaction recorded a script from the press on that shows the work, the way it records
+   * the script a wait was behind. Where the screen update's note names a long script after the
+   * handlers, a 'none' rests on there being no long script in the working time.
    *
    * 'inferred': it is the likeliest reading of weaker evidence. Render counts without durations
    * (production builds, or a clock too coarse to time components), a commit that only overlapped

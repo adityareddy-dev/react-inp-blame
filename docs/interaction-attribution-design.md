@@ -1131,23 +1131,27 @@ React rendered nothing for had no such figure either, whatever the build: a hand
 and set no state read "React didn't render anything; this browser does not report long tasks, so what ran
 instead is unknown", or, where no long animation frame had been recorded yet, that the time went to waiting
 and painting, while a 1 ms commit beside the same handler made it the handler's, measured. Where React is
-read, or no react-dom has loaded yet, and `unjoinedCommits` is 0, no commit means none of the working
-time was React's, so the handler is weighed as it is beside a render. Where a long animation frame
-was recorded over the handlers and names a script of 20 ms or more in the interaction, the browser's
-record still decides. One that lists only shorter scripts, or none, names nothing that ran in them,
-so the handler keeps its verdict rather than the time going to waiting and painting. One that ended
-as they began holds only what the click waited behind, so a 30 ms timer there leaves a 45 ms handler
-its verdict, as it has before that frame arrives and beside a 1 ms render. Where install()
-ran too late or react-dom cannot be read, the setup is still the verdict. A click React never dispatched,
-on server-rendered HTML it had not hydrated yet, is left as it was: the handler named there is a hydrated
-component's above the boundary, which never ran, and the working time can be React's own attempt at
-hydrating it. One limit is known. No react-dom having loaded yet is the status `'waiting'`, and the page
-is looked at for React's marks only five times, besides the check 3 s after install and the one at the
-first interaction after that, before it is taken to have none. A react-dom that loaded before install()
-and mounts its root after those looks renders unseen while the status stays `'waiting'`, and its render
-is then put on the handler, measured. The status already stood for React rendering nothing before this,
-in the verdict that names a long animation frame's script and in the one that sends the time to waiting
-and painting, and looking again for every report would bring back the cost the looks are capped to save.
+read, or no react-dom has loaded yet, and `unjoinedCommits` is 0, no commit in the working time means none
+of it was React's, so the handler is weighed as it is beside a render. A render the screen update's note
+ties to the script after the handlers is not in the working time, so a click whose only render ran there
+is weighed the same way: until 2026-09-26, 200 ms of short click handlers before a 40 ms scroll listener
+that rendered read as waiting and painting. Where a long animation frame was recorded over the handlers
+and names a script of 20 ms or more that a verdict would name, the browser's record still decides, in any
+build. One that lists only shorter scripts, or none, or only the one after the handlers that the note
+names, names nothing that ran in them, so the handler keeps its verdict rather than the time going to
+waiting and painting. One that ended as they began holds only what the click waited behind, so a 30 ms
+timer there leaves a 45 ms handler its verdict, as it has before that frame arrives and beside a 1 ms
+render. Where install() ran too late or react-dom cannot be read, the setup is still the verdict. A click
+React never dispatched, on server-rendered HTML it had not hydrated yet, is left as it was: the handler
+named there is a hydrated component's above the boundary, which never ran, and the working time can be
+React's own attempt at hydrating it. One limit is known. No react-dom having loaded yet is the status
+`'waiting'`, and the page is looked at for React's marks only five times, besides the check 3 s after
+install and the one at the first interaction after that, before it is taken to have none. A react-dom that
+loaded before install() and mounts its root after those looks renders unseen while the status stays
+`'waiting'`, and its render is then put on the handler, measured. The status already stood for React
+rendering nothing before this, in the verdict that names a long animation frame's script and in the one
+that sends the time to waiting and painting, and looking again for every report would bring back the cost
+the looks are capped to save.
 
 **How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's own time (the
@@ -1182,18 +1186,19 @@ Where it is taken out, or where the screen update's note names the script after 
 in it, as it does over 100 ms, a `script` verdict names the longest of the scripts up to the end of the
 handlers and, only where it held half the screen update, the script after them, ranked by length and not by
 where they ran. A timer the input waited behind is then said as before the handler started. With none of
-those, the verdict says no long task was recorded in the working time, and not that none was recorded at all,
-since the note names that script. Ranked that way only where a render ran in it, a 70 ms listener with none
-was a `script` verdict, and with one `none`. Where the frame waited on the next press, the verdict does not
-take the script after the handlers even from half, since it is usually that press's handler: a keyup's verdict
-once named the next key's 50 ms handler. A script after the handlers is said as after the handler finished
-wherever a verdict names it. The browser's own work is the frame's style, layout and paint where the frame
-timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does after a key
-press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a click
-Chromium does most of that work for the pointer's hit test, before the frame starts rendering. After Enter the
-same work lands inside the working time instead: the keydown's handlers and the click's took 1 ms, then the keyup
-waited 157 ms for the browser before its own, and the working time runs from the first handler to the last, as
-web-vitals counts it. A wait like that between one event's handlers and the next's is no handler's time, so it
+those, the verdict says no long task was recorded in the working time, and not that none was recorded at all, since
+the note names that script. Ranked that way only where a render ran in it, a 70 ms listener with none was a
+`script` verdict, and with one `none`. Where React rendered nothing in the working time, the handlers are weighed
+first, as where it rendered nothing at all, and take the verdict where they ran long enough. Where the frame waited
+on the next press, the verdict does not take the script after the handlers even from half, since it is usually that
+press's handler: a keyup's verdict once named the next key's 50 ms handler. A script after the handlers is said as
+after the handler finished wherever a verdict names it. The browser's own work is the frame's style, layout and
+paint where the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does
+after a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a
+click Chromium does most of that work for the pointer's hit test, before the frame starts rendering. After Enter
+the same work lands inside the working time instead: the keydown's handlers and the click's took 1 ms, then the
+keyup waited 157 ms for the browser before its own, and the working time runs from the first handler to the last,
+as web-vitals counts it. A wait like that between one event's handlers and the next's is no handler's time, so it
 is left out of what the handlers are said to have run for. From 50 ms it is the verdict, a `waiting` one with
 `detail` "between click and keyup", where it outweighs the handlers, React and any forced layout, is at least
 the wait before the first handler, and the screen update does not outrank the working time; where only those

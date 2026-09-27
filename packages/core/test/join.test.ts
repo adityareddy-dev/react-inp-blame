@@ -1696,6 +1696,51 @@ test('where React is read and rendered nothing, all of the working time is outsi
   assert.equal(report([entry('click', 0, 40, 5, 20)], [], [], save).explanation.blame.kind, 'none');
 });
 
+test('a click whose only render ran after the handlers is weighed as one React rendered nothing for, and a listener the note names after them leaves the handlers the verdict', () => {
+  // handleSave ran from 2 to 62 ms and set no state, then React's own task rendered from 64 to 144 ms in a 138 ms
+  // screen update. That render is the task's, said with it, so React rendered nothing in the working time.
+  const click = [entry('click', 0, 200, 2, 62)];
+  const save = loginClick('handleSave');
+  const task = [frame(62, 138, [script('MessagePort.onmessage', 64, 80)], 150)];
+  const handled = 'The click handler handleSave still ran for all 60 ms of working time before that.';
+  // The handler is the note the screen update leaves, as it is with no render at all and in a development build.
+  // A production build, which times no render, left it out.
+  const rows = { hasDurations: false, total: 0, priority: 3, components: [{ name: 'Row', count: 30, self: null, total: null }] };
+  const production = report(click, [commit(140, 0, rows)], task, save).explanation;
+  assert.equal(production.blame.kind, 'painting');
+  assert.match(production.cause, /MessagePort\.onmessage.*React rendered inside it: re-rendering 30 components/);
+  assert.deepEqual(production.notes, [handled]);
+  assert.deepEqual(report(click, [commit(140, 0, { total: 40, startedAt: 70, priority: 3 })], task, save).explanation.notes, [handled]);
+  assert.deepEqual(report(click, [], task, save).explanation.notes, [handled]);
+
+  // 200 ms of click handlers, none of which ran for 20 ms, then a 40 ms scroll listener in a 157 ms screen update
+  // that went mostly on style and layout. The listener ran outside the working time and the note names it, so it
+  // does not take the handlers' verdict, with a render inside it or none: that read as waiting and painting, where
+  // a 1 ms render in the working time left the verdict to the handler.
+  const tenClicks = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15));
+  const listened = (commits: CommitSummary[], onscroll = 40, styleAndLayoutStart = 250) =>
+    report([entry('click', 0, 360, 3, 203)], commits, [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, onscroll)], styleAndLayoutStart)], save)
+      .explanation;
+  const handler = { kind: 'handler', name: 'handleSave', detail: 'SignInPage', ms: 200, confidence: 'measured' };
+  const table = { total: 25, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 210 };
+  const none = listened([]);
+  assert.deepEqual(none.blame, handler);
+  assert.equal(none.cause, "The click handler handleSave ran for about 200 ms; React didn't render anything.");
+  for (const rendered of [table, { ...table, hasDurations: false, total: 0, startedAt: null }]) {
+    const r = listened([commit(240, 0, rendered)]);
+    assert.deepEqual(r.blame, handler);
+    // React did render, inside the listener, which the note says.
+    assert.equal(r.cause, "The click handler handleSave ran for about 200 ms; React didn't render anything in the working time.");
+    assert.match(r.notes[0]!, /DIV\.onscroll \(app\.js\), 40 ms, and React rendered inside it: /);
+  }
+  assert.deepEqual(listened([commit(150, 0, { total: 1, rendered: 2 })]).blame, { ...handler, ms: 199 });
+  // A listener that held half of the screen update is still the verdict's, with a render inside it in a development
+  // build as with none.
+  for (const commits of [[], [commit(270, 0, table)]]) {
+    assert.deepEqual(listened(commits, 80, 290).blame, { kind: 'script', name: 'DIV.onscroll', detail: null, ms: 80, confidence: 'measured' });
+  }
+});
+
 test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {
   // A click at 1000 waited behind an analytics task that ran from 745 to 1045. Its own handler ran from
   // 1045 to 1065, rendering 2 components in 1 ms, and the screen updated at 1096.
@@ -3928,15 +3973,16 @@ test('a screen update over 100 ms gets its note under another verdict where the 
     "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (BUTTON.onclick, app.js) ran for 190 ms.",
   );
   // A 40 ms listener in a 157 ms screen update that went mostly on the frame's style and layout held neither
-  // phase, so the verdict does not name it. It is the note's, with the render inside it.
+  // phase, so the verdict does not name it. It is the note's, with the render inside it, and the verdict is the
+  // 200 ms of handlers React rendered nothing in.
   const minor = report(
     [entry('click', 0, 360, 3, 203)],
     [commit(240, 0, { total: 25, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 210 })],
     [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, 40)], 250)],
     [input(0, 'click')],
   ).explanation;
-  assert.deepEqual(minor.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
-  assert.match(minor.cause, /^React didn't render anything in the working time and /);
+  assert.deepEqual(minor.blame, { kind: 'handler', name: null, detail: null, ms: 200, confidence: 'measured' });
+  assert.match(minor.cause, /; React didn't render anything in the working time\.$/);
   assert.deepEqual(minor.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 110 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
   ]);
@@ -3949,12 +3995,23 @@ test("a verdict does not say no long task was recorded where the screen update's
   const table = { total: 25, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 210 };
   const seventy = (commits: CommitSummary[], ring = [input(0, 'click')]) =>
     report([entry('click', 0, 360, 3, 203)], commits, [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, 70)], 280)], ring).explanation;
+  // That is 200 ms of handlers React rendered nothing in, so the verdict is theirs, as it is beside a 1 ms render there.
   const listener = seventy([commit(270, 0, table)]);
-  assert.deepEqual(listener.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
-  assert.equal(listener.cause, "React didn't render anything in the working time and no long task was recorded in it, so the time went to waiting and painting.");
+  assert.deepEqual(listener.blame, { kind: 'handler', name: null, detail: null, ms: 200, confidence: 'measured' });
+  assert.equal(listener.cause, "Code outside React (the click handler or other scripts) ran for about 200 ms; React didn't render anything in the working time.");
   assert.deepEqual(listener.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 80 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 70 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
   ]);
+  // Where the handlers were too short to be the verdict, it says no long task was recorded in the working time, and not
+  // that React rendered nothing: 20 ms of handlers before a 20 ms listener that rendered.
+  const short = report(
+    [entry('click', 0, 72, 3, 23)],
+    [commit(40, 0, { ...table, total: 10, startedAt: 28 })],
+    [frame(0, 72, [script('BUTTON.onclick', 3, 15), script('DIV.onscroll', 25, 20)], 50)],
+    [input(0, 'click')],
+  ).explanation;
+  assert.deepEqual(short.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
+  assert.equal(short.cause, "React didn't render anything in the working time and no long task was recorded in it, so the time went to waiting and painting.");
   // The same where the handlers rendered 3 components of their own in a production build.
   const three = commit(195, 0, { hasDurations: false, total: 0, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] });
   const small = seventy([three, commit(270, 0, { ...table, hasDurations: false, total: 0, startedAt: null })]);

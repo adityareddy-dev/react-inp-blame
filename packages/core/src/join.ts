@@ -1633,21 +1633,25 @@ function explain(r: InteractionReport): Explanation {
   // and the next's.
   const outside = Math.max(0, r.processing - between - Math.max(0, Math.max(reactWhileHandling, renderTotal + forcedWhileHandling) - renderedBetweenMs));
   // Where React is read, or no react-dom has loaded yet, and no commit during the handlers went unjoined, a report
-  // with no commit at all is React rendering nothing, so the whole working time is outside it whatever the build
-  // records: a 300 ms handler that set no state is the handler's, as it is beside a 1 ms render. Where a long
-  // animation frame was recorded over the handlers, the browser's own record decides where it names a script of
-  // 20 ms or more in the interaction, as it did. Where it lists only shorter ones, or none, it names nothing that
-  // ran in them, so the handler keeps its verdict rather than the time reading as waiting and painting. A frame
-  // that ended as they began holds only what the click waited behind: a 30 ms timer there no longer takes a 45 ms
+  // with no commit in the working time is React rendering nothing, so the whole working time is outside it whatever
+  // the build records: a 300 ms handler that set no state is the handler's, as it is beside a 1 ms render. A render
+  // the screen update's note ties to the script after the handlers is not in the working time, so a click whose
+  // every render ran there is the same: 200 ms of short handlers before a 40 ms scroll listener that rendered read
+  // as waiting and painting. Where a long animation frame was recorded over the handlers, the browser's own record
+  // decides, in any build, where it names a script of 20 ms or more that a verdict would name, as it did. Where it
+  // lists only shorter ones, or none, or only the one the note names after the handlers, it names nothing that ran
+  // in them, so the handler keeps its verdict rather than the time reading as waiting and painting. A frame that
+  // ended as they began holds only what the click waited behind: a 30 ms timer there no longer takes a 45 ms
   // handler's verdict, which the handler keeps before that frame arrives and beside a 1 ms render.
   // A click React never dispatched, on server-rendered HTML it had not hydrated, is left out: the handler named
   // there is a hydrated component's above the boundary, which never ran, and the working time can be React's own
   // attempt at hydrating it. "Not loaded yet" is 'waiting', which the page's looks for React's marks decide, so a
   // react-dom that loaded before install() and mounted after the last look is taken for none: a known limit, the
   // one every rung that says React rendered nothing already had.
-  const reactIdle = !r.commits.length && !blind && !unjoined && r.hydration?.kind !== 'not-hydrated';
+  const reactIdle = !inWorkingTime.length && !blind && !unjoined && r.hydration?.kind !== 'not-hydrated';
   const framedHandlers = frames.some((f) => f.start < processingEnd && f.start + f.duration > processingStart);
-  const outsideMatters = (hasDurations || (reactIdle && !(framedHandlers && anyScript))) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
+  const idleHandler = reactIdle && !(framedHandlers && ranScript);
+  const outsideMatters = (hasDurations || idleHandler) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler
   // its count has to explain the working time as well: a list of 50 of one component, or a tree at no
@@ -1968,10 +1972,10 @@ function explain(r: InteractionReport): Explanation {
       ms: forcedWhileHandling,
       confidence,
     };
-  } else if ((c || reactIdle) && handlerWins && !screenOutranks && !waitingWins) {
+  } else if ((c || idleHandler) && handlerWins && !screenOutranks && !waitingWins) {
     const confidence = measuredFrom(...inWorkingTime);
     const rest = !c
-      ? renderedNothing
+      ? noneWorking
       : renderTotal >= RENDER_MIN_MS
         ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}`
         : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
