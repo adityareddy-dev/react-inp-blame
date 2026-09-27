@@ -1042,6 +1042,8 @@ test('a page that turns the DevTools hook off where it is after install() is uns
       const again = install({ threshold: 40, devtoolsTrack: false });
       assert.equal(again.stats().mode, 'unsupported');
       assert.match(again.stats().unsupportedReason?.message ?? '', /off after react-dom registered with it/);
+      // That install() never took the hook up, so debug.hook() describes none, as for any hook install() finds off.
+      assert.equal(again.debug.hook().owner, 'none');
       again.dispose();
     });
   }
