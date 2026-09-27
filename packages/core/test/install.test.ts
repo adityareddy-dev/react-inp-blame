@@ -2136,17 +2136,26 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     assert.equal(api.last()?.target?.handler, 'setEmail');
     // Server HTML React had not hydrated by the keypress has no handler to read yet: the form is read when the
     // entries come, once React hydrated it to run the submit.
-    rootFiber.memoizedState = { isDehydrated: true };
-    delete form.__reactFiber$demo;
-    delete form.__reactProps$demo;
-    delete field.__reactFiber$demo;
-    delete field.__reactProps$demo;
+    const dehydrate = () => {
+      rootFiber.memoizedState = { isDehydrated: true };
+      delete form.__reactFiber$demo;
+      delete form.__reactProps$demo;
+      delete field.__reactFiber$demo;
+      delete field.__reactProps$demo;
+    };
     const hydrate = () => {
       rootFiber.memoizedState = { isDehydrated: false };
       Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit: finish } });
       Object.assign(field, { __reactFiber$demo: fieldFiber, __reactProps$demo: fieldProps });
     };
+    dehydrate();
     assert.equal(enter(11, 4000, hydrate), 'finish');
+    // An input method's Enter there is read then too, for the key its keydown was read for, which is not Enter.
+    dehydrate();
+    page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 5000, target: field, code: 'Enter', keyCode: 229 });
+    hydrate();
+    page.paint([{ ...pointer('keydown', 12, 5000, 140), target: field }]);
+    assert.equal(api.last()?.target?.handler, 'setEmail');
     api.dispose();
   });
 });

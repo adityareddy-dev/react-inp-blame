@@ -111,6 +111,12 @@ export interface InputRecord extends InputStamp {
   /** The React handler prop for this input's type on the target chain at dispatch, read then for the same reason. */
   readonly handler: string | null;
   /**
+   * The key `handler` was read for, which decides whether it can reach an onSubmit: a key event's `code`,
+   * or null for one an input method took (`IME_KEY_CODE`) and for any other input. An element read later
+   * for this event is read for the same key.
+   */
+  readonly key: string | null;
+  /**
    * For a keydown, the handler prop its keypress reached, read as the keypress was dispatched
    * (`noteKeypress`), since a keypress has no record of its own. Undefined until one comes, for a key that
    * fires none, and for a keypress on server HTML React had not hydrated.
@@ -402,6 +408,7 @@ function record(e: DispatchedInput): InputRecord {
   // belongs to: an icon library's `Trash2` inside the button is not what anyone clicked. Both found now,
   // since a click that swaps the icon detaches it before the entry.
   const control = controlOf(target);
+  const key = (isKey && e.keyCode !== IME_KEY_CODE && e.code) || null;
   const rec: InputRecord = {
     ts: e.timeStamp,
     type: e.type,
@@ -412,7 +419,8 @@ function record(e: DispatchedInput): InputRecord {
     control,
     label: control && state.options?.label?.(control),
     owners: Object.freeze(ownersOf(namingFiber(target))),
-    handler: handlerOf(fiber, e.type, isKey && e.keyCode !== IME_KEY_CODE ? e.code : null),
+    handler: handlerOf(fiber, e.type, key),
+    key,
     work: { endedAt: e.timeStamp, ownEndedAt: e.timeStamp, unjoined: [] },
     // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting
     // inside a page React has otherwise hydrated, and then the target's nearest fiber is the hydrated
