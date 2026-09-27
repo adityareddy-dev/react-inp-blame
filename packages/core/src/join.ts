@@ -1857,9 +1857,10 @@ function explain(r: InteractionReport): Explanation {
   // handlers did not sit in the working time, and is said to come after it, as the render verdict places it: 800 rows
   // committed after 30 ms of handlers read "In 30 ms of working time, short of a long task, React was
   // re-rendering 800 components", and the same rows after 55 ms "after the handlers, before the next frame".
+  const countAfter = !!c && c.at > processingEnd + STAMP_TOLERANCE;
   const shortOf =
     c && !hasDurations && !longTaskOfWork && countSays(c)
-      ? c.at > processingEnd + STAMP_TOLERANCE
+      ? countAfter
         ? `After the ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(c)}, before the next frame`
         : `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(c)}`
       : null;
@@ -2305,11 +2306,13 @@ function explain(r: InteractionReport): Explanation {
     const unknown = partway ? 'What React did after it stopped being read is unknown,' : `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen,`;
     cause = `${unknown} and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
-  } else if (ranScript && !(shortOf && ranAsHandler(ranScript.script))) {
+  } else if (ranScript && !(shortOf && !countAfter && ranAsHandler(ranScript.script))) {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the
     // interaction is exactly what stops this from being a finding. A script that ran as the handler holds
     // React's render as well (the blind rung above says why), so where the count would have named that
     // render but for the bar, the script is not measured in its place: nothing under the bar is blamed.
+    // A count that committed after the handlers is not in that script, and leaves it the verdict: kept from
+    // it, a 28 ms handleSave in 30 ms of working time was said nowhere, where beside no render it was named.
     const confidence = unsure ? 'inferred' : 'measured';
     const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.

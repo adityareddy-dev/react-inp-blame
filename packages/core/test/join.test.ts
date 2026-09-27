@@ -4406,6 +4406,16 @@ test('a render known only by its counts is not blamed under a long task of worki
     'After the 30 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them), before the next frame; this browser does not report long tasks, so what else ran is unknown.',
   );
   assert.match(afterShort([]).cause, /^After the 30 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row \(800 of them\), before the next frame; the rest went/);
+  // Nor is the handler's script kept from the verdict there: the rows rendered after it, in React's own task, not in
+  // it. Kept, a 28 ms handleSave in the 30 ms of working time was said nowhere, where beside no render it was named.
+  const task = [frame(0, 72, [script('BUTTON.onclick', 6, 28), script('MessagePort.onmessage', 36, 24)])];
+  const handledFirst = report([entry('click', 0, 72, 5, 35)], [rows], task, loginClick('handleSave')).explanation;
+  assert.deepEqual(handledFirst.blame, { kind: 'script', name: 'handleSave', detail: 'SignInPage', ms: 28, confidence: 'measured' });
+  assert.equal(
+    handledFirst.cause,
+    'After the 30 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them), before the next frame; the click handler handleSave ran for 28 ms.',
+  );
+  assert.deepEqual(report([entry('click', 0, 72, 5, 35)], [], task, loginClick('handleSave')).explanation.blame, handledFirst.blame);
   // A frame that covered the click and listed the handler's script: 300 components re-rendered inside List in
   // 45 ms of working time, with 45 ms charged to the root's click listener. That script holds React's render
   // as well as the handler, so it is not measured in the render's place; the report blames nothing, as it

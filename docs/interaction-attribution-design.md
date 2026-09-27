@@ -1757,11 +1757,13 @@ it, since that script holds React's render too. The cause leads with the working
 count sat in it, short of a long task, rather than calling the render small; the sentence that does
 name a render by its count gives the working time the count is read against. A count that committed
 after the handlers is said to come after the working time instead, before the next frame, as the
-render verdict places it. Where LoAF is supported and no frame covered the interaction, the frame
-was under 50 ms and whatever style recalculation and layout it forced went unmeasured (the Sheet
-opening on a phone forces four whole-document recalculations inside 31 ms of working time), and the
-sentence says so. Hydration is the exception: a boundary the interaction waited for is named by its
-count at any working time, as it was.
+render verdict places it, and the handler's script, which does not hold it, keeps its verdict:
+until 2026-09-27 a 28 ms handleSave in 30 ms of working time was said nowhere beside 800 rows React
+rendered after it. Where LoAF is supported and no frame covered the interaction, the frame was under
+50 ms and whatever style recalculation and layout it forced went unmeasured (the Sheet opening on a
+phone forces four whole-document recalculations inside 31 ms of working time), and the sentence says
+so. Hydration is the exception: a boundary the interaction waited for is named by its count at any
+working time, as it was.
 
 ## The demo
 
