@@ -1043,6 +1043,16 @@ production build could not time, stepped aside for it: a 480 ms click that waite
 its handler for 58 ms was blamed on the handler, with the wait said nowhere but the phases, and optimising
 that handler would barely have moved it.
 
+**With no render, the working time is outside React in any build.** The handler's figure is the working
+time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click
+React rendered nothing for had no such figure either, whatever the build: a handler that worked for 300 ms
+and set no state read "React didn't render anything; this browser does not report long tasks, so what ran
+instead is unknown", or, where no long animation frame had been recorded yet, that the time went to waiting
+and painting, while a 1 ms commit beside the same handler made it the handler's, measured. Where React is
+read and `unjoinedCommits` is 0, no commit means none of the working time was React's, so the handler is
+weighed as it is beside a render. Where a long animation frame recorded a script over the interaction,
+the browser's record of it still names it, and where React is not read the setup is still the verdict.
+
 
 
 
