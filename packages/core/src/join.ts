@@ -1614,16 +1614,20 @@ function explain(r: InteractionReport): Explanation {
    * beside the one commit's phrase, the total gave List a 500-component Sidebar's 25 ms, and a render blame
    * three 3 ms commits earned together said 3 ms. The share is not called the heaviest, since the commit a
    * blame names can be a lighter render chosen for its committing and effects. `alone` is the figure a
-   * sentence gives where one commit holds all of it.
+   * sentence gives where one commit holds all of it. Every commit that rendered at all is counted, or six
+   * renders of under 1 ms each beside List's 30 ms put their 2 ms on List.
    */
-  const renderCount = (named: CommitSummary) => new Set([...inWorkingTime.filter((x) => x.total >= 0.5), named]).size;
+  const renderCount = (named: CommitSummary) => new Set([...inWorkingTime.filter((x) => x.total > 0), named]).size;
   const severalRenders = (named: CommitSummary) => renderCount(named) > 1 && Math.round(renderSpent) - Math.round(named.total) >= 1;
   const renderAcross = (named: CommitSummary, alone: string) =>
     severalRenders(named)
       ? `${underOr(renderSpent)} rendering across ${plural(renderCount(named), 'commit')}, ${underOr(named.total)} of it ${renderPhrase(named)}`
       : `${alone} ${renderPhrase(named)}`;
-  // The same total, for a sentence that leads with the named commit's figure and keeps its word order.
-  const inAll = (named: CommitSummary) => (severalRenders(named) ? `, and ${ms(renderSpent)} in all across ${plural(renderCount(named), 'commit')}` : '');
+  // The same total, for a sentence that leads with the named commit's figure and keeps its word order. It goes
+  // after the working time, so only the named render is set against it: led with the total, a note put 35 ms of
+  // rendering, some of it after the handlers, in 25 ms of working time. It says what it totals, or after "30 ms
+  // re-rendering ... and 60 ms committing it" it read as the sum of the two.
+  const inAll = (named: CommitSummary) => (severalRenders(named) ? `, and ${ms(renderSpent)} of rendering in all across ${plural(renderCount(named), 'commit')}` : '');
   /**
    * Where the render a sentence says began before the handlers, how much of it the working time held, which is
    * what it was weighed on: "The render began before the handlers, so at most 17 ms of it was in the 27 ms of
@@ -1987,9 +1991,13 @@ function explain(r: InteractionReport): Explanation {
   // no commit has a span this is the heaviest render, as everywhere else. Committing and effects only
   // choose it where they are worth a mention at all, or a 1 ms render beside 30 ms of effects nobody
   // hears about is named over a 30 ms render. Without durations a commit is only named over the one
-  // with the most components when its effects are what earned the blame.
+  // with the most components when its effects are what earned the blame. A render counts for what the
+  // working time held of it, which is what earned the verdict, so where committing and effects choose
+  // nothing the render named is the one the working time held most of: a 100 ms render that began
+  // before the handlers and held 7 ms of them was named over one that ran all its 28 ms in them.
   const own = (x: CommitSummary) => held(x) + (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
-  const rc = c && (hasDurations ? committingMatters : effectsEarn) ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
+  const weight = hasDurations && !committingMatters ? held : own;
+  const rc = c && (hasDurations || effectsEarn) ? inWorkingTime.reduce((a, x) => (weight(x) > weight(a) ? x : a), c) : c;
   const rcCommitting = rc ? (committingOf.get(rc) ?? 0) : 0;
   const rcEffects = rc ? (effectsOf.get(rc) ?? 0) : 0;
   // Of a committing figure and an effects figure, which to say: each that would be worth saying alone,
@@ -2151,7 +2159,7 @@ function explain(r: InteractionReport): Explanation {
       : c && rc && renderMatters
         ? say(
             measuredFrom(rc),
-            `React still spent ${renderAcross(rc, ms(rc.total))}${spentWith(when)}.${heldSaid(rc, when)}`,
+            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}${inAll(rc)}.${heldSaid(rc, when)}`,
             hasDurations
               ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}${inAll(rc)}.${heldSaid(rc, when)}`
               : effectsThen

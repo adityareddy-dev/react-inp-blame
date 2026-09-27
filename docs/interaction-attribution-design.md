@@ -807,11 +807,12 @@ that duration up to the working time, all the working time can hold of it, and t
 blame's milliseconds give the same figure, with the whole beside it where the hydration was longer: "all
 20 ms of working time, in a hydration that took 90 ms in all". Until 2026-09-27 that read "90 ms of the
 20 ms of working time" beside a part of 20, and the blame said 90. `hydration.ms` keeps the whole. It
-takes the blame only when it is what the working time went on, at least `RENDER_MIN_MS` and more than
-the time outside React's render; a boundary that hydrated in 2 ms ahead of a 400 ms handler is a note
-beside the ordinary verdict instead. One that falls short while React's time as a whole outweighs the rest can
-still be the commit the render blame names, and then the note says where the click landed without
-adding that the hydration was not what took the time.
+takes the blame only when that part is what the working time went on, at least `RENDER_MIN_MS` and
+more than the time outside React's render; a boundary that hydrated in 2 ms ahead of a 400 ms handler
+is a note beside the ordinary verdict instead, and so is one that held 3 ms of working time before a
+61 ms screen update, whatever it took in all. One that falls short while React's time as a whole
+outweighs the rest can still be the commit the render blame names, and then the note says where the
+click landed without adding that the hydration was not what took the time.
 
 *It was still waiting.* Every input of the interaction the ring still holds landed on HTML that had not
 been hydrated, and no commit hydrated it. React stops a discrete event at a boundary it has not reached,
@@ -1090,13 +1091,14 @@ what the working time could hold of it (below), so no render is blamed for more 
 The render time is said the same way. Where more than one commit in the working time rendered, a
 sentence gives their total and the share of the commit it names: "React spent 55 ms rendering across 2
 commits, 30 ms of it re-rendering 30 components inside List". The share is not called the heaviest,
-since the commit a render blame names can be a lighter render chosen for its committing. A hedged
-render sentence keeps the named render against the working time first and adds the total after it,
-"and 55 ms in all across 2 commits", and a note standing in for a closed render branch says it the way
-the branch would. Until 2026-09-27 the handler and layout sentences put the total beside the one
-commit's phrase, which gave List a 500-component Sidebar's 25 ms, and the render verdict said only the
-commit it named, so three 3 ms renders that earned it together read as 3 ms, under the 5 ms a render
-needs.
+since the commit a render blame names can be a lighter render chosen for its committing. Every commit
+that rendered at all is counted, or six renders of under 1 ms each put their 2 ms on List. A hedged
+render sentence, and a note standing in for a closed render branch, keep the named render against the
+working time first and add the total after it, "and 55 ms of rendering in all across 2 commits", since
+the total can hold renders that ran after the handlers or began before them, more than the working
+time. Until 2026-09-27 the handler and layout sentences put the total beside the one commit's phrase,
+which gave List a 500-component Sidebar's 25 ms, and the render verdict said only the commit it named,
+so three 3 ms renders that earned it together read as 3 ms, under the 5 ms a render needs.
 
 React commits some updates once a commit's effects are done and before it says they ran: one an
 effect made with `flushSync`, and one a layout effect made, the measure-then-`setState` a tooltip
@@ -1285,35 +1287,37 @@ the wait is still said, in a note with the figure and the hedge the closed branc
 A production build names the handler the same way, hedged, and a forced layout keeps the note it has
 under any verdict but its own. Where the forced layout outran the rest, the branch the wait closed was
 the layout's, and that note is all that is said: until 2026-09-27 the note under the wait, or under a
-screen update that closed the layout's branch, said a production build's handleSave "still took the
-200 ms of working time after the wait" of which the layout took 160, or that 800 rows were "still
+screen update that closed the layout's branch, said a production build's handleSave "still took the 200
+ms of working time after the wait" of which the layout took 160, or that 800 rows were "still
 re-rendering" in it. A render that committed after the handlers ran after them, and the note says so,
 "after the handlers, before the next frame", here and under a screen update that closed the render's
-branch: until 2026-09-26 a 43 ms render in the task after 15 ms of handlers was said to be "in the 15
-ms of working time after the wait", a part larger than the whole. The note says it with that place
-alone, without another commit's effects, which ran inside the handlers but read as though they had run
-after them. The render verdict places its render the same way, alone, in a production build too: kept
-from React's task after the handlers, a 43 ms render read "about 43 ms of the 15 ms of working time",
-and until 2026-09-27 a production build's 800 rows committed after the handlers "then ran useEffect
-callbacks" that had run inside them. One that began before the handlers, or ran longer than they did
-and committed with them, was not all in the working time either, and is given no place. React does
-not yield inside the handlers, so it is weighed and blamed on what the working time could hold of it:
-from their start to its commit where it began before them, and no more than the working time where it
-committed with them. The sentence gives the render whole and then that part: "The render began before
-the handlers, so at most 17 ms of it was in the 27 ms of working time." Where it gave several
-commits' total, the part is of that total: "Some of that rendering began before the handlers, so at
-most 35 ms of it was in the 38 ms of working time." Until 2026-09-27 a 120 ms render that began 100 ms before a click's 27 ms of handlers was weighed whole and blamed for 120 ms of
-the 64 ms click. A 43 ms render in the task the click waited behind, committed as its handlers began,
-was said as that wait and again as 43 ms in the 15 ms of working time after it. None of it was in
-there, so no note names it now. Where the screen update outranks the working time too,
-the working time is the smallest of the three phases, and no note is added. The wait itself is said
-in a note under every verdict but its own, whatever React rendered: "It also waited 70 ms before the
-handler could start, because the main thread was busy." Until 2026-09-26 that note needed a render big
-enough to be the verdict, so a 70 ms wait before a 98 ms handler went unsaid beside a 2 ms render, or
-none, and was said beside a 10 ms one. The one exception is a `script` verdict on a timer the input
-waited behind, said as before the handler started, where that timer held half of the wait: it is the
-wait, and the note would say it twice. A 62 ms timer in a 63 ms wait leaves the note out, and a 30 ms
-timer in a 120 ms wait keeps it.
+branch: until 2026-09-26 a 43 ms render in the task after 15 ms of handlers was said to be "in the 15 ms
+of working time after the wait", a part larger than the whole. The note says it with that place alone,
+without another commit's effects, which ran inside the handlers but read as though they had run after
+them. The render verdict places its render the same way, alone, in a production build too: kept from
+React's task after the handlers, a 43 ms render read "about 43 ms of the 15 ms of working time", and
+until 2026-09-27 a production build's 800 rows committed after the handlers "then ran useEffect
+callbacks" that had run inside them. One that began before the handlers, or ran longer than they did and
+committed with them, was not all in the working time either. React does not yield inside the handlers,
+so it is weighed and blamed on what the working time could hold of it: from their start to its commit
+where it began before them, and no more than the working time where it committed with them. The sentence
+gives the render whole and then that part: "The render began before the handlers, so at most 17 ms of it
+was in the 27 ms of working time." Where it gave several commits' total, the part is of that total:
+"Some of that rendering began before the handlers, so at most 35 ms of it was in the 38 ms of working
+time." Where committing and effects choose no commit, the render a render verdict names is the one the
+working time held most of, not the longest. Until 2026-09-27 a 120 ms render that began 100 ms before a
+click's 27 ms of handlers was weighed whole and blamed for 120 ms of the 64 ms click, and a 100 ms
+render that held 7 ms of the handlers was named over one that ran all its 28 ms in them. A 43 ms render
+in the task the click waited behind, committed as its handlers began, was said as that wait and again as
+43 ms in the 15 ms of working time after it. None of it was in there, so no note names it now. Where the
+screen update outranks the working time too, the working time is the smallest of the three phases, and
+no note is added. The wait itself is said in a note under every verdict but its own, whatever React
+rendered: "It also waited 70 ms before the handler could start, because the main thread was busy." Until
+2026-09-26 that note needed a render big enough to be the verdict, so a 70 ms wait before a 98 ms
+handler went unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. The one exception is
+a `script` verdict on a timer the input waited behind, said as before the handler started, where that
+timer held half of the wait: it is the wait, and the note would say it twice. A 62 ms timer in a 63 ms
+wait leaves the note out, and a 30 ms timer in a 120 ms wait keeps it.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click
