@@ -1258,8 +1258,9 @@ test('a page that only sets isDisabled once react-dom has registered is still re
   const clock = useClock(t);
   ownShim(t);
   for (const wrapped of [['inject', 'onCommitFiberRoot'], ['onPostCommitFiberRoot']]) {
-    // The chained hook is the one React DevTools installs, which has an onPostCommitFiberRoot of its own.
-    for (const existing of [null, { ...existingHook(), onPostCommitFiberRoot() {} }]) {
+    // The chained hook is the one React DevTools installs, which has an onPostCommitFiberRoot of its own, or Fast
+    // Refresh's stub, which has none, so dispose() takes the library's away.
+    for (const existing of [null, { ...existingHook(), onPostCommitFiberRoot() {} }, existingHook()]) {
       session?.slots.warnings?.clear();
       warn.mock.resetCalls();
       await inBrowser(async (page) => {
