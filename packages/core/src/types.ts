@@ -583,10 +583,12 @@ export interface InteractionReport {
    * Commits that landed after that paint but still belong to this input (effects, transitions, cascades), within
    * `inputWindow` of the paint, or of the end of a later input's own work in the same interaction, such as the
    * click that releases a press held past the paint, and before any newer input or any `input`, `change` or
-   * `submit` a script dispatched after the paint. One that landed before the headline's input, after another of
-   * the interaction's entries painted and inside none of them, is one too, from that paint: a key press's render
-   * before its slower keyup. INP does not count them, except one that ran inside another of the interaction's own
-   * entries (`CommitSummary.inDispatch`), such as that release's render; the user still waits for them.
+   * `submit` a script dispatched after the paint. One made outside any dispatch and stamped with a keyup or a
+   * pointerup is left out where another press came between that release and its own, as when keys roll over
+   * while typing fast. One that landed before the headline's input, after another of the interaction's entries
+   * painted and inside none of them, is one too, from that paint: a key press's render before its slower keyup.
+   * INP does not count them, except one that ran inside another of the interaction's own entries
+   * (`CommitSummary.inDispatch`), such as that release's render; the user still waits for them.
    */
   readonly followUps: readonly CommitSummary[];
   /**
