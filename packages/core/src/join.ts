@@ -1357,6 +1357,17 @@ function explain(r: InteractionReport): Explanation {
   // What the build records, which a report whose every commit was the late script's still says.
   const hasDurations = (c ?? r.commits[0])?.hasDurations ?? false;
   /**
+   * The script a verdict names once React is ruled out: the longest anywhere in the interaction, except
+   * where every commit was the late script's. The screen update's note says that script and the render in
+   * it, and the verdict says React rendered nothing in the working time, so the script it names is the
+   * longest that ran there. A pointerdown, pointerup and click that ran for 60, 60 and 70 ms, then a scroll
+   * listener that forced a 100 ms render in its 150 ms, were put on the listener as though it had run in
+   * the working time. Where nothing there ran for long it is the late script still, said as after it.
+   */
+  const lateOnly = insideLate.length > 0 && !c;
+  const workingScript = lateOnly ? longestPart(whileHandling) : null;
+  const ranScript = lateOnly ? (workingScript ?? lateScript) : anyScript;
+  /**
    * The window the scripts, and so the forced layout, were counted across. It runs to the end of the
    * library's own walk, because the walk happens inside the same script the handlers did, and
    * `processing` has that walk taken back out of it. Anything printed against the forced layout is
@@ -1967,7 +1978,7 @@ function explain(r: InteractionReport): Explanation {
     const held = recorded ? ` The browser recorded ${aScript(recorded.script)} running for ${ms(recorded.ms)} of it, which holds React's render as well as the handler.` : '';
     cause = `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen, and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
-  } else if (anyScript && !(shortOf && ranAsHandler(anyScript.script))) {
+  } else if (ranScript && !(shortOf && ranAsHandler(ranScript.script))) {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the
     // interaction is exactly what stops this from being a finding. A script that ran as the handler holds
     // React's render as well (the blind rung above says why), so where the count would have named that
@@ -1975,13 +1986,14 @@ function explain(r: InteractionReport): Explanation {
     const confidence = unsure ? 'inferred' : 'measured';
     // Where every render ran in the script after the handlers, the screen update's note says it: React did
     // render, just not in the working time.
-    const noneWorking = insideLate.length && !unjoined ? "React didn't render anything in the working time" : renderedNothing;
+    const noneWorking = lateOnly && !unjoined ? "React didn't render anything in the working time" : renderedNothing;
     const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
-    const ofIt = Math.round(anyScript.ms) < Math.round(anyScript.script.duration) ? ' of it' : '';
-    const ran = `${scriptPhrase(anyScript.script)} ran for ${ms(anyScript.ms)}${ofIt}`;
+    const ofIt = Math.round(ranScript.ms) < Math.round(ranScript.script.duration) ? ' of it' : '';
+    const after = lateOnly && !workingScript ? ' after the handler finished' : '';
+    const ran = `${scriptPhrase(ranScript.script)} ran for ${ms(ranScript.ms)}${ofIt}${after}`;
     cause = say(confidence, `${small}; ${ran}.`, `${small}; ${HEDGE} ${ran}.`);
-    blame = { kind: 'script', name: scriptBlameName(anyScript.script), detail: ranAsHandler(anyScript.script) ? component : null, ms: anyScript.ms, confidence };
+    blame = { kind: 'script', name: scriptBlameName(ranScript.script), detail: ranAsHandler(ranScript.script) ? component : null, ms: ranScript.ms, confidence };
   } else if (r.frames) {
     // Long Animation Frames lists frames of 50 ms and up, so no frame over the interaction says its frame
     // was under one, and that what the browser spent in it recalculating styles and layout was never

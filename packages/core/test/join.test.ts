@@ -3481,16 +3481,44 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   );
   // Where the handler rendered nothing and the script's render was the only one, the verdict does not say
   // React rendered nothing at all.
-  const scrolled = report(
-    [entry('click', 0, 296, 3, 153)],
-    [commit(270, 0, { total: 100, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 160 })],
-    [frame(0, 296, [script('INPUT.onclick', 3, 150), script('DIV.onscroll', 155, 130)], 290)],
-    [input(0, 'click')],
-  ).explanation;
+  const scrolledBy = (ring: InputRecord[]) =>
+    report(
+      [entry('click', 0, 296, 3, 153)],
+      [commit(270, 0, { total: 100, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 160 })],
+      [frame(0, 296, [script('INPUT.onclick', 3, 150), script('DIV.onscroll', 155, 130)], 290)],
+      ring,
+    ).explanation;
+  const scrolled = scrolledBy([input(0, 'click')]);
   assert.equal(scrolled.cause, "React didn't render anything in the working time; a script (INPUT.onclick, app.js) ran for 150 ms.");
   assert.deepEqual(scrolled.notes, [
     'After the handler finished, the screen took another 143 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 130 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
   ]);
+  // Nor that it rendered nothing in the working time, where a commit in it could not be tied to the click.
+  assert.equal(
+    scrolledBy([input(0, 'click', { work: { endedAt: 0, unjoined: [100] } })]).cause,
+    'React rendered during it, but 1 commit could not be tied to this click; most likely a script (INPUT.onclick, app.js) ran for 150 ms.',
+  );
+
+  // The handlers split across three listeners, each shorter than the scroll listener after them. The
+  // verdict is on the working time, so it names the longest script that ran there, and the note the
+  // listener the screen update waited on.
+  const splitUp = (handlers: ScriptSummary[]) =>
+    report(
+      [entry('click', 0, 360, 3, 203)],
+      [commit(340, 0, { total: 100, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 210 })],
+      [frame(0, 360, [...handlers, script('DIV.onscroll', 205, 150)], 356)],
+      [input(0, 'click')],
+    ).explanation;
+  const split = splitUp([script('BUTTON.onpointerdown', 3, 60), script('BUTTON.onpointerup', 65, 60), script('BUTTON.onclick', 130, 70)]);
+  assert.deepEqual(split.blame, { kind: 'script', name: 'BUTTON.onclick', detail: null, ms: 70, confidence: 'measured' });
+  assert.equal(split.cause, "React didn't render anything in the working time; a script (BUTTON.onclick, app.js) ran for 70 ms.");
+  assert.deepEqual(split.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 150 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
+  ]);
+  // Where no script there ran for long, the scroll listener is named still, and said to have run after it.
+  const spread = splitUp(Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15)));
+  assert.equal(spread.blame.name, 'DIV.onscroll');
+  assert.equal(spread.cause, "React didn't render anything in the working time; a script (DIV.onscroll, app.js) ran for 150 ms after the handler finished.");
 });
 
 test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {
