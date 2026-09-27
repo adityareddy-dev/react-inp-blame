@@ -582,14 +582,16 @@ onSubmit does little in the keypress, so its entry ties with the keydown's, whic
 that commits an input method's text is another matter. It submits nothing and fires no keypress, and the
 field's onChange runs from the input event that ends the composition. Its keydown has keyCode 229, which
 is how React itself tells a key the input method took, and the ring reads it as any other key and keeps
-that key for a later read of the element. The element is read when the entry arrives only for an event
-the ring keeps no reading of, such as the `input` an input method sends, and for one on server HTML,
-which had no handler to read until React hydrated it to run the event. A keydown with a keypress after it
-is the exception. React hydrates the HTML inside the keydown, so its entry carries the hydration and can
-outweigh the keypress's, and read when it arrived, Enter on the wizard's first step named finish. The
-keydown's element is read again as the keypress is dispatched instead, hydrated by then and before the
-submit renders. It is read from its own node, not the keypress's: an onKeyDown that moves focus sends the
-keypress to the element it focused.
+that key for a later read of the element. Server HTML has no handler to read at dispatch. React hydrates
+it inside the event's own dispatch, to run it, and commits that before any handler runs, so the record is
+read again at that commit. Read when the entry arrived instead, a toolbar's
+`onKeyDown={open ? closeMenu : openMenu}` named closeMenu for the key that opened the menu. The element
+is read when the entry arrives only for an event the ring keeps no reading of, such as the `input` an
+input method sends, and for server HTML React did not hydrate inside the event's dispatch. Each element's
+props are read there from the fiber React cached on it, not from the props the event's own render put on
+it. React keeps two fibers for an element and swaps which is current on each render, so the one it cached
+when it made or hydrated the element holds the props from before the event's render when that is the
+element's first render since, or its third, and the new props otherwise.
 
 Where the form has a submit button, Chromium submits it from Enter in a field by clicking the button
 inside the keypress, and times that click in an entry of its own with the keypress's work. The click
@@ -599,8 +601,9 @@ work. So a click a key made on another element than its own is named by the onSu
 reached, or by the button's onClick in a form with no onSubmit. That onSubmit is read on its own as the
 keypress is dispatched, apart from the field's onKeyPress, which the keypress reaches first and which
 does none of the click's work: a quantity field that keeps to digits with one would take the name of
-the whole submit. Firefox times the submit in the keypress entry alone, which that onKeyPress begins,
-and nothing there tells the two apart, so the keypress's own reading names it.
+the whole submit. Firefox times the submit in the keypress entry alone, which that onKeyPress begins, and
+so does Chromium for a form with no submit button, which Enter in its one field submits with no click.
+Nothing there tells the two apart, so the keypress's own reading names it.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every
