@@ -1790,11 +1790,12 @@ function explain(r: InteractionReport): Explanation {
   // the build records: a 300 ms handler that set no state is the handler's, as it is beside a 1 ms render. A render
   // the screen update's note ties to the script after the handlers is not in the working time, so a click whose
   // every render ran there is the same: 200 ms of short handlers before a 40 ms scroll listener that rendered read
-  // as waiting and painting. So is one where React stopped being read after that render: it was read once the
-  // handlers had ended, so React was read all through them. Taken as unknown, 200 ms of handleSave before a scroll
-  // listener that rendered was blamed on nothing and the render said to be unseen, so the rung for a react-dom that
-  // is not read passes such a report on too, and the forced layout's sentence, in `whereRead`, takes the handlers
-  // as read. Where a long animation frame was recorded over the handlers, the browser's own record decides, in any
+  // as waiting and painting. So is one where React stopped being read after that render, or after any render it read
+  // once the handlers had ended, in React's own task or a later one: React was read all through them. Taken as
+  // unknown, 200 ms of handleSave before a scroll listener that rendered was blamed on nothing and the render said to
+  // be unseen, and so was 20 ms of it before a render React scheduled for right after it, so the rung for a react-dom
+  // that is not read passes such a report on too, and the forced layout's sentence, in `whereRead`, takes the
+  // handlers as read. Where a long animation frame was recorded over the handlers, the browser's own record decides, in any
   // build, where it names a script of 20 ms or more that a verdict would name, as it did. Where it lists only
   // shorter ones, or none, or only the one the note names after the handlers, it names nothing that ran in them, so
   // the handler keeps its verdict rather than the time reading as waiting and painting. A frame that ended as they
@@ -1805,7 +1806,7 @@ function explain(r: InteractionReport): Explanation {
   // attempt at hydrating it. "Not loaded yet" is 'waiting', which the page's looks for React's marks decide, so a
   // react-dom that loaded before install() and mounted after the last look is taken for none: a known limit, the
   // one every rung that says React rendered nothing already had.
-  const unseen = blind && !lateOnly;
+  const unseen = blind && ![...r.commits, ...r.followUps].some((x) => x.at > processingEnd + STAMP_TOLERANCE);
   const reactIdle = !inWorkingTime.length && !unseen && !unjoined && r.hydration?.kind !== 'not-hydrated';
   const framedHandlers = frames.some((f) => f.start < processingEnd && f.start + f.duration > processingStart);
   const idleHandler = reactIdle && !(framedHandlers && ranScript);
@@ -2283,7 +2284,9 @@ function explain(r: InteractionReport): Explanation {
     const why = r.reactStatus === 'installed-late' ? 'install() ran after react-dom loaded' : 'no react-dom on this page is being read';
     const recorded = longestPart(whileHandling);
     const held = recorded ? ` The browser recorded ${aScript(recorded.script)} running for ${ms(recorded.ms)} of it, which holds React's render as well as the handler.` : '';
-    cause = `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen, and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
+    // Where it was read before it stopped, what it rendered by then is in the report, and only the rest is unknown.
+    const unknown = r.commits.length || r.followUps.length ? 'What React did after it stopped being read is unknown,' : `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen,`;
+    cause = `${unknown} and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   } else if (ranScript && !(shortOf && ranAsHandler(ranScript.script))) {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the

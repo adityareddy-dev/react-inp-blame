@@ -2053,6 +2053,13 @@ test('where React stopped being read partway through an interaction, the note sa
   const after = attachLaterRender(buildReport(click, [], [], [], 'attributes', [], undefined, 'unreadable'), commit(400, 0, { total: 40 }), []);
   assert.ok(after);
   assert.match(notesOf(sealReport(after)), stopped);
+  // Nor does the cause say that whatever React rendered was not seen, where it holds a render read before that: a
+  // production build's 2 components, too few to be the verdict, in 190 ms of working time.
+  const two = commit(10, 0, { hasDurations: false, total: 0, rendered: 2, components: [{ name: 'Row', count: 2, self: null, total: null }] });
+  const partway = report([entry('click', 0, 200, 1, 191)], [two], [], [input(0, 'click')], 'attributes', [], undefined, 'unreadable').explanation;
+  assert.deepEqual(partway.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
+  assert.equal(partway.cause, 'What React did after it stopped being read is unknown, and the 190 ms of working time cannot be put on the click handler or on a render.');
+  assert.match(partway.notes[0]!, stopped);
   // With nothing read, nothing React did is in it.
   assert.match(notesOf(report(click, [], [], [], 'attributes', [], undefined, 'unreadable')), /^No react-dom on this page is being read, so nothing React did is in this report/m);
 });
@@ -2084,6 +2091,15 @@ test('where React stopped being read after the only render it read, in a listene
   const forced = stopped([frame(0, 280, [script('BUTTON.onclick', 20, 200, 150), listener])]);
   assert.deepEqual(forced.blame, { kind: 'layout', name: 'handleSave', detail: null, ms: 150, confidence: 'measured' });
   assert.match(forced.cause, /No React commit ran in the script it was charged to, so it was not in a layout effect but in code outside React, such as the click handler handleSave/);
+  // So was it where the render it read ran in React's own task after the handlers, which stays in the working time
+  // where the screen update does not outrank it: 20 ms of handleSave read as unknown, and that render as not seen.
+  const quick = [entry('click', 0, 72, 10, 30)];
+  const scheduled = [commit(38, 0, { total: 3, rendered: 3, startedAt: 35, components: [{ name: 'Row', count: 3, self: 1, total: 1 }] })];
+  const task = [frame(0, 72, [script('BUTTON.onclick', 10, 20), script('MessagePort.onmessage', 31, 8)])];
+  const inTask = report(quick, scheduled, task, save, 'attributes', [], undefined, 'unreadable').explanation;
+  assert.deepEqual(inTask.blame, { kind: 'script', name: 'handleSave', detail: 'SignInPage', ms: 20, confidence: 'inferred' });
+  assert.equal(inTask.cause, "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them, 1 ms)); most likely the click handler handleSave ran for 20 ms.");
+  assert.deepEqual(report(quick, scheduled, task, save).explanation.blame, { ...inTask.blame, confidence: 'measured' });
   // With no render read, what React did is still unknown.
   const unread = report(click, [], [frame(0, 280, [script('BUTTON.onclick', 20, 200), listener])], save, 'attributes', [], undefined, 'unreadable').explanation;
   assert.deepEqual(unread.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
