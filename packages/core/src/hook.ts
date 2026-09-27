@@ -3,7 +3,7 @@ import { controlOf } from './element.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
-import { warnOnce } from './warn.js';
+import { guarded, warnOnce } from './warn.js';
 
 const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 const MAX_COMMITS = 300;
@@ -1281,17 +1281,19 @@ function createShim(): DevtoolsHook {
  * Makes the shim the global through an accessor rather than a plain value, so that another tool
  * assigning its own hook later is noticed instead of silently winning or losing. React DevTools
  * never assigns: its installHook returns as soon as `window` has the property, without a read or a
- * write the accessor could see, so a shim that got there first locks it out unnoticed.
+ * write the accessor could see, so a shim that got there first locks it out unnoticed. The setter runs
+ * inside the other tool's assignment, so nothing it throws may reach that tool.
  */
 function defineGlobal(holder: HookHolder, hook: DevtoolsHook): void {
   let current: unknown = hook;
+  const follow = guarded(replaced);
   Object.defineProperty(holder, HOOK_KEY, {
     configurable: true,
     enumerable: false,
     get: () => current,
     set(next: unknown) {
       current = next;
-      if (next !== hook) replaced(hook, next);
+      if (next !== hook) follow(hook, next);
     },
   });
 }
