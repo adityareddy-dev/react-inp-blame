@@ -101,6 +101,12 @@ test('inside an icon, a node with no fiber of its own is named as the icon is, n
   const svg = element('svg', { classes: ['glyph'], parentNode: spanFiber.stateNode });
   assert.equal(generateTarget(asNode(spanFiber.stateNode)), 'Toolbar > DeleteButton > Icon (span.icon)');
   assert.equal(generateTarget(asNode(svg)), 'Toolbar > DeleteButton (svg.glyph)');
+  // Inside means up to five levels in. Artwork nested deeper is outside the icon, and placed by the nearest
+  // element that has a fiber, the span Icon renders.
+  let g = svg;
+  for (let level = 1; level <= 5; level++) g = element('g', { parentNode: g });
+  assert.equal(generateTarget(asNode(g)), 'Toolbar > DeleteButton (g)');
+  assert.equal(generateTarget(asNode(element('path', { parentNode: g }))), 'Toolbar > DeleteButton > Icon (path)');
 });
 
 test('text a component returned adds that component to the path of the element holding it', () => {

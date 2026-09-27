@@ -100,15 +100,15 @@ export type { Blame, RenderedComponent } from './types.js';
  *
  * It reads the fiber React stored on the node, so it needs neither `install()` nor any React
  * internals beyond that one property. Leaving icons aside (an `<svg>`, `<img>` or `<picture>`, and
- * anything inside one), a text node gives the path of the element holding it, and text a component
- * returned adds that component: a `<Label>` in that button that returns its text gives
- * `"ProfilePage > PhotoTile > Label (button.tile)"`. Outside an icon, a node with no fiber of its
- * own, like an element the app added outside React, is placed by the nearest element that has one.
- * It never throws. A node with no fiber on it or on any element above it returns undefined, which
- * is web-vitals' signal to fall back to its own CSS selector: a node on a page with no React, say,
- * or an element React removed, which loses its fiber once the commit's effects have run. So does a
- * node whose properties cannot be read, and an element whose enclosing components have no names
- * worth printing.
+ * anything up to five levels inside one), a text node gives the path of the element holding it, and
+ * text a component returned adds that component: a `<Label>` in that button that returns its text
+ * gives `"ProfilePage > PhotoTile > Label (button.tile)"`. Outside an icon, a node with no fiber of
+ * its own, like an element the app added outside React, is placed by the nearest element that has
+ * one. It never throws. A node with no fiber on it or on any element above it returns undefined,
+ * which is web-vitals' signal to fall back to its own CSS selector: a node on a page with no React,
+ * say, or an element React removed, which loses its fiber once the commit's effects have run. So
+ * does a node whose properties cannot be read, and an element whose enclosing components have no
+ * names worth printing.
  *
  * Under a production build without the `displayName` transform (`react-inp-blame/next`,
  * `react-inp-blame/vite` or `react-inp-blame/display-names-loader`) the minifier has renamed the
