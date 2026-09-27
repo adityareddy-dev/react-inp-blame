@@ -1298,13 +1298,14 @@ function explain(r: InteractionReport): Explanation {
    * from their start to its commit, and no render committed with them had more than the working time: a 120 ms
    * render that began 100 ms before a click's 27 ms of handlers and committed in them was blamed for 120 ms of
    * a 64 ms click. One committed after the handlers is React's own task after them, the render they set off,
-   * and is weighed whole.
+   * and is weighed whole, up to the time from their start to its commit: kept with no start, a 150 ms render
+   * committed 107 ms after the handlers began was blamed for 150 ms of a 120 ms click.
    */
   const held = (x: CommitSummary) =>
     x.startedAt !== null && x.startedAt < processingStart - STAMP_TOLERANCE
       ? Math.min(x.total, r.processing, Math.max(0, Math.min(x.at, processingEnd) - processingStart))
       : x.at > processingEnd + STAMP_TOLERANCE
-        ? x.total
+        ? Math.min(x.total, x.at - processingStart)
         : Math.min(x.total, r.processing);
   /**
    * Working time no entry's handlers ran in. The entries painted in one frame are one working window, as
@@ -1605,9 +1606,13 @@ function explain(r: InteractionReport): Explanation {
   // script's, or the same render is said twice, once as the script's and once as the handlers'.
   const inWorkingTime = insideLate.length ? r.commits.filter((x) => !insideLate.includes(x)) : r.commits;
   const c = inWorkingTime.length ? heaviest(inWorkingTime) : null;
-  // React's render time in the working time as the verdict weighs it, and as the sentences say it, all of it.
+  // React's render time in the working time as the verdict weighs it.
   const renderTotal = inWorkingTime.reduce((a, x) => a + held(x), 0);
-  const renderSpent = inWorkingTime.reduce((a, x) => a + x.total, 0);
+  // A render that began before the handlers and committed as they began, in the task the click waited behind.
+  // The working time held none of it, so no total counts it: a note on a render after the handlers added its
+  // 43 ms, "and 143 ms of rendering in all across 2 commits". Only a sentence that names it says it.
+  const ranBefore = (x: CommitSummary) => x.startedAt !== null && x.startedAt < processingStart - STAMP_TOLERANCE && held(x) < 0.5;
+  const rendering = inWorkingTime.filter((x) => x.total > 0 && !ranBefore(x));
   /**
    * React's render time where several commits hold it, said as their total with the named commit's share:
    * "React spent 55 ms rendering across 2 commits, 30 ms of it re-rendering 30 components inside List". Said
@@ -1617,34 +1622,46 @@ function explain(r: InteractionReport): Explanation {
    * sentence gives where one commit holds all of it. Every commit that rendered at all is counted, or six
    * renders of under 1 ms each beside List's 30 ms put their 2 ms on List.
    */
-  const renderCount = (named: CommitSummary) => new Set([...inWorkingTime.filter((x) => x.total > 0), named]).size;
-  const severalRenders = (named: CommitSummary) => renderCount(named) > 1 && Math.round(renderSpent) - Math.round(named.total) >= 1;
+  const rendersWith = (named: CommitSummary) => [...new Set([...rendering, named])];
+  const renderSpent = (named: CommitSummary) => rendersWith(named).reduce((a, x) => a + x.total, 0);
+  const renderCount = (named: CommitSummary) => rendersWith(named).length;
+  const severalRenders = (named: CommitSummary) => renderCount(named) > 1 && Math.round(renderSpent(named)) - Math.round(named.total) >= 1;
   const renderAcross = (named: CommitSummary, alone: string) =>
     severalRenders(named)
-      ? `${underOr(renderSpent)} rendering across ${plural(renderCount(named), 'commit')}, ${underOr(named.total)} of it ${renderPhrase(named)}`
+      ? `${underOr(renderSpent(named))} rendering across ${plural(renderCount(named), 'commit')}, ${underOr(named.total)} of it ${renderPhrase(named)}`
       : `${alone} ${renderPhrase(named)}`;
   // The same total, for a sentence that leads with the named commit's figure and keeps its word order. It goes
   // after the working time, so only the named render is set against it: led with the total, a note put 35 ms of
   // rendering, some of it after the handlers, in 25 ms of working time. It says what it totals, or after "30 ms
   // re-rendering ... and 60 ms committing it" it read as the sum of the two.
-  const inAll = (named: CommitSummary) => (severalRenders(named) ? `, and ${ms(renderSpent)} of rendering in all across ${plural(renderCount(named), 'commit')}` : '');
+  const inAll = (named: CommitSummary) => (severalRenders(named) ? `, and ${ms(renderSpent(named))} of rendering in all across ${plural(renderCount(named), 'commit')}` : '');
   /**
    * Where the render a sentence says began before the handlers, how much of it the working time held, which is
    * what it was weighed on: "The render began before the handlers, so at most 17 ms of it was in the 27 ms of
    * working time." The figure said is all of it, since the render's own components were timed whole: said as
    * the part held, a render of 17 ms held a component of 20. Where the sentence gave the total of several
-   * commits, the clause is about that total.
+   * commits, the clause is about that total. Only the renders that committed with the handlers are weighed
+   * here. One after them ran after the working time, not before it, so where the total holds one, only the part
+   * held is said: from rendering longer than the working time, a note on a 100 ms render after 27 ms of handlers
+   * inferred that some of it "began before the handlers".
    */
   const heldSaid = (named: CommitSummary, when = '') => {
     const several = severalRenders(named);
-    const weighed = several ? renderTotal : held(named);
-    if (Math.round(weighed) >= Math.round(several ? renderSpent : named.total)) return '';
+    const said = several ? rendersWith(named) : [named];
+    const withThem = said.filter((x) => x.at <= processingEnd + STAMP_TOLERANCE);
+    const weighed = Math.min(r.processing, withThem.reduce((a, x) => a + held(x), 0));
+    if (Math.round(weighed) >= Math.round(withThem.reduce((a, x) => a + x.total, 0))) return '';
+    const after = withThem.length < said.length;
     const within = `the ${ms(r.processing)} of working time${when ? ` ${when}` : ''}`;
     const it = several ? 'That rendering' : 'The render';
-    if (weighed < 0.5) return ` ${it} ran before the handlers, not in ${within}.`;
-    if (Math.round(weighed) >= Math.round(r.processing)) return ` ${it} was longer than ${within}, so ${several ? 'some of it' : 'it'} began before the handlers.`;
+    if (!after && weighed < 0.5) return ` ${it} ran before the handlers, not in ${within}.`;
+    if (!after && Math.round(weighed) >= Math.round(r.processing)) return ` ${it} was longer than ${within}, so ${several ? 'some of it' : 'it'} began before the handlers.`;
     return ` ${several ? 'Some of that rendering' : 'The render'} began before the handlers, so at most ${ms(weighed)} of it was in ${within}.`;
   };
+  // The render the handler's and the layout's sentences name: the one the working time held most of, and the
+  // heaviest of those it held as much of. Named by its whole time, a 43 ms render in the task the click waited
+  // behind, committed as the handlers began, took the share from the 10 ms render the handler made.
+  const heldMost = c ? inWorkingTime.reduce((a, x) => (held(x) > held(a) ? x : a), c) : null;
   // What the build records, which a report whose every commit was the late script's still says.
   const hasDurations = (c ?? r.commits[0])?.hasDurations ?? false;
   /**
@@ -2267,8 +2284,9 @@ function explain(r: InteractionReport): Explanation {
     // that could not be tied to this interaction at all, cannot say the layout happened in the
     // subtree it names. Then the name is dropped rather than the confidence, because everything left
     // — the milliseconds and the invoker — is still something the browser measured. Render durations
-    // are not part of this test: a production build records none and its names are no worse for it.
-    const named = c && !unjoined && namesThisInteraction(c) ? c : null;
+    // are not part of this test: a production build records none and its names are no worse for it. The
+    // commit is the one the sentence names, the render the working time held most of.
+    const named = heldMost && !unjoined && namesThisInteraction(heldMost) ? heldMost : null;
     // One script holding nearly all of the total is where the layout happened; several scripts
     // sharing it means no one script is, and then nothing but the commit can name this.
     const holdsMostOfIt = !!charged && charged.forcedLayout >= FORCED_LAYOUT_ONE_SCRIPT_SHARE * forcedWhileHandling;
@@ -2307,7 +2325,9 @@ function explain(r: InteractionReport): Explanation {
     // A production build's component counts are measured by the walk, so they are not hedged here.
     const reactSure = !!named && (!hasDurations || measuredFrom(named) === 'measured');
     const maybe = reactSure ? '' : `${HEDGE} `;
-    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(c, underOr(renderSpent))}.${heldSaid(c)}` : `React was ${maybe}${renderPhrase(c)}.`}` : '';
+    const rendered = heldMost
+      ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(heldMost, underOr(renderSpent(heldMost)))}.${heldSaid(heldMost)}` : `React was ${maybe}${renderPhrase(heldMost)}.`}`
+      : '';
     const read = whereRead(whileHandling);
     cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo}${rendered} ${read.said}`;
     // Nothing names the read that forced the layout. What is held is where it happened: the subtree
@@ -2328,16 +2348,17 @@ function explain(r: InteractionReport): Explanation {
     };
   } else if ((c || idleHandler) && handlerWins && !screenOutranks && !waitingWins) {
     const confidence = measuredFrom(...inWorkingTime);
-    const rest = !c
+    const renderMs = heldMost ? renderSpent(heldMost) : 0;
+    const rest = !heldMost
       ? noneWorking
-      : renderSpent >= RENDER_MIN_MS
-        ? `React spent ${renderAcross(c, ms(renderSpent))}`
-        : `React's own render took ${renderSpent < 0.5 ? 'under 1 ms' : `only ${ms(renderSpent)}`}`;
-    const heldBy = c ? heldSaid(c) : '';
+      : renderMs >= RENDER_MIN_MS
+        ? `React spent ${renderAcross(heldMost, ms(renderMs))}`
+        : `React's own render took ${renderMs < 0.5 ? 'under 1 ms' : `only ${ms(renderMs)}`}`;
+    const heldBy = heldMost ? heldSaid(heldMost) : '';
     // Committing and effects React spent beside it, where they would be worth saying. They are the
     // totals, since the render named here need not be the commit that spent them.
     const spent = figures(committing, effects, totalsSaid);
-    const also = spent.length ? ` React also spent ${spent.join(' and ')}${whereOf(c, totalsSaid)}.` : '';
+    const also = spent.length ? ` React also spent ${spent.join(' and ')}${whereOf(heldMost, totalsSaid)}.` : '';
     cause = say(
       confidence,
       `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${heldBy}${also}`,

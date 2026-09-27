@@ -1300,19 +1300,24 @@ until 2026-09-27 a production build's 800 rows committed after the handlers "the
 callbacks" that had run inside them. One that began before the handlers, or ran longer than they did and
 committed with them, was not all in the working time either. React does not yield inside the handlers,
 so it is weighed and blamed on what the working time could hold of it: from their start to its commit
-where it began before them, and no more than the working time where it committed with them. The sentence
-gives the render whole and then that part: "The render began before the handlers, so at most 17 ms of it
-was in the 27 ms of working time." Where it gave several commits' total, the part is of that total:
-"Some of that rendering began before the handlers, so at most 35 ms of it was in the 38 ms of working
-time." Where committing and effects choose no commit, the render a render verdict names is the one the
-working time held most of, not the longest. Until 2026-09-27 a 120 ms render that began 100 ms before a
-click's 27 ms of handlers was weighed whole and blamed for 120 ms of the 64 ms click, and a 100 ms
-render that held 7 ms of the handlers was named over one that ran all its 28 ms in them. A 43 ms render
-in the task the click waited behind, committed as its handlers began, was said as that wait and again as
-43 ms in the 15 ms of working time after it. None of it was in there, so no note names it now. Where the
-screen update outranks the working time too, the working time is the smallest of the three phases, and
-no note is added. The wait itself is said in a note under every verdict but its own, whatever React
-rendered: "It also waited 70 ms before the handler could start, because the main thread was busy." Until
+where it began before them, and no more than the working time where it committed with them. One
+committed after them is weighed whole, up to the time from their start to its commit, which bounds it
+where the build kept no start. The sentence gives the render whole and then that part: "The render began
+before the handlers, so at most 17 ms of it was in the 27 ms of working time." Where it gave several
+commits' total, the part is of that total: "Some of that rendering began before the handlers, so at most
+35 ms of it was in the 38 ms of working time." Only the renders that committed with the handlers are
+weighed for that part: one after them ran after the working time, not before it. Where committing and
+effects choose no commit, the render a render verdict names is the one the working time held most of,
+not the longest, and so is the render the handler's and the layout's sentences name. Until 2026-09-27 a
+120 ms render that began 100 ms before a click's 27 ms of handlers was weighed whole and blamed for 120
+ms of the 64 ms click, and a 100 ms render that held 7 ms of the handlers was named over one that ran
+all its 28 ms in them. A 43 ms render in the task the click waited behind, committed as its handlers
+began, was said as that wait and again as 43 ms in the 15 ms of working time after it. None of it was in
+there, so no note names it now, and no total counts it. Beside the 10 ms render a handler made, it took
+the handler's sentence too: "React spent 53 ms re-rendering 30 components inside List". Where the screen
+update outranks the working time too, the working time is the smallest of the three phases, and no note
+is added. The wait itself is said in a note under every verdict but its own, whatever React rendered:
+"It also waited 70 ms before the handler could start, because the main thread was busy." Until
 2026-09-26 that note needed a render big enough to be the verdict, so a 70 ms wait before a 98 ms
 handler went unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. The one exception is
 a `script` verdict on a timer the input waited behind, said as before the handler started, where that
