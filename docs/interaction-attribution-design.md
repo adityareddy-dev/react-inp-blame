@@ -595,8 +595,12 @@ Where the form has a submit button, Chromium submits it from Enter in a field by
 inside the keypress, and times that click in an entry of its own with the keypress's work. The click
 ranks first, and its own record holds the button's onClick, which runs before the onSubmit: an onClick
 for analytics, or the one a library's button always has, would take the name of the onSubmit that did the
-work. So a click a key made on another element than its own is named by what the keypress reached, or by
-the button's onClick where the keypress reached nothing, as in a form with no onSubmit.
+work. So a click a key made on another element than its own is named by the onSubmit the keypress
+reached, or by the button's onClick in a form with no onSubmit. That onSubmit is read on its own as the
+keypress is dispatched, apart from the field's onKeyPress, which the keypress reaches first and which
+does none of the click's work: a quantity field that keeps to digits with one would take the name of
+the whole submit. Firefox times the submit in the keypress entry alone, which that onKeyPress begins,
+and nothing there tells the two apart, so the keypress's own reading names it.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every
