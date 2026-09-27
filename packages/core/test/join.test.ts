@@ -3447,10 +3447,25 @@ test('a script after the handlers is what held the screen update only from half 
       [input(0, 'click')],
     ).explanation;
   assert.deepEqual(two([]).blame, { kind: 'painting', name: null, detail: null, ms: 370, confidence: 'measured' });
-  assert.equal(two([]).cause, 'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest A.onscroll (app.js) for 150 ms.');
+  assert.equal(
+    two([]).cause,
+    'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest a script (A.onscroll, app.js) for 150 ms.',
+  );
   assert.equal(
     two([commit(180, 0, { total: 15, startedAt: 150 })]).cause,
-    'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest A.onscroll (app.js) for 150 ms, and React rendered inside that one: 15 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).',
+    'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest a script (A.onscroll, app.js) for 150 ms, and React rendered inside that one: 15 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).',
+  );
+  // One the browser gave no name is a script with no name, and not "the longest one with no name", which reads
+  // as the longest of the ones with none.
+  const unnamedTwo = report(
+    click,
+    [handled],
+    [frame(0, 400, [script('BUTTON.onclick', 2, 28), { invoker: '', name: '', source: 'app.js', start: 40, duration: 150, forcedLayout: 0 }, script('B.onscroll', 195, 120)], 330)],
+    [input(0, 'click')],
+  ).explanation;
+  assert.equal(
+    unnamedTwo.cause,
+    'After the click was handled, the screen took another 370 ms to update. Scripts ran for 270 ms of it, the longest a script with no name (app.js) for 150 ms.',
   );
   // At 180 ms together, with the last 100 ms in no long frame and the browser's own work under half too, the
   // longest is said on its own.

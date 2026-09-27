@@ -1369,7 +1369,7 @@ function explain(r: InteractionReport): Explanation {
   const lateScriptClause = lateLeads
     ? `, mostly because ${scriptPhrase(lateLeads.script)} ran for ${ms(lateLeads.ms)} before the next frame${lateRenderSaid}.`
     : !browserClause && lateScripted >= WAITED_BEHIND_MIN_SHARE * r.presentation
-      ? `. Scripts ran for ${ms(lateScripted)} of it${lateScript ? `, the longest ${namedWithFile(lateScript.script)} for ${ms(lateScript.ms)}${renderedInside('that one')}` : ''}.`
+      ? `. Scripts ran for ${ms(lateScripted)} of it${lateScript ? `, the longest ${aScript(lateScript.script)} for ${ms(lateScript.ms)}${renderedInside('that one')}` : ''}.`
       : `${browserClause ?? '.'}${longestSaid(lateScript, lateRenderSaid, true)}`;
 
   // The commits of the working time. One the screen update's clause ties to the script it ran in is that
