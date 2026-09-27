@@ -4,7 +4,7 @@ import { checkHookReplaced, clearCommits, CLOSER_TYPES, DEFAULT_INPUT_WINDOW, di
 import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
 import { labelOf, type LabelSource } from './join.js';
-import { createLifecycle } from './lifecycle.js';
+import { createLifecycle, MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
 import { NOT_OBSERVING, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
@@ -148,13 +148,16 @@ function installNow(opts: InstallOptions): Api {
   // Performance panel entries are drawn once the page is idle: their tooltip is the verdict, and
   // building it does not belong in the callbacks that can delay the next input.
   const timeline = settings.devtoolsTrack ? createTimeline(knownRenderers) : null;
-  // The newest revision of each report not drawn yet.
+  // The newest revision of each report not drawn yet, kept for the next chance where drawing throws. Only as many
+  // as the lifecycle can still revise are kept, the oldest going first, so drawing that goes on throwing holds no
+  // more than that, and draws no more than that at once if it stops.
   const undrawn = new Map<number, InteractionReport>();
   let cancelDraw: (() => void) | null = null;
   let drawMs = 0;
   const drawWhenIdle = (r: InteractionReport) => {
     if (!timeline) return;
     undrawn.set(r.interactionId, r);
+    if (undrawn.size > MAX_REPORTS + MAX_QUIET) undrawn.delete(undrawn.keys().next().value as number);
     if (cancelDraw) return;
     try {
       cancelDraw = whenIdle(
