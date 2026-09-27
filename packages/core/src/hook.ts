@@ -108,8 +108,12 @@ export interface InputRecord extends InputStamp {
    * a clicked row that deleted itself is still named after what it was.
    */
   readonly owners: readonly string[];
-  /** The React handler prop for this input's type on the target chain at dispatch, read then for the same reason. */
-  readonly handler: string | null;
+  /**
+   * The React handler prop for this input's type on the target chain at dispatch, read then for the same reason.
+   * A keydown on server HTML had none to read then, and is read again as its keypress is dispatched, once React
+   * has hydrated the element to run the key (`noteKeypress`).
+   */
+  handler: string | null;
   /**
    * The key `handler` was read for, which decides whether it can reach an onSubmit: a key event's `code`,
    * or null for one an input method took (`IME_KEY_CODE`) and for any other input. An element read later
@@ -127,7 +131,7 @@ export interface InputRecord extends InputStamp {
    * dispatched; null when React had hydrated it, and on a page with no React root above the target.
    */
   readonly dehydrated: HydrationBoundary | null;
-  /** What React did about this input. The hook keeps it current as commits arrive; the rest of the record is read at dispatch, `keypressHandler` at the keypress's, and does not change. */
+  /** What React did about this input. The hook keeps it current as commits arrive; the rest of the record is read at dispatch, `keypressHandler` and a keydown's `handler` on server HTML at the keypress's, and does not change. */
   readonly work: InputWork;
 }
 
@@ -354,14 +358,19 @@ export function noteInput(e: Event): void {
  * the submit's work, and the submit's own render can give the form another onSubmit before that entry
  * comes: `onSubmit={step < 2 ? goNext : finish}` does on the first step. Read when the entry came, the
  * form named the step after. Server HTML React has not hydrated has no handler to read yet, and the form
- * is read when the entry comes.
+ * is read when the entry comes. HTML React hydrated inside the keydown, to run it, is read now, and so is
+ * the keydown's element, which had nothing to read at its own dispatch: its entry carries the hydration
+ * and can outweigh the keypress's.
  */
 export function noteKeypress(e: Event): void {
   const last = newestInput();
   const code = (e as DispatchedInput).code;
   if (!e.isTrusted || !last || last.type !== 'keydown' || last.press !== code || last.keypressHandler !== undefined) return;
   const target = e.target as Node | null;
-  if (dehydratedAround(target) === null) last.keypressHandler = handlerOf(fiberFromNode(target), 'keypress', code);
+  if (dehydratedAround(target) !== null) return;
+  const fiber = fiberFromNode(target);
+  last.keypressHandler = handlerOf(fiber, 'keypress', code);
+  if (last.dehydrated) last.handler = handlerOf(fiber, 'keydown', last.key);
 }
 
 /** The events that close the newest input's later renders when a script dispatches one (`noteCloser`). */
