@@ -247,6 +247,7 @@ test("a page named only in Vite 8.2's input, at the top level or for the client 
   // and all.
   assert.deepEqual(decided(admin, named({ main: 'index.html', admin: './admin/index.html' }, 'top'), '/admin/index.html'), script);
   assert.deepEqual(decided(admin, [{ build: { rollupOptions: { input: { main: 'index.html', admin: 'admin/index.html' } } } }, {}], '/admin/index.html'), script);
+  assert.deepEqual(decided(admin, [{ build: { rolldownOptions: { input: { main: 'index.html', admin: 'admin/index.html' } } } }, {}], '/admin/index.html'), script);
 
   // With root set to a folder of the project, Rollup (Vite 7 and before) reads a relative input from the working
   // directory, above the root, and Rolldown (Vite 8) from the root first and the working directory after. The page
@@ -276,6 +277,9 @@ test('where the app builds with sharedConfigBuild, as RSC setups do, the page tr
   assert.deepEqual(decided(admin, shared({ rollupOptions: { input } }), '/admin/index.html'), { chunk: true, inline: false });
   // A client build of one file by format has no chunk to point a script at, so the page keeps the inline import.
   assert.deepEqual(decided(admin, shared({ rollupOptions: { input, output: { format: 'iife' } } }), '/admin/index.html'), { chunk: false, inline: true });
+  // A browser environment of another name builds from its own input.
+  const client = { consumer: 'client', build: { rollupOptions: {} } };
+  assert.equal(decided(admin, [{ build: { rollupOptions: {} }, environments: { client } }, { input, build: { rollupOptions: {} } }], '/admin/index.html').chunk, true);
 });
 
 test('pages picks the pages that get the runtime, and runtime: false keeps only the transform', () => {
