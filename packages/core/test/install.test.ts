@@ -2100,13 +2100,13 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     formFiber.stateNode = form;
     const field: Record<string, unknown> = { ...node('input', fieldFiber, form), __reactProps$demo: fieldProps };
     fieldFiber.stateNode = field;
-    const enter = (id: number, ts: number, render: () => void, beforeKeypress = () => {}) => {
+    const enter = (id: number, ts: number, render: () => void, beforeKeypress = () => {}, submitWork = 120) => {
       page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' });
       beforeKeypress();
       page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: field, code: 'Enter' });
       render();
       const keydown = { ...pointer('keydown', id, ts, 140), processingEnd: ts + 3, target: field };
-      page.paint([keydown, { ...keydown, name: 'keypress', processingStart: ts + 3, processingEnd: ts + 123 }]);
+      page.paint([keydown, { ...keydown, name: 'keypress', processingStart: ts + 3, processingEnd: ts + 3 + submitWork }]);
       return api.last()?.target?.handler;
     };
     // The first step's submit renders the second, whose onSubmit is finish, before the entries come.
@@ -2124,6 +2124,10 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
       page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: 2000, target: field, code: 'KeyA' });
     };
     assert.equal(enter(8, 2000, () => (form.__reactProps$demo = { onSubmit: finish }), strays), 'goNext');
+    // An async onSubmit does little in the keypress, so its entry ties with the keydown's, which comes first. The
+    // keydown reaches the same onSubmit and no onChange either: React runs none for Enter in a field.
+    form.__reactProps$demo = { onSubmit: goNext };
+    assert.equal(enter(9, 3000, () => (form.__reactProps$demo = { onSubmit: finish }), undefined, 2), 'goNext');
     // Server HTML React had not hydrated by the keypress has no handler to read yet: the form is read when the
     // entries come, once React hydrated it to run the submit.
     rootFiber.memoizedState = { isDehydrated: true };
@@ -2136,7 +2140,7 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
       Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit: finish } });
       Object.assign(field, { __reactFiber$demo: fieldFiber, __reactProps$demo: fieldProps });
     };
-    assert.equal(enter(9, 3000, hydrate), 'finish');
+    assert.equal(enter(10, 4000, hydrate), 'finish');
     api.dispose();
   });
 });
