@@ -3261,8 +3261,9 @@ test("Enter in a field that submits by clicking the form's submit button is name
   const field = node('input', { type: 'text', name: 'qty' });
   const buy = node('button', { type: 'submit', onClick: trackClick });
   const pressed = (on: Node) => [entry('keydown', 0, 100, 1, 1.5, { target: on }), entry('keypress', 0, 100, 2, 82, { target: on }), entry('click', 0, 100, 2, 82, { target: buy })];
-  const ring = (on: Node, keypressHandler: string | null, clickHandler = 'trackClick') => [
-    input(0, 'keydown', { target: on, press: 'Enter', key: 'Enter', owners: ['Checkout'], keypressHandler }),
+  // What the keypress reached, and the onSubmit apart from it, as the ring read them at its dispatch.
+  const ring = (on: Node, keypressSubmit: string | null, clickHandler = 'trackClick', keypressHandler = keypressSubmit) => [
+    input(0, 'keydown', { target: on, press: 'Enter', key: 'Enter', owners: ['Checkout'], keypressHandler, keypressSubmit }),
     input(0, 'click', { target: buy, press: -1, owners: ['Checkout'], handler: clickHandler }),
   ];
   assert.equal(report(pressed(field), [], [], ring(field, 'placeOrder')).target?.handler, 'placeOrder');
@@ -3273,6 +3274,15 @@ test("Enter in a field that submits by clicking the form's submit button is name
   assert.equal(report(pressed(field), [], [], ring(field, null, 'saveOrder')).target?.handler, 'saveOrder');
   // Enter on the button itself clicks the element the key was on, which is named as a click on it is.
   assert.equal(report(pressed(buy), [], [], ring(buy, 'placeOrder')).target?.handler, 'trackClick');
+  // A field that keeps to digits with its own onKeyPress: the keypress reached that first, and ran it before the click.
+  // It did none of the click's work, which is the onSubmit's, and with no onSubmit the button's onClick's.
+  assert.equal(report(pressed(field), [], [], ring(field, 'placeOrder', 'trackClick', 'onlyDigits')).target?.handler, 'placeOrder');
+  assert.equal(report(gone, [], [], ring(field, 'placeOrder', 'trackClick', 'onlyDigits')).target?.handler, 'placeOrder');
+  assert.equal(report(pressed(field), [], [], ring(field, null, 'saveOrder', 'onlyDigits')).target?.handler, 'saveOrder');
+  // Firefox times the submit in the keypress entry alone, which the onKeyPress begins, and nothing there tells its
+  // work from the onSubmit's: the keypress's own reading names it.
+  const firefox = [entry('keypress', 0, 100, 2, 82, { target: field })];
+  assert.equal(report(firefox, [], [], ring(field, 'placeOrder', 'trackClick', 'onlyDigits')).target?.handler, 'onlyDigits');
 });
 
 test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {

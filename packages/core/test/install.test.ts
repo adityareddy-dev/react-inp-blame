@@ -2201,6 +2201,73 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
   });
 });
 
+test("Enter in a form's field is named in each browser's entries by what did the submit's work, with or without the field's onKeyPress, the form's onSubmit and the button's onClick", async () => {
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    function Checkout() {}
+    function onlyDigits() {}
+    function placeOrder() {}
+    function trackClick() {}
+    function saveOrder() {}
+    const node = (tag: string, fiber: Record<string, unknown>, parent: Record<string, unknown> | null, props: Record<string, unknown>) => {
+      const el: Record<string, unknown> = {
+        nodeType: 1, tagName: tag.toUpperCase(), id: '', classList: { length: 0 }, parentNode: parent, parentElement: parent, firstChild: null,
+        getAttribute: () => null, __reactFiber$demo: fiber, __reactProps$demo: props,
+      };
+      fiber.stateNode = el;
+      return el;
+    };
+    const rootFiber = { tag: 3, elementType: null, type: null, memoizedProps: null, memoizedState: { isDehydrated: false }, return: null };
+    const container = { nodeType: 1, tagName: 'DIV', id: '', classList: { length: 0 }, parentNode: null, parentElement: null, firstChild: null, getAttribute: () => null, __reactContainer$demo: rootFiber };
+    const checkoutFiber = { tag: 0, elementType: Checkout, type: Checkout, memoizedProps: {}, return: rootFiber };
+    let id = 20;
+    // Every browser fires the keydown and the keypress on the field, and the click Enter makes on the submit button inside
+    // the keypress, with the submit after it. Chromium times all three, the keypress and the click with the submit's work.
+    // Firefox times the keypress alone, and the click too where the button's own onClick did the work. WebKit times the
+    // keydown alone, whose handlers end before the submit begins.
+    const enter = (keypress: boolean, submit: boolean, click: boolean, browser: 'chromium' | 'firefox' | 'firefox-click' | 'webkit') => {
+      const formProps = submit ? { onSubmit: placeOrder } : {};
+      const formFiber: Record<string, unknown> = { tag: 5, elementType: 'form', type: 'form', memoizedProps: formProps, return: checkoutFiber };
+      const form = node('form', formFiber, container, formProps);
+      const fieldProps = { type: 'text', name: 'qty', ...(keypress ? { onKeyPress: onlyDigits } : {}) };
+      const field = node('input', { tag: 5, elementType: 'input', type: 'input', memoizedProps: fieldProps, return: formFiber }, form, fieldProps);
+      const buttonProps = { type: 'submit', ...(click ? { onClick: submit ? trackClick : saveOrder } : {}) };
+      const button = node('button', { tag: 5, elementType: 'button', type: 'button', memoizedProps: buttonProps, return: formFiber }, form, buttonProps);
+      const ts = 1000 * ++id;
+      page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' });
+      page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: field, code: 'Enter' });
+      page.fire('click', { isTrusted: true, type: 'click', timeStamp: ts, target: button, pointerId: -1, pointerType: '' });
+      const keydownEntry = { ...pointer('keydown', id, ts, 96), processingEnd: ts + 3, target: field };
+      const keypressEntry = { ...keydownEntry, name: 'keypress', processingStart: ts + 3, processingEnd: ts + 83 };
+      const clickEntry = { ...keypressEntry, name: 'click', target: button };
+      const entries = { chromium: [keydownEntry, keypressEntry, clickEntry], firefox: [keypressEntry], 'firefox-click': [keypressEntry, clickEntry], webkit: [keydownEntry] };
+      page.paint(entries[browser]);
+      return api.last()?.target?.handler;
+    };
+    const browsers = ['chromium', 'firefox', 'webkit'] as const;
+    // The field's onKeyPress, the form's onSubmit and the button's onClick, and what Chromium, Firefox and WebKit name.
+    // Firefox's keypress entry begins with the field's onKeyPress, and nothing in it tells that one's work from the
+    // submit's, so the keypress's own reading names it. With no onSubmit and no onClick nothing of React's did the work,
+    // and a keypress's own reading is all there is. WebKit's keydown reaches the onSubmit and never the button's onClick.
+    const shapes: [boolean, boolean, boolean, (string | null)[]][] = [
+      [true, true, true, ['placeOrder', 'onlyDigits', 'placeOrder']],
+      [true, true, false, ['placeOrder', 'onlyDigits', 'placeOrder']],
+      [true, false, true, ['saveOrder', 'onlyDigits', null]],
+      [true, false, false, ['onlyDigits', 'onlyDigits', null]],
+      [false, true, true, ['placeOrder', 'placeOrder', 'placeOrder']],
+      [false, true, false, ['placeOrder', 'placeOrder', 'placeOrder']],
+      [false, false, true, ['saveOrder', null, null]],
+      [false, false, false, [null, null, null]],
+    ];
+    const named = shapes.map(([keypress, submit, click]) => [keypress, submit, click, browsers.map((b) => enter(keypress, submit, click, b))]);
+    assert.deepEqual(named, shapes);
+    // Where Firefox times the click too, the button's onClick did the work, and names it whether the field has an
+    // onKeyPress or not.
+    assert.deepEqual([enter(true, false, true, 'firefox-click'), enter(false, false, true, 'firefox-click')], ['saveOrder', 'saveOrder']);
+    api.dispose();
+  });
+});
+
 test('two copies of the library on one page share one installation: one hook wrapper, one walk per commit, one set of listeners', async (t) => {
   const [a, b] = await Promise.all([copyOfLibrary(t), copyOfLibrary(t)]);
   assert.notEqual(a.install, b.install, 'the copies share their modules');

@@ -588,7 +588,7 @@ const TYPING = ['onChange', 'onInput'];
 const CLICK_ON_TOGGLE = ['onClick', 'onChange', 'onSubmit'];
 // `KeyboardEvent.code` for the two Enter keys, and `key` for both, since the ring stores the code and
 // a caller with the event in hand may pass either.
-const ENTER_KEYS = ['Enter', 'NumpadEnter'];
+export const ENTER_KEYS = ['Enter', 'NumpadEnter'];
 
 // The `type` values React treats as a text field, so that typing in one fires onChange: react-dom's
 // `supportedInputTypes`, which `isTextInputElement` reads.

@@ -1,4 +1,4 @@
-import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, namingFiber, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
+import { dehydratedAround, ENTER_KEYS, fiberFromNode, handlerOf, hydratedSince, namingFiber, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
 import { controlOf } from './element.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
@@ -127,11 +127,17 @@ export interface InputRecord extends InputStamp {
    */
   keypressHandler?: string | null;
   /**
+   * For an Enter's keydown, the onSubmit its keypress reached, read with `keypressHandler` and apart from it: a
+   * field's own onKeyPress comes first there, and does none of the work of the click Enter makes on the form's
+   * submit button (`submittedBy` in join.ts). Undefined where `keypressHandler` is, and for any other key.
+   */
+  keypressSubmit?: string | null;
+  /**
    * Server-rendered HTML enclosing the target that React had not hydrated when the input was
    * dispatched; null when React had hydrated it, and on a page with no React root above the target.
    */
   readonly dehydrated: HydrationBoundary | null;
-  /** What React did about this input. The hook keeps it current as commits arrive; the rest of the record is read at dispatch, `keypressHandler` and a keydown's `handler` on server HTML at the keypress's, and does not change. */
+  /** What React did about this input. The hook keeps it current as commits arrive; the rest of the record is read at dispatch, the keypress's readings and a keydown's `handler` on server HTML at the keypress's, and does not change. */
   readonly work: InputWork;
 }
 
@@ -360,7 +366,8 @@ export function noteInput(e: Event): void {
  * form named the step after. Server HTML React has not hydrated has no handler to read yet, and the form
  * is read when the entry comes. HTML React hydrated inside the keydown, to run it, is read now, and so is
  * the keydown's element, which had nothing to read at its own dispatch: its entry carries the hydration
- * and can outweigh the keypress's.
+ * and can outweigh the keypress's. For Enter the onSubmit is read on its own as well, since a field's
+ * onKeyPress comes before it in what the keypress reaches.
  */
 export function noteKeypress(e: Event): void {
   const last = newestInput();
@@ -368,7 +375,9 @@ export function noteKeypress(e: Event): void {
   if (!e.isTrusted || !last || last.type !== 'keydown' || last.press !== code || last.keypressHandler !== undefined) return;
   const target = e.target as Node | null;
   if (dehydratedAround(target) !== null) return;
-  last.keypressHandler = handlerOf(fiberFromNode(target), 'keypress', code);
+  const fiber = fiberFromNode(target);
+  last.keypressHandler = handlerOf(fiber, 'keypress', code);
+  if (code && ENTER_KEYS.includes(code)) last.keypressSubmit = handlerOf(fiber, 'submit');
   // From its own element: an onKeyDown that moves focus sends the keypress to the element it focused.
   if (last.dehydrated) last.handler = handlerOf(fiberFromNode(last.target), 'keydown', last.key);
 }
