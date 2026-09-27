@@ -688,6 +688,33 @@ test('a walk that throws turns the walk off for good, and stats() carries what i
   });
 });
 
+test('a walk that throws a value with no string form still turns the walk off, and the hook it chains onto still hears the commit', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    try {
+      const id = existing.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      existing.onCommitFiberRoot(id, root);
+      // A component whose type throws an object with no prototype when it is read, which has no string form.
+      commitAgain(root, 4);
+      Object.defineProperty(root.current.child, 'elementType', {
+        get() {
+          throw Object.create(null);
+        },
+      });
+      assert.doesNotThrow(() => page.duringClick(() => existing.onCommitFiberRoot(id, root)));
+      assert.deepEqual(existing.calls, [id, id]);
+      assert.equal(api.stats().unsupportedReason?.kind, 'walk-threw');
+      assert.match(api.stats().unsupportedReason?.message ?? '', /reading a commit of react-dom 19\.3\.0 threw \(a value that cannot be printed\)/);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test("a page whose DevTools hook turns React's support off still gets reports, without components, and stats() says why", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
