@@ -1113,7 +1113,7 @@ half the screen update, and a shorter script from 20 ms after it as the longest 
 render inside it, said even where the browser gave that script no name. A 20 ms timer is not why a 370 ms
 screen update that spent 250 ms on style and layout was slow, and the sentence once said it was. Where the
 frame waited on the next interaction's press, as above, the sentence says that instead, in the screen update's
-note too where the working time was longer: typing fast, the script after the handlers is the next key's
+note too where another verdict took the blame: typing fast, the script after the handlers is the next key's
 handler, whose work belongs to the next report. The browser's own work is the frame's style, layout and paint
 where the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does after
 a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a click
