@@ -2403,7 +2403,7 @@ test("an error while the library checks for react-dom, 3 s after install or at t
   }
 });
 
-test("a DevTools hook global a classic script declared with var holds the shim as a plain value, and one locked as null leaves the page 'unsupported', rather than install() throwing", async (t) => {
+test("a DevTools hook global a classic script declared with var holds the shim as a plain value, and one locked as null or behind a setter that drops the write leaves the page 'unsupported', rather than install() throwing", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   // Declared, the global cannot be redefined as the shim's accessor, but it can still be written.
   await inBrowser((page) => {
@@ -2422,20 +2422,28 @@ test("a DevTools hook global a classic script declared with var holds the shim a
       api.dispose();
     }
   });
-  // Locked as null, it can be neither redefined nor written.
-  await inBrowser((page) => {
-    Object.defineProperty(page.window, HOOK, { value: null, writable: false, configurable: false });
-    const api = install({ devtoolsTrack: false });
-    try {
-      assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
-      assert.equal(warn.mock.callCount(), 1);
-      assert.match(String(warn.mock.calls[0]?.arguments[0]), /__REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and read-only, so React registers with no hook and its commits cannot be read\./);
-      page.paint([click(7, 1000, 120)]);
-      assert.deepEqual({ id: api.last()?.interactionId, react: api.last()?.reactStatus }, { id: 7, react: 'unreadable' });
-    } finally {
-      api.dispose();
-    }
-  });
+  // Locked as null, or behind a setter that drops what it is handed, it can be neither redefined nor written.
+  const locked = {
+    'as null': { value: null, writable: false, configurable: false },
+    'behind a setter': { get: () => undefined, set() {}, configurable: false },
+  };
+  for (const [name, descriptor] of Object.entries(locked)) {
+    await inBrowser((page) => {
+      Object.defineProperty(page.window, HOOK, descriptor);
+      const api = install({ devtoolsTrack: false });
+      try {
+        assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' }, name);
+        assert.equal(warn.mock.callCount(), 1, name);
+        assert.match(String(warn.mock.calls[0]?.arguments[0]), /__REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and read-only, so React registers with no hook and its commits cannot be read\./, name);
+        page.paint([click(7, 1000, 120)]);
+        assert.deepEqual({ id: api.last()?.interactionId, react: api.last()?.reactStatus }, { id: 7, react: 'unreadable' }, name);
+      } finally {
+        api.dispose();
+      }
+    });
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+  }
 });
 
 test("an Event Timing entry the library cannot read never reaches the page's error handlers, whether the observer is handed it or the hide takes it", async (t) => {
@@ -3387,6 +3395,29 @@ test("a DevTools hook global the page makes throw when read, after React registe
     });
     session?.slots.warnings?.clear();
   }
+});
+
+test('React registers with the shim a DevTools hook global declared with var holds as a plain value, and its commits are read', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    Object.defineProperty(page.window, HOOK, { value: undefined, writable: true, enumerable: true, configurable: false });
+    const api = install({ devtoolsTrack: false });
+    try {
+      // What react-dom does as it loads: it reads the global and registers with the hook there.
+      const hook = page.window[HOOK];
+      const id = hook.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      hook.onCommitFiberRoot(id, root);
+      page.duringClick(() => {
+        commitAgain(root, 5);
+        hook.onCommitFiberRoot(id, root, 1, false);
+      });
+      assert.deepEqual({ mode: api.stats().mode, react: api.stats().react, commits: api.debug.commits().length }, { mode: 'shim', react: 'reading', commits: 1 });
+      assert.equal(warn.mock.callCount(), 0);
+    } finally {
+      api.dispose();
+    }
+  });
 });
 
 test("a commit React makes inside an input's dispatch is that input's, however long the dispatch has been running", async (t) => {
