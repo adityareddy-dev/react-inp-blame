@@ -368,9 +368,9 @@ export function noteKeypress(e: Event): void {
   if (!e.isTrusted || !last || last.type !== 'keydown' || last.press !== code || last.keypressHandler !== undefined) return;
   const target = e.target as Node | null;
   if (dehydratedAround(target) !== null) return;
-  const fiber = fiberFromNode(target);
-  last.keypressHandler = handlerOf(fiber, 'keypress', code);
-  if (last.dehydrated) last.handler = handlerOf(fiber, 'keydown', last.key);
+  last.keypressHandler = handlerOf(fiberFromNode(target), 'keypress', code);
+  // From its own element: an onKeyDown that moves focus sends the keypress to the element it focused.
+  if (last.dehydrated) last.handler = handlerOf(fiberFromNode(last.target), 'keydown', last.key);
 }
 
 /** The events that close the newest input's later renders when a script dispatches one (`noteCloser`). */
