@@ -342,6 +342,16 @@ test('an editor is named like a form field whatever labels allows, never by the 
     const copy = element('button', [text('Copy')], { type: 'button' });
     editable('div', [element('pre', [text('const token = "s3cr3t"')]), element('div', [copy], { contenteditable: 'false' })], { contenteditable: 'true' });
     assert.equal(label(copy), 'button', labels);
+    // An editor built on an EditContext has nothing in its markup to say so: the page's code attaches one to the
+    // element that takes the key presses, and it draws what was typed inside that element, a word in a line.
+    assert.equal(label(Object.assign(element('div', [text('Dear Dr. Smith, my diagnosis is')], { tabindex: '0' }), { editContext: {} })), 'div', labels);
+    const word = element('span', [text('typed via EditContext')]);
+    Object.assign(element('div', [element('div', [word])]), { editContext: {} });
+    assert.equal(label(word), 'span', labels);
+    // As far down as the fifth element below it.
+    const deep = element('span', [text('my diagnosis is')]);
+    Object.assign(element('div', [element('div', [element('div', [element('div', [element('p', [deep])])])])]), { editContext: {} });
+    assert.equal(label(deep), 'span', labels);
     // An element with a text field's role is a field, named by what the page's code wrote on it.
     assert.equal(label(element('div', [text('typed search query')], { role: 'textbox' })), 'div', labels);
     assert.equal(label(element('div', [text('typed search query')], { role: 'searchbox', 'data-testid': 'search' })), 'div "search"', labels);
@@ -364,6 +374,8 @@ test('an editor is named like a form field whatever labels allows, never by the 
   assert.equal(labelOf(composer, 'text'), 'div "Send"');
   assert.equal(labelOf(element('div', [element('textarea', [text('Hi Ada, the password is hunter2')])]), 'text'), 'div');
   assert.equal(labelOf(element('div', [element('div', [text('typed search query')], { role: 'searchbox' })]), 'text'), 'div');
+  const drawn = Object.assign(element('div', [text('Hi Ada, the password is hunter2')]), { editContext: {} });
+  assert.equal(labelOf(element('div', [drawn, element('button', [text('Send')])]), 'text'), 'div "Send"');
   // The text a page shows beside an editor still names what was clicked.
   const toolbar = element('div', [element('span', [text('Bold')]), element('div', [text('Hi Ada')], { contenteditable: 'true' })]);
   assert.equal(labelOf(toolbar, 'text'), 'div "Bold"');
