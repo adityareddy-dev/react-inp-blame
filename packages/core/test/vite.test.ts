@@ -266,6 +266,18 @@ test("a page named only in Vite 8.2's input, at the top level or for the client 
   assert.deepEqual(decided(index, [{ build: { rollupOptions: {} }, environments: { client: { input: 'about.html' } } }], '/index.html'), script);
 });
 
+test('where the app builds with sharedConfigBuild, as RSC setups do, the page transform reads the client environment the build reads', () => {
+  // The plugins get the top-level config then, and the client environment's build is the top-level one with its
+  // own laid over it.
+  const shared = (build: Record<string, any>) => [{ build: { rollupOptions: {} }, environments: { client: { consumer: 'client', build } } }, { build }] as const;
+  const admin = (path: string) => path.startsWith('/admin/');
+  const input = { main: 'index.html', admin: 'admin/index.html' };
+
+  assert.deepEqual(decided(admin, shared({ rollupOptions: { input } }), '/admin/index.html'), { chunk: true, inline: false });
+  // A client build of one file by format has no chunk to point a script at, so the page keeps the inline import.
+  assert.deepEqual(decided(admin, shared({ rollupOptions: { input, output: { format: 'iife' } } }), '/admin/index.html'), { chunk: false, inline: true });
+});
+
 test('pages picks the pages that get the runtime, and runtime: false keeps only the transform', () => {
   const plugins = pluginsFor('serve', { pages: (path) => path !== '/devtools-hook.html' });
   assert.equal(tagsFor(plugins, '/devtools-hook.html'), undefined);
