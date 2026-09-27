@@ -2048,6 +2048,8 @@ test("an error while a later render revises a report inside React's commit is no
     try {
       const id = existing.inject(reactDom('19.3.0'));
       const root = mountedRoot(0b11, 4);
+      const heard: number[] = [];
+      onInteraction((r) => heard.push(r.revision));
       clock.now = 1000;
       page.duringClick(() => existing.onCommitFiberRoot(id, root));
       page.paint([click(7, 1000, 120)]);
@@ -2070,6 +2072,9 @@ test("an error while a later render revises a report inside React's commit is no
       assert.equal(api.stats().mode, 'chained');
       assert.equal(caught(warn).length, 1);
       assert.equal(warn.mock.callCount(), 1);
+      // Only its drawing is lost: the revision is still heard.
+      await nextTask();
+      assert.deepEqual(heard, [0, 1]);
       // The next click's handler renders, and its report has that commit.
       clock.now = 2000;
       commitAgain(root, 4);
@@ -2311,6 +2316,40 @@ test("an error while reports are drawn on the Performance panel never reaches th
       page.paint([click(14, 2000, 150)]);
       t.mock.timers.tick(0);
       assert.deepEqual(drawn, ['120 ms click', '150 ms click']);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
+test('a page that refuses the idle callback the Performance panel is drawn in keeps no report from its listeners, before the hide or at it', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  // Asked for as each report is published, and refused every time.
+  Object.defineProperty(globalThis, 'requestIdleCallback', {
+    configurable: true,
+    value: () => {
+      throw new TypeError('idle callback refused');
+    },
+  });
+  t.after(() => delete (globalThis as any).requestIdleCallback);
+  await inBrowser((page) => {
+    const api = install();
+    try {
+      const heard: number[] = [];
+      onInteraction((r) => heard.push(r.interactionId));
+      assert.doesNotThrow(() => page.paint([click(7, 1000, 300)]));
+      page.paint([click(14, 2000, 300)]);
+      t.mock.timers.tick(0);
+      assert.deepEqual(heard, [7, 14]);
+      page.queue([click(21, 3000, 300)]);
+      page.hide();
+      assert.deepEqual(
+        api.reports().map((r) => r.interactionId),
+        [7, 14, 21],
+      );
+      assert.deepEqual(heard, [7, 14, 21]);
+      assert.equal(caught(warn).length, 1);
     } finally {
       api.dispose();
     }
