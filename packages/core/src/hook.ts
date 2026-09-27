@@ -593,15 +593,26 @@ function unreadableReactDom(): UnsupportedReason | null {
 }
 
 /**
- * Looks for a tool that replaced the shim by redefining or deleting the global, which its accessor
- * cannot see (an assignment it can). install() calls it at fixed points, so reading `stats()` or
- * `debug.hook()` never changes what they report.
+ * Looks for a page that turned the hook in use off where it is, and for a tool that replaced the shim by
+ * redefining or deleting the global, which its accessor cannot see (an assignment it can). install() calls
+ * it at fixed points, so reading `stats()` or `debug.hook()` never changes what they report.
  */
 export function checkHookReplaced(): void {
   const { attached, shim } = state;
-  if (!attached || attached !== shim) return;
-  const current = (window as unknown as HookHolder)[HOOK_KEY];
-  if (current !== shim) replaced(shim, current);
+  if (!attached) return;
+  if (attached.isDisabled || !attached.supportsFiber) {
+    // The library is the first import, so a script that keeps developer tools out finds the shim, or the hook it
+    // chained onto, and turns support off, most with each method made a no-op in place of the library's. Fast
+    // Refresh wraps those methods too, and passes React's calls on, so a method that is not ours says nothing.
+    const message =
+      "the page turned its __REACT_DEVTOOLS_GLOBAL_HOOK__ off after install() (isDisabled, or no supportsFiber), so React's commits cannot be read. Interactions are still reported, without components.";
+    state.detach?.();
+    unusable(message);
+    warnOnce('hook-disabled', message);
+  } else if (attached === shim) {
+    const current = (window as unknown as HookHolder)[HOOK_KEY];
+    if (current !== shim) replaced(shim, current);
+  }
 }
 
 function owner(): string {
@@ -681,9 +692,10 @@ export function uninstallHook(): void {
 
 function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   let detach: (() => void) | null = null;
-  if (as === 'chained' && (hook.isDisabled || !hook.supportsFiber)) {
+  if (hook.isDisabled || !hook.supportsFiber) {
     // React checks both before registering, so it registers with no hook at all. That is as true of a hook
-    // assigned over the shim, which an app does when its first import keeps developer tools out.
+    // assigned over the shim, which an app does when its first import keeps developer tools out, and of the
+    // shim itself once the page has turned it off (checkHookReplaced).
     const message =
       "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ turns React's developer tools support off (isDisabled, or no supportsFiber), so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.";
     unusable(message);
