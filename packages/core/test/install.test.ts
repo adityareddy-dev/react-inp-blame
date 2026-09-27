@@ -2194,13 +2194,20 @@ test("a DevTools hook global the library cannot read never reaches the page's er
         if (reads === 'hide') {
           page.queue([click(14, 2000, 200)]);
           assert.doesNotThrow(() => page.hide());
-          assert.deepEqual(heard, [7], 'the report waiting was not heard at the hide');
+          assert.deepEqual(heard, [7, 14], 'the reports waiting were not heard at the hide');
         }
-        assert.equal(caught(warn).length, 1, reads);
-        // Once it can be read again, the next interaction is reported.
+        // The check is housekeeping: while it goes on throwing, and once the global can be read again, every
+        // interaction is reported and counted toward INP, and the console is told once.
+        page.paint([click(21, 3000, 300)]);
         Object.defineProperty(page.window, HOOK, { value: shim, configurable: true, writable: true });
-        page.paint([click(21, 3000, 200)]);
-        assert.equal(api.last()?.interactionId, 21, reads);
+        page.paint([click(28, 4000, 400)]);
+        assert.deepEqual(
+          api.reports().map((r) => r.interactionId),
+          reads === 'check' ? [7, 21, 28] : [7, 14, 21, 28],
+          reads,
+        );
+        assert.equal(api.inp()?.interactionId, 28, reads);
+        assert.equal(caught(warn).length, 1, reads);
       } finally {
         api.dispose();
       }
