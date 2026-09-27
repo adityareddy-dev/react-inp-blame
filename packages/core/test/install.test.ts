@@ -2403,13 +2403,32 @@ test("an error while the library checks for react-dom, 3 s after install or at t
   }
 });
 
-test("a DevTools hook global the shim cannot replace, such as one locked as null, leaves the page 'unsupported' rather than install() throwing", async (t) => {
+test("a DevTools hook global a classic script declared with var holds the shim as a plain value, and one locked as null leaves the page 'unsupported', rather than install() throwing", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
+  // Declared, the global cannot be redefined as the shim's accessor, but it can still be written.
+  await inBrowser((page) => {
+    Object.defineProperty(page.window, HOOK, { value: undefined, writable: true, enumerable: true, configurable: false });
+    const api = install({ devtoolsTrack: false });
+    try {
+      assert.deepEqual({ mode: api.stats().mode, shim: page.window[HOOK]?.reactInpBlame }, { mode: 'shim', shim: true });
+      assert.equal(warn.mock.callCount(), 0);
+      // With no accessor to hear it, a tool that assigns its own hook before React registers is noticed at the
+      // next batch, and followed.
+      page.window[HOOK] = existingHook();
+      page.paint([click(7, 1000, 120)]);
+      assert.deepEqual({ mode: api.stats().mode, id: api.last()?.interactionId }, { mode: 'chained', id: 7 });
+      assert.equal(warn.mock.callCount(), 0);
+    } finally {
+      api.dispose();
+    }
+  });
+  // Locked as null, it can be neither redefined nor written.
   await inBrowser((page) => {
     Object.defineProperty(page.window, HOOK, { value: null, writable: false, configurable: false });
     const api = install({ devtoolsTrack: false });
     try {
       assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+      assert.equal(warn.mock.callCount(), 1);
       assert.match(String(warn.mock.calls[0]?.arguments[0]), /__REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and read-only, so React registers with no hook and its commits cannot be read\./);
       page.paint([click(7, 1000, 120)]);
       assert.deepEqual({ id: api.last()?.interactionId, react: api.last()?.reactStatus }, { id: 7, react: 'unreadable' });
