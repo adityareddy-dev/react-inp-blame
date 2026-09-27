@@ -1100,20 +1100,27 @@ takes, and a wait of 50 ms or less closes nothing: a 38 ms handler after a 45 ms
 handler's, and 40 ms of forced layout after a 48 ms wait stays the layout's. The renders between the
 handlers are added because the render branch is judged on them: an 85 ms render between a keydown's
 handlers and its keyup's, after a 60 ms wait, stays the render's. They are added only where a render
-could be the verdict, since one too small to be closes nothing, and adding it would leave the wait to
-no branch at all: a 55 ms wait before 52 ms of handlers, with a 4 ms render between them and the
-keyup's, stays the wait's. A render there that kept no durations is timed by React's scheduler tasks
-where long animation frames recorded them, and where no frame says what ran, the wait has to outlast
-all of the time between the handlers. Until 2026-09-26 only a forced layout, and a handler a
-production build could not time, stepped aside for it, on a test of their own: any wait longer than
-the working time, under 50 ms too, and never one shorter, even where part of the working time went by
-between the handlers. A 480 ms click that waited 400 ms and then ran its handler for 58 ms was blamed
-on the handler, with the wait said nowhere but the phases, and optimising that handler would barely
-have moved it. What ran after the wait is still said, in a note with the figure and the hedge the
-closed branch would have given it: "The click handler handleSave still ran for about 58 ms of the
-60 ms of working time after the wait." A production build names the handler the same way, hedged, and
-a forced layout keeps the note it has under any verdict but its own. Where the screen update outranks
-the working time too, the working time is the smallest of the three phases, and no note is added.
+could be the verdict. One too small to be closes nothing, and adding it would leave the wait to no
+branch at all: a 55 ms wait before 52 ms of handlers, with a 4 ms render between them and the keyup's,
+stays the wait's. Nor can one be the verdict beside a handler or a forced layout that outruns React's
+render, since that branch is asked first and leaves the time between the handlers out of its figure: a
+60 ms wait before a keydown's 38 ms handler, with a 30 ms render before the keyup's, stays the wait's.
+A render there that kept no durations is timed by React's scheduler tasks where long animation frames
+recorded them, and where no frame says what ran, the wait has to outlast all of the time between the
+handlers. Until 2026-09-26 only a forced layout, and a handler a production build could not time,
+stepped aside for it, on a test of their own: any wait longer than the working time, under 50 ms too,
+and never one shorter, even where part of the working time went by between the handlers. A 480 ms
+click that waited 400 ms and then ran its handler for 58 ms was blamed on the handler, with the wait
+said nowhere but the phases, and optimising that handler would barely have moved it. What ran after
+the wait is still said, in a note with the figure and the hedge the closed branch would have given it:
+"The click handler handleSave still ran for about 58 ms of the 60 ms of working time after the wait."
+A production build names the handler the same way, hedged, and a forced layout keeps the note it has
+under any verdict but its own. Where the screen update outranks the working time too, the working time
+is the smallest of the three phases, and no note is added. The wait itself is said in a note under
+every verdict but its own, whatever React rendered: "It also waited 70 ms before the handler could
+start, because the main thread was busy." Until 2026-09-26 that note needed a render big enough to be
+the verdict, so a 70 ms wait before a 98 ms handler went unsaid beside a 2 ms render, or none, and was
+said beside a 10 ms one.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click
