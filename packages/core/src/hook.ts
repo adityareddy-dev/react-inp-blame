@@ -191,8 +191,8 @@ export interface HookOptions {
   walkBudget: number;
   inputWindow: number;
   onSummary: (c: CommitSummary) => void;
-  /** Names the control an input landed on, at dispatch (see `InputRecord.label`). */
-  label?: (control: Node) => string | null;
+  /** Names the control around the node an input landed on, at dispatch (see `InputRecord.label`). */
+  label?: (target: Node) => string | null;
 }
 
 /**
@@ -438,7 +438,9 @@ function record(e: DispatchedInput): InputRecord {
     pointerType: e.pointerType,
     target,
     control,
-    label: control && state.options?.label?.(control),
+    // Asked of the target, as a report asks of its entry's: the control around it is the same, and whether
+    // the input landed inside an editor is asked of the element it landed on.
+    label: target && state.options?.label?.(target),
     owners: Object.freeze(ownersOf(namingFiber(target))),
     handler: handlerOf(fiber, e.type, key),
     key,
