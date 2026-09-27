@@ -2046,6 +2046,34 @@ test('a wait that is the verdict is not said again in a note, and one under anot
   assert.match(painted.verdict, /React still spent 20 ms/);
 });
 
+test('a handler or a render shorter than a long wait before the handlers does not take the verdict from it', () => {
+  // A 480 ms click that waited 400 ms, then ran handleSave for 58 ms and rendered for 2. Optimising
+  // handleSave would barely move it.
+  const click = [entry('click', 0, 480, 400, 460)];
+  const save = loginClick('handleSave');
+  const waited = { kind: 'waiting', name: null, detail: null, ms: 400, confidence: 'measured' };
+  for (const frames of [[], null]) {
+    const r = report(click, [commit(450, 0, { total: 2 })], frames, save);
+    assert.deepEqual(r.explanation.blame, waited);
+    assert.equal(r.explanation.cause, 'The click waited 400 ms before its handler could start: the main thread was busy with something else.');
+  }
+  // Where a long animation frame recorded the timer the click waited behind, the timer is named, not the handler after it.
+  const behind = [frame(0, 470, [script('TimerHandler:setTimeout', 0, 398), script('BUTTON.onclick', 400, 58)])];
+  assert.deepEqual(report(click, [commit(450, 0, { total: 2 })], behind, save).explanation.blame, { ...waited, name: 'TimerHandler:setTimeout' });
+  // 50 ms of code outside React beside a 10 ms render, and a 40 ms render, are no more the answer.
+  const outside = report(click, [commit(450, 0, { total: 10 })], [], [input(0, 'click')]);
+  assert.deepEqual(outside.explanation.blame, waited);
+  assert.doesNotMatch(outside.verdict, /also waited/);
+  const rendered = report(click, [commit(450, 0, { total: 40 })], []);
+  assert.deepEqual(rendered.explanation.blame, waited);
+  assert.doesNotMatch(rendered.verdict, /also waited/);
+  // A wait shorter than the working time leaves the render its verdict, and one short of a long task
+  // leaves the handler its own: a 38 ms handler after 45 ms is not nothing.
+  assert.equal(report([entry('click', 0, 110, 30, 90)], [commit(80, 0, { total: 40 })], []).explanation.blame.kind, 'render');
+  const brief = report([entry('click', 0, 96, 45, 85)], [commit(84, 0, { total: 2 })], [], save);
+  assert.deepEqual(brief.explanation.blame, { kind: 'handler', name: 'handleSave', detail: 'SignInPage', ms: 38, confidence: 'measured' });
+});
+
 test('the render blame names the commit whose committing took the time', () => {
   // List renders for 30 ms and commits in 2; a layout effect of it sets state, and Tooltip renders in
   // 1 ms and then runs 200 ms of layout effects. The 200 ms is Tooltip's, so the blame is too.

@@ -1092,6 +1092,15 @@ site, paging a calendar forward one month (5 ms of working time, 82 of the scree
 85) came back `painting` and `measured` because its commit touched two. Two interactions of the same
 shape, one offered as a guess and the other as a measurement. They now read the same.
 
+**A long wait before the handlers outranks what ran in them.** A wait of 50 ms or more, a long task
+itself, that is at least the handlers' own time and the screen update is the verdict over a handler or
+a render inside the working time, as it was over a forced layout. It is the test the waiting branch
+asks, so a branch it closes is one the wait takes, and a wait under 50 ms closes nothing: a 38 ms
+handler after a 45 ms wait stays the handler's. Until 2026-09-26 only a forced layout, and a handler a
+production build could not time, stepped aside for it: a 480 ms click that waited 400 ms and then ran
+its handler for 58 ms was blamed on the handler, with the wait said nowhere but the phases, and optimising
+that handler would barely have moved it.
+
 **How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's own time (the
 larger of two figures: each render's start to its commit's end, where the build keeps the start, and

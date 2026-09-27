@@ -1719,6 +1719,12 @@ function explain(r: InteractionReport): Explanation {
   // The handler is the blame where it outruns all of React's time, or where React's time, whatever it
   // is, would not be the blame anyway: a 28 ms handler beside a 4 ms render and 24 ms of effects.
   const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
+  // A wait before the handlers that is a long task itself, and at least the handlers' own time and the screen
+  // update, is the answer over anything inside them: a 58 ms handler or a 40 ms render after a 400 ms wait did
+  // not make the click slow. The same test opens the waiting rung, so a rung this closes is one the wait takes. A
+  // wait short of a long task closes nothing, or a 38 ms handler after a 45 ms wait would be nobody's. What a
+  // closed rung would have named is not said under the wait, for the reason `closedByTheScreen` gives.
+  const waitingWins = r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing - between && r.inputDelay >= r.presentation;
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
@@ -1732,8 +1738,8 @@ function explain(r: InteractionReport): Explanation {
     forcedWhileHandling >= FORCED_LAYOUT_MIN_SHARE * handledWindow &&
     forcedWhileHandling > renderTotal &&
     forcedWhileHandling > outside &&
-    // A longer wait before the handlers is the answer, as it is for the handler rung: 26 ms of layout
-    // at the end of a 300 ms wait did not make the click slow.
+    // A longer wait before the handlers is the answer, as it is for the handler and render rungs: 26 ms
+    // of layout at the end of a 300 ms wait did not make the click slow.
     r.processing >= r.inputDelay &&
     !screenOutranks;
 
@@ -1912,7 +1918,7 @@ function explain(r: InteractionReport): Explanation {
       ms: forcedWhileHandling,
       confidence,
     };
-  } else if (c && handlerWins && !screenOutranks) {
+  } else if (c && handlerWins && !screenOutranks && !waitingWins) {
     const confidence = measuredFrom(...inWorkingTime);
     const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
     // Committing and effects React spent beside it, where they would be worth saying. They are the
@@ -1932,7 +1938,7 @@ function explain(r: InteractionReport): Explanation {
     // The component is the target's, which is where a React handler lives. A listener on the document
     // lives nowhere in the tree, so a name that came from the browser goes without one.
     blame = { kind: 'handler', name: handlerName ?? blamedListener, detail: blamedListener && !handlerName ? null : component, ms: outside, confidence };
-  } else if (c && rc && renderMatters && !screenOutranks) {
+  } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
     const confidence = measuredFrom(rc);
     // Without durations the blame rests on the component count alone, which is why it is a reading:
     // 600 cheap components can outrank the one expensive component that actually took the time. The
@@ -1972,7 +1978,7 @@ function explain(r: InteractionReport): Explanation {
     const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';
     cause = `${cap(handler)} ${HEDGE} took ${took}: ${howLittle}${ranEffects}.${profiling}`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
-  } else if (r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing - between && r.inputDelay >= r.presentation) {
+  } else if (waitingWins) {
     // What the input waited behind is usually on record: the long animation frame that was open when
     // it came lists its scripts, and the one that filled the wait is the thing to go and look at. It is
     // counted for its part inside the wait only, since what it did before the input came delayed nobody.
