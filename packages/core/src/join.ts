@@ -1632,7 +1632,12 @@ function explain(r: InteractionReport): Explanation {
   // Nor can it be more than the handlers' own time, which leaves out what ran between one event's handlers
   // and the next's.
   const outside = Math.max(0, r.processing - between - Math.max(0, Math.max(reactWhileHandling, renderTotal + forcedWhileHandling) - renderedBetweenMs));
-  const outsideMatters = hasDurations && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
+  // Where React is read and no commit during the handlers went unjoined, a report with no commit at all is React
+  // rendering nothing, so the whole working time is outside it whatever the build records: a 300 ms handler that
+  // set no state is the handler's, as it is beside a 1 ms render. Where a long animation frame recorded a script
+  // over the interaction, the browser's own record of it names it, as it did.
+  const reactIdle = !r.commits.length && !blind && !unjoined;
+  const outsideMatters = (hasDurations || (reactIdle && !anyScript)) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler
   // its count has to explain the working time as well: a list of 50 of one component, or a tree at no
@@ -1918,9 +1923,13 @@ function explain(r: InteractionReport): Explanation {
       ms: forcedWhileHandling,
       confidence,
     };
-  } else if (c && handlerWins && !screenOutranks && !waitingWins) {
+  } else if ((c || reactIdle) && handlerWins && !screenOutranks && !waitingWins) {
     const confidence = measuredFrom(...inWorkingTime);
-    const rest = renderTotal >= RENDER_MIN_MS ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}` : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
+    const rest = !c
+      ? renderedNothing
+      : renderTotal >= RENDER_MIN_MS
+        ? `React spent ${ms(renderTotal)} ${renderPhrase(c)}`
+        : `React's own render took ${renderTotal < 0.5 ? 'under 1 ms' : `only ${ms(renderTotal)}`}`;
     // Committing and effects React spent beside it, where they would be worth saying. They are the
     // totals, since the render named here need not be the commit that spent them.
     const spent = figures(committing, effects, totalsSaid);

@@ -521,9 +521,10 @@ test('a keyup is said to have waited on the next key press only where the page w
 test('the frame is said to wait on the next key press only where the screen update is the larger part of the interaction, under a long task as well', () => {
   const ring = (at: number, until: number) => [input(1000, 'keydown'), input(1100, 'keyup', { gestureTs: 1000 }), input(at, 'keydown', worked(until))];
   // 60 ms of handlers and 43 ms of screen update, which the next key's render filled from the end of the handlers.
+  // React rendered nothing for the keyup, so the 60 ms are the handlers'.
   const handled = report([entry('keyup', 1100, 104, 1101, 1161)], [], [], ring(1150, 1200));
   assert.equal(handled.nextInput?.start, 1150);
-  assert.equal(handled.explanation.blame.kind, 'none');
+  assert.deepEqual(handled.explanation.blame, { kind: 'handler', name: null, detail: null, ms: 60, confidence: 'measured' });
   assert.doesNotMatch(handled.explanation.cause, /waited on/);
   // A 45 ms wait before the handlers and 38 ms of screen update.
   const waitedLonger = report([entry('keyup', 1100, 88, 1145, 1150)], [], [], ring(1150.5, 1185));
@@ -1638,6 +1639,33 @@ test('where React stopped being read partway through an interaction, the note sa
   assert.match(notesOf(sealReport(after)), stopped);
   // With nothing read, nothing React did is in it.
   assert.match(notesOf(report(click, [], [], [], 'attributes', [], undefined, 'unreadable')), /^No react-dom on this page is being read, so nothing React did is in this report/m);
+});
+
+test('where React is read and rendered nothing, all of the working time is outside it in any build, so a slow handler is named', () => {
+  // A click whose handleSave ran from 2 to 302 ms and set no state. With a 1 ms commit it was the handler's,
+  // measured; with none it read as unknown, or as time that went to waiting and painting.
+  const click = [entry('click', 0, 320, 2, 302)];
+  const save = loginClick('handleSave');
+  const handler = { kind: 'handler', name: 'handleSave', detail: 'SignInPage', ms: 300, confidence: 'measured' };
+  // A browser without Long Animation Frames, and one that has recorded no frame over the click yet.
+  for (const frames of [null, []]) {
+    const r = report(click, [], frames, save);
+    assert.deepEqual(r.explanation.blame, handler);
+    assert.equal(r.explanation.cause, "The click handler handleSave ran for about 300 ms; React didn't render anything.");
+  }
+  assert.equal(report(click, [], null, [input(0, 'click')]).explanation.cause, "Code outside React (the click handler or other scripts) ran for about 300 ms; React didn't render anything.");
+  // Where the screen update outranks the working time, the handler is the note it leaves.
+  const painted = report([entry('click', 0, 200, 2, 62)], [], null, save);
+  assert.equal(painted.explanation.blame.kind, 'painting');
+  assert.ok(painted.explanation.notes.includes('The click handler handleSave still ran for about 60 ms of the 60 ms of working time before that.'));
+  // Where a frame recorded the listener, the browser's own record of the script is named, as before.
+  assert.deepEqual(report(click, [], [frame(0, 320, [script('BUTTON.onclick', 2, 300)])], save).explanation.blame, { ...handler, kind: 'script' });
+  // Where React is not read, or rendered in commits that could not be tied to the click, its time is unknown.
+  assert.equal(report(click, [], null, save, 'attributes', [], undefined, 'installed-late').explanation.blame.kind, 'none');
+  const unjoinable = [{ ...save[0]!, work: { endedAt: 0, unjoined: [50] } }];
+  assert.deepEqual(report(click, [], null, unjoinable).explanation.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
+  // And a handler short of the bar is still nobody's.
+  assert.equal(report([entry('click', 0, 40, 5, 20)], [], [], save).explanation.blame.kind, 'none');
 });
 
 test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {
