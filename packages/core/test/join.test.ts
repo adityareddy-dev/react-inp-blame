@@ -4269,6 +4269,17 @@ test('a render known only by its counts is not blamed under a long task of worki
     later.cause,
     'In 49 ms of working time, short of a long task, React was re-rendering 56 components inside Presence; a script (setTimeout, app.js) ran for 22 ms after the handler finished.',
   );
+  // A count that committed after the handlers did not sit in the working time, and is said to have come after it: 800
+  // rows committed 25 ms after 30 ms of handlers read "In 30 ms of working time, short of a long task, React was
+  // re-rendering 800 components", where the same rows after 55 ms of handlers ran "after the handlers".
+  const rows = commit(60, 0, { hasDurations: false, total: 0, rendered: 800, components: [{ name: 'Row', count: 800, self: null, total: null }] });
+  const afterShort = (frames: FrameSummary[] | null) => report([entry('click', 0, 72, 5, 35)], [rows], frames, [input(0, 'click')]).explanation;
+  assert.equal(afterShort(null).blame.kind, 'none');
+  assert.equal(
+    afterShort(null).cause,
+    'After the 30 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them), before the next frame; this browser does not report long tasks, so what else ran is unknown.',
+  );
+  assert.match(afterShort([]).cause, /^After the 30 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row \(800 of them\), before the next frame; the rest went/);
   // A frame that covered the click and listed the handler's script: 300 components re-rendered inside List in
   // 45 ms of working time, with 45 ms charged to the root's click listener. That script holds React's render
   // as well as the handler, so it is not measured in the render's place; the report blames nothing, as it

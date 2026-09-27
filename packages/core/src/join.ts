@@ -1838,8 +1838,16 @@ function explain(r: InteractionReport): Explanation {
   // A count the bar alone kept from naming the render. The rungs below the phase blames say so, with the
   // working time the count sat in, rather than calling the render small: nothing measured it, and a
   // count of 1298 is not small by the library's own bars. The time leads, so the count's own clauses
-  // ("31 of them inside DismissableLayer") do not read as what took it.
-  const shortOf = c && !hasDurations && !longTaskOfWork && countSays(c) ? `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(c)}` : null;
+  // ("31 of them inside DismissableLayer") do not read as what took it. A count that committed after the
+  // handlers did not sit in the working time, and is said to come after it, as the render verdict places it: 800 rows
+  // committed after 30 ms of handlers read "In 30 ms of working time, short of a long task, React was
+  // re-rendering 800 components", and the same rows after 55 ms "after the handlers, before the next frame".
+  const shortOf =
+    c && !hasDurations && !longTaskOfWork && countSays(c)
+      ? c.at > processingEnd + STAMP_TOLERANCE
+        ? `After the ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(c)}, before the next frame`
+        : `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(c)}`
+      : null;
   // The commit a render blame names is the one React spent longest on, committing and effects included,
   // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
   // no commit has a span this is the heaviest render, as everywhere else. Committing and effects only
