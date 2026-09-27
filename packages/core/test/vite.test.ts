@@ -609,13 +609,15 @@ test('a build of scripts only is told what to do where its inputs are named for 
 
   assert.match((await warningsFor(client({ build: { rollupOptions: { input: { index: 'virtual:vite-rsc/entry-browser' } } } })))[0]!, scriptsOnly);
   assert.match((await warningsFor(client({ build: { rolldownOptions: { input: 'src/entry.browser.tsx' } } })))[0]!, scriptsOnly);
-  // Vite 8.3's own `input`, which it reads after the bundler's.
+  // Vite 8.2's own `input`, which it reads after the bundler's.
   assert.match((await warningsFor(client({ input: 'src/entry.browser.tsx', build: { rollupOptions: {} } })))[0]!, scriptsOnly);
+  assert.match((await warningsFor(client({ input: 'index.html', build: { rollupOptions: { input: 'src/entry.browser.tsx' } } })))[0]!, scriptsOnly);
   // The client environment replacing the top-level page with a script builds no page.
   assert.match((await warningsFor(client({ build: { rollupOptions: { input: 'src/entry.browser.tsx' } } }, { rollupOptions: { input: 'index.html' } })))[0]!, scriptsOnly);
 
   assert.deepEqual(await warningsFor(client({ build: { rollupOptions: { input: { index: 'index.html', browser: 'src/entry.browser.tsx' } } } })), []);
   assert.deepEqual(await warningsFor(client({ input: 'index.html', build: { rollupOptions: {} } })), []);
+  assert.deepEqual(await warningsFor(client({ input: 'src/entry.browser.tsx', build: { rollupOptions: { input: 'index.html' } } })), []);
   assert.deepEqual(await warningsFor(client({ build: { rollupOptions: {} } })), []);
   assert.deepEqual(await warningsFor(client({ build: { lib: { entry: 'src/index.ts' }, rollupOptions: { input: 'src/index.ts' } } })), []);
   assert.deepEqual(await warningsFor(client({ build: { ssr: 'src/server.ts', rollupOptions: { input: 'src/server.ts' } } })), []);
