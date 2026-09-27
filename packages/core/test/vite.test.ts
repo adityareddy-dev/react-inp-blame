@@ -248,6 +248,8 @@ test("a page named only in Vite 8.2's input, at the top level or for the client 
   assert.deepEqual(decided(admin, named({ main: 'index.html', admin: './admin/index.html' }, 'top'), '/admin/index.html'), script);
   assert.deepEqual(decided(admin, [{ build: { rollupOptions: { input: { main: 'index.html', admin: 'admin/index.html' } } } }, {}], '/admin/index.html'), script);
   assert.deepEqual(decided(admin, [{ build: { rolldownOptions: { input: { main: 'index.html', admin: 'admin/index.html' } } } }, {}], '/admin/index.html'), script);
+  // An absolute input on Windows, as path.resolve(__dirname, ...) writes it, is the page below the root too.
+  assert.deepEqual(decided(admin, [{ root: 'C:/app', build: { rollupOptions: { input: { main: 'C:\\app\\index.html', admin: 'C:\\app\\admin\\index.html' } } } }, {}], '/admin/index.html'), script);
 
   // With root set to a folder of the project, Rollup (Vite 7 and before) reads a relative input from the working
   // directory, above the root, and Rolldown (Vite 8) from the root first and the working directory after. The page
