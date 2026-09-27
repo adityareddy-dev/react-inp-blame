@@ -230,8 +230,10 @@ Outside an interaction the per-commit cost is a renderer lookup, the check that 
 listeners did not cause the commit (a map lookup and two bit tests), and one subtraction.
 
 These figures were taken on 7917366, before the review fixes. What changed since costs a commit the
-listener check above and the walk a `tag` comparison per fiber; neither has been measured again, and the
-sizes below have.
+listener check above and the walk a `tag` comparison per fiber, and install() five capture listeners on
+the window beyond the seven above: `input`, `change` and `submit`, `resize`, and since 2026-09-26
+`keypress`, which reads what an Enter's keypress reaches before React runs it. None of that has been
+measured again, and the sizes below have.
 
 **Size.** Since 0.8.0 `scripts/size.mjs` measures the bundles on every CI run, with the same settings as
 below, and keeps the READMEs' tables current: on 3bc78de, where the script came in, `/auto` was 59.0 KB
