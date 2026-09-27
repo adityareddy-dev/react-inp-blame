@@ -422,14 +422,14 @@ export interface Blame {
    */
   readonly detail: string | null;
   /**
-   * How much of the interaction it accounts for, in ms; null when the build records no durations and
-   * React rendered during the interaction.
+   * How much of the interaction it accounts for, in ms; null for 'none', and for a render, a hydration
+   * or a handler where the build records no durations and React committed during the interaction.
    */
   readonly ms: number | null;
   /**
    * 'measured': the blame follows from timings of this interaction. A render or handler blame
    * rests on React's render durations for commits joined by their exact input stamp and walked in
-   * full, or a handler blame on React being read and committing nothing during the interaction, in
+   * full, or a handler blame on React committing nothing where it is read or not yet loaded, in
    * any build; waiting and painting on the browser's own phases; a script on its Long Animation Frames
    * entry; 'none' on Long Animation Frames showing no long script. A painting blame whose cause says
    * the frame waited on the next press (`InteractionReport.nextInput`) is still the screen update's own

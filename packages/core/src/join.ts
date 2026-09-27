@@ -1632,10 +1632,10 @@ function explain(r: InteractionReport): Explanation {
   // Nor can it be more than the handlers' own time, which leaves out what ran between one event's handlers
   // and the next's.
   const outside = Math.max(0, r.processing - between - Math.max(0, Math.max(reactWhileHandling, renderTotal + forcedWhileHandling) - renderedBetweenMs));
-  // Where React is read and no commit during the handlers went unjoined, a report with no commit at all is React
-  // rendering nothing, so the whole working time is outside it whatever the build records: a 300 ms handler that
-  // set no state is the handler's, as it is beside a 1 ms render. Where a long animation frame recorded a script
-  // over the interaction, the browser's own record of it names it, as it did.
+  // Where React is read, or no react-dom has loaded yet, and no commit during the handlers went unjoined, a report
+  // with no commit at all is React rendering nothing, so the whole working time is outside it whatever the build
+  // records: a 300 ms handler that set no state is the handler's, as it is beside a 1 ms render. Where a long
+  // animation frame recorded a script over the interaction, the browser's own record of it names it, as it did.
   const reactIdle = !r.commits.length && !blind && !unjoined;
   const outsideMatters = (hasDurations || (reactIdle && !anyScript)) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a

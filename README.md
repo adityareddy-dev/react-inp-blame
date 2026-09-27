@@ -1098,10 +1098,11 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   the interaction waited for is still named by its count at any working time, as before.
   The exceptions are what the browser times itself and the build cannot change: waiting, the screen update,
   a Long Animation Frames script, and forced layout inside the handlers, which stay `'measured'` in a
-  production build. So does a handler where React is read and rendered nothing: the working time is then
-  all outside React. The build is not the only thing that can lower a confidence, though: a script blame is
-  `'inferred'` whenever a commit could not be tied to the interaction, since a script is what is left once
-  React is ruled out and an unjoined commit is exactly what stops React from being ruled out.
+  production build. So does a handler where React rendered nothing, on a page where it is read or no
+  react-dom has loaded yet: the working time is then all outside React. The build is not the only thing
+  that can lower a confidence, though: a script blame is `'inferred'` whenever a commit could not be tied
+  to the interaction, since a script is what is left once React is ruled out and an unjoined commit is
+  exactly what stops React from being ruled out.
 - **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only. The
   browser counts style recalculation in the same figure, so a `'layout'` blame covers either. Its share of
   a script that ran on past the handlers is apportioned by time rather than measured, so such a blame is

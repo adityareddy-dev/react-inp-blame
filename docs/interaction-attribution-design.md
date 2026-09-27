@@ -1114,9 +1114,10 @@ React rendered nothing for had no such figure either, whatever the build: a hand
 and set no state read "React didn't render anything; this browser does not report long tasks, so what ran
 instead is unknown", or, where no long animation frame had been recorded yet, that the time went to waiting
 and painting, while a 1 ms commit beside the same handler made it the handler's, measured. Where React is
-read and `unjoinedCommits` is 0, no commit means none of the working time was React's, so the handler is
-weighed as it is beside a render. Where a long animation frame recorded a script over the interaction,
-the browser's record of it still names it, and where React is not read the setup is still the verdict.
+read, or no react-dom has loaded yet, and `unjoinedCommits` is 0, no commit means none of the working
+time was React's, so the handler is weighed as it is beside a render. Where a long animation frame
+recorded a script over the interaction, the browser's record of it still names it, and where install()
+ran too late or react-dom cannot be read, the setup is still the verdict.
 
 **How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's own time (the
