@@ -2241,7 +2241,7 @@ test('a DevTools hook that refuses a call by throwing a value with no string for
     const api = install({ devtoolsTrack: false });
     try {
       assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
-      assert.match(String(warn.mock.calls[0]?.arguments[0]), /__REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be chained onto \(a value that cannot be printed\), so React reports to it alone/);
+      assert.match(String(warn.mock.calls[0]?.arguments[0]), /__REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen, or has a method that cannot be assigned or added, so it cannot be wrapped/);
       assert.equal(hook.inject, inject);
       assert.equal(hook.onCommitFiberRoot, onCommitFiberRoot);
     } finally {
