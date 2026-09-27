@@ -683,8 +683,8 @@ function unreadableReactDom(): UnsupportedReason | null {
 /**
  * Looks for a page that turned the hook in use off where it is, or emptied the global over the shim, and for
  * a tool that replaced the shim by redefining or deleting the global, which its accessor cannot see (an
- * assignment it can). install() calls it at fixed points, so reading `stats()` or `debug.hook()` never
- * changes what they report.
+ * assignment it can), or by assigning over a shim the global holds as a plain value. install() calls it at
+ * fixed points, so reading `stats()` or `debug.hook()` never changes what they report.
  */
 export function checkHookReplaced(): void {
   const { attached, shim } = state;
