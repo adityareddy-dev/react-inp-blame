@@ -13,12 +13,21 @@ export function warnOnce(key: string, message: string, anchor = key): void {
   console.warn(`[react-inp-blame] ${message} See ${HELP}${anchor}`);
 }
 
+/** `error` as a warning quotes it. A thrown value with no string form, such as an object with no prototype, still gives one. */
+export function errorText(error: unknown): string {
+  try {
+    return String(error);
+  } catch {
+    return 'a value that cannot be printed';
+  }
+}
+
 /**
  * Says once that the library caught an error of its own. It is kept from the page's error handlers,
  * where error monitoring would count it as the app's, so this is the only place it shows.
  */
 export function dropped(error: unknown): void {
-  warnOnce('library-error', `an error inside the library (${String(error)}) was kept from the page, and what it was working on, usually one report, was dropped. Please open an issue with this message.`);
+  warnOnce('library-error', `an error inside the library (${errorText(error)}) was kept from the page, and what it was working on, usually one report, was dropped. Please open an issue with this message.`);
 }
 
 /**
