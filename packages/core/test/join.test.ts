@@ -1052,6 +1052,19 @@ test('a render stamped with a release is attached to nothing when another press 
   const data = commit(800, 600, { inputType: 'keyup', gestureTs: 0, inDispatch: false, rendered: 400, total: 60 });
   assert.equal(isLaterRender(buildReport(shift, [], [], shiftClick), data, shiftClick), false);
   assert.deepEqual(buildReport(shift, [data], [], shiftClick).followUps, []);
+  // A click is a press in between as well: the mouse went down before the key and was let go before it came up.
+  const clickBetween = [
+    input(-10, 'pointerdown', mouse),
+    input(0, 'keydown', { press: 'KeyA' }),
+    input(40, 'pointerup', { ...mouse, gestureTs: -10 }),
+    input(40.5, 'click', { ...mouse, gestureTs: -10 }),
+    input(80, 'keyup', { press: 'KeyA', gestureTs: 0 }),
+  ];
+  assert.equal(isLaterRender(buildReport(keyA, [], [], clickBetween), results, clickBetween), false);
+  // A pointer let go the same way, with a key gone down while it was held.
+  const alt = [input(0, 'pointerdown', mouse), input(100, 'keydown', { press: 'AltLeft' }), input(600, 'pointerup', { ...mouse, gestureTs: 0 })];
+  const released = commit(900, 600, { inputType: 'pointerup', gestureTs: 0, inDispatch: false, rendered: 400, total: 60 });
+  assert.equal(isLaterRender(buildReport([entry('pointerdown', 0, 24, 1, 10)], [], [], alt), released, alt), false);
   // With nothing else pressed in between, the keyup's render is still the key's, and so is one React made
   // inside the keyup's own dispatch, whoever went down before it.
   const alone = [input(0, 'keydown', { press: 'KeyA' }), input(80, 'keyup', { press: 'KeyA', gestureTs: 0 })];
