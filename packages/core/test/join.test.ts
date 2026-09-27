@@ -638,6 +638,46 @@ test('a keyup is said to have waited on the next key press only where the page w
   assert.match(cause({}, [frame(1100, 104, [script('DIV#root.oninput', 1104, 60)])]), /: the frame waited on the next key press, which the page handled first\. /);
 });
 
+test('where the frame most likely waited on the next key press, the script after the handlers names the painting blame only where it ran for half of the screen update', () => {
+  // A keyup handled by 1004 and painted at 1304, 300 ms of screen update, with the next key down at 1006.
+  // Only the end of that key's render shows the frame waited on it, so the clause is hedged.
+  const entries = [entry('keydown', 900, 16, 901, 903), entry('keyup', 1000, 304, 1001, 1004)];
+  const typed = [input(900, 'keydown'), input(1000, 'keyup', { gestureTs: 900 })];
+  const keyup = (until: number, frames: FrameSummary[], rendered = 12, total = 8, ring = [...typed, input(1006, 'keydown', worked(until))]) =>
+    report(entries, [commit(until, 1006, { inputType: 'keydown', rendered, total })], frames, ring).explanation;
+  const painting = (name: string | null) => ({ kind: 'painting', name, detail: null, ms: 300, confidence: 'measured' });
+  const hedged = 'After the key press was handled, the screen took another 300 ms to update: the frame most likely waited on the next key press, which the page handled first.';
+
+  // A 20 ms timer in the frame the next key's handler ran in is in the sentence, with its own figure, and is not the blame.
+  const small = keyup(1163, [frame(995, 155, [], 1010), frame(1150, 60, [script('DIV#root.onkeydown', 1150, 15), script('TimerHandler:setTimeout', 1166, 20)], 1195)]);
+  assert.deepEqual(small.blame, painting(null));
+  assert.equal(small.cause, `${hedged} The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 20 ms.`);
+  // Nor is a 101 ms timer the next key waited behind, a third of it, in one fully recorded frame.
+  const timerFirst = (timer: number, key: number) => [frame(1000, 304, [script('TimerHandler:setTimeout', 1004, timer), script('DIV#root.onkeydown', 1004 + timer, key)], 1004 + timer + key)];
+  const behind = keyup(1160, timerFirst(101, 60), 40, 40);
+  assert.deepEqual(behind.blame, painting(null));
+  assert.equal(behind.cause, `${hedged} The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 101 ms.`);
+  // As with no next key at all.
+  assert.equal(keyup(1160, timerFirst(101, 60), 40, 40, typed).blame.name, null);
+  // At half of the screen update it names the blame, and just under half it does not.
+  assert.deepEqual(keyup(1232, timerFirst(201, 30), 12, 20).blame, painting('TimerHandler:setTimeout'));
+  assert.equal(keyup(1170, timerFirst(150, 20)).blame.name, 'TimerHandler:setTimeout');
+  const under = keyup(1170, timerFirst(149, 20));
+  assert.deepEqual(under.blame, painting(null));
+  assert.equal(under.cause, `${hedged} The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 149 ms.`);
+  // The next key's own handler under half is that key's work, not this keyup's name.
+  const handler = keyup(1160, [frame(1000, 304, [script('DIV#root.onkeydown', 1080, 80)], 1165)], 40, 40);
+  assert.deepEqual(handler.blame, painting(null));
+  assert.equal(handler.cause, `${hedged} The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 80 ms.`);
+  // Where that handler ran for half of the screen update, it is on record from the press and the clause is not hedged.
+  const held = keyup(1245, [frame(1000, 304, [script('DIV#root.onkeydown', 1006, 244)], 1250)], 900, 230);
+  assert.deepEqual(held.blame, painting('DIV#root.onkeydown'));
+  assert.equal(
+    held.cause,
+    'After the key press was handled, the screen took another 300 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 244 ms.',
+  );
+});
+
 test('the frame is said to wait on the next key press only where the screen update is the larger part of the interaction, under a long task as well', () => {
   const ring = (at: number, until: number) => [input(1000, 'keydown'), input(1100, 'keyup', { gestureTs: 1000 }), input(at, 'keydown', worked(until))];
   // 60 ms of handlers and 43 ms of screen update, which the next key's render filled from the end of the handlers.

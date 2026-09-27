@@ -2187,9 +2187,12 @@ function explain(r: InteractionReport): Explanation {
   } else if (waitedOnNext) {
     // The frame waited on the next press, which the page handled first. What it did for that press is the
     // next report's, so there is nothing of this interaction's own to blame, and the wait is the answer.
-    // The blame is the screen update, this interaction's own phase, and stays measured.
+    // The blame is the screen update, this interaction's own phase, and stays measured. It takes a script's
+    // name as any painting blame does, only where the script ran for half of the screen update: where only
+    // the press's render says the frame waited, a 20 ms timer is the longest script the sentence gives,
+    // with its own figure, and is not the blame.
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${nextClause}`;
-    blame = { kind: 'painting', name: lateScript ? scriptName(lateScript.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
+    blame = { kind: 'painting', name: lateLeads ? scriptName(lateLeads.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (screenOutranks) {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot
     // be refused for the screen update and then fall past it.

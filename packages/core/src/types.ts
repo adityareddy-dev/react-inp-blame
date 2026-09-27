@@ -404,8 +404,7 @@ export interface Blame {
    * the input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that
    * filled at least half of the wait, before the first handler or between them; null otherwise. A
    * 'painting' takes the invoker of the script after the handlers that ran for at least half of the
-   * screen update ("DIV.onscroll"), or, where the frame waited on the next interaction's press, of the
-   * longest script after the handlers; null otherwise. A 'handler' React has no name for (a listener
+   * screen update ("DIV.onscroll"); null otherwise. A 'handler' React has no name for (a listener
    * bound on the document, say) takes the invoker of the longest script in the working time on the
    * same terms as a 'waiting': "#document.onkeydown".
    */
