@@ -297,11 +297,12 @@ React DevTools never installs over an existing hook: its `installHook` returns a
 `window` has the property, reading and writing nothing. So a shim that loads before it locks
 React DevTools out without a trace, and `api.debug.hook().devtoolsLockedOut` cannot see that happen. The
 flag catches only a tool that assigns its own hook later, which the shim notices because it is an
-accessor on `window`: before React has registered, the library follows the new hook; after, React
-keeps reporting to the shim, the flag turns true and one warning says so. The browser extension
-installs its hook at document start, before any page script, so beside it the library chains; the
-lockout needs the page itself to install React DevTools after the library, as a call to
-react-devtools-inline's `initialize()` after the library's import does.
+accessor on `window`: before React has registered, the library follows the new hook, or is
+`'unsupported'` where that hook is switched off; after, React keeps reporting to the shim, the flag
+turns true and one warning says so. The browser extension installs its hook at document start,
+before any page script, so beside it the library chains; the lockout needs the page itself to
+install React DevTools after the library, as a call to react-devtools-inline's `initialize()` after
+the library's import does.
 `apps/demo/e2e/devtools-hook.spec.ts` loads React DevTools' real hook (react-devtools-inline
 8.0.0) and the Fast Refresh runtime (react-refresh 0.19.0) before and after the library, in
 development and production builds (Fast Refresh in development only, its runtime throws in a
