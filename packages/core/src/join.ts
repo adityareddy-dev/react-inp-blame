@@ -407,10 +407,13 @@ const latest = (stamps: readonly Stamp[]) => stamps.reduce((a, s) => Math.max(a,
  * `submit` a script dispatched between the paint and the commit (`InputWork.closers`), which the ring
  * never holds: Playwright's `selectOption` changes a select that way, so a page size changed through it
  * still put its render on the sort click. With nothing newer the commit belongs where its stamp says.
+ *
+ * A commit before the headline's input, after the press painted, is looked at from that paint (`since`):
+ * the interaction's own inputs go on past the commit, so nothing after all of them came before it.
  */
-function newerInputBefore(inputs: readonly InputRecord[], stamps: readonly Stamp[], end: number, at: number): boolean {
+function newerInputBefore(inputs: readonly InputRecord[], stamps: readonly Stamp[], end: number, at: number, since?: number): boolean {
   const own = ringInputs(inputs, stamps);
-  const last = own.reduce((a, i) => Math.max(a, i.ts), latest(stamps));
+  const last = since ?? own.reduce((a, i) => Math.max(a, i.ts), latest(stamps));
   if (inputs.some((i) => !own.includes(i) && i.ts > last + STAMP_TOLERANCE && i.ts <= at)) return true;
   const from = Math.max(last, end) + STAMP_TOLERANCE;
   return own.some((i) => i.work.closers?.some((t) => t > from && t <= at));
@@ -576,10 +579,10 @@ export function buildReport(
         // another of the interaction's entries (a press held before a click), or before its press can
         // have painted, `holdMs` covers it. After one of them painted it is a later render of that paint,
         // as one after the headline's is: a keydown's render before its slower keyup, or a pointerdown's
-        // while the pointer was held.
+        // while the pointer was held. Anything newer is looked for from that paint.
         const from = paintBefore(entries, c);
         const inEntry = entries.some((e) => c.at >= e.startTime - STAMP_TOLERANCE && c.at <= paintOf(e));
-        if (from > -Infinity && !inEntry && isFollowUp(c, from, inputs, stamps, inputWindow)) followUps.push(joined(c, 'exact'));
+        if (from > -Infinity && !inEntry && isFollowUp(c, from, inputs, stamps, inputWindow, from)) followUps.push(joined(c, 'exact'));
         continue;
       }
       if (c.at <= paintBound) inWindow.push(joined(c, 'exact'));
@@ -753,8 +756,8 @@ export function refreshFrames(r: ReportData, frames: readonly FrameSummary[]): R
  * `inputWindow` of `followUpFrom`, the length the hook walks a commit by, so a page that sets it longer
  * gets the renders it pays to walk and one that sets it shorter keeps the ones it walked.
  */
-function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: readonly Stamp[], inputWindow: number): boolean {
-  return c.at - followUpFrom(c, end, inputs, stamps) <= inputWindow && worthMentioning(c) && !newerInputBefore(inputs, stamps, end, c.at) && !releaseAfterOtherPress(c, inputs, stamps);
+function isFollowUp(c: CommitSummary, end: number, inputs: readonly InputRecord[], stamps: readonly Stamp[], inputWindow: number, since?: number): boolean {
+  return c.at - followUpFrom(c, end, inputs, stamps) <= inputWindow && worthMentioning(c) && !newerInputBefore(inputs, stamps, end, c.at, since) && !releaseAfterOtherPress(c, inputs, stamps);
 }
 
 /**

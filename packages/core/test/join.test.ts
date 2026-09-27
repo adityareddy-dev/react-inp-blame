@@ -989,6 +989,22 @@ test("a render a key press set off after it painted is still a later render once
   assert.match(note(next), /^A React render landed 126 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it, but people still wait for it\.$/);
 });
 
+test("a press's render before a slower release is looked at from the press's paint for anything that came between", () => {
+  // A script dispatched a change at 100, after the keydown painted at 24 and before the render at 150. Judged
+  // against the keydown's report the render was left out for it, and the keyup's put it back: the check ran
+  // after the interaction's last input, the keyup at 300, which came after the render.
+  const keydown = entry('keydown', 0, 24, 1, 10);
+  const pressed = input(0, 'keydown', { press: 'KeyA', work: { endedAt: 0, unjoined: [], closers: [100] } });
+  const render = commit(150, 0, { inputType: 'keydown', rendered: 400, total: 60 });
+  assert.equal(isLaterRender(buildReport([keydown], [], [], [pressed]), render, [pressed]), false);
+  const both = [keydown, entry('keyup', 300, 48, 301, 340)];
+  const released = input(300, 'keyup', { press: 'KeyA', gestureTs: 0 });
+  assert.deepEqual(buildReport(both, [render], [], [pressed, released]).followUps, []);
+  // So is another key that went down in between.
+  const rolled = [input(0, 'keydown', { press: 'KeyA' }), input(100, 'keydown', { press: 'KeyB' }), released];
+  assert.deepEqual(buildReport(both, [render], [], rolled).followUps, []);
+});
+
 test('a render a press too quick for an entry set off is a later render of the release that heads the report', () => {
   // A pointerdown under 16 ms sends no entry, and that is the usual press, so only the click's arrived. With
   // no entry painted before it, the render the press set off at 100, while the pointer was held, was thrown
