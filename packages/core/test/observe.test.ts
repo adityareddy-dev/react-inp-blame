@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildReport, sealReport } from '../src/join.ts';
-import { observeEventTiming } from '../src/observe.ts';
-import type { CommitSummary } from '../src/types.ts';
+import { observeEventTiming, observeFrames } from '../src/observe.ts';
+import type { CommitSummary, FrameSummary } from '../src/types.ts';
 
 // The browser's PerformanceObserver, reduced to the two delivery rules these tests are about:
 // an `event` entry reaches an observer only at or above its durationThreshold (never under
@@ -113,4 +113,74 @@ test('a first input replayed to an install() that ran after it is handed over wh
     handed.map((batch) => batch.map((e) => `${e.entryType} ${e.name} ${e.duration}`)),
     [['first-input pointerdown 56']],
   );
+});
+
+/** A long-animation-frame entry as the browser gives it, holding scripts as `[invoker, startTime, duration]`, each from an inline script on `page`. */
+function loaf(startTime: number, duration: number, scripts: [string, number, number][], page = 'https://shop.example/') {
+  return {
+    entryType: 'long-animation-frame',
+    startTime,
+    duration,
+    blockingDuration: Math.max(0, duration - 50),
+    styleAndLayoutStart: startTime + duration - 2,
+    scripts: scripts.map(([invoker, start, length]) => ({ invoker, sourceFunctionName: '', sourceURL: page, startTime: start, duration: length, forcedStyleAndLayoutDuration: 0 })),
+  };
+}
+
+test("a script the browser names by a URL is kept without the URL's query and fragment, and any other invoker as the browser gave it", () => {
+  const frames: FrameSummary[] = [];
+  const invokers = [
+    'https://cdn.example/app.js?sig=abc#x',
+    'https://shop.example/account#access_token=abc',
+    // An event listener on an element with no id is named by its src.
+    'IMG[src=https://cdn.example/avatars/ada.png?X-Amz-Signature=abc].onload',
+    'IMG[src=/avatars/ada.png?v=3].onerror',
+    'IMG#avatar.onload',
+    '#document.onclick',
+    'DIV#root.onclick',
+    'TimerHandler:setTimeout',
+    'MessagePort.onmessage',
+    'Response.json.then',
+    'blob:https://shop.example/1234',
+    '',
+  ];
+  inBrowser((paint) => {
+    observeFrames(frames, () => {});
+    paint([loaf(1000, 240, invokers.map((invoker, i) => [invoker, 1000 + i * 20, 20]))]);
+  });
+  assert.deepEqual(
+    frames[0]?.scripts.map((s) => s.invoker),
+    [
+      'https://cdn.example/app.js',
+      'https://shop.example/account',
+      'IMG[src=https://cdn.example/avatars/ada.png].onload',
+      'IMG[src=/avatars/ada.png].onerror',
+      'IMG#avatar.onload',
+      '#document.onclick',
+      'DIV#root.onclick',
+      'TimerHandler:setTimeout',
+      'MessagePort.onmessage',
+      'Response.json.then',
+      'blob:https://shop.example/1234',
+      '',
+    ],
+  );
+});
+
+test('a click that waited behind an inline script on a reset link blames the page by its path, and the token in its query is nowhere in the report', () => {
+  const frames: FrameSummary[] = [];
+  const page = 'https://shop.example/reset-password?token=s3cr3t-reset-token&email=ada%40example.com';
+  inBrowser((paint) => {
+    observeFrames(frames, () => {});
+    paint([loaf(1000, 352, [[page, 1000, 300]], page)]);
+  });
+  const r = sealReport(buildReport([timing('event', 'click', 352, 1300, 1350)], [], frames));
+  assert.deepEqual(r.explanation.blame, { kind: 'waiting', name: 'https://shop.example/reset-password', detail: null, ms: 300, confidence: 'measured' });
+  assert.equal(
+    r.explanation.cause,
+    'The click waited 300 ms before its handler could start: a script (https://shop.example/reset-password, /reset-password) ran first and held the main thread for all of that wait.',
+  );
+  const sent = JSON.stringify(r);
+  assert.equal(sent.includes('s3cr3t'), false);
+  assert.equal(sent.includes('ada%40example.com'), false);
 });
