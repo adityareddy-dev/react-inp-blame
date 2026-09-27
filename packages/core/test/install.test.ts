@@ -721,6 +721,8 @@ async function overLockedHook(t: TestContext, lock: (hook: ReturnType<typeof exi
     assert.equal('onPostCommitFiberRoot' in locked, false, 'the locked hook was left wrapped');
     page.paint([slowClick(120)]);
     assert.equal(api.last()?.duration, 120);
+    // The report says why nothing React did is in it, in words that fit a hook the page locked.
+    assert.match(api.last()?.explanation.notes.join('\n') ?? '', /the page turns its DevTools hook off or locks it/);
     assert.equal(warn.mock.callCount(), 1);
     assert.match(warn.mock.calls[0].arguments[0], /cannot be wrapped/);
     api.dispose();
