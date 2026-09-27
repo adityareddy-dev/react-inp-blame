@@ -2078,7 +2078,9 @@ test("a click on an icon that the click swapped out is named by the button it wa
 
 test("Enter in a form's field is named by the onSubmit its keypress reached, read as the keypress was dispatched", async () => {
   await inBrowser((page) => {
-    const api = install({ devtoolsTrack: false });
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ devtoolsTrack: false, hook: 'chain' });
     function Wizard() {}
     function goNext() {}
     function finish() {}
@@ -2158,9 +2160,12 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
       delete field.__reactFiber$demo;
       delete field.__reactProps$demo;
     };
+    // React hydrates an element with the same props on it and on the fiber it caches there.
     const hydrate = (onSubmit = finish, props: Record<string, unknown> = fieldProps) => {
       rootFiber.memoizedState = { isDehydrated: false };
-      Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit } });
+      formFiber.memoizedProps = { onSubmit };
+      fieldFiber.memoizedProps = props;
+      Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: formFiber.memoizedProps });
       Object.assign(field, { __reactFiber$demo: fieldFiber, __reactProps$demo: props });
     };
     dehydrate();
@@ -2171,13 +2176,19 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     hydrate();
     page.paint([{ ...pointer('keydown', 12, 5000, 140), target: field }]);
     assert.equal(api.last()?.target?.handler, 'setEmail');
-    // React hydrates the HTML a key lands on inside the keydown, and then the keydown's entry carries the hydration
-    // and outweighs the keypress's. Its element is read again as the keypress is dispatched: hydrated by then, and
-    // not yet rendered by the submit.
-    const hydratedInKeydown = (id: number, ts: number, props: Record<string, unknown>, keypressOn = field) => {
+    // React hydrates the HTML a key lands on inside the keydown, to run it, and commits that before any handler runs.
+    // Then the keydown's entry carries the hydration and outweighs the keypress's. Its element is read again at that
+    // commit: hydrated by then, and not yet rendered by the key or the submit.
+    const renderer = existing.inject(reactDom('19.3.0'));
+    const hydratedInKeydown = (id: number, ts: number, props: Record<string, unknown>, keypressOn = field, keydownRender = () => {}) => {
       dehydrate();
-      page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' });
+      const pressed = { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' };
+      page.fire('keydown', pressed);
+      page.window.event = pressed;
       hydrate(goNext, props);
+      existing.onCommitFiberRoot(renderer, mountedRoot(0b11, 4));
+      delete page.window.event;
+      keydownRender();
       page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: keypressOn, code: 'Enter' });
       form.__reactProps$demo = { onSubmit: finish };
       const keydown = { ...pointer('keydown', id, ts, 400), processingEnd: ts + 361, target: field };
@@ -2188,8 +2199,16 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     // A field with its own onKeyDown ran it in the keydown, and that is what the keydown is named by.
     function checkShortcut() {}
     assert.equal(hydratedInKeydown(14, 7000, { ...fieldProps, onKeyDown: checkShortcut }), 'checkShortcut');
+    // One the key's own render swaps, with a render after it, from an effect, that leaves the fiber cached on the
+    // field current again with the swapped props. The keydown ran checkShortcut, and was read as React hydrated it.
+    function closeShortcut() {}
+    const swapped = () => {
+      fieldFiber.memoizedProps = { ...fieldProps, onKeyDown: closeShortcut };
+      field.__reactProps$demo = fieldFiber.memoizedProps;
+    };
+    assert.equal(hydratedInKeydown(17, 7500, { ...fieldProps, onKeyDown: checkShortcut }, field, swapped), 'checkShortcut');
     // One that moves focus sends the keypress to the element it focused, whose own onKeyDown never ran for the key.
-    // The keydown is read again from its own element.
+    // The keydown is read from its own element.
     function focusResults() {}
     function moveThroughResults() {}
     const resultsProps = { tabIndex: -1, onKeyDown: moveThroughResults };
@@ -2197,6 +2216,38 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     const results = { ...node('ul', resultsFiber, container), __reactProps$demo: resultsProps };
     resultsFiber.stateNode = results;
     assert.equal(hydratedInKeydown(16, 8000, { ...fieldProps, onKeyDown: focusResults }, results), 'focusResults');
+    api.dispose();
+  });
+});
+
+test("a key on server HTML is named by the handler React hydrated the element with to run it, not the one the key's own render gave it", async () => {
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ devtoolsTrack: false, hook: 'chain' });
+    const renderer = existing.inject(reactDom('19.3.0'));
+    function Toolbar() {}
+    function openMenu() {}
+    function closeMenu() {}
+    const rootFiber = { tag: 3, elementType: null, type: null, memoizedProps: null, memoizedState: { isDehydrated: true }, return: null };
+    const toolbarFiber = { tag: 0, elementType: Toolbar, type: Toolbar, memoizedProps: {}, return: rootFiber };
+    const container = { nodeType: 1, tagName: 'DIV', id: '', classList: { length: 0 }, parentNode: null, parentElement: null, firstChild: null, getAttribute: () => null, __reactContainer$demo: rootFiber };
+    // `onKeyDown={open ? closeMenu : openMenu}` on server HTML React has not hydrated: nothing on the button to read yet.
+    const button: Record<string, unknown> = { nodeType: 1, tagName: 'BUTTON', id: '', classList: { length: 0 }, parentNode: container, parentElement: container, firstChild: null, getAttribute: () => null };
+    const pressed = { isTrusted: true, type: 'keydown', timeStamp: 1000, target: button, code: 'ArrowDown' };
+    page.fire('keydown', pressed);
+    // React hydrates it inside the keydown, to run it, and commits that before any handler runs.
+    page.window.event = pressed;
+    const buttonFiber: Record<string, unknown> = { tag: 5, elementType: 'button', type: 'button', memoizedProps: { onKeyDown: openMenu }, return: toolbarFiber, stateNode: button };
+    rootFiber.memoizedState = { isDehydrated: false };
+    Object.assign(button, { __reactFiber$demo: buttonFiber, __reactProps$demo: buttonFiber.memoizedProps });
+    existing.onCommitFiberRoot(renderer, mountedRoot(0b11, 4));
+    delete page.window.event;
+    // openMenu ran, and its render put closeMenu on the button. A layout effect that measured the open menu rendered
+    // it again, which left the fiber cached on the button current, with closeMenu too.
+    button.__reactProps$demo = buttonFiber.memoizedProps = { onKeyDown: closeMenu };
+    page.paint([{ ...pointer('keydown', 3, 1000, 140), processingEnd: 1126, target: button }]);
+    assert.equal(api.last()?.target?.handler, 'openMenu');
     api.dispose();
   });
 });

@@ -212,8 +212,11 @@ test("the handler is the one the ring read at dispatch, where the click's own re
   assert.equal(clickOn(edited, { handler: 'save' }), 'save');
   // Where React had no handler on it at dispatch, as before a page's hydrateRoot, none ran, whatever it has now.
   assert.equal(clickOn(edited, { handler: null }), null);
-  // Server HTML at dispatch had nothing to read yet, and React hydrated it to run the click: it is read now.
-  assert.equal(clickOn(button(addToCart), { handler: null, dehydrated: { scope: 'boundary', owner: 'ProductPage' } }), 'addToCart');
+  // Server HTML at dispatch had nothing to read yet. React hydrated it inside the click's dispatch, to run it, and the
+  // record was read again then; one React did not hydrate there is read now.
+  const dehydrated = { scope: 'boundary', owner: 'ProductPage' } as const;
+  assert.equal(clickOn(edited, { handler: 'save', dehydrated, hydratedRead: true }), 'save');
+  assert.equal(clickOn(button(addToCart), { handler: null, dehydrated }), 'addToCart');
   // So is an event the ring has no record of.
   assert.equal(report([entry('click', 0, 120, 3, 100, { target: edited })], [], []).target?.handler, 'startEdit');
   // Two fingers on two buttons in one frame: each report takes the record of its own button, not the first at its time.
@@ -3171,15 +3174,16 @@ test("Enter's work in the keypress entry is named by the form's onSubmit, from t
 
 test("Enter's submit is named by the onSubmit its keypress reached at dispatch, where the submit's own render gave the form another", () => {
   // `onSubmit={step < 2 ? goNext : finish}`: Enter on the first step ran goNext from the keypress, and the submit's
-  // render put finish on the form before the entries came. The keypress has no record of its own; what it reached
-  // was read onto its keydown's as it was dispatched.
+  // render put finish on the form before the entries came, and on the fiber cached on it, which typing in the field
+  // had rendered once before. The keypress has no record of its own; what it reached was read onto its keydown's as
+  // it was dispatched.
   function goNext() {}
   function finish() {}
   function Wizard() {}
   const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
     ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null }) as Record<string, unknown>;
-  const form = fiberOf(5, 'form', fiberOf(0, Wizard, null), { onSubmit: goNext });
-  form.stateNode = Object.assign(element('form', []), { __reactFiber$k1: form, __reactProps$k1: { onSubmit: finish } });
+  const form = fiberOf(5, 'form', fiberOf(0, Wizard, null), { onSubmit: finish });
+  form.stateNode = Object.assign(element('form', []), { __reactFiber$k1: form, __reactProps$k1: form.memoizedProps });
   const field = fiberOf(5, 'input', form, { type: 'text', name: 'email' });
   const target = Object.assign(element('input', [], { name: 'email' }), { __reactFiber$k1: field }) as unknown as Node;
   const press = [entry('keydown', 0, 140, 1, 3, { target }), entry('keypress', 0, 140, 3, 123, { target })];
@@ -3223,27 +3227,56 @@ test("an input method's Enter read from the element when the entry comes is read
   assert.equal(report(composed, [], [], keydown('Enter')).target?.handler, 'goNext');
 });
 
-test("Enter on server HTML React hydrated inside the keydown is named by the keydown's element as the keypress was dispatched", () => {
-  // React hydrates the boundary a key lands on inside the keydown, so the keydown's entry carries the hydration and
-  // outweighs the keypress's. By the keypress the field was hydrated and its keydown read again, before the submit's
-  // render put finish on the form. Read when the entries came, it named the step after.
+test("Enter on server HTML React hydrated inside the keydown is named by the keydown's element as React hydrated it", () => {
+  // React hydrates the boundary a key lands on inside the keydown, to run it, so the keydown's entry carries the
+  // hydration and outweighs the keypress's. The field was read again at the commit that hydrated it, before the
+  // submit's render put finish on the form and on the fiber cached on it. Read when the entries came, it named the
+  // step after.
   function goNext() {}
   function finish() {}
   function Wizard() {}
   const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
     ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null }) as Record<string, unknown>;
-  const form = fiberOf(5, 'form', fiberOf(0, Wizard, null), { onSubmit: goNext });
-  form.stateNode = Object.assign(element('form', []), { __reactFiber$k1: form, __reactProps$k1: { onSubmit: finish } });
+  const form = fiberOf(5, 'form', fiberOf(0, Wizard, null), { onSubmit: finish });
+  form.stateNode = Object.assign(element('form', []), { __reactFiber$k1: form, __reactProps$k1: form.memoizedProps });
   const field = fiberOf(5, 'input', form, { type: 'text', name: 'email' });
   const target = Object.assign(element('input', [], { name: 'email' }), { __reactFiber$k1: field }) as unknown as Node;
   const hydrating = [entry('keydown', 0, 400, 1, 361, { target }), entry('keypress', 0, 400, 361, 393, { target })];
   const keydown = (extra: Partial<InputRecord>) => [input(0, 'keydown', { target, press: 'Enter', key: 'Enter', owners: ['Wizard'], dehydrated: { scope: 'boundary', owner: 'Wizard' }, ...extra })];
-  assert.equal(report(hydrating, [], [], keydown({ handler: 'goNext', keypressHandler: 'goNext' })).target?.handler, 'goNext');
+  assert.equal(report(hydrating, [], [], keydown({ handler: 'goNext', hydratedRead: true, keypressHandler: 'goNext' })).target?.handler, 'goNext');
   // A field with its own onKeyDown ran it in the keydown, which is that entry's handler and not the onSubmit its
   // keypress reached.
-  assert.equal(report(hydrating, [], [], keydown({ handler: 'checkShortcut', keypressHandler: 'goNext' })).target?.handler, 'checkShortcut');
-  // With no keypress while hydrated, the keydown had nothing read, and the form is read now.
+  assert.equal(report(hydrating, [], [], keydown({ handler: 'checkShortcut', hydratedRead: true, keypressHandler: 'goNext' })).target?.handler, 'checkShortcut');
+  // A keydown React did not hydrate inside its own dispatch was not read again, and the form is read now.
   assert.equal(report(hydrating, [], [], keydown({})).target?.handler, 'finish');
+});
+
+test("an element read when the entry comes is read from the fiber cached on it, not from the props the event's own render put there", () => {
+  // `onKeyDown={open ? closeMenu : openMenu}` on server HTML: openMenu ran, and its render put closeMenu on the
+  // button before the entry came. The fiber cached on the button is the one React hydrated it with, and it still
+  // holds openMenu.
+  function openMenu() {}
+  function closeMenu() {}
+  function Toolbar() {}
+  const host = (tag: string, cached: Record<string, unknown>, now: Record<string, unknown>) => {
+    const owner = { tag: 0, flags: 0, mode: 0, elementType: Toolbar, type: Toolbar, memoizedProps: {}, memoizedState: null, return: null, child: null, sibling: null, alternate: null };
+    const fiber: Record<string, unknown> = { tag: 5, flags: 0, mode: 0, elementType: tag, type: tag, memoizedProps: cached, memoizedState: null, return: owner, child: null, sibling: null, alternate: null };
+    fiber.stateNode = Object.assign(element(tag, []), { __reactFiber$k1: fiber, __reactProps$k1: now });
+    return fiber.stateNode as Node;
+  };
+  const dehydrated = { scope: 'boundary', owner: 'Toolbar' } as const;
+  const pressed = (target: Node, extra: Partial<InputRecord> = {}) =>
+    report([entry('keydown', 0, 140, 1, 126, { target })], [], [], [input(0, 'keydown', { target, press: 'ArrowDown', key: 'ArrowDown', dehydrated, ...extra })]).target?.handler;
+  // React did not hydrate it inside the key's dispatch, so the record was not read again.
+  assert.equal(pressed(host('button', { onKeyDown: openMenu }, { onKeyDown: closeMenu })), 'openMenu');
+  // Where it did, the reading from then is taken. Here a layout effect rendered the button again, and the fiber cached
+  // on it is the current one, with closeMenu too.
+  assert.equal(pressed(host('button', { onKeyDown: closeMenu }, { onKeyDown: closeMenu }), { handler: 'openMenu', hydratedRead: true }), 'openMenu');
+  // The `input` an input method sends has no record, and its render gave the field another onChange.
+  function startSearch() {}
+  function updateSearch() {}
+  const field = host('input', { type: 'search', onChange: startSearch }, { type: 'search', onChange: updateSearch });
+  assert.equal(report([entry('input', 0, 120, 1, 100, { target: field })], [], []).target?.handler, 'startSearch');
 });
 
 test("Enter in a field that submits by clicking the form's submit button is named by the onSubmit its keypress reached", () => {
@@ -3283,6 +3316,9 @@ test("Enter in a field that submits by clicking the form's submit button is name
   // work from the onSubmit's: the keypress's own reading names it.
   const firefox = [entry('keypress', 0, 100, 2, 82, { target: field })];
   assert.equal(report(firefox, [], [], ring(field, 'placeOrder', 'trackClick', 'onlyDigits')).target?.handler, 'onlyDigits');
+  // So does Chromium for a form with no submit button, which Enter in its one field submits with no click.
+  const noButton = pressed(field).slice(0, 2);
+  assert.equal(report(noButton, [], [], ring(field, 'placeOrder', 'trackClick', 'onlyDigits').slice(0, 1)).target?.handler, 'onlyDigits');
 });
 
 test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {

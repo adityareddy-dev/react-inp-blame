@@ -504,24 +504,26 @@ export function buildReport(
       // comes, the event's own render can have put another on the element: `onClick={editing ? save : edit}`
       // does on every click, and `onSubmit={step < 2 ? goNext : finish}` on Enter, whose keypress is read
       // onto its keydown's record. Only the record of the entry's own node is taken, since two fingers on
-      // two buttons in one frame are two records under a millisecond apart. The element is read now only for
-      // an event the ring has no reading of, and for one on server HTML, which had no handler to read until
-      // React hydrated it to run the event. A keydown there with a keypress after it has a reading all the
-      // same: React hydrates inside the keydown, and the element was read again as the keypress came. The
-      // click Enter in a field makes on the form's submit button is named by the onSubmit its keypress reached.
+      // two buttons in one frame are two records under a millisecond apart. Server HTML had no handler to
+      // read at dispatch, and its record was read again once React hydrated it inside the event's dispatch,
+      // to run it. The click Enter in a field makes on the form's submit button is named by the onSubmit its
+      // keypress reached.
       const own = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime) && (!e.target || i.target === e.target));
       const reached = keypressReached(inputs, e);
-      if (own && (!own.dehydrated || own.keypressHandler !== undefined)) {
+      if (own && (!own.dehydrated || own.hydratedRead)) {
         handler = submittedBy(inputs, own) ?? own.handler;
       } else if (reached !== undefined) {
         handler = reached;
       } else {
+        // The element is read now only for an event the ring has no reading of, such as the `input` an input
+        // method sends, and for server HTML React did not hydrate inside the event's dispatch. The event's own
+        // render can have given the element other props by now, so the fiber cached on it is read (`handlerOf`).
         // An Event Timing entry does not say which key was pressed; the ring entry for the same event
         // does, and which key it was decides whether the press could have submitted a form. It is the key
         // the ring read the handler for, so an input method's Enter is not one here either.
         // A keypress has no ring entry of its own and shares its keydown's key.
         const key = inputs.find((i) => (i.type === e.name || (e.name === 'keypress' && i.type === 'keydown')) && near(i.ts, e.startTime))?.key;
-        handler = handlerOf(fiber, e.name, key);
+        handler = handlerOf(fiber, e.name, key, true);
       }
       if (handler) break;
     }

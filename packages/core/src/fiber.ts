@@ -734,20 +734,20 @@ function handlerName(fn: Function, key: string): string {
  * that hands its onClick to the one button inside runs nothing for a click on its photo. They are read off
  * the element, where React writes each render's props. The fiber cached there is the one the element was
  * made with, and an element's two fibers take turns being current, so after every other render it holds
- * the render before.
+ * the render before. `cached` reads that fiber's props all the same (`handlerOf`).
  */
-function listenerProps(f: Fiber): Record<string, unknown> | null {
+function listenerProps(f: Fiber, cached?: boolean): Record<string, unknown> | null {
   if (typeof f.type !== 'string') return null;
   const el = f.stateNode as Node | null | undefined;
-  return (el && expando<Record<string, unknown>>(el, '__reactProps$')) || f.memoizedProps;
+  return (!cached && el && expando<Record<string, unknown>>(el, '__reactProps$')) || f.memoizedProps;
 }
 
 /** The first of `props` set on `fiber` or an element above it, as a name. `stop` is the last fiber looked at. */
-function firstHandler(fiber: Fiber | null, props: readonly string[], stop: Fiber | null): string | null {
+function firstHandler(fiber: Fiber | null, props: readonly string[], stop: Fiber | null, cached?: boolean): string | null {
   let f = fiber;
   let hops = 0;
   while (f && hops++ < MAX_HOPS) {
-    const p = listenerProps(f);
+    const p = listenerProps(f, cached);
     if (p) {
       for (const key of props) {
         const fn = p[key];
@@ -764,20 +764,25 @@ function firstHandler(fiber: Fiber | null, props: readonly string[], stop: Fiber
  * Name of the first React handler prop for this event type on the chain from a fiber up. `key` is the
  * `code` or `key` of a key event where the caller has it; without it a key press reaches no onSubmit,
  * since there is no way to tell Enter from any other key.
+ *
+ * `cached` is for an element read once the event is over, when its own render may have given the element
+ * other props. Each fiber's own props are read instead, from the one cached on the element up: that one
+ * holds the props from before a render on every other render, and the element's first render since React
+ * made or hydrated it is one of those.
  */
-export function handlerOf(fiber: Fiber | null, eventType: string, key?: string | null): string | null {
+export function handlerOf(fiber: Fiber | null, eventType: string, key?: string | null, cached?: boolean): string | null {
   const props = propsFor(fiber, eventType, key);
   if (!props) return null;
   const label = forwardingLabel(fiber, eventType);
   if (label) {
     // Anything at or below the label handles the click itself; only when nothing there does is the
     // click the browser's to forward.
-    const own = firstHandler(fiber, props, label);
+    const own = firstHandler(fiber, props, label, cached);
     if (own) return own;
     const control = labelledControl(label);
-    if (control) return firstHandler(control, propsFor(control, eventType, key) ?? props, null);
+    if (control) return firstHandler(control, propsFor(control, eventType, key) ?? props, null, cached);
   }
-  return firstHandler(fiber, props, null);
+  return firstHandler(fiber, props, null, cached);
 }
 
 /** What the walk needs besides the fiber tree: what React passed with the commit, how its build marks measured trees, and where the input landed. */
