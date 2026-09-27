@@ -920,28 +920,30 @@ itself says what is wrong: the Next.js wrapper checks the version at build time,
 react-dom as it registers.
 
 **Under Jest.** The package is ES modules only, and Jest's default runtime loads everything as CommonJS, so a
-test that reaches it fails with "Cannot use import statement outside a module" (from Jest 30.5,
-"Must use import to load ES Module") unless Jest compiles it first. With `next/jest`, add
-`transpilePackages: ['react-inp-blame']` to your Next.js config. Anywhere else, install `@babel/preset-env@7`,
-since Jest is on Babel 7, add `transformIgnorePatterns: ['/node_modules/(?!(.pnpm/)?react-inp-blame[@/])']` to
-the Jest config, which lets Babel at the package in npm's `node_modules` and in pnpm's, and put the presets in a
-`babel.config.cjs`, the kind of Babel config that reaches into `node_modules`:
+test that reaches it fails with "Cannot use import statement outside a module" (from Jest 30.5, "Must use import
+to load ES Module") unless Jest compiles it first. With `next/jest`, add `transpilePackages: ['react-inp-blame']`
+to your Next.js config. Anywhere else, install `@babel/preset-env@7`, since Jest is on Babel 7, and add these two
+keys to the Jest config:
 
 ```js
-// babel.config.cjs, beside package.json
-module.exports = { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] };
+transform: {
+  '\\.[jt]sx?$': ['babel-jest', { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }],
+},
+transformIgnorePatterns: ['/node_modules/(?!(.pnpm/)?react-inp-blame[@/])'],
 ```
 
-The pattern alone is not enough, since babel-jest, which comes with Jest, leaves `import` and `export` as they
-are when Babel has no config, and a `.babelrc` or a `babel` key in `package.json` is not enough either: Babel
-reads those for your own files, never for one in `node_modules`. The file is `.cjs` so that it loads where
-`package.json` says `"type": "module"`, as a Vite app's does, which makes a `babel.config.js` an ES module.
-Where the Jest config already has a `transformIgnorePatterns`, put `react-inp-blame` inside its `(?!...)`
-rather than adding a second pattern, since Jest leaves a file uncompiled when any one of them matches. And
-babel-jest only runs where the Jest config sets no `transform` of its own, so a config that sets one has to
-compile `.js` files as well; ts-jest's preset compiles only TypeScript, and
-`preset: 'ts-jest/presets/js-with-babel'` hands the rest to babel-jest. Jest 30.5's error also offers Node
-24.9 or later, but there Jest loads the package as it is only from Jest 30.4 and only when run with
+The pattern lets Jest hand the package to babel-jest in npm's `node_modules` and in pnpm's, and the presets have
+babel-jest turn `import` and `export` into `require`, which it does not do on its own. `'\\.[jt]sx?$'` is the key
+Jest gives babel-jest where a config sets no `transform`, so your own files still go to it. The presets go here
+rather than in a Babel config file: Babel never reads a `.babelrc` or a `babel` key in `package.json` for a file
+in `node_modules`, and Next.js builds the app with any Babel config file it finds, in place of its own compiler,
+so one that holds only these presets breaks `next build`. Where the Jest config already has a
+`transformIgnorePatterns`, put `react-inp-blame` inside its `(?!...)` rather than adding a second pattern, since
+Jest leaves a file uncompiled when any one of them matches. Where the config or its preset already sets a
+`transform`, give the presets to its babel-jest entry, or where no entry takes `.js` files, as under ts-jest, add
+the one above with `'\\.jsx?$'` as its key: Jest runs a file through the first entry whose key matches, so one
+for `.ts` files as well would take them from ts-jest. Jest 30.5's error also offers Node 24.9 or later, but there
+Jest loads the package as it is only from Jest 30.4 and only when run with
 `NODE_OPTIONS=--experimental-vm-modules`; on Node 20 and 22, or an older Jest, not even then. CI checks all of it
 on Jest 30, ts-jest 29, the Next.js `apps/next-demo` pins and Node 20.19, except a pnpm install, the `babel` key
 and the flag on Node 24.19 and on older Jest, which were checked by hand.
