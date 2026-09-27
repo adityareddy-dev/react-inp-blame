@@ -1635,14 +1635,17 @@ function explain(r: InteractionReport): Explanation {
   // Where React is read, or no react-dom has loaded yet, and no commit during the handlers went unjoined, a report
   // with no commit at all is React rendering nothing, so the whole working time is outside it whatever the build
   // records: a 300 ms handler that set no state is the handler's, as it is beside a 1 ms render. Where a long
-  // animation frame recorded a script over the interaction, the browser's own record of it names it, as it did.
+  // animation frame was recorded over the handlers, the browser's own record of what ran in them decides, as it
+  // did. One that ended as they began holds only what the click waited behind: a 30 ms timer there no longer
+  // takes a 45 ms handler's verdict, which the handler keeps before that frame arrives and beside a 1 ms render.
   // A click React never dispatched, on server-rendered HTML it had not hydrated, is left out: the handler named
   // there is a hydrated component's above the boundary, which never ran, and the working time can be React's own
   // attempt at hydrating it. "Not loaded yet" is 'waiting', which the page's looks for React's marks decide, so a
   // react-dom that loaded before install() and mounted after the last look is taken for none: a known limit, the
   // one every rung that says React rendered nothing already had.
   const reactIdle = !r.commits.length && !blind && !unjoined && r.hydration?.kind !== 'not-hydrated';
-  const outsideMatters = (hasDurations || (reactIdle && !anyScript)) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
+  const framedHandlers = frames.some((f) => f.start < processingEnd && f.start + f.duration > processingStart);
+  const outsideMatters = (hasDurations || (reactIdle && !framedHandlers)) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler
   // its count has to explain the working time as well: a list of 50 of one component, or a tree at no

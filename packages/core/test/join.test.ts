@@ -1662,6 +1662,13 @@ test('where React is read and rendered nothing, all of the working time is outsi
   assert.ok(painted.explanation.notes.includes('The click handler handleSave still ran for about 60 ms of the 60 ms of working time before that.'));
   // Where a frame recorded the listener, the browser's own record of the script is named, as before.
   assert.deepEqual(report(click, [], [frame(0, 320, [script('BUTTON.onclick', 2, 300)])], save).explanation.blame, { ...handler, kind: 'script' });
+  // A frame that ended as the handlers began records only what the click waited behind: a 30 ms timer, then a 45 ms
+  // handleSave in a frame under 50 ms, which no entry reports. The handler is still named, as it is before that
+  // frame arrives and beside a 1 ms render.
+  const saved = [entry('click', 0, 78, 30, 75)];
+  const timer = [frame(-60, 90, [script('TimerHandler:setTimeout', -58, 88)])];
+  for (const frames of [timer, [], null]) assert.deepEqual(report(saved, [], frames, save).explanation.blame, { ...handler, ms: 45 });
+  assert.equal(report(saved, [commit(74, 0, { total: 1, rendered: 1 })], timer, save).explanation.blame.kind, 'handler');
   // Where React is not read, or rendered in commits that could not be tied to the click, its time is unknown.
   assert.equal(report(click, [], null, save, 'attributes', [], undefined, 'installed-late').explanation.blame.kind, 'none');
   const unjoinable = [{ ...save[0]!, work: { endedAt: 0, unjoined: [50] } }];

@@ -1130,7 +1130,9 @@ instead is unknown", or, where no long animation frame had been recorded yet, th
 and painting, while a 1 ms commit beside the same handler made it the handler's, measured. Where React is
 read, or no react-dom has loaded yet, and `unjoinedCommits` is 0, no commit means none of the working
 time was React's, so the handler is weighed as it is beside a render. Where a long animation frame
-recorded a script over the interaction, the browser's record of it still names it, and where install()
+was recorded over the handlers, the browser's record of what ran in them still decides. One that ended
+as they began holds only what the click waited behind, so a 30 ms timer there leaves a 45 ms handler
+its verdict, as it has before that frame arrives and beside a 1 ms render. Where install()
 ran too late or react-dom cannot be read, the setup is still the verdict. A click React never dispatched,
 on server-rendered HTML it had not hydrated yet, is left as it was: the handler named there is a hydrated
 component's above the boundary, which never ran, and the working time can be React's own attempt at
