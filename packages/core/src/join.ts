@@ -1735,11 +1735,16 @@ function explain(r: InteractionReport): Explanation {
   // closed rung would have named is said under the wait, in `closedByTheWait`, and a forced layout in the note
   // that follows every blame that is not one.
   // React's renders between one event's handlers and the next's are working time the wait has to outlast too,
-  // since the render rung is judged on them: an 85 ms render between a keydown's handlers and its keyup's is not
-  // closed by a 60 ms wait before them. One that kept no durations is timed by React's tasks, where long frames
-  // recorded them; where no frame says what ran, nothing times it, and all of the time between is counted, as
-  // `waitBetween` counts none of it.
-  const renderedInGaps = !framesSay && renderedBetween.some((x) => !x.hasDurations && carriesWork(x)) ? between : renderedBetweenMs + untimedMs;
+  // where a render could be the verdict, since the render rung is judged on them: an 85 ms render between a
+  // keydown's handlers and its keyup's is not closed by a 60 ms wait before them. One too small to be the verdict
+  // closes nothing, and adding it would only leave the wait short of the handlers' own time with no rung to take
+  // it. One that kept no durations is timed by React's tasks, where long frames recorded them; where no frame says
+  // what ran, nothing times it, and all of the time between is counted, as `waitBetween` counts none of it.
+  const renderedInGaps = !(c && rc && renderMatters)
+    ? 0
+    : !framesSay && renderedBetween.some((x) => !x.hasDurations && carriesWork(x))
+      ? between
+      : renderedBetweenMs + untimedMs;
   const waitingWins = r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing - between + renderedInGaps && r.inputDelay >= r.presentation;
   // The handler a build that records no durations cannot time, named where the rungs above it are not and the
   // working time was a long task and at least the screen update. The effects are measured in every build, so they

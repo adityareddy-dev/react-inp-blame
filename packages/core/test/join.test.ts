@@ -2202,6 +2202,12 @@ test("a render between one event's handlers and the next's is working time a lon
   for (const frames of [[], null]) {
     assert.deepEqual(report(held, counted(2, 90), frames, [input(0, 'keydown')]).explanation.blame, waited);
   }
+  // A render too small to be the verdict is no working time the wait has to outlast, since it closes nothing: a 55 ms
+  // wait before 52 ms of a keydown's handlers is still the verdict with a 4 ms render between them and the keyup's.
+  for (const frames of [[], null]) {
+    const small = report([entry('keydown', 0, 312, 55, 107), entry('keyup', 300, 12, 300.1, 300.3)], [commit(200, 0, { total: 4 })], frames, [input(0, 'keydown')]);
+    assert.deepEqual(small.explanation.blame, { ...waited, ms: 55 });
+  }
 });
 
 test('the render blame names the commit whose committing took the time', () => {
@@ -4333,7 +4339,7 @@ test("a wait between one event's handlers and the next is put on the wait, not o
   assert.deepEqual([delayed.explanation.blame.kind, delayed.explanation.blame.detail], ['waiting', null]);
   assert.match(gapNote(delayed), /^88 ms of the working time also went by between the click's handlers and the keyup's/);
   // A wait before the handlers longer than the handlers themselves is the verdict, whatever the working time
-  // held between them other than a render.
+  // held between them other than a render that could be the verdict.
   const shortHandlers = report(
     [entry('keydown', 0, 128, 60, 65), entry('keyup', 1, 128, 120, 125)],
     [commit(64, 0, { total: 0.3, rendered: 2 })],
