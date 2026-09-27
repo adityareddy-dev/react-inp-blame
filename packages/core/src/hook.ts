@@ -757,7 +757,14 @@ export function installHook(opts: HookOptions): void {
   state.width = window.innerWidth;
   state.resizedAt = undefined;
   const holder = window as unknown as HookHolder;
-  const existing = holder[HOOK_KEY] as DevtoolsHook | undefined;
+  let existing: DevtoolsHook | undefined;
+  try {
+    existing = holder[HOOK_KEY] as DevtoolsHook | undefined;
+  } catch (error) {
+    // A getter a script put there to lock the page down: no hook can be reached through it.
+    globalUnusable(error);
+    return;
+  }
   if (existing && existing === state.shim) {
     attach(existing, 'shim');
   } else if (existing) {
@@ -866,6 +873,13 @@ function unusable(message: string): void {
   state.detach = null;
   state.mode = 'unsupported';
   state.unsupported = { kind: 'hook-disabled', message };
+}
+
+/** The global cannot be read, so no hook the library can reach hears React's commits. */
+function globalUnusable(error: unknown): void {
+  const message = `the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be read or replaced (${errorText(error)}), so React's commits cannot be read. Interactions are still reported, without components.`;
+  unusable(message);
+  warnOnce('hook-disabled', message);
 }
 
 function registryOf(hook: DevtoolsHook): Map<number, Renderer> {
