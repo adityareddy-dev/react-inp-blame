@@ -352,6 +352,8 @@ test('an editor is named like a form field whatever labels allows, never by the 
     assert.equal(label(picked), 'span', labels);
     // A select trigger that shows its value is named the way a <select> is. Radix's is a button of type button.
     assert.equal(label(element('button', [text('ada@example.com')], { type: 'button', role: 'combobox' })), 'button', labels);
+    // A textarea is named by its placeholder as ever, never by the text React keeps the same as its value.
+    assert.equal(label(element('textarea', [text('Hi Ada, the password is hunter2')], { placeholder: 'Message' })), 'textarea "Message"', labels);
   }
   // A click beside an editor or a textarea reads no text inside them: React keeps a textarea's text the same as its value.
   const composer = element('div', [element('div', [text('Hi Ada, the password is hunter2')], { contenteditable: 'true' }), element('button', [text('Send')])]);
