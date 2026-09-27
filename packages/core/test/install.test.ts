@@ -1875,18 +1875,26 @@ test("an input on an element the library cannot read never reaches the page's er
   });
 });
 
-test("a hook the library cannot chain onto never reaches the page's error handlers, whether the check 3 s after install, an Event Timing batch or the hide finds it", async (t) => {
+test("a hook the library cannot chain onto never reaches the page's error handlers, from the assignment that puts it over the shim or from the check 3 s after install, the Event Timing batch or the hide that finds it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  for (const finds of ['check', 'batch', 'hide']) {
+  for (const finds of ['assignment', 'check', 'batch', 'hide']) {
     await inBrowser((page) => {
       const api = install({ devtoolsTrack: false });
       try {
         const heard: number[] = [];
         onInteraction((r) => heard.push(r.interactionId));
         page.paint([click(7, 1000, 120)]);
-        // A script that locks the page down redefines the hook as a frozen object before React loads.
-        Object.defineProperty(page.window, HOOK, { value: Object.freeze(existingHook()), configurable: true, writable: true });
+        // A script that locks the page down puts a frozen hook there before React loads: assigned, which the
+        // shim's accessor hears at once, or redefined, which it cannot see.
+        const frozen = Object.freeze(existingHook());
+        if (finds === 'assignment') {
+          assert.doesNotThrow(() => {
+            page.window[HOOK] = frozen;
+          });
+        } else {
+          Object.defineProperty(page.window, HOOK, { value: frozen, configurable: true, writable: true });
+        }
         if (finds === 'check') assert.doesNotThrow(() => t.mock.timers.tick(3000));
         if (finds === 'batch') assert.doesNotThrow(() => page.paint([click(14, 2000, 200)]));
         if (finds === 'hide') {
