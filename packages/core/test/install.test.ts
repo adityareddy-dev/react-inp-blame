@@ -752,6 +752,18 @@ test("a page whose DevTools hook drops what is assigned to onCommitFiberRoot is 
   });
 });
 
+test('a page whose DevTools hook drops what is assigned to inject is unsupported, not read as React rendering nothing', async (t) => {
+  // No react-dom would ever register with the library, so none of its commits could be read.
+  await overLockedHook(t, (hook) => {
+    const { inject } = hook;
+    return Object.defineProperty(hook, 'inject', { get: () => inject, set: () => {}, enumerable: true, configurable: true });
+  });
+});
+
+test('a page whose DevTools hook drops what is assigned to onPostCommitFiberRoot is unsupported, and the two methods wrapped are put back', async (t) => {
+  await overLockedHook(t, (hook) => new Proxy(hook, { set: (target, key, value) => (key !== 'onPostCommitFiberRoot' && ((target as any)[key] = value), true) }));
+});
+
 /** Gives `hook` an onCommitFiberRoot whose setter keeps a function of its own that calls the one it is given, and returns each one it was given. */
 function wrapsWhatItIsGiven(hook: ReturnType<typeof existingHook>): unknown[] {
   const given: unknown[] = [];
