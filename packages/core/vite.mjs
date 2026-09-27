@@ -174,9 +174,13 @@ function setupAdvice(config) {
     const add = framework.create ? `Create ${framework.entry} as the README shows and add entry: '${framework.entry}'` : `Add entry: '${framework.entry}'`;
     return `${framework.name} writes its own HTML, so this plugin's install script never reaches a page and nothing installs. ${add} to inpBlame(): ${README}${framework.section}`;
   }
-  const build = config.build;
+  // Vite 6 and later build the page from the client environment, whose options are the top-level ones with
+  // its own laid over them, so an app or a framework can name its inputs there alone, as RSC setups do. Its
+  // `input` (Vite 8.3) is what Vite builds from when the bundler's options name none.
+  const client = config.environments?.client;
+  const build = client?.build ?? config.build;
   if (build?.lib || build?.ssr) return null;
-  const input = build?.rollupOptions?.input ?? build?.rolldownOptions?.input;
+  const input = build?.rollupOptions?.input ?? build?.rolldownOptions?.input ?? client?.input;
   if (input === undefined || input === null) return null;
   const inputs = typeof input === 'string' ? [input] : Array.isArray(input) ? input : Object.values(input);
   if (inputs.length === 0 || inputs.some((file) => typeof file !== 'string' || file.endsWith('.html'))) return null;
