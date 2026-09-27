@@ -387,7 +387,7 @@ and so can `blame.name`, which for a script can be its URL, or the page's for an
   the Vite plugins and the Next.js wrapper call it with their `runtime` options.
   Options: `overlay` (false), `threshold` (40 ms), `labels` (`'auto'`), `hook` (`'auto'`),
   `sampleRate` (1), `walkBudget` (5000 component fibers React rendered or passed through per
-  commit, so one huge render cannot cost more than that), `inputWindow` (1500 ms, how long after
+  commit, so the walk costs no more than the render did), `inputWindow` (1500 ms, how long after
   an interaction a render can still join it), `devtoolsTrack` (true), `debugGlobal` (false; set it
   to `true` to put the API on `window.__REACT_INP_BLAME__`, or to a string to name the property).
 - `onInteraction(fn)` hears each report, and each later revision of it, in a task after the one that
