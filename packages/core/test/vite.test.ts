@@ -104,12 +104,12 @@ function resolved(overrides: Record<string, any> = {}): Record<string, any> {
   return { command: 'build', base: '/', root: '/app', plugins: [], build: { rollupOptions: { input: '/app/index.html' } }, ...overrides };
 }
 
-/** A rollup plugin context that records what the plugin emitted, for `consumer` builds whose environment also has `config`. */
-function buildContext(consumer: 'client' | 'server', config: Record<string, any> = {}) {
+/** A rollup plugin context that records what the plugin emitted, for `consumer` builds whose environment also has `config`, and `name` where given. */
+function buildContext(consumer: 'client' | 'server', config: Record<string, any> = {}, name?: string) {
   const emitted: Record<string, unknown>[] = [];
   return {
     emitted,
-    environment: { config: { consumer, ...config } },
+    environment: { name, config: { consumer, ...config } },
     emitFile(file: Record<string, unknown>) {
       emitted.push(file);
       return `ref-${emitted.length}`;
@@ -213,12 +213,12 @@ test('a build with no page to carry a second script asks for no chunk and keeps 
 });
 
 /**
- * Whether a build of `config` asks for the chunk, from the build's environment, and whether the page at `path`
- * gets the inline import besides. With no environment, the context is Vite 5's.
+ * Whether a build of `config` asks for the chunk, from the build's environment, the one called `name` where given,
+ * and whether the page at `path` gets the inline import besides. With no environment, the context is Vite 5's.
  */
-function decided(pages: (path: string) => boolean, [config, environment]: readonly [Record<string, any>, Record<string, any>?], path: string) {
+function decided(pages: (path: string) => boolean, [config, environment, name]: readonly [Record<string, any>, Record<string, any>?, string?], path: string) {
   const install = buildPlugins({ pages }, config).find((p) => p.name === INSTALL)!;
-  const ctx = environment ? buildContext('client', environment) : { ...buildContext('client'), environment: undefined };
+  const ctx = environment ? buildContext('client', environment, name) : { ...buildContext('client'), environment: undefined };
   install.buildStart.call(ctx);
   return { chunk: ctx.emitted.length > 0, inline: install.transformIndexHtml.handler('<!doctype html>', { path }) !== undefined };
 }
@@ -267,6 +267,22 @@ test("a page named only in Vite 8.2's input, at the top level or for the client 
   assert.deepEqual(decided(index, [{ build: { rollupOptions: {} }, environments: { client: { input: 'about.html' } } }], '/index.html'), script);
 });
 
+test('before Vite 8.2, an input written at the top level, which Vite does not build from, leaves the root index.html a script of its own where pages takes it', () => {
+  // Vite 6 to 8.1 resolve no `input` for the client environment and build the root index.html, but the build's
+  // environment hands on the top-level keys it does not have, and the app's `input` is one, as written.
+  const older = (input: unknown) => {
+    const build = { rollupOptions: {} };
+    return [{ input, build, environments: { client: { consumer: 'client', build } } }, { input, build }] as const;
+  };
+  const index = (path: string) => path === '/index.html';
+  const about = (path: string) => path === '/about.html';
+
+  assert.deepEqual(decided(index, older('src/main.js'), '/index.html'), { chunk: true, inline: false });
+  assert.deepEqual(decided(index, older('about.html'), '/index.html'), { chunk: true, inline: false });
+  // The page Vite builds is the one pages turns down, so nothing is asked for.
+  assert.deepEqual(decided(about, older('about.html'), '/index.html'), { chunk: false, inline: false });
+});
+
 test('where the app builds with sharedConfigBuild, as RSC setups do, the page transform reads the client environment the build reads', () => {
   // The plugins get the top-level config then, and the client environment's build is the top-level one with its
   // own laid over it.
@@ -279,7 +295,8 @@ test('where the app builds with sharedConfigBuild, as RSC setups do, the page tr
   assert.deepEqual(decided(admin, shared({ rollupOptions: { input, output: { format: 'iife' } } }), '/admin/index.html'), { chunk: false, inline: true });
   // A browser environment of another name builds from its own input.
   const client = { consumer: 'client', build: { rollupOptions: {} } };
-  assert.equal(decided(admin, [{ build: { rollupOptions: {} }, environments: { client } }, { input, build: { rollupOptions: {} } }], '/admin/index.html').chunk, true);
+  const browser = { consumer: 'client', input, build: { rollupOptions: {} } };
+  assert.equal(decided(admin, [{ build: { rollupOptions: {} }, environments: { client, browser } }, browser, 'browser'], '/admin/index.html').chunk, true);
 });
 
 test('pages picks the pages that get the runtime, and runtime: false keeps only the transform', () => {

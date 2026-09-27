@@ -344,8 +344,11 @@ function buildsPages(config, environment, pages) {
   if (!separateScript(config, environment)) return false;
   const build = buildOptions(config, environment);
   // Vite 8.2's `input`, written at the top level or for the client environment, is what Vite builds from
-  // when the bundler's options name none.
-  const input = build.rollupOptions?.input ?? build.rolldownOptions?.input ?? (environment?.config ?? clientEnvironment(config))?.input;
+  // when the bundler's options name none. It is read from the environment's resolved options, as the page
+  // transform reads it: the environment's own config hands on the top-level keys it does not have, and
+  // before 8.2 an app's `input` is one of those, left as written and never built from.
+  const options = environment ? config.environments?.[environment.name ?? 'client'] : clientEnvironment(config);
+  const input = build.rollupOptions?.input ?? build.rolldownOptions?.input ?? options?.input;
   // Vite's own default, when the config names no input, is the root index.html.
   const entries = input === undefined ? [`${config.root}/index.html`] : typeof input === 'string' ? [input] : Array.isArray(input) ? input : Object.values(input);
   return entries.some((entry) => typeof entry === 'string' && entry.endsWith('.html') && pages(pagePath(config.root, entry)));
