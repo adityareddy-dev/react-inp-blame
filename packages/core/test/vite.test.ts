@@ -212,15 +212,18 @@ test('a build with no page to carry a second script asks for no chunk and keeps 
   assert.deepEqual(server.emitted, []);
 });
 
+/**
+ * Whether a build of `config` asks for the chunk, from the build's environment, and whether the page at `path`
+ * gets the inline import besides. With no environment, the context is Vite 5's.
+ */
+function decided(pages: (path: string) => boolean, [config, environment]: readonly [Record<string, any>, Record<string, any>?], path: string) {
+  const install = buildPlugins({ pages }, config).find((p) => p.name === INSTALL)!;
+  const ctx = environment ? buildContext('client', environment) : { ...buildContext('client'), environment: undefined };
+  install.buildStart.call(ctx);
+  return { chunk: ctx.emitted.length > 0, inline: install.transformIndexHtml.handler('<!doctype html>', { path }) !== undefined };
+}
+
 test("a page named only in Vite 8.2's input, at the top level or for the client environment, or by a relative path, gets a script of its own where pages takes it", () => {
-  // Whether the build asks for the chunk, and whether the page at `path` gets the inline import besides. With no
-  // environment, the context is Vite 5's.
-  const decided = (pages: (path: string) => boolean, [config, environment]: readonly [Record<string, any>, Record<string, any>?], path: string) => {
-    const install = buildPlugins({ pages }, config).find((p) => p.name === INSTALL)!;
-    const ctx = environment ? buildContext('client', environment) : { ...buildContext('client'), environment: undefined };
-    install.buildStart.call(ctx);
-    return { chunk: ctx.emitted.length > 0, inline: install.transformIndexHtml.handler('<!doctype html>', { path }) !== undefined };
-  };
   // What Vite 8.2 and later resolve where the pages are named in `input`: the bundler's options name none, and
   // the client environment has the input, from the top level unless it was written for the environment alone.
   const named = (input: unknown, where: 'top' | 'client') => {
@@ -240,9 +243,24 @@ test("a page named only in Vite 8.2's input, at the top level or for the client 
   const bundler = { build: { rollupOptions: { input: '/app/index.html' } } };
   assert.deepEqual(decided(index, [{ ...bundler, input: 'about.html', environments: { client: { consumer: 'client', input: 'about.html', ...bundler } } }, { input: 'about.html', ...bundler }], '/index.html'), script);
 
-  // A relative input is a path from the root, and Vite hands `pages` the page's path below it, folder and all.
+  // A relative input found in the root is the page there, and Vite hands `pages` its path below the root, folder
+  // and all.
   assert.deepEqual(decided(admin, named({ main: 'index.html', admin: './admin/index.html' }, 'top'), '/admin/index.html'), script);
   assert.deepEqual(decided(admin, [{ build: { rollupOptions: { input: { main: 'index.html', admin: 'admin/index.html' } } } }, {}], '/admin/index.html'), script);
+
+  // With root set to a folder of the project, Rollup (Vite 7 and before) reads a relative input from the working
+  // directory, above the root, and Rolldown (Vite 8) from the root first and the working directory after. The page
+  // is the file on disk, and where both are, Rolldown opens the root's.
+  const cwd = process.cwd().replaceAll('\\', '/');
+  const disk = [`${cwd}/site/index.html`, `${cwd}/site/admin/index.html`, `${cwd}/admin/index.html`];
+  exists.mock.mockImplementation((file: fs.PathLike) => disk.includes(String(file)));
+  try {
+    const site = (input: Record<string, string>) => [{ root: `${cwd}/site`, build: { rollupOptions: { input } } }, {}] as const;
+    assert.deepEqual(decided(index, site({ main: 'site/index.html', admin: 'site/admin/index.html' }), '/index.html'), script);
+    assert.deepEqual(decided(admin, site({ main: 'index.html', admin: 'admin/index.html' }), '/admin/index.html'), script);
+  } finally {
+    exists.mock.mockImplementation(() => true);
+  }
 
   // Vite 5 passes an `environments` block through as written, with no consumer, and builds the root index.html.
   assert.deepEqual(decided(index, [{ build: { rollupOptions: {} }, environments: { client: { input: 'about.html' } } }], '/index.html'), script);
