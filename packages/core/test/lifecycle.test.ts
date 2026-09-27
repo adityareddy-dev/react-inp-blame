@@ -208,6 +208,23 @@ test('a late entry publishes the next revision as a new report, and the revision
   assert.equal(life.last(), after);
 });
 
+test('a quiet key press published for the render it set off keeps that render in the revision its slower keyup makes', () => {
+  // The keydown painted at 7024 and its render landed at 7150, before the key came up at 7300. The keyup's
+  // entry was the longer one, and the revision it made said React didn't render anything.
+  const input = (ts: number, type: string) => ({ ts, type, gestureTs: 7000, press: 'KeyA', target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const ring = [input(7000, 'keydown')];
+  const { life, published, render } = lifecycle({ inputs: () => ring });
+  life.onEntries([entry(7, 'keydown', 24)]);
+  render({ ...commit(7150, 7000), inputType: 'keydown' });
+  assert.equal(published.length, 1);
+  ring.push(input(7300, 'keyup'));
+  life.onEntries([entry(7, 'keyup', 48, { startTime: 7300, processingStart: 7301, processingEnd: 7340 })]);
+  assert.equal(published.length, 2);
+  assert.equal(published[1]?.duration, 48);
+  assert.deepEqual(published[1]?.followUps.map((c) => c.at), [7150]);
+  assert.match(published[1]?.verdict ?? '', /A second React render landed 126 ms after the screen updated/);
+});
+
 test("the page's first input, heard as its first-input entry and then as its event entry, is one entry in its report", () => {
   const { life, published } = lifecycle();
   life.onEntries([entry(7, 'pointerdown', 56, { entryType: 'first-input' })]);

@@ -1108,8 +1108,14 @@ commits get no effects' time. React 17 makes no call at all, so nothing changes 
 stamped with the same input, with no newer input in between and no `input`, `change` or `submit` a
 script dispatched after the paint. Effects, transitions and data-driven
 re-renders show up here. The window runs from the paint, not from the input, so an interaction that took
-three seconds still gets the render its effects schedule a moment after it. Where the commit's own input
-is a later one of the same interaction whose work ended after that paint, the click that releases a
+three seconds still gets the render its effects schedule a moment after it. A render before the headline
+entry's input is one too, where another of the interaction's entries painted before it and it is inside
+none of them: a keydown's render before a slower keyup, or a pointerdown's while the pointer is held
+before a slow click. INP leaves it out, and it is measured from that earlier paint. Until 2026-09-27
+every render before the headline's input was dropped as time `holdMs` covers, and a key press published
+for its render was told in its keyup's revision that React didn't render anything. One inside another
+entry, its handlers or the wait before them, is still left to `holdMs`. Where the commit's own input
+is a later one of the same interaction whose work ended after the paint, the click that releases a
 pointer held down past it or a click whose pointerdown was the slow part and painted first, the window
 runs from the end of that input's work (`work.endedAt` in the ring), which is where the hook measured
 it from. So the hold is not counted against the render the release made, and a window set shorter than

@@ -458,6 +458,16 @@ export function interactionTarget(entries: readonly InteractionTiming[], inputs:
   return entryTarget(entries) ?? ringInput(inputs, stampsOf(entries))?.target ?? null;
 }
 
+/** When an entry's frame painted, bounded like `paintBound`: its duration is rounded to 8 ms, its `processingEnd` is exact. */
+const paintOf = (e: Pick<EventEntrySummary, 'startTime' | 'duration' | 'processingEnd'>) => Math.max(e.startTime + e.duration, e.processingEnd);
+
+/** The latest paint of these entries before `at`; -Infinity where none had painted by then. */
+function paintBefore(entries: readonly Pick<EventEntrySummary, 'startTime' | 'duration' | 'processingEnd'>[], at: number): number {
+  let p = -Infinity;
+  for (const e of entries) if (paintOf(e) < at) p = Math.max(p, paintOf(e));
+  return p;
+}
+
 /**
  * One report's data from every Event Timing entry seen for an interactionId. The headline is the
  * longest single entry, which is the number web-vitals reports as INP for the interaction;
@@ -556,9 +566,16 @@ export function buildReport(
   const ownStamps = commitStamps(inputs, stamps);
   for (const c of commits) {
     if (stampMatches(c, ownStamps)) {
-      // Work before the headline entry's own input (a press held before a click) is not
-      // part of what INP measured for it; `holdMs` covers that time.
-      if (c.at < start - STAMP_TOLERANCE) continue;
+      if (c.at < start - STAMP_TOLERANCE) {
+        // Work before the headline entry's own input is not part of what INP measured for it. Inside
+        // another of the interaction's entries (a press held before a click) `holdMs` covers it. After
+        // one of them painted it is a later render of that paint, as one after the headline's is: a
+        // keydown's render before its slower keyup, or a pointerdown's while the pointer was held.
+        const from = paintBefore(entries, c.at);
+        const inEntry = entries.some((e) => c.at >= e.startTime - STAMP_TOLERANCE && c.at <= paintOf(e));
+        if (from > -Infinity && !inEntry && isFollowUp(c, from, inputs, stamps, inputWindow)) followUps.push(joined(c, 'exact'));
+        continue;
+      }
       if (c.at <= paintBound) inWindow.push(joined(c, 'exact'));
       else if (isFollowUp(c, end, inputs, stamps, inputWindow)) followUps.push(joined(c, 'exact'));
     } else if (c.at >= processingStart - STAMP_TOLERANCE && c.at <= paintBound && !claimedElsewhere(c, inputs, stamps)) {
@@ -2345,7 +2362,9 @@ function explain(r: InteractionReport): Explanation {
     const laterForced = r.laterFrames ? r.laterFrames.reduce((a, x) => a + x.forcedLayout, 0) : 0;
     const layout = laterForced >= FORCED_LAYOUT_MIN_MS ? `, and it made the browser recalculate styles and layout for ${ms(laterForced)} on the way` : '';
     const uncounted = !timed(f, r.entries);
-    notes.push(`A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
+    // From the paint it came after, which for one before the headline's input is an earlier entry's.
+    const painted = f.at < r.end ? paintBefore(r.entries, f.at) : r.end;
+    notes.push(`A second React render landed ${ms(f.at - painted)} after the screen updated${uncounted ? '' : ', on the release'}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
   // A render the clause ties to the script is said there and nowhere else, so the note is kept for it at
   // any length and whichever phase was the longer: a render the script forced is the script's, as
