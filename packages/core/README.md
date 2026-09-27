@@ -387,9 +387,9 @@ and so can `blame.name`, which for a script can be its URL, or the page's for an
   the Vite plugins and the Next.js wrapper call it with their `runtime` options.
   Options: `overlay` (false), `threshold` (40 ms), `labels` (`'auto'`), `hook` (`'auto'`),
   `sampleRate` (1), `walkBudget` (5000 component fibers React rendered or passed through per
-  commit, so the walk costs no more than the render did), `inputWindow` (1500 ms, how long after
-  an interaction a render can still join it), `devtoolsTrack` (true), `debugGlobal` (false; set it
-  to `true` to put the API on `window.__REACT_INP_BLAME__`, or to a string to name the property).
+  commit), `inputWindow` (1500 ms, how long after an interaction a render can still join it),
+  `devtoolsTrack` (true), `debugGlobal` (false; set it to `true` to put the API on
+  `window.__REACT_INP_BLAME__`, or to a string to name the property).
 - `onInteraction(fn)` hears each report, and each later revision of it, in a task after the one that
   published it, and returns the unsubscribe. What is still waiting when the page is hidden is heard
   inside that `visibilitychange` instead, so a page that sends what it heard on `visibilitychange`
