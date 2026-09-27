@@ -6,6 +6,181 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Added
+
+- **The READMEs say how to run the package under Jest.** A test that reached the package stopped at "Must use
+  import to load ES Module", and neither README mentioned Jest. Now both give the setup: under `next/jest`, add
+  `transpilePackages: ['react-inp-blame']` to the Next.js config; anywhere else, use `@babel/preset-env` 7 with two
+  keys in the Jest config.
+
+### Changed
+
+- **The displayName stamps of a module with two or more function components are far smaller.** Each stamp repeated
+  the whole check. Now the names loader writes that check once, as a helper, and each stamp is `typeof Foo ===
+  "function" && __reactInpBlameName(Foo, "Foo");`. The Vite plugin does the same under Rolldown (Vite 8). On
+  `apps/next-demo` the stamps went from 2,539 bytes to 1,473. Under Next.js and Vite 8, since 0.2.0.
+- **CI checks the verdict in Firefox and WebKit production builds.** Firefox and WebKit ran one scenario, and only
+  a development build checked its blame. Now both builds check the blame, and three more scenarios get clicked in
+  every browser.
+- **The design notes say which frameworks the Vite plugin warns about.** They said nothing tells you when a
+  framework's own HTML leaves the library uninstalled. They now say the plugin warns under React Router, Remix,
+  TanStack Start and Astro.
+
+### Fixed
+
+- **A render blame on the commit that hydrated no longer has the note deny it.** Beside that blame the note could
+  read "It landed on server-rendered HTML that had not been hydrated yet, and React hydrated the Suspense boundary
+  in ProductPage during it. That was not what took the time here." It now stops after "during it." In React 18 and
+  19, since 0.12.0.
+- **The interaction web-vitals reports as INP when the page is hidden now has its report.** Where its Event Timing
+  entry was still waiting for the library's observer at the hide, `attributeINP(metric).react` was null for the
+  interaction that set INP. Now the hide first takes what the browser has queued for both observers, so the report
+  is there before web-vitals reports, and `inp()` counts it. In React 17, 18 and 19, since 0.1.0.
+- **`onInteraction` listeners hear the last reports before the hide's `visibilitychange` handler returns.** Reports
+  were heard in a later task, and a tab that closes runs none, so a page that sent reports with `sendBeacon` on
+  `visibilitychange` lost the last ones. A page that sends on `pagehide` can still miss them. In React 17, 18 and
+  19, since 0.1.0.
+- **An error an `onInteraction` listener throws reaches the page's error handlers.** It was caught and dropped: no
+  console line, nothing in `window.onerror`, Sentry or Datadog. Now it goes to `reportError`, and the other
+  listeners still hear the report. In React 17, 18 and 19, since 0.1.0.
+- **`target.selector` is a selector `querySelector` can read when an id or a class has a colon or a slash.** useId
+  ids and Tailwind classes gave `button#radix-:r1:` or `div.md:flex.w-1/2`. They are now escaped the way
+  `CSS.escape` escapes them: `button#radix-\:r1\:`, `div.md\:flex.w-1\/2`. `generateTarget`'s element half follows,
+  so analytics grouped by `interactionTarget` split once for these elements. In React 18 and 19, since 0.1.0.
+- **A form with a field named "id" is named by its own id.** A hidden `<input name="id">` is what the form's `id`
+  property returns, so a click on the form itself gave `form#[object HTMLInputElement]`. It now reads
+  `form#checkout`, or plain `form` when the form has no id. In React 18 and 19, since 0.1.0.
+- **`interactionTarget` never ends in half an emoji.** Where the 120-character cap cut through an emoji, or any
+  other character past U+FFFF, the string ended in a lone UTF-16 unit, which a beacon's UTF-8 sends as a
+  replacement character. The cut now drops that half. In React 18 and 19, since 0.2.0.
+- **A badge shown with `mountOverlay()` comes back after its handle is disposed, and stays up under StrictMode.**
+  Every `mountOverlay()` after a handle's `dispose()` got that same disposed handle back, so a component that
+  called it in an effect and disposed the handle in its cleanup showed no badge at all in development. Now each
+  call gets a handle of its own. The StrictMode case in React 18 and 19, since 0.1.0.
+- **A badge whose code failed to load is tried again.** Where the badge and panel could not be shown, every later
+  `mountOverlay()` resolved to null for as long as the page was open. Now the next call tries again. Since 0.1.0.
+- **install() no longer throws into the page when its DevTools hook is locked.** On a page that freezes
+  `__REACT_DEVTOOLS_GLOBAL_HOOK__`, install() threw "TypeError: Cannot assign to read only property 'inject' of
+  object" and the app never rendered. Now the page is `'unsupported'` with kind `'hook-disabled'`, one warning says
+  "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen, or has a method that cannot be assigned or added, so it
+  cannot be wrapped", and interactions are still reported, without components. In React 17 to 19, since 0.1.0.
+- **A page that holds the DevTools global empty no longer makes install() throw.** A `var
+  __REACT_DEVTOOLS_GLOBAL_HOOK__;` in a classic script now gets the shim as its value. A global defined empty and
+  read-only makes the page `'unsupported'` with kind `'hook-disabled'` and the warning "the page's
+  __REACT_DEVTOOLS_GLOBAL_HOOK__ is empty and read-only". Since 0.1.0.
+- **A page that empties the DevTools global before react-dom loads is no longer told install() ran late.** Where
+  the app set `__REACT_DEVTOOLS_GLOBAL_HOOK__` to undefined or false, or deleted it, after the library's shim went
+  in, the page is now `'unsupported'` with kind `'hook-disabled'` and the warning "the page emptied its
+  __REACT_DEVTOOLS_GLOBAL_HOOK__ after install(), so React registers with no hook and its commits cannot be read".
+  In React 17 to 19.
+- **dispose() no longer throws into a page that locked its DevTools hook after install().** Where the app froze or
+  sealed the hook after the library had wrapped it, dispose() threw a TypeError into the page. Now each method goes
+  back where it still can, and one that cannot only passes calls on.
+- **The hook lets go of React roots the page has dropped.** A page that keeps creating roots, as antd's static
+  Modal.confirm does, held an empty WeakRef, about 41 bytes, for every root it ever made, and the default
+  production setup never cleaned that list. Now dropped roots are let go of as new ones are recorded. Since 0.1.0.
+- **A commit is read once after dispose() and another install() where another tool wrapped the hook.** Where Fast
+  Refresh had wrapped a method, dispose() left it in place, so after another install() `debug.commits()` held each
+  commit twice. Now the methods dispose() leaves behind only pass calls on.
+- **A DevTools hook that turns React's support off is noticed when it is assigned over the shim too.** Where the
+  app's first import set `__REACT_DEVTOOLS_GLOBAL_HOOK__ = { isDisabled: true }`, `stats()` said `'chained'` with
+  React `'waiting'`. Now the page is `'unsupported'` with kind `'hook-disabled'` and the warning "the page's
+  __REACT_DEVTOOLS_GLOBAL_HOOK__ turns React's developer tools support off (isDisabled, or no supportsFiber)".
+  Since 0.1.0.
+- **A page that turns the DevTools hook off after install() is unsupported.** Where the common scripts that keep
+  React DevTools out of production set `supportsFiber` to null, reports said "React didn't render anything". Now
+  `stats().mode` goes to `'unsupported'`, with kind `'hook-disabled'` and the warning "the page turned its
+  __REACT_DEVTOOLS_GLOBAL_HOOK__ off after install() (isDisabled, or no supportsFiber), so React's commits cannot
+  be read". A page that only sets `isDisabled` once react-dom has registered is still read. In React 17 to 19.
+- **The note where React is not read says the page's hook can be why, and a report where React stopped being read
+  partway says so.** The note now ends "or stats().unsupportedReason says why (the page turns its DevTools hook off
+  or locks it, or the react-dom that registered cannot be read)." A report that has commits reads "React stopped
+  being read partway through this click, so only what it did before that is in this report, and
+  stats().unsupportedReason says why." Its `reactStatus` is `'unreadable'`. In React 17 to 19, since 0.12.0.
+- **A short script after the handlers is no longer said to be why the screen took long to update.** A click read
+  "the screen took another 370 ms to update, mostly because a script (TimerHandler:setTimeout, app.js) ran for 20
+  ms before the next frame". A script now takes that clause and the painting blame's name only when it ran for half
+  of the screen update. Below that the sentence reads "...mostly the browser recalculating styles and layout and
+  painting the frame: 250 ms.", and `blame.name` is null. Since 0.1.0.
+- **A screen update over 100 ms is said even when the working time was longer.** twenty's select-all spent 947 ms
+  rendering and then 762 ms updating the screen, and the report never mentioned the 762 ms. It now has the note
+  "After the handler finished, the screen took another 762 ms to update, mostly the browser recalculating styles
+  and layout and painting the frame: 712 ms." Since 0.1.0.
+- **A render that a script after the handlers forced is tied to that script however long each part took.** On a
+  production build where the handlers rendered 3 components and a 150 ms scroll listener re-rendered 721 rows, the
+  verdict named the 721 components inside TableBody. It now reads "React's render was small (re-rendering 3
+  components inside List, mostly Row (3 of them)); a script (DIV.onscroll, app.js) ran for 150 ms after the handler
+  finished." So `blame.kind` can move from `render` to `handler`, `script` or `none`.
+- **A transition's render in React's own task is said to be inside that task.** A click whose transition rendered
+  for 100 ms in `MessagePort.onmessage` after the handlers had no note on its screen update. The verdict is still
+  the render, and the note now reads "After the handler finished, the screen took another 157 ms to update, mostly
+  because a script (MessagePort.onmessage, app.js) ran for 150 ms before the next frame, and React rendered inside
+  it: 100 ms re-rendering 721 components inside TableBody."
+- **A keyup no longer blames the next key's handler.** When the frame waited on the next key press, a keyup with
+  short handlers of its own and a small render was a `script` verdict naming DIV#root.onkeydown, with no note. It
+  is now `none`, and the note says "After the handler finished, the screen took another 122 ms to update: the frame
+  waited on the next key press, which the page handled first. The longest script the browser recorded in that time
+  was DIV#root.onkeydown (app.js), 70 ms."
+- **A script verdict says when the script ran.** A 22 ms timer read "a script (setTimeout, app.js) ran for 22 ms."
+  It now ends "ran for 22 ms after the handler finished." When nothing long ran in the working time, the verdict
+  says "no long task was recorded in the working time", so a 70 ms listener with no render in it moves from
+  `script` to `none`.
+- **A listener that starts on the very millisecond the handlers ended is named for what ran it.** With a coarse
+  clock, a scroll task can carry the same timestamp as the click's last handler, and it was named after that
+  handler (`blame.name` 'handleSave'). It is now `DIV.onscroll`, said to have run after the handler finished.
+- **A script the browser gave no name is said as "a script with no name" everywhere.** One sentence said "mostly
+  because a script (unknown, app.js) ran for 150 ms" and the next "a script with no name". Both now say "a script
+  with no name (app.js)".
+- **A long wait before the handlers is the verdict over a handler, a render or a forced layout shorter than it.** A
+  wait over 50 ms that is at least the handlers' own time and the screen update is now the `waiting` blame, and a
+  480 ms click reads "The click waited 400 ms before its handler could start: the main thread was busy with
+  something else. The click handler handleSave still ran for about 58 ms of the 60 ms of working time after the
+  wait." A wait of 50 ms or less closes nothing, so a forced layout after one is the layout's again. Since 0.1.0.
+- **A long wait before the handlers is said under every verdict but its own, and only once.** The note on it needed
+  a render big enough to be the verdict, so a 70 ms wait before a 98 ms handler went unsaid beside a 2 ms render.
+  It is now said whatever React rendered. Where the wait was itself the verdict, a 344 ms click said it twice, the
+  second time as "It also waited 200 ms before the handler could start, because the main thread was busy." That
+  note is gone there. The note left out beside a small render, since 0.1.0.
+- **A click React rendered nothing for is put on its handler in any build.** A handleSave that ran for 300 ms and
+  set no state read "React didn't render anything; this browser does not report long tasks, so what ran instead is
+  unknown" in Firefox and Safari, and in Chromium it could go to waiting and painting. It now reads "The click
+  handler handleSave ran for about 300 ms; React didn't render anything.", a `handler` blame that is `measured`, in
+  a development or a production build. Where a long animation frame over the handlers names a script of 20 ms or
+  more, that script is still named. Since 0.1.0.
+- **A render that ran outside the working time is no longer said to have run in it.** When the screen update or a
+  wait took the verdict from a render that committed in the task after the handlers, the note put the render inside
+  the working time: "React still spent 40 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms)
+  in the 30 ms of working time before that." Now it says where the render ran: "React still spent 40 ms
+  re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next
+  frame." The render verdict follows the same rule. A production build's verdict and note do the same where they
+  said "in the 60 ms of working time". A render that began before the handlers, or ran longer than they did, is no
+  longer given a place at all. In React 18 and 19, since 0.2.0.
+- **A render committed at the end of React's own task is no longer put in a script that started just after it.** A
+  production render stamped inside React's task (`MessagePort.onmessage`), under a millisecond before a timer
+  started, was said to have run inside the timer: "the screen took another 89 ms to update, mostly because a script
+  (TimerHandler:setTimeout, app.js) ran for 28 ms before the next frame, and React rendered inside it: re-rendering
+  800 components inside List". Now the timer is named without it ("Scripts ran for 48 ms of it, the longest a
+  script (TimerHandler:setTimeout, app.js) for 28 ms."), and the render gets its own note, "React was most likely
+  still re-rendering 800 components inside List, mostly Row (800 of them), after the handlers, before the next
+  frame." In React 18 and 19, since 0.15.0.
+- **A forced layout is put outside React where react-dom stopped being read only after the handlers.** Where the
+  only render read was in the script after the handlers, React was read all through them, but the layout the
+  handlers forced was blamed on the subtree that render drew (List) and said to happen "often in a layout effect".
+  It now reads as it does where React is read: "No React commit ran in the script it was charged to, so it was not
+  in a layout effect but in code outside React, such as the click handler handleSave or a library's listener", and
+  the blame names handleSave. In React 18 and 19.
+
+### Security
+
+- **The release is built where npm's publish token cannot be asked for.** One publish job used to install the whole
+  workspace and run `prepack` while it could ask for that token. Now a build job with read access only runs `npm ci
+  --ignore-scripts`, builds, tests and packs, and a second job that installs nothing publishes that tarball with
+  `--provenance`. The `NPM_TOKEN` fallback is gone. The packed package.json carries a `gitHead` line, so the
+  registry still shows each version's commit.
+- **Every GitHub Action in the workflows is pinned to a commit.** `actions/checkout@v6` and the rest ran whatever
+  their tag pointed at on the day. Now each names the commit its tag pointed at, in the publish, CI and Pages
+  workflows.
+
 ## [0.15.0] - 2026-09-26
 
 ### Added
