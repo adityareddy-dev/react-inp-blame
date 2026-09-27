@@ -1984,6 +1984,16 @@ function explain(r: InteractionReport): Explanation {
    * `renderRan` puts it.
    */
   const spentIn = (when: string, lead: string) => placed(lead, `in the ${ms(r.processing)} of working time ${when}`);
+  /**
+   * A render that ran after the handlers is placed right after it, and what committing and effects took beside it,
+   * which is only ever counted in the working time, is said against the working time after that. Placed at the end
+   * of the sentence, "after the handlers, before the next frame" read as where another commit's effects had run,
+   * though they ran inside the handlers.
+   */
+  const ranAfter = (when: string, lead: string, figures: string | null, end: string) =>
+    `${lead}after the handlers, before the next frame${figures ? `, and ${figures}${end} in the ${ms(r.processing)} of working time ${when}` : ''}`;
+  const spentWith = (when: string) =>
+    renderRan === 'after' ? ranAfter(when, ' ', extras.length ? extras.join(' and ') : acrossCommits, committedEnd) : `${committed}${spentIn(when, `${committedEnd} `)}`;
   const closedOff = (when: string): string | null =>
     handlerWins
       ? say(
@@ -1994,11 +2004,13 @@ function explain(r: InteractionReport): Explanation {
       : c && rc && renderMatters
         ? say(
             measuredFrom(rc),
-            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${spentIn(when, `${committedEnd} `)}.`,
+            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}.`,
             hasDurations
-              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${spentIn(when, `${committedEnd} `)}.`
+              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}.`
               : effectsFigure >= 1
-                ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${spentIn(when, heldAll ? ', ' : ' ')}.`
+                ? renderRan === 'after'
+                  ? `React was ${HEDGE} still ${renderPhrase(rc)}${ranAfter(when, ', ', `spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}`, heldAll ? ',' : '')}.`
+                  : `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${spentIn(when, heldAll ? ', ' : ' ')}.`
                 : `React was ${HEDGE} still ${renderPhrase(rc)}${spentIn(when, ', ')}.`,
           )
         : untimedHandler
