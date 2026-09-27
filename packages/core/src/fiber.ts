@@ -502,11 +502,12 @@ export function namingFiber(node: Node | null): Fiber | null {
   if (!start) return fiberFromNode(node);
   let f = start;
   // An icon with no fiber is read from the element around it. That element's handler is the icon's only where
-  // React rendered nothing in it, as with markup set through dangerouslySetInnerHTML. Where React rendered
-  // something there, an `<i>` that feather.replace() or Font Awesome's autoReplaceSvg swapped for an `<svg>`,
-  // or the text of `<button onClick>Close</button>`, the element holds the icon and the handler is its own:
-  // IconButton's `<button onClick>` names IconButton.
-  const handled = handlesInput(start) && (fiberOn(icon) === start || rendersNothing(start));
+  // the element is not a control and React rendered nothing in it, as with a `<span onClick>` whose markup is
+  // set through dangerouslySetInnerHTML. A control holds what is drawn in it, and so does an element React
+  // rendered something in, an `<i>` that feather.replace() or Font Awesome's autoReplaceSvg swapped for an
+  // `<svg>` or the text of `<div onClick>Close</div>`: the handler is the element's own, and IconButton's
+  // `<button onClick>` names IconButton.
+  const handled = handlesInput(start) && (fiberOn(icon) === start || (rendersNothing(start) && !isControlHost(start)));
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {
