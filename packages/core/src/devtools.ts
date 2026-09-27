@@ -108,11 +108,14 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
 
 /** One entry for one React commit joined to the report. */
 function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boolean, readPriorities: boolean): void {
-  const later = c.at > r.end;
+  // By where the report put it, not by the headline's paint: a press's render before a slower release is a
+  // later render of the press's paint, and it would be drawn from the release's input back to itself.
+  const later = r.followUps.includes(c);
   const name = leafName(c) ?? 'root';
   const counted = `${c.truncated ? 'at least ' : ''}${c.rendered} components`;
   const label = `${later ? 'Later render' : c.hydrated ? 'Hydration' : 'React render'} · ${name} (${counted})`;
-  const start = Math.max(r.start, c.hasDurations ? c.at - c.total : c.at - 0.5);
+  const from = c.hasDurations ? c.at - c.total : c.at - 0.5;
+  const start = later ? from : Math.max(r.start, from);
   const color = renderColor(c, later, readPriorities);
   if (timeStampTracks) {
     (console as unknown as TrackConsole).timeStamp(label, start, c.at, RENDER_TRACK, TRACK_GROUP, color);
