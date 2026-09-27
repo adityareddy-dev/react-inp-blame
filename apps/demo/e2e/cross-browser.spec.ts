@@ -83,9 +83,10 @@ test('handler hog: no React render, and the click is the handler that ran', asyn
     expect(r.explanation.blame).toMatchObject({ kind: 'script', name: r.target?.handler, confidence: 'measured' });
     expect(r.explanation.blame.ms).toBeGreaterThanOrEqual(60);
   } else {
-    // Nothing timed the script and React rendered nothing, so nothing is blamed.
+    // Nothing timed the script, but React rendered nothing, so the working time is the handler's, measured.
     expect(r.frames).toBeNull();
-    expect(r.explanation.blame).toMatchObject({ kind: 'none', name: null });
+    expect(r.explanation.blame).toMatchObject({ kind: 'handler', name: r.target?.handler, confidence: 'measured' });
+    expect(r.explanation.blame.ms).toBeGreaterThanOrEqual(60);
   }
 });
 
