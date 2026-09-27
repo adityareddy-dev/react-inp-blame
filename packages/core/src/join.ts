@@ -1296,18 +1296,16 @@ function explain(r: InteractionReport): Explanation {
     x.at <= s.start + s.duration + STAMP_TOLERANCE &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
-  const insideLate =
-    lateScript && !heldByNext && (screenOutranks || lateScript.script.invoker !== REACT_TASK)
-      ? r.commits.filter((x) => ranInside(x, lateScript.script))
-      : [];
-  const lateRender = insideLate.length ? heaviest(insideLate) : null;
+  const ranInLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  const insideLate = screenOutranks || lateScript?.script.invoker !== REACT_TASK ? ranInLate : [];
+  const lateRender = ranInLate.length ? heaviest(ranInLate) : null;
   // Said right after the script, the render is "inside it". After all the scripts together, "inside that one".
   const renderedInside = (it: string) =>
     !lateRender
       ? ''
-      : insideLate.length === 1
+      : ranInLate.length === 1
         ? `, and React rendered inside ${it}: ${lateRender.hasDurations ? `${ms(lateRender.total)} ` : ''}${renderPhrase(lateRender)}`
-        : `, and React rendered inside ${it} ${insideLate.length} times, the ${lateRender.hasDurations ? `heaviest ${ms(lateRender.total)}` : 'largest'} ${renderPhrase(lateRender)}`;
+        : `, and React rendered inside ${it} ${ranInLate.length} times, the ${lateRender.hasDurations ? `heaviest ${ms(lateRender.total)}` : 'largest'} ${renderPhrase(lateRender)}`;
   const lateRenderSaid = renderedInside('it');
   /**
    * Where no script took the screen update, the browser's own work on the main thread did, where Long
