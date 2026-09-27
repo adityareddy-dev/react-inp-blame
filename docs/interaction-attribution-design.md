@@ -488,13 +488,16 @@ names it by its tag and a name of at most 40 characters, and its whole `textCont
 because a click can land on a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
 form field's placeholder, aria-placeholder or name, an input's type, or its data-testid or data-test),
 and, where text is allowed, from the first run of text of an element with no aria-label that is not a
-form field. Anything a person types in is a form field here, since its text is what they typed: an
-element with the role textbox, searchbox, combobox or spinbutton, and anything inside a contenteditable
+form field. Anything a person types in is a form field here, since its text is what they typed: anything
+inside an element with the role textbox, searchbox, combobox or spinbutton, or inside a contenteditable
 editor, a mention chip it marks contenteditable="false" included. That is asked of `closest` rather than
 found by walking up, since a label is read at every key press. The search for the first run of text never
 goes inside one of those either, nor inside a textarea, whose text React keeps the same as its value, so
-a click beside a chat box is not named by the message in it. Only an input is named by its type: a select
-trigger with the role combobox is a button, and the type on a button is button, which names nothing. A run
+a click beside a chat box is not named by the message in it. An editor that draws its text in ordinary
+elements and takes key presses in a hidden one, as Monaco does, cannot be told from the page's own text:
+a key press lands on the hidden one, but a click on a line is named by the line. Only an input is named
+by its type: a select trigger with the role combobox is a button, and the type on a button is button, which
+names nothing. A run
 is the adjacent text nodes React renders an interpolated string as, `Add to cart ({n})` as three, and
 it takes in the `<!-- -->` the server renderer puts between them to keep hydration straight: without
 that, the same button would be labelled `Add to cart (` after hydration and `Add to cart (3)` after a

@@ -124,12 +124,10 @@ const LABEL_NODES = 32;
 // Siblings joined into that run once it starts, the separators between them counted: an interpolated
 // string is a handful of nodes, so a long row of them is a list, not a label.
 const RUN_NODES = 16;
-// The roles of an element a person types or picks a value in. Its text is that value, so it is named
-// the way a form field is.
-const FIELD_ROLES = ['textbox', 'searchbox', 'combobox', 'spinbutton'];
-// An element inside one the page made editable, whose text is what a person typed. A mention chip an
-// editor marks contenteditable="false" is still inside it.
-const EDITING = '[contenteditable]:not([contenteditable="false"])';
+// The elements a person types or picks a value in: one the page made editable, and one with a text field's
+// role. The text inside one is that value, so it is named the way a form field is. A mention chip an editor
+// marks contenteditable="false" is still inside the editor.
+const TYPED_IN = '[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="searchbox"],[role="combobox"],[role="spinbutton"]';
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
@@ -826,8 +824,8 @@ function describeTarget(node: Node, owners: readonly string[], handler: string |
  * code wrote on the element: its aria-label, a form field's placeholder, aria-placeholder or name, an
  * input's type, or its data-testid or data-test. Where `labels` is 'text', an element with no aria-label
  * that is not a form field is named by its first run of text before those data attributes are tried.
- * What a person types in is a form field wherever it is: an element with a text field's role, and
- * anything inside an editor, whose text is what they typed. Only an input is named by its type: a select
+ * What a person types in is a form field wherever it is: anything inside an editor, or inside an element
+ * with a text field's role, whose text is what they typed. Only an input is named by its type: a select
  * trigger with the role combobox is a button, and the type on a button names nothing.
  */
 export function labelOf(node: Node, labels: LabelSource): string | null {
@@ -847,15 +845,15 @@ export function labelOf(node: Node, labels: LabelSource): string | null {
   return label ? `${word} "${label}"` : word;
 }
 
-/** Is `el` itself one a person types in: a textarea, an element with a text field's role, or an editor? */
-const typedIn = (el: Element): boolean => el.tagName.toLowerCase() === 'textarea' || FIELD_ROLES.includes(el.getAttribute('role') ?? '') || !!el.matches?.(EDITING);
+/** Is `el` itself one a person types in: a textarea, an editor, or an element with a text field's role? */
+const typedIn = (el: Element): boolean => el.tagName.toLowerCase() === 'textarea' || !!el.matches?.(TYPED_IN);
 
 /**
- * Is `el` in an editor, or in a document in designMode? Asked of the element an input landed on, which
- * is inside anything the control around it is inside. `closest` rather than a walk up, since a label is
- * read at every key press.
+ * Is `el` inside an editor or an element with a text field's role, or in a document in designMode? Asked
+ * of the element an input landed on, which is inside anything the control around it is inside. `closest`
+ * rather than a walk up, since a label is read at every key press.
  */
-const editing = (el: Element): boolean => (el as HTMLElement).isContentEditable === true || !!el.closest?.(EDITING);
+const editing = (el: Element): boolean => (el as HTMLElement).isContentEditable === true || !!el.closest?.(TYPED_IN);
 
 /** Whitespace collapsed, cut at 40 characters. */
 function clip(text: string): string {

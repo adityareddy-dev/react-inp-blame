@@ -1217,9 +1217,11 @@ reported. Under a production build of React the label uses only what your code w
 `aria-label`, a form field's `placeholder`, `aria-placeholder` or `name`, an input's `type`, or `data-testid`
 or `data-test`. An element's text can be a person's name or email, and reports are made to be forwarded to
 error trackers and analytics, so text is opt-in there: with `install({ labels: 'text' })` an element with
-no `aria-label` that is not a form field is named by its first run of text. Anything a person types in counts
-as a form field: an element inside a `contenteditable` editor, or one with the role `textbox`, `searchbox`,
-`combobox` or `spinbutton`. That first run of text is never read from inside one, or from inside a `textarea`.
+no `aria-label` that is not a form field is named by its first run of text. An element inside a
+`contenteditable` editor, or inside one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`,
+counts as a form field, and that first run of text is never read from inside one, or from inside a
+`textarea`. An editor that draws its text in ordinary elements and takes key presses in a hidden one, as
+Monaco does, cannot be told from the rest of the page, so a click on that text can be named by it.
 Development builds use text by default. Whatever `labels` says, `target.selector` has the tag, the `id` if
 there is one, and `data-test` or `data-testid` or else two classes, and `navigationURL` and
 `startedNavigation.url` are full URLs, query string included. A script the browser names by its URL, or by

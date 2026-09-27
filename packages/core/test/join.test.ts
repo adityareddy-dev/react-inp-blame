@@ -77,8 +77,9 @@ function element(tag: string, children: Record<string, unknown>[], attributes: R
   return el;
 }
 
-/** `Element.matches` for the attribute selectors a label asks about: `[name]`, `[name="value"]`, and `:not()` of those. */
+/** `Element.matches` for the attribute selectors a label asks about: `[name]`, `[name="value"]`, `:not()` of those, and a list of them. */
 function matches(el: Record<string, unknown>, selector: string): boolean {
+  if (selector.includes(',')) return selector.split(',').some((one) => matches(el, one.trim()));
   const not = /^(.+):not\((.+)\)$/.exec(selector);
   if (not) return matches(el, not[1]!) && !matches(el, not[2]!);
   const attribute = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(selector);
@@ -341,6 +342,14 @@ test('an editor is named like a form field whatever labels allows, never by the 
     assert.equal(label(element('div', [text('typed search query')], { role: 'textbox' })), 'div', labels);
     assert.equal(label(element('div', [text('typed search query')], { role: 'searchbox', 'data-testid': 'search' })), 'div "search"', labels);
     assert.equal(label(element('div', [text('Nice work, Ada')], { role: 'textbox', 'aria-placeholder': 'Write a comment' })), 'div "Write a comment"', labels);
+    assert.equal(label(element('span', [text('1987')], { role: 'spinbutton' })), 'span', labels);
+    // So is anything inside one: the span holding the words typed into a textbox, or the value an ARIA 1.1 combobox shows.
+    const typed = element('span', [text('typed secret words')]);
+    element('div', [typed], { role: 'textbox', tabindex: '0' });
+    assert.equal(label(typed), 'span', labels);
+    const picked = element('span', [text('Ada Lovelace')]);
+    element('div', [picked], { role: 'combobox' });
+    assert.equal(label(picked), 'span', labels);
     // A select trigger that shows its value is named the way a <select> is. Radix's is a button of type button.
     assert.equal(label(element('button', [text('ada@example.com')], { type: 'button', role: 'combobox' })), 'button', labels);
   }
@@ -352,6 +361,9 @@ test('an editor is named like a form field whatever labels allows, never by the 
   // The text a page shows beside an editor still names what was clicked.
   const toolbar = element('div', [element('span', [text('Bold')]), element('div', [text('Hi Ada')], { contenteditable: 'true' })]);
   assert.equal(labelOf(toolbar, 'text'), 'div "Bold"');
+  // And so does the text of an element marked not editable outside any editor.
+  assert.equal(labelOf(element('div', [text('Plain text')], { contenteditable: 'false' }), 'text'), 'div "Plain text"');
+  assert.equal(labelOf(element('div', [element('div', [text('Plain text')], { contenteditable: 'false' })]), 'text'), 'div "Plain text"');
 });
 
 test('a click on an icon is labelled by the control it is inside, and its selector stays the element it landed on', () => {
