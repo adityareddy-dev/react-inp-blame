@@ -2002,8 +2002,8 @@ test('the note standing in for a closed rung is not printed when no rung was clo
 });
 
 test('the note standing in for a closed render rung counts the commit it names, not every commit', () => {
-  // The rung it replaces blames one commit and prints that commit's own total. Summing every commit
-  // into the note put 200 ms beside a phrase describing the 80 ms one.
+  // The rung it replaces blames one commit and says the render of every commit as their total, with that
+  // commit's share. Summing every commit into the note put 200 ms beside a phrase describing the 80 ms one.
   const r = report(
     [entry('click', 0, 425, 0, 210)],
     [commit(40, 0, { total: 60, rendered: 20 }), commit(70, 0, { total: 60, rendered: 20 }), commit(100, 0, { total: 80, rendered: 300 })],
@@ -2011,8 +2011,8 @@ test('the note standing in for a closed render rung counts the commit it names, 
   );
   assert.equal(r.explanation.blame.kind, 'painting');
   const note = r.explanation.notes.find((n) => n.startsWith('React still')) ?? '';
-  assert.match(note, /React still spent 80 ms re-rendering 300 components/);
-  assert.doesNotMatch(note, /200 ms/);
+  assert.match(note, /^React still spent 200 ms rendering across 3 commits, 80 ms of it re-rendering 300 components/);
+  assert.doesNotMatch(note, /200 ms re-rendering/);
 });
 
 test('the layout sentence names one window, and the numbers in it add up to that window', () => {
@@ -2971,7 +2971,7 @@ test('a render blame on the commit that hydrated does not have the note say the 
   assert.deepEqual(r.hydration, { kind: 'waited', scope: 'boundary', owner: 'ProductPage', ms: 30 });
   assert.equal(r.explanation.blame.kind, 'render');
   assert.equal(r.explanation.blame.name, 'ProductPage');
-  assert.match(r.explanation.cause, /^React spent 30 ms hydrating /);
+  assert.match(r.explanation.cause, /^React spent 40 ms rendering across 2 commits, 30 ms of it hydrating /);
   assert.ok(r.explanation.notes.includes('It landed on server-rendered HTML that had not been hydrated yet, and React hydrated the Suspense boundary in ProductPage during it.'));
   assert.doesNotMatch(r.verdict, /not what took the time/);
   // The same hydration behind a handler that outlasts it keeps the whole note.
@@ -3258,11 +3258,11 @@ test('a render a closed verdict does not take is said to have run after the hand
   assert.equal(beside.explanation.blame.kind, 'painting');
   assert.equal(
     beside.explanation.notes[0],
-    'React still spent 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.',
+    'React still spent 45 ms rendering across 2 commits, 43 ms of it re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.',
   );
   // So where that render is only a reading, walked short of its end.
   const cut = report([entry('click', 0, 400, 100, 160)], [commit(120, 0, { total: 2, rendered: 3, ...effects }), commit(250, 0, { total: 43, truncated: true })], [], save);
-  assert.equal(cut.explanation.notes[0], 'React most likely still spent about 43 ms re-rendering at least 30 components inside List after the handlers, before the next frame.');
+  assert.equal(cut.explanation.notes[0], 'React most likely still spent about 43 ms re-rendering at least 30 components inside List after the handlers, before the next frame, and 45 ms in all across 2 commits.');
   const few = { hasDurations: false, total: 0, rendered: 5, components: [{ name: 'Row', count: 5, self: null, total: null }], effectsStartedAt: 330.2, effectsEndedAt: 365 };
   const rows = { ...counted, rendered: 800, components: [{ name: 'Row', count: 800, self: null, total: null }] };
   assert.deepEqual(report([entry('click', 0, 500, 300, 400)], [commit(330, 0, few), commit(450, 0, rows)], null, save).explanation.notes, [
@@ -3617,7 +3617,7 @@ test("where only the effects of several commits together earned React the blame,
   const click = [entry('click', 1000, 60, 1003, 1043)];
   const dev = report(click, [first, second], null, draw());
   assert.equal(dev.explanation.blame.kind, 'render');
-  assert.match(dev.explanation.cause, /React spent 1 ms re-rendering \w+\. React also spent 30 ms running useEffect callbacks across 2 commits\./);
+  assert.match(dev.explanation.cause, /React spent 2 ms rendering across 2 commits, 1 ms of it re-rendering \w+\. React also spent 30 ms running useEffect callbacks across 2 commits\./);
   const strip = (x: CommitSummary): CommitSummary => ({ ...x, hasDurations: false, total: 0, startedAt: null, components: [] });
   const production = report(click, [strip(first), strip(second)], null, draw());
   assert.equal(production.explanation.blame.kind, 'render');
@@ -3676,7 +3676,47 @@ test("the handler's sentence gives React's committing and effects as totals, sin
   const tooltip = commit(1237, 1000, { startedAt: 1036, total: 1, rendered: 1, roots: ['Tooltip'], hotPath: ['Tooltip'] });
   const r = report([entry('click', 1000, 520, 1003, 1500)], [list, tooltip], null, draw());
   assert.equal(r.explanation.blame.kind, 'handler');
-  assert.match(r.explanation.cause, /React spent 31 ms re-rendering 31 components inside List, .*\)\. React also spent 200 ms committing in another commit\.$/);
+  assert.match(r.explanation.cause, /React spent 31 ms rendering across 2 commits, 30 ms of it re-rendering 31 components inside List, .*\)\. React also spent 200 ms committing in another commit\.$/);
+});
+
+test("React's render time across several commits is said as their total with the named commit's share, not as the one's", () => {
+  // handleSave runs for about 143 ms, List renders 30 components for 30 ms and Sidebar 500 for 25. The sentence
+  // read "React spent 55 ms re-rendering 30 components inside List", putting Sidebar's 25 ms and 500 components there.
+  const list = commit(40, 0, { total: 30 });
+  const sidebar = commit(60, 0, { total: 25, rendered: 500, roots: ['Sidebar'], hotPath: ['Sidebar'], components: [{ name: 'Item', count: 500, self: 20, total: 20 }] });
+  const across = '55 ms rendering across 2 commits, 30 ms of it re-rendering 30 components inside List, mostly Row (30 of them, 20 ms)';
+  const handled = report([entry('click', 0, 216, 2, 200)], [list, sidebar], [], loginClick('handleSave')).explanation;
+  assert.equal(handled.blame.kind, 'handler');
+  assert.equal(handled.cause, `The click handler handleSave ran for about 143 ms; React spent ${across}.`);
+  // The same beside a forced layout, and where the render is the verdict, which named List's 30 ms and never Sidebar's 25.
+  const forced = [frame(0, 200, [script('BUTTON.onclick', 2, 178, 120)])];
+  const layout = report([entry('click', 0, 200, 2, 180)], [list, sidebar], forced, loginClick('handleSave')).explanation;
+  assert.equal(layout.blame.kind, 'layout');
+  assert.match(layout.cause, new RegExp(` React spent ${across.replace(/[()]/g, '\\$&')}\\. `));
+  const rendered = report([entry('click', 0, 72, 2, 64)], [list, sidebar], [], [input(0, 'click')]).explanation;
+  assert.deepEqual(rendered.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 30, confidence: 'measured' });
+  assert.equal(rendered.cause, `React spent ${across}.`);
+  // A hedged sentence gives the named render against the working time first, and the total after it.
+  const partial = report([entry('click', 0, 72, 2, 64)], [{ ...list, truncated: true }, sidebar], [], [input(0, 'click')]).explanation;
+  assert.equal(
+    partial.cause,
+    'React most likely spent about 30 ms of the 62 ms of working time re-rendering at least 30 components inside List, and 55 ms in all across 2 commits.',
+  );
+  // Three renders of 3 ms earned the blame together, over the 5 ms a render needs, and read as 3 ms.
+  const small = { total: 3, components: [{ name: 'Row', count: 30, self: 2, total: 2 }] };
+  const three = report([entry('click', 0, 72, 2, 30)], [commit(10, 0, small), commit(15, 0, small), commit(20, 0, small)], [], [input(0, 'click')]).explanation;
+  assert.deepEqual(three.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 3, confidence: 'measured' });
+  assert.equal(three.cause, 'React spent 9 ms rendering across 3 commits, 3 ms of it re-rendering 30 components inside List, mostly Row (30 of them, 2 ms).');
+  // One render beside commits that rendered nothing is said as it was.
+  const alone = report([entry('click', 0, 72, 2, 40)], [commit(20, 0, { total: 0.2, rendered: 1 }), list], [], [input(0, 'click')]).explanation;
+  assert.equal(alone.blame.kind, 'render');
+  assert.equal(alone.cause, 'React spent 30 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
+  // Where one of them began before the handlers, what the working time held is said of the total.
+  const early = report([entry('click', 0, 72, 2, 40)], [commit(12, 0, { startedAt: -8, total: 20 }), { ...sidebar, at: 39, startedAt: 14 }], [], [input(0, 'click')]).explanation;
+  assert.equal(
+    early.cause,
+    'React spent 45 ms rendering across 2 commits, 25 ms of it re-rendering 500 components inside Sidebar, mostly Item (500 of them, 20 ms). Some of that rendering began before the handlers, so at most 35 ms of it was in the 38 ms of working time.',
+  );
 });
 
 test('effects too small to mention do not choose the commit a render blame names', () => {
@@ -4982,7 +5022,7 @@ test("the panel's row takes its verb from the commit the blame names, which is n
   const effects = commit(95, 0, { startedAt: 30, total: 5, rendered: 12, mounted: 0, roots: ['Panel'], hotPath: ['Panel'], startRendered: 12, pathRendered: 12, components: [{ name: 'Row', count: 5, self: 1, total: 1 }] });
   const r = report(click, [mount, effects], []);
   assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['render', 'Panel']);
-  assert.match(r.explanation.cause, /^React spent 5 ms re-rendering 12 components inside Panel\. Committing it took about 60 ms more/);
+  assert.match(r.explanation.cause, /^React spent 25 ms rendering across 2 commits, 5 ms of it re-rendering 12 components inside Panel\. Committing it took about 60 ms more/);
   assert.equal(heaviest(r.commits).at, mount.at);
   assert.equal(renderedVerb(mount), 'mounted');
   assert.equal(blamedCommit(r)?.at, effects.at);

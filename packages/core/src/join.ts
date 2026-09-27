@@ -1609,18 +1609,37 @@ function explain(r: InteractionReport): Explanation {
   const renderTotal = inWorkingTime.reduce((a, x) => a + held(x), 0);
   const renderSpent = inWorkingTime.reduce((a, x) => a + x.total, 0);
   /**
+   * React's render time where several commits hold it, said as their total with the named commit's share:
+   * "React spent 55 ms rendering across 2 commits, 30 ms of it re-rendering 30 components inside List". Said
+   * beside the one commit's phrase, the total gave List a 500-component Sidebar's 25 ms, and a render blame
+   * three 3 ms commits earned together said 3 ms. The share is not called the heaviest, since the commit a
+   * blame names can be a lighter render chosen for its committing and effects. `alone` is the figure a
+   * sentence gives where one commit holds all of it.
+   */
+  const renderCount = (named: CommitSummary) => new Set([...inWorkingTime.filter((x) => x.total >= 0.5), named]).size;
+  const severalRenders = (named: CommitSummary) => renderCount(named) > 1 && Math.round(renderSpent) - Math.round(named.total) >= 1;
+  const renderAcross = (named: CommitSummary, alone: string) =>
+    severalRenders(named)
+      ? `${underOr(renderSpent)} rendering across ${plural(renderCount(named), 'commit')}, ${underOr(named.total)} of it ${renderPhrase(named)}`
+      : `${alone} ${renderPhrase(named)}`;
+  // The same total, for a sentence that leads with the named commit's figure and keeps its word order.
+  const inAll = (named: CommitSummary) => (severalRenders(named) ? `, and ${ms(renderSpent)} in all across ${plural(renderCount(named), 'commit')}` : '');
+  /**
    * Where the render a sentence says began before the handlers, how much of it the working time held, which is
    * what it was weighed on: "The render began before the handlers, so at most 17 ms of it was in the 27 ms of
    * working time." The figure said is all of it, since the render's own components were timed whole: said as
-   * the part held, a render of 17 ms held a component of 20.
+   * the part held, a render of 17 ms held a component of 20. Where the sentence gave the total of several
+   * commits, the clause is about that total.
    */
   const heldSaid = (named: CommitSummary, when = '') => {
-    const weighed = held(named);
-    if (Math.round(weighed) >= Math.round(named.total)) return '';
+    const several = severalRenders(named);
+    const weighed = several ? renderTotal : held(named);
+    if (Math.round(weighed) >= Math.round(several ? renderSpent : named.total)) return '';
     const within = `the ${ms(r.processing)} of working time${when ? ` ${when}` : ''}`;
-    if (weighed < 0.5) return ` The render ran before the handlers, not in ${within}.`;
-    if (Math.round(weighed) >= Math.round(r.processing)) return ` The render was longer than ${within}, so it began before the handlers.`;
-    return ` The render began before the handlers, so at most ${ms(weighed)} of it was in ${within}.`;
+    const it = several ? 'That rendering' : 'The render';
+    if (weighed < 0.5) return ` ${it} ran before the handlers, not in ${within}.`;
+    if (Math.round(weighed) >= Math.round(r.processing)) return ` ${it} was longer than ${within}, so ${several ? 'some of it' : 'it'} began before the handlers.`;
+    return ` ${several ? 'Some of that rendering' : 'The render'} began before the handlers, so at most ${ms(weighed)} of it was in ${within}.`;
   };
   // What the build records, which a report whose every commit was the late script's still says.
   const hasDurations = (c ?? r.commits[0])?.hasDurations ?? false;
@@ -2132,9 +2151,9 @@ function explain(r: InteractionReport): Explanation {
       : c && rc && renderMatters
         ? say(
             measuredFrom(rc),
-            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}.${heldSaid(rc, when)}`,
+            `React still spent ${renderAcross(rc, ms(rc.total))}${spentWith(when)}.${heldSaid(rc, when)}`,
             hasDurations
-              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}.${heldSaid(rc, when)}`
+              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}${inAll(rc)}.${heldSaid(rc, when)}`
               : effectsThen
                 ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${spentIn(when, heldAll ? ', ' : ' ')}.`
                 : `React was ${HEDGE} still ${renderPhrase(rc)}${spentIn(when, ', ')}.`,
@@ -2280,7 +2299,7 @@ function explain(r: InteractionReport): Explanation {
     // A production build's component counts are measured by the walk, so they are not hedged here.
     const reactSure = !!named && (!hasDurations || measuredFrom(named) === 'measured');
     const maybe = reactSure ? '' : `${HEDGE} `;
-    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${underOr(renderSpent)} ${renderPhrase(c)}.${heldSaid(c)}` : `React was ${maybe}${renderPhrase(c)}.`}` : '';
+    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(c, underOr(renderSpent))}.${heldSaid(c)}` : `React was ${maybe}${renderPhrase(c)}.`}` : '';
     const read = whereRead(whileHandling);
     cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo}${rendered} ${read.said}`;
     // Nothing names the read that forced the layout. What is held is where it happened: the subtree
@@ -2304,7 +2323,7 @@ function explain(r: InteractionReport): Explanation {
     const rest = !c
       ? noneWorking
       : renderSpent >= RENDER_MIN_MS
-        ? `React spent ${ms(renderSpent)} ${renderPhrase(c)}`
+        ? `React spent ${renderAcross(c, ms(renderSpent))}`
         : `React's own render took ${renderSpent < 0.5 ? 'under 1 ms' : `only ${ms(renderSpent)}`}`;
     const heldBy = c ? heldSaid(c) : '';
     // Committing and effects React spent beside it, where they would be worth saying. They are the
@@ -2341,14 +2360,14 @@ function explain(r: InteractionReport): Explanation {
       ? // The measured render is the claim; the working time is context. Saying React spent all of it
         // rendering and then that other code ran for a third of it was two claims that cannot both hold.
         renderRan === 'in'
-        ? `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}.`
-        : `React ${HEDGE} spent about ${ms(rc.total)} ${renderPhrase(rc)}${placed(' ', '')}.`
+        ? `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}${inAll(rc)}.`
+        : `React ${HEDGE} spent about ${ms(rc.total)} ${renderPhrase(rc)}${placed(' ', '')}${inAll(rc)}.`
       : `React was ${HEDGE} ${renderPhrase(rc)}${placed(', ', `in the ${ms(r.processing)} of working time`)}. This React build records no render durations, so that is read from the component counts, not measured.`;
     // A production build times the effects but not the render, so there the effects lead.
     cause =
       !hasDurations && effectsThen
         ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}`
-        : say(confidence, `React spent ${ms(rc.total)} ${renderPhrase(rc)}.${heldSaid(rc)}`, `${likely}${heldSaid(rc)}${profiling}`);
+        : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.${heldSaid(rc)}`, `${likely}${heldSaid(rc)}${profiling}`);
     if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
     if (sayEffects && hasDurations) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
     if (acrossCommits && hasDurations) cause += ` React also spent ${acrossCommits}.`;

@@ -1087,6 +1087,16 @@ to outrun all of React's time to be the blame, committing and effects included, 
 durations it was held against before spans existed. A render blame's milliseconds are the commit's in
 all, render, committing and effects, since that is what it accounts for, with the render counted for
 what the working time could hold of it (below), so no render is blamed for more than the interaction.
+The render time is said the same way. Where more than one commit in the working time rendered, a
+sentence gives their total and the share of the commit it names: "React spent 55 ms rendering across 2
+commits, 30 ms of it re-rendering 30 components inside List". The share is not called the heaviest,
+since the commit a render blame names can be a lighter render chosen for its committing. A hedged
+render sentence keeps the named render against the working time first and adds the total after it,
+"and 55 ms in all across 2 commits", and a note standing in for a closed render branch says it the way
+the branch would. Until 2026-09-27 the handler and layout sentences put the total beside the one
+commit's phrase, which gave List a 500-component Sidebar's 25 ms, and the render verdict said only the
+commit it named, so three 3 ms renders that earned it together read as 3 ms, under the 5 ms a render
+needs.
 
 React commits some updates once a commit's effects are done and before it says they ran: one an
 effect made with `flushSync`, and one a layout effect made, the measure-then-`setState` a tooltip
@@ -1290,8 +1300,9 @@ and committed with them, was not all in the working time either, and is given no
 not yield inside the handlers, so it is weighed and blamed on what the working time could hold of it:
 from their start to its commit where it began before them, and no more than the working time where it
 committed with them. The sentence gives the render whole and then that part: "The render began before
-the handlers, so at most 17 ms of it was in the 27 ms of working time." Until 2026-09-27 a 120 ms
-render that began 100 ms before a click's 27 ms of handlers was weighed whole and blamed for 120 ms of
+the handlers, so at most 17 ms of it was in the 27 ms of working time." Where it gave several
+commits' total, the part is of that total: "Some of that rendering began before the handlers, so at
+most 35 ms of it was in the 38 ms of working time." Until 2026-09-27 a 120 ms render that began 100 ms before a click's 27 ms of handlers was weighed whole and blamed for 120 ms of
 the 64 ms click. A 43 ms render in the task the click waited behind, committed as its handlers began,
 was said as that wait and again as 43 ms in the 15 ms of working time after it. None of it was in
 there, so no note names it now. Where the screen update outranks the working time too,
