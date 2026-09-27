@@ -203,6 +203,12 @@ test('a null entry target falls back to the node, the components and the handler
   const r = report([entry('click', 0, 120, 3, 100)], [], [], ring, 'text');
   assert.deepEqual(r.target, { selector: 'button', label: 'button "Close"', component: 'CloseButton', owners: ['CloseButton', 'Dialog'], handler: 'handleClose' });
   assert.equal(r.verdict.startsWith('120 ms click on button "Close" in CloseButton.'), true);
+  // A deleted row, with an older click still in the ring: the handler is the one read for the click at the entry's time.
+  const menu = input(0, 'click', { target: element('button', [text('Menu')]) as unknown as Node, owners: ['MenuButton'], handler: 'openMenu' });
+  const row = element('button', [text('Delete')]);
+  const both = [menu, input(5000, 'click', { target: row as unknown as Node, owners: ['DeleteButton', 'Row'], handler: 'deleteRow' })];
+  const deleted = report([entry('click', 5000, 120, 5003, 5100)], [], [], both, 'text');
+  assert.deepEqual(deleted.target, { selector: 'button', label: 'button "Delete"', component: 'DeleteButton', owners: ['DeleteButton', 'Row'], handler: 'deleteRow' });
 });
 
 test('the label is the one read at dispatch, before a handler changed the text, and read now when the ring has another node', () => {
@@ -3299,6 +3305,10 @@ test("Enter's work in the keypress entry is named by the form's onSubmit, from t
   // Any other key submits nothing, so nothing is named for the keypress's work.
   const other = [input(0, 'keydown', { target: target as unknown as Node, press: 'KeyA', key: 'KeyA', owners: ['OrderForm'] })];
   assert.equal(report(press, [], [], other).target?.handler, null);
+  // Nor where an Enter 5 s before is still in the ring: the key is the one pressed at the entry's time.
+  const later = [entry('keydown', 5000, 140, 5001, 5003, { target }), entry('keypress', 5000, 140, 5003, 5123, { target })];
+  const typed = [...ring, input(5000, 'keydown', { target: target as unknown as Node, press: 'KeyA', key: 'KeyA', owners: ['OrderForm'] })];
+  assert.equal(report(later, [], [], typed).target?.handler, null);
 });
 
 test("Enter's submit is named by the onSubmit its keypress reached at dispatch, where the submit's own render gave the form another", () => {

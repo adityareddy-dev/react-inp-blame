@@ -3889,6 +3889,49 @@ function inputOn(page: Page, clock: { now: number }, commit: (ms: number) => voi
   };
 }
 
+test('a key or a finger let go pairs with its own press, not the newest one, when keys roll over or two fingers are down', async (t) => {
+  // A fast typist presses H before letting go of T. Paired with the newest press, T's keyup took H's keydown,
+  // and the render T's keyup made carried H's stamp, as if H had made it. Two fingers on a touch screen, the
+  // first lifted while the second is still down, are the same by pointerId.
+  const clock = useClock(t);
+  await inBrowser(async (page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    existing.onCommitFiberRoot(id, root);
+    const input = inputOn(page, clock, (ms) => {
+      commitAgain(root, ms);
+      existing.onCommitFiberRoot(id, root, 1, false);
+    });
+
+    input('keydown', 10000, { code: 'KeyT' });
+    await nextTask();
+    input('keydown', 10030, { code: 'KeyH' });
+    await nextTask();
+    input('keyup', 10060, { code: 'KeyT' }, 20);
+    await nextTask();
+    input('keyup', 10090, { code: 'KeyH' }, 20);
+    await nextTask();
+    input('pointerdown', 11000, { pointerId: 3, pointerType: 'touch' });
+    await nextTask();
+    input('pointerdown', 11020, { pointerId: 4, pointerType: 'touch' });
+    await nextTask();
+    input('pointerup', 11050, { pointerId: 3, pointerType: 'touch' }, 20);
+    await nextTask();
+    assert.deepEqual(
+      api.debug.commits().map((c) => ({ input: c.inputTs, gesture: c.gestureTs })),
+      [
+        { input: 10060, gesture: 10000 },
+        { input: 10090, gesture: 10030 },
+        { input: 11050, gesture: 11000 },
+      ],
+    );
+    api.dispose();
+  });
+});
+
 test('a click made from the keyboard is part of its key press, so its render never joins the mouse click before it', async (t) => {
   // A mouse click on a button, then Enter on the button it left focused, 800 ms after the click's paint.
   // The click Enter makes has no pointerdown (its pointerId is -1). It used to take the newest pointerdown
@@ -4010,6 +4053,20 @@ test("a click takes the press of the input whose task made it, whatever its poin
     input('keydown', 4500, { code: 'Enter' });
     input('click', 4501, { pointerId: 1, pointerType: 'mouse' }, 40);
     await nextTask();
+    // Two fingers: one tapped and has had its click, and the other is still down. Enter's click carrying the
+    // first finger's pointerId is still Enter's. The finger that tapped is not waiting for a click, and the one
+    // that is has another pointerId.
+    input('pointerdown', 6000, { pointerId: 6, pointerType: 'touch' });
+    await nextTask();
+    input('pointerup', 6050, { pointerId: 6, pointerType: 'touch' });
+    await nextTask();
+    input('click', 6052, { pointerId: 6, pointerType: 'touch' });
+    await nextTask();
+    input('pointerdown', 6100, { pointerId: 5, pointerType: 'touch' });
+    await nextTask();
+    input('keydown', 6200, { code: 'Enter' });
+    input('click', 6201, { pointerId: 6, pointerType: 'touch' }, 40);
+    await nextTask();
     assert.deepEqual(
       api.debug.commits().map((c) => ({ input: c.inputTs, gesture: c.gestureTs })),
       [
@@ -4017,6 +4074,7 @@ test("a click takes the press of the input whose task made it, whatever its poin
         { input: 2001, gesture: 2000 },
         { input: 3083, gesture: 3000 },
         { input: 4501, gesture: 4500 },
+        { input: 6201, gesture: 6200 },
       ],
     );
     api.dispose();
