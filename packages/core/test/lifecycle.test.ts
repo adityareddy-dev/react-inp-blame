@@ -61,6 +61,9 @@ function lifecycle(options: Partial<LifecycleOptions> = {}) {
     labels: () => 'attributes',
     now: () => 0,
     publish: (r) => published.push(r),
+    dropped: (error) => {
+      throw error;
+    },
     ...options,
   });
   /** What the DevTools hook does with a commit: record it, then hand it over. */
@@ -73,6 +76,9 @@ function lifecycle(options: Partial<LifecycleOptions> = {}) {
 
 /** An element with this id, as the observer hands a target over. */
 const elementWithId = (id: string) => ({ nodeType: 1, tagName: 'DIV', id, classList: { length: 0 }, parentNode: null, parentElement: null, firstChild: null, getAttribute: () => null });
+
+/** A form with a field named `tagName`, which a form's fields shadow: reading the form's tag reads the field. */
+const formWithFieldNamedTagName = () => ({ ...elementWithId(''), tagName: { nodeType: 1, tagName: 'INPUT' } });
 
 test('a quiet interaction is held back, and published once a render it caused lands after the paint', () => {
   const { life, published, render } = lifecycle();
@@ -295,6 +301,18 @@ test("a click on the library's own badge or panel is never reported, though INP 
   // The page's own element with an id that merely starts the same way is the page's.
   life.onEntries([entry(14, 'click', 120, { target: elementWithId('react-inp-blame-docs') })]);
   assert.equal(published.length, 1);
+});
+
+test('an interaction whose report cannot be built goes to dropped on its own, and the others in its batch are still published', () => {
+  const errors: unknown[] = [];
+  const { life, published } = lifecycle({ dropped: (error) => errors.push(error) });
+  life.onEntries([entry(7, 'click', 120, { target: formWithFieldNamedTagName() }), entry(14, 'keydown', 120)]);
+  assert.deepEqual(
+    published.map((r) => r.interactionId),
+    [14],
+  );
+  assert.equal(errors.length, 1);
+  assert.ok(errors[0] instanceof TypeError, String(errors[0]));
 });
 
 test(`past ${MAX_REPORTS} published reports the oldest goes first, but never one of the ${KEPT_SLOWEST} slowest`, () => {

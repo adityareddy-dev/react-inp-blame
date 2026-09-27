@@ -430,6 +430,20 @@ on without components. Since 0.1.0 `stats().unsupportedReason` says which of the
 commit with a rendered tree already behind it means `install()` ran after that root rendered, and a
 warning says so once.
 
+**Errors of its own.** Every callback the library hands the browser or a router runs inside a guard:
+both observers' callbacks and their flushes, the window listeners for inputs, resizes, `pageshow` and
+`visibilitychange`, the timers that deliver reports and check for react-dom, the idle callback that
+draws them, and the App Router's navigation announcement. An error in one is caught, what it was working
+on is dropped, and the console says so once (`library-error`). Until 2026-09-26 an error while a report
+was built went from the Event Timing callback to `window.onerror`, where Sentry or Datadog counted it as
+the app's, and the report was lost anyway. A click on a form with a field named `tagName` still throws
+in there, since a form's fields shadow its own properties. The interactions in one batch are built one
+at a time, so that click drops only its own report, and at hide each observer is flushed under a guard
+of its own, so a frame that cannot be read keeps neither the entries from their reports nor the reports
+from being heard. React's calls into the hook were guarded already: a walk that throws stops that
+renderer, as above. An error a report listener throws is the page's own, and still goes to
+`reportError`.
+
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
 bailed out, so its whole subtree is stale and gets pruned; that prune is what keeps the walk

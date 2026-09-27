@@ -11,7 +11,7 @@ import type { OverlayHandle } from './overlay.js';
 import { overlayRequested } from './overlay-host.js';
 import { incompatibleCopy, shared } from './session.js';
 import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, ReactStatus, RendererInfo } from './types.js';
-import { warnOnce } from './warn.js';
+import { dropped, guarded, warnOnce } from './warn.js';
 
 export type * from './types.js';
 export type { InpEstimate } from './inp.js';
@@ -156,13 +156,15 @@ function installNow(opts: InstallOptions): Api {
     if (!timeline) return;
     undrawn.set(r.interactionId, r);
     if (cancelDraw) return;
-    cancelDraw = whenIdle(() => {
-      cancelDraw = null;
-      const started = performance.now();
-      for (const pending of undrawn.values()) timeline.draw(pending);
-      undrawn.clear();
-      drawMs += performance.now() - started;
-    });
+    cancelDraw = whenIdle(
+      guarded(() => {
+        cancelDraw = null;
+        const started = performance.now();
+        for (const pending of undrawn.values()) timeline.draw(pending);
+        undrawn.clear();
+        drawMs += performance.now() - started;
+      }),
+    );
   };
 
   // Reports reach listeners in a task of their own. A later render revises a report inside React's
@@ -171,7 +173,7 @@ function installNow(opts: InstallOptions): Api {
   // exception is the page being hidden, below.
   const undelivered: InteractionReport[] = [];
   let delivery: ReturnType<typeof setTimeout> | null = null;
-  const deliver = () => {
+  const deliver = guarded(() => {
     delivery = null;
     const reports = undelivered.splice(0);
     if (!page.listeners.size) return;
@@ -194,7 +196,7 @@ function installNow(opts: InstallOptions): Api {
         }
       }
     });
-  };
+  });
 
   // Where reports happened: the document's own navigation, then each soft navigation a router
   // announces and each restore from the back/forward cache, oldest first.
@@ -235,6 +237,7 @@ function installNow(opts: InstallOptions): Api {
     labels,
     reactStatus,
     now: () => performance.now(),
+    dropped,
     publish: (r) => {
       if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', MINIFIED_NAMES_CONSOLE);
       drawWhenIdle(r);
@@ -250,15 +253,16 @@ function installNow(opts: InstallOptions): Api {
     // The badge shows the INP of the navigation the page is on, which has just started over.
     page.overlay?.then((handle) => handle?.refresh());
   };
-  const onPageShow = (e: PageTransitionEvent) => {
+  const onPageShow = guarded((e: PageTransitionEvent) => {
     const current = navigations[navigations.length - 1];
     if (e.persisted && current) navigated({ url: current.url, type: 'back-forward-cache', start: e.timeStamp, router: null });
-  };
+  });
   // web-vitals chooses INP again when the page is hidden, at the interaction count by then, and first takes the
   // entries its observer has not been handed yet. The observers here are flushed too, so the interaction it
   // reports has its report. This listener is on the window in the capture phase and added before the app
-  // runs, so it comes before web-vitals' own. Frames go first, so a report is built with its frame in it.
-  const onVisibilityChange = () => {
+  // runs, so it comes before web-vitals' own. Frames go first, so a report is built with its frame in it, and
+  // each flush is guarded on its own, so frames that cannot be read keep neither the entries nor the delivery.
+  const onVisibilityChange = guarded(() => {
     if (document.visibilityState !== 'hidden') return;
     frameObserver.flush();
     eventObserver.flush();
@@ -269,19 +273,27 @@ function installNow(opts: InstallOptions): Api {
       clearTimeout(delivery);
       deliver();
     }
-  };
+  });
   // The App Router announces a navigation from inside the handler that starts it, so the input
   // being dispatched, if any, is the one that started it.
-  const stopRouterNavigations = onRouterNavigation(({ url, type, at }) => {
-    const input = dispatchedInput();
-    navigated({ url, type: 'soft-navigation', start: at, router: { type, input: input && { inputTs: input.ts, inputType: input.type, gestureTs: input.gestureTs } } });
-  });
+  const stopRouterNavigations = onRouterNavigation(
+    guarded(({ url, type, at }) => {
+      const input = dispatchedInput();
+      navigated({ url, type: 'soft-navigation', start: at, router: { type, input: input && { inputTs: input.ts, inputType: input.type, gestureTs: input.gestureTs } } });
+    }),
+  );
+  // Every callback the browser or a router calls here is guarded, so an error of the library's own never
+  // reaches the page's error handlers (`dropped`). React's calls into the hook guard themselves.
+  const onInput = guarded(noteInput);
+  const onCloser = guarded(noteCloser);
+  const onKeypress = guarded(noteKeypress);
+  const onResize = guarded(noteResize);
 
   installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit, label: (target) => labelOf(target, labels()) });
-  for (const t of INPUT_TYPES) window.addEventListener(t, noteInput, { capture: true, passive: true });
-  for (const t of CLOSER_TYPES) window.addEventListener(t, noteCloser, { capture: true, passive: true });
-  window.addEventListener('keypress', noteKeypress, { capture: true, passive: true });
-  window.addEventListener('resize', noteResize, { capture: true, passive: true });
+  for (const t of INPUT_TYPES) window.addEventListener(t, onInput, { capture: true, passive: true });
+  for (const t of CLOSER_TYPES) window.addEventListener(t, onCloser, { capture: true, passive: true });
+  window.addEventListener('keypress', onKeypress, { capture: true, passive: true });
+  window.addEventListener('resize', onResize, { capture: true, passive: true });
   window.addEventListener('pageshow', onPageShow, { capture: true });
   window.addEventListener('visibilitychange', onVisibilityChange, { capture: true });
   const frameObserver = frames ? observeFrames(frames, lifecycle.onFrame) : NOT_OBSERVING;
@@ -316,7 +328,7 @@ function installNow(opts: InstallOptions): Api {
     if (rendererCheck === 'again') checkRenderer();
     lifecycle.onEntries(batch);
   });
-  const rendererTimer = setTimeout(checkRenderer, RENDERER_CHECK_MS);
+  const rendererTimer = setTimeout(guarded(checkRenderer), RENDERER_CHECK_MS);
   const debugName = debugGlobalName(settings.debugGlobal);
 
   const api: Api = {
@@ -342,10 +354,10 @@ function installNow(opts: InstallOptions): Api {
       frameObserver.stop();
       eventObserver.stop();
       stopRouterNavigations();
-      for (const t of INPUT_TYPES) window.removeEventListener(t, noteInput, { capture: true });
-      for (const t of CLOSER_TYPES) window.removeEventListener(t, noteCloser, { capture: true });
-      window.removeEventListener('keypress', noteKeypress, { capture: true });
-      window.removeEventListener('resize', noteResize, { capture: true });
+      for (const t of INPUT_TYPES) window.removeEventListener(t, onInput, { capture: true });
+      for (const t of CLOSER_TYPES) window.removeEventListener(t, onCloser, { capture: true });
+      window.removeEventListener('keypress', onKeypress, { capture: true });
+      window.removeEventListener('resize', onResize, { capture: true });
       window.removeEventListener('pageshow', onPageShow, { capture: true });
       window.removeEventListener('visibilitychange', onVisibilityChange, { capture: true });
       uninstallHook();

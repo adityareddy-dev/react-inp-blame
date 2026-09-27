@@ -57,6 +57,8 @@ export interface LifecycleOptions {
   now(): number;
   /** Called with each report when it is published, and with every later revision of it: a new frozen report each time. */
   publish(r: InteractionReport): void;
+  /** Called with what building one interaction's report threw. That report is dropped, and the others in the batch are not. */
+  dropped(error: unknown): void;
 }
 
 export interface Lifecycle {
@@ -217,7 +219,14 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
         if (group) group.push(e);
         else byId.set(e.interactionId, [e]);
       }
-      for (const [id, group] of byId) onInteraction(id, group);
+      // One at a time, so a report that cannot be built drops only itself, and not the others painted with it.
+      for (const [id, group] of byId) {
+        try {
+          onInteraction(id, group);
+        } catch (error) {
+          options.dropped(error);
+        }
+      }
     },
 
     onCommit(c) {
