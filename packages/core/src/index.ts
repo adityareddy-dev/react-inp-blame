@@ -326,9 +326,14 @@ function installNow(opts: InstallOptions): Api {
     }
   };
   const eventObserver = observeEventTiming((batch) => {
-    checkHookReplaced();
     reactLookDue = true;
-    if (rendererCheck === 'again') checkRenderer();
+    // The checks are housekeeping, so one that throws drops only itself, and the batch still has its reports.
+    try {
+      checkHookReplaced();
+      if (rendererCheck === 'again') checkRenderer();
+    } catch (error) {
+      dropped(error);
+    }
     lifecycle.onEntries(batch);
   });
   const rendererTimer = setTimeout(guarded(checkRenderer), RENDERER_CHECK_MS);
