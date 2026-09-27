@@ -2082,6 +2082,7 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     function Wizard() {}
     function goNext() {}
     function finish() {}
+    function saveDraft() {}
     function setEmail() {}
     const node = (tag: string, fiber: Record<string, unknown>, parent: Record<string, unknown> | null) => ({
       nodeType: 1, tagName: tag.toUpperCase(), id: '', classList: { length: 0 }, parentNode: parent, parentElement: parent, firstChild: null,
@@ -2099,8 +2100,9 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     formFiber.stateNode = form;
     const field: Record<string, unknown> = { ...node('input', fieldFiber, form), __reactProps$demo: fieldProps };
     fieldFiber.stateNode = field;
-    const enter = (id: number, ts: number, render: () => void) => {
+    const enter = (id: number, ts: number, render: () => void, beforeKeypress = () => {}) => {
       page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' });
+      beforeKeypress();
       page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: field, code: 'Enter' });
       render();
       const keydown = { ...pointer('keydown', id, ts, 140), processingEnd: ts + 3, target: field };
@@ -2112,6 +2114,16 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
       enter(7, 1000, () => (form.__reactProps$demo = { onSubmit: finish })),
       'goNext',
     );
+    // Only the browser's own keypress for the keydown's key is read onto its record. One a script dispatched, here
+    // while the form had another onSubmit, is not, and nor is one for another key.
+    form.__reactProps$demo = { onSubmit: goNext };
+    const strays = () => {
+      form.__reactProps$demo = { onSubmit: saveDraft };
+      page.fire('keypress', { isTrusted: false, type: 'keypress', timeStamp: 2000, target: field, code: 'Enter' });
+      form.__reactProps$demo = { onSubmit: goNext };
+      page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: 2000, target: field, code: 'KeyA' });
+    };
+    assert.equal(enter(8, 2000, () => (form.__reactProps$demo = { onSubmit: finish }), strays), 'goNext');
     // Server HTML React had not hydrated by the keypress has no handler to read yet: the form is read when the
     // entries come, once React hydrated it to run the submit.
     rootFiber.memoizedState = { isDehydrated: true };
@@ -2124,7 +2136,7 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
       Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit: finish } });
       Object.assign(field, { __reactFiber$demo: fieldFiber, __reactProps$demo: fieldProps });
     };
-    assert.equal(enter(8, 2000, hydrate), 'finish');
+    assert.equal(enter(9, 3000, hydrate), 'finish');
     api.dispose();
   });
 });
