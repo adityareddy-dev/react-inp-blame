@@ -214,7 +214,10 @@ export interface UnsupportedReason {
 
 /** The DevTools hook as this library found and uses it. */
 export interface HookInfo {
-  /** Who owns the hook: this library, or the keys of the hook it chained onto. */
+  /**
+   * Who owns the hook: this library, or the keys of the hook it chained onto. Where the page turned that hook off
+   * after install(), it is still the one described here, with the renderers that registered with it.
+   */
   owner: string;
   /** Every renderer known to have registered with the hook: the ones seen registering, plus earlier ones React DevTools' hook kept. */
   renderers: RendererInfo[];
