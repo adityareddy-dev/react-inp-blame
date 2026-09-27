@@ -1729,6 +1729,14 @@ function explain(r: InteractionReport): Explanation {
   // The handler is the blame where it outruns all of React's time, or where React's time, whatever it
   // is, would not be the blame anyway: a 28 ms handler beside a 4 ms render and 24 ms of effects.
   const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
+  // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
+  // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
+  // build, where a render the library only counted used to outrank a layout it had timed.
+  const layoutOutruns =
+    forcedWhileHandling >= (hasDurations ? LONG_TASK_MS : FORCED_LAYOUT_MIN_MS_NO_DURATIONS) &&
+    forcedWhileHandling >= FORCED_LAYOUT_MIN_SHARE * handledWindow &&
+    forcedWhileHandling > renderTotal &&
+    forcedWhileHandling > outside;
   // A wait before the handlers that is a long task itself, and at least the handlers' own time and the screen
   // update, is the answer over anything inside them: a 58 ms handler or a 40 ms render after a 400 ms wait did
   // not make the click slow. The same test opens the waiting rung and closes each rung from the forced layout down
@@ -1740,9 +1748,12 @@ function explain(r: InteractionReport): Explanation {
   // where a render could be the verdict, since the render rung is judged on them: an 85 ms render between a
   // keydown's handlers and its keyup's is not closed by a 60 ms wait before them. One too small to be the verdict
   // closes nothing, and adding it would only leave the wait short of the handlers' own time with no rung to take
-  // it. One that kept no durations is timed by React's tasks, where long frames recorded them; where no frame says
-  // what ran, nothing times it, and all of the time between is counted, as `waitBetween` counts none of it.
-  const renderedInGaps = !(c && rc && renderMatters)
+  // it. Nor does one beside a handler or a forced layout that outruns React's render, since that rung is asked
+  // first and leaves the time between out of its figure: a 30 ms render there handed a 38 ms handler the verdict
+  // over a 60 ms wait. One that kept no durations is timed by React's tasks, where long frames recorded them;
+  // where no frame says what ran, nothing times it, and all of the time between is counted, as `waitBetween`
+  // counts none of it.
+  const renderedInGaps = !(c && rc && renderMatters) || handlerWins || layoutOutruns
     ? 0
     : !framesSay && renderedBetween.some((x) => !x.hasDurations && carriesWork(x))
       ? between
@@ -1753,23 +1764,14 @@ function explain(r: InteractionReport): Explanation {
   // come off what it is said to have taken.
   const untimedHandler = !!c && !hasDurations && !!handler && longTaskOfWork && r.processing >= r.presentation;
   const untimedTook = effects >= 1 || between >= 1 ? `about ${ms(r.processing - between - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
-  // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
-  // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
-  // build, where a render the library only counted used to outrank a layout it had timed.
   // A wait between the events' handlers is no handler's and no render's, so it is weighed against both.
   // Where the wait before the first handler or the screen update is larger, it is a note.
   const betweenMatters =
     waitBetween >= LONG_TASK_MS && waitBetween > outside && waitBetween > reactTime && waitBetween > untimedMs && waitBetween > forcedWhileHandling;
   const betweenWins = betweenMatters && waitBetween >= r.inputDelay && !screenOutranks;
-  const layoutMatters =
-    forcedWhileHandling >= (hasDurations ? LONG_TASK_MS : FORCED_LAYOUT_MIN_MS_NO_DURATIONS) &&
-    forcedWhileHandling >= FORCED_LAYOUT_MIN_SHARE * handledWindow &&
-    forcedWhileHandling > renderTotal &&
-    forcedWhileHandling > outside &&
-    // A long wait before the handlers is the answer, on the same test as the handler and render rungs: 26 ms
-    // of layout at the end of a 300 ms wait did not make the click slow.
-    !waitingWins &&
-    !screenOutranks;
+  // A long wait before the handlers is the answer, on the same test as the handler and render rungs: 26 ms of
+  // layout at the end of a 300 ms wait did not make the click slow.
+  const layoutMatters = layoutOutruns && !waitingWins && !screenOutranks;
 
   /**
    * What the ladder would have named had the screen update not outrun the whole working time. The

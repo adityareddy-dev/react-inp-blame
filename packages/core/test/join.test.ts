@@ -2208,6 +2208,25 @@ test("a render between one event's handlers and the next's is working time a lon
     const small = report([entry('keydown', 0, 312, 55, 107), entry('keyup', 300, 12, 300.1, 300.3)], [commit(200, 0, { total: 4 })], frames, [input(0, 'keydown')]);
     assert.deepEqual(small.explanation.blame, { ...waited, ms: 55 });
   }
+  // Nor is one beside a handler or a forced layout that outruns React's render, since that rung is asked first and
+  // leaves the time between out of its figure: a 60 ms wait before a keydown's 38 ms handler, with a 30 ms render
+  // before the keyup's, is still the verdict, and the handler is said after it.
+  const keyed = [entry('keydown', 0, 144, 60, 100), entry('keyup', 120, 24, 140, 140.2)];
+  const key = [{ ...loginClick('handleKey')[0]!, type: 'keydown' }];
+  for (const frames of [[], null]) {
+    const handled = report(keyed, [commit(98, 0, { total: 2 }), commit(135, 0, { total: 30 })], frames, key).explanation;
+    assert.deepEqual(handled.blame, { ...waited, ms: 60 });
+    assert.ok(handled.notes.includes('The key press handler handleKey still ran for about 38 ms of the 80 ms of working time after the wait.'));
+  }
+  // So is 52 ms of forced layout in a keydown's 55 ms of handlers, with an 8 ms render between them and the keyup's.
+  const forced = report(
+    [entry('keydown', 0, 144, 60, 115), entry('keyup', 120, 24, 140, 140.2)],
+    [commit(110, 0, { total: 6 }), commit(135, 0, { total: 8 })],
+    [frame(50, 94, [script('INPUT.onkeydown', 60, 55, 52)])],
+    [input(0, 'keydown')],
+  );
+  assert.deepEqual(forced.explanation.blame, { ...waited, ms: 60 });
+  assert.match(forced.verdict, /The browser also spent 52 ms recalculating styles and layout in scripts before the paint\./);
 });
 
 test('the render blame names the commit whose committing took the time', () => {
