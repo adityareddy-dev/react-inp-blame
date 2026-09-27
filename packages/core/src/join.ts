@@ -1841,6 +1841,9 @@ function explain(r: InteractionReport): Explanation {
   // short form never disagrees with the long one.
   let cause: string;
   let blame: Blame;
+  // A script verdict said as before the handler started is the wait before the handlers, so the note on the
+  // wait does not say it again.
+  let saidBehind = false;
   if (hydrationTook) {
     const { boundary, commit } = hydrationTook;
     const confidence = measuredFrom(commit);
@@ -2086,6 +2089,7 @@ function explain(r: InteractionReport): Explanation {
         : lateNoted && s.start + s.duration <= processingStart + STAMP_TOLERANCE
           ? ' before the handler started'
           : '';
+    saidBehind = where === ' before the handler started';
     const ran = `${scriptPhrase(s)} ran for ${ms(ranScript.ms)}${ofIt}${where}`;
     cause = say(confidence, `${small}; ${ran}.`, `${small}; ${HEDGE} ${ran}.`);
     blame = { kind: 'script', name: scriptBlameName(ranScript.script), detail: ranAsHandler(ranScript.script) ? component : null, ms: ranScript.ms, confidence };
@@ -2181,8 +2185,8 @@ function explain(r: InteractionReport): Explanation {
   if (closedByTheScreen && blame.kind === 'painting') notes.push(closedByTheScreen);
   // A long wait under any other verdict is said whatever React rendered: a 70 ms wait before a 98 ms handler went
   // unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. Under a verdict that is the wait, it
-  // is already said.
-  if (r.inputDelay > LONG_TASK_MS && !waitIsTheVerdict) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
+  // is already said, and so it is under a script said to have run before the handler started.
+  if (r.inputDelay > LONG_TASK_MS && !waitIsTheVerdict && !saidBehind) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
   if (c?.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   const walked = [...r.commits, ...r.followUps];
   if (namesLookMinified(walked)) notes.push(MINIFIED_NAMES_NOTE);
