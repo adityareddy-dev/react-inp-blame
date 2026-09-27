@@ -114,14 +114,17 @@ test('an icon a script drew outside React is placed by the button holding it, un
   // and feather.replace() swaps the `<i>` for an `<svg>` React never saw, so the svg has no fiber and the
   // button's is read.
   const close = () => {};
-  /** Page's IconButton, whose button holds `inside` in the tree React rendered: a fiber, or text React wrote in with none. */
-  const iconButton = (inside: Record<string, unknown> | string): Record<string, unknown> => {
+  /**
+   * Page's IconButton, whose button holds `inside` in the tree React rendered: a fiber, text React wrote in with
+   * none, or nothing. `props` are the button's others.
+   */
+  const iconButton = (inside: Record<string, unknown> | string | null, props: Record<string, unknown> = {}): Record<string, unknown> => {
     const iconButtonFiber = component('IconButton', component('Page'));
     iconButtonFiber.memoizedProps = { onClick: close };
     const written = typeof inside === 'string';
-    const buttonFiber: Record<string, unknown> = { tag: 5, elementType: 'button', type: 'button', memoizedProps: written ? { onClick: close, children: inside } : { onClick: close }, return: iconButtonFiber, child: written ? null : inside, sibling: null };
+    const buttonFiber: Record<string, unknown> = { tag: 5, elementType: 'button', type: 'button', memoizedProps: written ? { ...props, onClick: close, children: inside } : { ...props, onClick: close }, return: iconButtonFiber, child: written ? null : inside, sibling: null };
     iconButtonFiber.child = buttonFiber;
-    if (!written) inside.return = buttonFiber;
+    if (inside !== null && !written) inside.return = buttonFiber;
     buttonFiber.stateNode = element('button', { fiber: buttonFiber });
     return buttonFiber.stateNode as Record<string, unknown>;
   };
@@ -132,6 +135,13 @@ test('an icon a script drew outside React is placed by the button holding it, un
   // twemoji.parse() swaps the emoji in `<button onClick={onClick}>👍 Like</button>` for an `<img class="emoji">`.
   const emoji = element('img', { classes: ['emoji'], parentNode: iconButton('👍 Like') });
   assert.equal(generateTarget(asNode(emoji)), 'Page > IconButton (img.emoji)');
+  // And one in a button React rendered nothing in: an svg imported as a string and set through
+  // dangerouslySetInnerHTML, or the `<svg>` Font Awesome's searchPseudoElements draws in an empty
+  // `<button aria-label="Close">`.
+  const setOnButton = element('svg', { parentNode: iconButton(null, { dangerouslySetInnerHTML: { __html: '<svg></svg>' } }) });
+  assert.equal(generateTarget(asNode(setOnButton)), 'Page > IconButton (svg)');
+  const pseudo = element('svg', { classes: ['svg-inline--fa', 'fa-xmark'], parentNode: iconButton(null, { 'aria-label': 'Close' }) });
+  assert.equal(generateTarget(asNode(pseudo)), 'Page > IconButton (svg.svg-inline--fa.fa-xmark)');
   // An svg React rendered in the same button is placed there as well.
   const svgFiber: Record<string, unknown> = { tag: 5, elementType: 'svg', type: 'svg', memoizedProps: {}, child: null, sibling: null };
   svgFiber.stateNode = element('svg', { classes: ['lucide'], fiber: svgFiber, parentNode: iconButton(svgFiber) });
