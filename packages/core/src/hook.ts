@@ -1032,6 +1032,9 @@ function chain(hook: DevtoolsHook): () => void {
   const prevCommit = hook.onCommitFiberRoot;
   const hadPostCommit = Object.prototype.hasOwnProperty.call(hook, 'onPostCommitFiberRoot');
   const prevPostCommit = hook.onPostCommitFiberRoot;
+  // Until the undo. A method of ours left on the hook after it only passes calls on, also once a later install()
+  // wraps the same hook again: that one reads each commit, and this one would read it a second time.
+  let live = true;
   const inject = function (this: unknown, ...args: Parameters<DevtoolsHook['inject']>): number {
     const id = prevInject.apply(this, args);
     const renderer = register(hook, id, args[0]);
@@ -1039,19 +1042,19 @@ function chain(hook: DevtoolsHook): () => void {
     return id;
   };
   const onCommitFiberRoot = function (this: unknown, ...args: Parameters<DevtoolsHook['onCommitFiberRoot']>): void {
-    guardedCommit(hook, ...args);
+    if (live) guardedCommit(hook, ...args);
     try {
       if (typeof prevCommit === 'function') prevCommit.apply(this, args);
     } finally {
-      hookReturned();
+      if (live) hookReturned();
     }
   };
   const onPostCommitFiberRoot = function (this: unknown, id: number, root: FiberRoot): void {
-    guardedPostCommit(hook, id, root);
+    if (live) guardedPostCommit(hook, id, root);
     if (typeof prevPostCommit === 'function') prevPostCommit.call(this, id, root);
   };
   // A page can lock the hook after install(), and dispose() must not throw into it then. A method that cannot be
-  // put back stays ours, which only passes calls on once the hook is not attached.
+  // put back stays ours.
   const putBack = (restore: () => void) => {
     try {
       restore();
@@ -1060,6 +1063,7 @@ function chain(hook: DevtoolsHook): () => void {
     }
   };
   const undo = (failed?: boolean) => {
+    live = false;
     // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through. Where
     // wrapping failed, each one that no longer reads as the page's own goes back.
     if (failed ? hook.inject !== prevInject : hook.inject === inject) putBack(() => (hook.inject = prevInject));
