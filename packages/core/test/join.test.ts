@@ -2267,6 +2267,19 @@ test('a click whose only render ran after the handlers is weighed as one React r
   assert.deepEqual(unnoted.notes, []);
   assert.deepEqual(timed(104).blame, unnoted.blame);
   assert.deepEqual(timed(99, [commit(100, 0, { total: 1, rendered: 1 })]).blame, { ...handler, ms: 109 });
+  // Where the frame names a 25 ms timer the click waited behind, which takes the verdict from the handlers, it is that
+  // timer's under either screen update, and not the 30 ms one after them: under 99 ms the later one was named.
+  const waitedTimed = (paint: number) =>
+    report(
+      [entry('click', 0, 140 + paint, 30, 140)],
+      [],
+      [frame(0, 140 + paint, [script('TimerHandler:setTimeout', 3, 25), ...sevenClicks.map((s) => ({ ...s, start: s.start + 28 })), script('TimerHandler:setTimeout', 143, 30)], 120 + paint)],
+      save,
+    ).explanation;
+  const first = waitedTimed(99);
+  assert.deepEqual(first.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 25, confidence: 'measured' });
+  assert.equal(first.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 25 ms before the handler started.");
+  assert.deepEqual([waitedTimed(104).blame, waitedTimed(104).cause], [first.blame, first.cause]);
 });
 
 test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {

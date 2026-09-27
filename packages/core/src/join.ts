@@ -1560,7 +1560,7 @@ function explain(r: InteractionReport): Explanation {
    * by where it ran, against every script up to the end of the handlers: ranked by where, a 20 ms click handler
    * took the verdict from the 150 ms listener, and a 25 ms pointerdown listener from a 120 ms timer the click
    * waited behind, which was then said nowhere. `ledScript` is that ranking whether or not the note names the
-   * script after the handlers, for the idle handler's rung below.
+   * script after the handlers, for the idle handler's rung below, where `ranScript` is settled.
    */
   const lateOnly = insideLate.length > 0 && !c;
   const lateNoted = insideLate.length > 0 || (!!lateScript && (r.presentation > PRESENTATION_NOTE_MS || !!heldByNext));
@@ -1568,7 +1568,6 @@ function explain(r: InteractionReport): Explanation {
   const earlyScript = longestPart(scriptParts(frames, r.start, processingEnd));
   const ledScript = lateTaken && (!earlyScript || lateTaken.ms > earlyScript.ms) ? lateTaken : earlyScript;
   const ownScript = longestPart(scriptParts(frames, r.start, r.end).filter((p) => !next || p.script.start < nextFrom - STAMP_TOLERANCE));
-  const ranScript = !lateNoted ? ownScript : ledScript;
   // Where every render ran in the script after the handlers, the screen update's note says it: React did
   // render, just not in the working time, and a verdict that names no render says that much. So it does where
   // a press rendered after it painted, before a slower release: the later render's note, right after it, says
@@ -1811,9 +1810,10 @@ function explain(r: InteractionReport): Explanation {
   // half of the screen update or on the next press, it names nothing that ran in them, so the handler keeps its
   // verdict rather than the time reading as waiting and painting. That holds with no note to name the one after
   // them, as `ledScript` weighs it: taken there, a 30 ms timer after 110 ms of short handlers was the verdict under a
-  // 99 ms screen update, and the handler's under a 104 ms one. A frame that ended as they began holds only what the
-  // click waited behind: a 30 ms timer there no longer takes a 45 ms handler's verdict, which the handler keeps before
-  // that frame arrives and beside a 1 ms render.
+  // 99 ms screen update, and the handler's under a 104 ms one. The script that closes the rung is the one the verdict
+  // names, too: where a 25 ms timer the click waited behind closed it, that 30 ms timer took the verdict all the same.
+  // A frame that ended as they began holds only what the click waited behind: a 30 ms timer there no longer takes a
+  // 45 ms handler's verdict, which the handler keeps before that frame arrives and beside a 1 ms render.
   // A click React never dispatched, on server-rendered HTML it had not hydrated, is left out: the handler named
   // there is a hydrated component's above the boundary, which never ran, and the working time can be React's own
   // attempt at hydrating it. "Not loaded yet" is 'waiting', which the page's looks for React's marks decide, so a
@@ -1823,6 +1823,7 @@ function explain(r: InteractionReport): Explanation {
   const reactIdle = !inWorkingTime.length && !unseen && !unjoined && r.hydration?.kind !== 'not-hydrated';
   const framedHandlers = frames.some((f) => f.start < processingEnd && f.start + f.duration > processingStart);
   const idleHandler = reactIdle && !(framedHandlers && ledScript);
+  const ranScript = (reactIdle && framedHandlers && ledScript) || (lateNoted ? ledScript : ownScript);
   const outsideMatters = (hasDurations || idleHandler) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler
