@@ -3,7 +3,7 @@ import { controlOf } from './element.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
-import { guarded, warnOnce } from './warn.js';
+import { dropped, guarded, warnOnce } from './warn.js';
 
 const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 const MAX_COMMITS = 300;
@@ -422,14 +422,16 @@ export function noteCloser(e: Event): void {
 function record(e: DispatchedInput): InputRecord {
   const isKey = e.type === 'keydown' || e.type === 'keyup';
   const target = e.target as Node | null;
-  // Read now, before React's handlers run: once React commits the deletion of the element, React 18
-  // and 19 clear its fiber's links and props, and the Event Timing entry arrives after that.
-  const fiber = fiberFromNode(target);
-  // The control labels the click, and for a click on an icon the components are read from what the icon
-  // belongs to: an icon library's `Trash2` inside the button is not what anyone clicked. Both found now,
-  // since a click that swaps the icon detaches it before the entry.
-  const control = controlOf(target);
-  const key = (isKey && e.keyCode !== IME_KEY_CODE && e.code) || null;
+  let read: TargetReading;
+  try {
+    read = readTarget(e, target, isKey);
+  } catch (error) {
+    // A target the library cannot read, such as a field of a form whose fields shadow its properties, still
+    // records its input, read as one with no target: the commits in its dispatch are its own, and it names
+    // nothing.
+    dropped(error);
+    read = readTarget(e, null, isKey);
+  }
   const rec: InputRecord = {
     ts: e.timeStamp,
     type: e.type,
@@ -437,18 +439,8 @@ function record(e: DispatchedInput): InputRecord {
     press: isKey ? e.code : e.pointerId,
     pointerType: e.pointerType,
     target,
-    control,
-    // Asked of the target, as a report asks of its entry's: the control around it is the same, and whether
-    // the input landed inside an editor is asked of the element it landed on.
-    label: target && state.options?.label?.(target),
-    owners: Object.freeze(ownersOf(namingFiber(target))),
-    handler: handlerOf(fiber, e.type, key),
-    key,
+    ...read,
     work: { endedAt: e.timeStamp, ownEndedAt: e.timeStamp, unjoined: [] },
-    // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting
-    // inside a page React has otherwise hydrated, and then the target's nearest fiber is the hydrated
-    // ancestor above the boundary. React reads the same markers on every event it dispatches.
-    dehydrated: frozen(dehydratedAround(target)),
   };
   state.inputs.push(rec);
   if (state.inputs.length > RING_SIZE) state.inputs.shift();
@@ -459,6 +451,33 @@ function record(e: DispatchedInput): InputRecord {
     if (state.inTask === rec) state.inTask = null;
   }, 0);
   return rec;
+}
+
+/** What an input's target says at dispatch. */
+type TargetReading = Pick<InputRecord, 'control' | 'label' | 'owners' | 'handler' | 'key' | 'dehydrated'>;
+
+function readTarget(e: DispatchedInput, target: Node | null, isKey: boolean): TargetReading {
+  // Read now, before React's handlers run: once React commits the deletion of the element, React 18
+  // and 19 clear its fiber's links and props, and the Event Timing entry arrives after that.
+  const fiber = fiberFromNode(target);
+  // The control labels the click, and for a click on an icon the components are read from what the icon
+  // belongs to: an icon library's `Trash2` inside the button is not what anyone clicked. Both found now,
+  // since a click that swaps the icon detaches it before the entry.
+  const control = controlOf(target);
+  const key = (isKey && e.keyCode !== IME_KEY_CODE && e.code) || null;
+  return {
+    control,
+    // Asked of the target, as a report asks of its entry's: the control around it is the same, and whether
+    // the input landed inside an editor is asked of the element it landed on.
+    label: target && state.options?.label?.(target),
+    owners: Object.freeze(ownersOf(namingFiber(target))),
+    handler: handlerOf(fiber, e.type, key),
+    key,
+    // Asked of every input, not only of one with no fiber: a Suspense boundary can still be waiting
+    // inside a page React has otherwise hydrated, and then the target's nearest fiber is the hydrated
+    // ancestor above the boundary. React reads the same markers on every event it dispatches.
+    dehydrated: frozen(dehydratedAround(target)),
+  };
 }
 
 const frozen = <T>(x: T | null): T | null => (x === null ? null : Object.freeze(x));
