@@ -2049,8 +2049,8 @@ function explain(r: InteractionReport): Explanation {
   // short form never disagrees with the long one.
   let cause: string;
   let blame: Blame;
-  // A script verdict said as before the handler started is the wait before the handlers, so the note on the
-  // wait does not say it again.
+  // A script verdict said as before the handler started, where it held half of the wait, is the wait before the
+  // handlers, so the note on the wait does not say it again.
   let saidBehind = false;
   if (hydrationTook) {
     const { boundary, commit } = hydrationTook;
@@ -2301,16 +2301,18 @@ function explain(r: InteractionReport): Explanation {
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(ranScript.ms) < Math.round(ranScript.script.duration) ? ' of it' : '';
     // A script that started after the handlers says so wherever it is named: said bare, a 22 ms timer after a
-    // Sheet's 49 ms of working time read as the handler's. Where the note names the script after the handlers,
-    // the verdict is ranked against the ones before it, so a timer the input waited behind says so too.
+    // Sheet's 49 ms of working time read as the handler's. So does a timer the input waited behind, which with
+    // no note on the script after the handlers was said bare too, and then again as the wait. It is the wait,
+    // and the note on the wait is left out, only where it held half of it: a 30 ms timer in a 120 ms wait left
+    // the other 90 ms said nowhere.
     const s = ranScript.script;
     const where =
       s.start >= processingEnd
         ? ' after the handler finished'
-        : lateNoted && s.start + s.duration <= processingStart + STAMP_TOLERANCE
+        : s.start + s.duration <= processingStart + STAMP_TOLERANCE
           ? ' before the handler started'
           : '';
-    saidBehind = where === ' before the handler started';
+    saidBehind = where === ' before the handler started' && ranScript.ms >= WAITED_BEHIND_MIN_SHARE * r.inputDelay;
     const ran = `${scriptPhrase(s)} ran for ${ms(ranScript.ms)}${ofIt}${where}`;
     cause = say(confidence, `${small}; ${ran}.`, `${small}; ${HEDGE} ${ran}.`);
     blame = { kind: 'script', name: scriptBlameName(ranScript.script), detail: ranAsHandler(ranScript.script) ? component : null, ms: ranScript.ms, confidence };

@@ -5052,6 +5052,23 @@ test("a verdict does not say no long task was recorded where the screen update's
   assert.deepEqual(behindBare.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 110 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms.',
   ]);
+  // A timer that held under half of the wait is said as before the handler started all the same, and the wait is
+  // still said: a 30 ms timer in a 120 ms wait left the other 90 ms said nowhere. One that held 115 ms of it is the
+  // wait, as the 62 ms timer is.
+  const save = loginClick('handleSave');
+  const tenLater = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 121 + i * 20, 15));
+  const timerIn = (duration: number) =>
+    report([entry('click', 0, 460, 120, 330)], [], [frame(0, 460, [script('TimerHandler:setTimeout', 120 - duration, duration), ...tenLater, script('DIV.onscroll', 335, 40)], 420)], save).explanation;
+  const part = timerIn(30);
+  assert.deepEqual(part.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 30, confidence: 'measured' });
+  assert.equal(part.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 30 ms before the handler started.");
+  assert.deepEqual(part.notes, [
+    'It also waited 120 ms before the handler could start, because the main thread was busy.',
+    "After the handler finished, the screen took another 130 ms to update: 90 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms.",
+  ]);
+  const most = timerIn(115);
+  assert.equal(most.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 115 ms before the handler started.");
+  assert.deepEqual(most.notes, [part.notes[1]]);
 
   // A 120 ms timer the click waited 121 ms behind, a 25 ms pointerdown listener, then a 40 ms scroll listener
   // that held the 61 ms screen update and forced a render. The timer is the longest, and is not dropped for the
@@ -5064,10 +5081,19 @@ test("a verdict does not say no long task was recorded where the screen update's
       [frame(0, 312, [script('TimerHandler:setTimeout', 0, 120), script('BUTTON.onpointerdown', 121, 25), ...sixClicks, script('DIV.onscroll', 253, 40)], 300)],
       [input(0, 'click')],
     ).explanation;
-  assert.equal(timerFirst([]).cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 120 ms.");
+  // With no note on the listener it is still said as before the handler started, and as the 121 ms wait.
+  assert.equal(timerFirst([]).cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 120 ms before the handler started.");
+  assert.deepEqual(timerFirst([]).notes, []);
   const forced = timerFirst([commit(290, 0, { ...table, total: 30, rendered: 200, startedAt: 255 })]);
   assert.deepEqual(forced.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 120, confidence: 'measured' });
   assert.equal(forced.cause, "React didn't render anything in the working time; a script (TimerHandler:setTimeout, app.js) ran for 120 ms before the handler started.");
+  // So is a timer that began before the click, cut at its start: said bare, its 60 ms read as a cost of its own,
+  // then "It also waited 60 ms" as another, though they were the same 60 ms.
+  const sevenClicks = Array.from({ length: 7 }, (_, i) => script('DOCUMENT.onclick', 60 + i * 14.2, 13.7));
+  const cut = report([entry('click', 0, 200, 60, 160)], [], [frame(-10, 210, [script('TimerHandler:setTimeout', -10, 70), ...sevenClicks])], save).explanation;
+  assert.deepEqual(cut.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 60, confidence: 'measured' });
+  assert.equal(cut.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 60 ms of it before the handler started.");
+  assert.deepEqual(cut.notes, []);
 });
 
 test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {
