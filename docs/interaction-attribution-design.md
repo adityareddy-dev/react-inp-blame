@@ -1118,8 +1118,8 @@ says that instead, in the screen update's note too where another verdict took th
 script after the handlers is the next key's handler, whose work belongs to the next report. Otherwise a render
 inside the script after the handlers is never counted in the working time, however short the screen update,
 unless the script is React's own task, which Long Animation Frames names `MessagePort.onmessage`, and the
-working time was the longer part: that render is one the handlers scheduled, a transition started from the
-click, and it stays the interaction's render, not a script's. Where it is taken out, a `script` verdict names
+screen update did not outrank the working time: that render is one the handlers scheduled, a transition
+started from the click, and it stays the interaction's render. Where it is taken out, a `script` verdict names
 the longest of the scripts up to the end of the handlers and, only where it held half the screen update, the
 script after them, ranked by length and not by where they ran. One outside the working time is said as after
 the handler finished, or as before the handler started for a timer the input waited behind. With none of
