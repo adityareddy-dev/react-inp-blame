@@ -1041,6 +1041,52 @@ test('a page that turns the DevTools hook off where it is after install() is uns
   }
 });
 
+test('a click whose commit was read before React stopped being read keeps it, and its report says so rather than that none is in it', async (t) => {
+  // The page turns the hook off, or a later commit's walk throws, after the click's commit was read and before its
+  // entry arrives, so the report is built once the library has stopped reading.
+  t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  ownShim(t);
+  for (const stop of ['turned off', 'walk threw']) {
+    await inBrowser(async (page) => {
+      if (stop === 'walk threw') page.window[HOOK] = existingHook();
+      const api = install({ threshold: 40, devtoolsTrack: false });
+      const hook = page.window[HOOK];
+      const id = hook.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      hook.onCommitFiberRoot(id, root);
+      clock.now = 1000;
+      page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+      page.duringClick(() => {
+        clock.now = 1150;
+        commitAgain(root, 150);
+        hook.onCommitFiberRoot(id, root, 1, false);
+        if (stop === 'walk threw') {
+          clock.now = 1160;
+          commitAgain(root, 5);
+          Object.defineProperty(root.current.child, 'elementType', {
+            get() {
+              throw new Error('elementType moved');
+            },
+          });
+          hook.onCommitFiberRoot(id, root, 1, false);
+        }
+      });
+      if (stop === 'turned off') turnOff(hook);
+      page.paint([click(1000, 1000, 200)]);
+      await nextTask();
+      const r = api.last();
+      assert.ok(r);
+      assert.deepEqual({ mode: api.stats().mode, reactStatus: r.reactStatus, commits: r.commits.length }, { mode: 'unsupported', reactStatus: 'unreadable', commits: 1 });
+      assert.match(r.explanation.cause, /150 ms .*Counter/);
+      const notes = r.explanation.notes.join('\n');
+      assert.doesNotMatch(notes, /nothing React did is in this report/);
+      assert.match(notes, /React stopped being read partway through this click, so only what it did before that is in this report/);
+      api.dispose();
+    });
+  }
+});
+
 test('a chained hook whose supportsFiber the page clears after install() gets its own methods back', async (t) => {
   t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
