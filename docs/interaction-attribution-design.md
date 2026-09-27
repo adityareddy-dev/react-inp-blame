@@ -442,7 +442,8 @@ the Event Timing callback to `window.onerror`, where Sentry or Datadog counted i
 report was lost anyway. A report's explanation and verdict are built later, on first read, and that read
 is the page's own code: a listener, `api.last()`, a `JSON.stringify`. So that build is guarded too. A
 report whose explanation throws is kept, with its own fields as they were, blaming nothing
-(`kind: 'none'`, inferred) and with a cause that says the library hit an error of its own.
+(`kind: 'none'`, inferred) and with a cause that says the library hit an error of its own. The panel's
+row says that too, rather than that nothing stood out.
 `attributeINP` gives `react: null` for it, since that `'none'` is no finding. Before, the error went out
 of the page's listener to `reportError`, as the page's. The badge and panel, which a developer turns on,
 draw under a guard of their own (`overlay-draw`). Where one error could take more with it, the guard is
