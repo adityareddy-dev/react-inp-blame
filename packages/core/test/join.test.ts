@@ -989,6 +989,31 @@ test("a render a key press set off after it painted is still a later render once
   assert.match(note(next), /^A React render landed 126 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it, but people still wait for it\.$/);
 });
 
+test('a render a press too quick for an entry set off is a later render of the release that heads the report', () => {
+  // A pointerdown under 16 ms sends no entry, and that is the usual press, so only the click's arrived. With
+  // no entry painted before it, the render the press set off at 100, while the pointer was held, was thrown
+  // away as the press's own work and the click was said to have rendered nothing.
+  const note = (r: InteractionReport) => r.explanation.notes.find((n) => /^A (second )?React render/.test(n)) ?? '';
+  const ring = [input(0, 'pointerdown'), input(200, 'pointerup', { gestureTs: 0 }), input(200.5, 'click', { gestureTs: 0 })];
+  const click = [entry('click', 200, 120, 201, 300)];
+  const held = report(click, [commit(100, 0, { inputType: 'pointerdown', rendered: 400, total: 60 })], [], ring);
+  assert.deepEqual(held.followUps.map((c) => c.at), [100]);
+  // From the latest the press can have painted, 16 ms after it went down.
+  assert.match(note(held), /^A React render landed 84 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it/);
+  // One inside those 16 ms can be the press's own work before its paint, which `holdMs` covers.
+  const handlers = report(click, [commit(10, 0, { inputType: 'pointerdown', rendered: 400, total: 60 })], [], ring);
+  assert.deepEqual(handlers.followUps, []);
+  assert.ok(!handlers.verdict.includes('Infinity'), handlers.verdict);
+  // A press with an entry is measured from that entry's paint, however short: the page's first input comes at any duration.
+  const first = report([entry('pointerdown', 0, 8, 1, 4, { entryType: 'first-input' }), ...click], [commit(100, 0, { inputType: 'pointerdown', rendered: 400, total: 60 })], [], ring);
+  assert.match(note(first), /^A React render landed 92 ms after the press updated the screen/);
+  // A quick keydown's, before its slower keyup.
+  const keys = [input(0, 'keydown', { press: 'KeyA' }), input(300, 'keyup', { press: 'KeyA', gestureTs: 0 })];
+  const typed = report([entry('keyup', 300, 48, 301, 340)], [commit(150, 0, { inputType: 'keydown', rendered: 400, total: 60 })], [], keys);
+  assert.deepEqual(typed.followUps.map((c) => c.at), [150]);
+  assert.match(note(typed), /^A React render landed 134 ms after the press updated the screen, before the release: 60 ms /);
+});
+
 test("a render a held pointer's press set off after it painted is a later render of the click that heads the report, and one in another entry's handlers is not", () => {
   const note = (r: InteractionReport) => r.explanation.notes.find((n) => /^A (second )?React render/.test(n)) ?? '';
   const ring = [input(0, 'pointerdown'), input(200, 'pointerup', { gestureTs: 0 }), input(200.5, 'click', { gestureTs: 0 })];
