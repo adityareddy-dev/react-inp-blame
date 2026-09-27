@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildReport, laterRenderOf, renderedVerb, sealReport } from '../src/join.ts';
-import { blameLine, createOverlay, laterDetail, laterWhen, titleFor } from '../src/overlay.ts';
+import { blameLine, createOverlay, laterDetail, laterLead, laterWhen, titleFor } from '../src/overlay.ts';
 import type { CommitSummary, InteractionReport } from '../src/types.ts';
 
 // Only what a row's title reads: the report's type, its target's label and the names of its entries.
@@ -148,4 +148,7 @@ test("the panel's line for a press's render before a slower release says it came
   const at = (at: number) => ({ at }) as unknown as CommitSummary;
   assert.equal(laterWhen(r, at(100)), 'after the press painted');
   assert.equal(laterWhen(r, at(700)), 'after the paint');
+  // The line opens "earlier," for it, where one after the paint opens "then".
+  assert.equal(laterLead(r, at(100)), 'earlier, ');
+  assert.equal(laterLead(r, at(700)), 'then ');
 });
