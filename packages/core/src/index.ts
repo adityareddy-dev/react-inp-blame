@@ -21,7 +21,11 @@ export type { OverlayHandle } from './overlay.js';
 const DEBUG_GLOBAL = '__REACT_INP_BLAME__';
 /** `threshold` by default: web-vitals' default `durationThreshold`, two and a half frames at 60 Hz. */
 const DEFAULT_THRESHOLD = 40;
-/** `walkBudget` by default: over three times the 1441 components of the demo's largest commit, and still a bound on a runaway tree inside React's commit. */
+/**
+ * `walkBudget` by default: over three times the 1441 components of the demo's largest commit, and still a bound on
+ * a runaway render inside React's commit. A component React only cloned is not counted, so how many of those the
+ * walk looks at is bounded by React's own cloning, not by this.
+ */
 const DEFAULT_WALK_BUDGET = 5000;
 /** How often the page is looked at for React's marks while no react-dom has registered, at most. */
 const REACT_LOOK_MS = 1000;

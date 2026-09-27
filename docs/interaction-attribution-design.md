@@ -1780,12 +1780,14 @@ What needs help:
   is a RUM-side feature, not a browser-side one.
 - **Durations.** Only `react-dom/profiling` records them. Counts and the hot path are
   usually enough to name the culprit; durations tell you how bad.
-- **Budget.** The walk is bounded (`walkBudget`, default 5000 component fibers) and only runs for a
-  commit an input can claim: one React made inside an input's dispatch, or one within `inputWindow`
-  (1.5 s) of the end of the newest input's own work. `sampleRate` (0 to 1) rolls
-  once per page load, and a page that loses installs nothing at all. Reports carry
-  `overheadMs`, and `stats()` carries `walkTotalMs`, `reportTotalMs` and `installMs`, so the
-  cost is visible in the data rather than assumed.
+- **Budget.** The walk follows only what React rendered or cloned in the commit, and stops after
+  `walkBudget` components that rendered or that it passed through (default 5000). One React only
+  cloned and skipped is not counted, so how many of those the walk looks at is bounded by React's
+  own cloning rather than by the budget. It only runs for a commit an input can claim: one React
+  made inside an input's dispatch, or one within `inputWindow` (1.5 s) of the end of the newest
+  input's own work. `sampleRate` (0 to 1) rolls once per page load, and a page that loses installs
+  nothing at all. Reports carry `overheadMs`, and `stats()` carries `walkTotalMs`, `reportTotalMs`
+  and `installMs`, so the cost is visible in the data rather than assumed.
 
 The production mode is the one that has to reproduce a hand-made INP win on a large app; that
 test has not been run yet against anything but the demo, and the real applications run by hand were
