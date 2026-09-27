@@ -865,6 +865,32 @@ test('a page that seals its DevTools hook after install() gets its methods back 
   });
 });
 
+test('a hook that inherits onPostCommitFiberRoot and is sealed after install() still hears about post-commits after dispose()', async () => {
+  // A hook made from a class has its methods on the prototype, where a sealed hook's own property would hide them.
+  await inBrowser((page) => {
+    const posts: number[] = [];
+    class Hook {
+      renderers = new Map<number, unknown>();
+      supportsFiber = true;
+      inject(_internals: unknown): number {
+        return 1;
+      }
+      onCommitFiberRoot(): void {}
+      onPostCommitFiberRoot(id: number): void {
+        posts.push(id);
+      }
+    }
+    const existing = new Hook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    Object.seal(existing);
+    api.dispose();
+    // React calls it only when it is a function.
+    if (typeof existing.onPostCommitFiberRoot === 'function') existing.onPostCommitFiberRoot(1);
+    assert.deepEqual(posts, [1], "the hook's own onPostCommitFiberRoot was hidden");
+  });
+});
+
 test('a page that declares the global with var gets the shim as its value, and a hook assigned over it is noticed at the next Event Timing batch', async (t) => {
   // `var __REACT_DEVTOOLS_GLOBAL_HOOK__;` in a classic script leaves the global empty and writable, but it cannot
   // be redefined as the accessor that sees an assignment as it happens.
