@@ -332,12 +332,17 @@ test('an editor is named like a form field whatever labels allows, never by the 
     const chip = element('span', [text('@Ada Lovelace')], { contenteditable: 'false' });
     editable('div', [text('Thanks '), chip], { contenteditable: 'true' });
     assert.equal(label(chip), 'span', labels);
+    // A button an editor draws beside what was typed, a code block's Copy, is named by what the page's code wrote
+    // on it, and its type names nothing.
+    const copy = element('button', [text('Copy')], { type: 'button' });
+    editable('div', [element('pre', [text('const token = "s3cr3t"')]), element('div', [copy], { contenteditable: 'false' })], { contenteditable: 'true' });
+    assert.equal(label(copy), 'button', labels);
     // An element with a text field's role is a field, named by what the page's code wrote on it.
     assert.equal(label(element('div', [text('typed search query')], { role: 'textbox' })), 'div', labels);
     assert.equal(label(element('div', [text('typed search query')], { role: 'searchbox', 'data-testid': 'search' })), 'div "search"', labels);
     assert.equal(label(element('div', [text('Nice work, Ada')], { role: 'textbox', 'aria-placeholder': 'Write a comment' })), 'div "Write a comment"', labels);
-    // A select trigger that shows its value is named the way a <select> is.
-    assert.equal(label(element('button', [text('ada@example.com')], { role: 'combobox' })), 'button', labels);
+    // A select trigger that shows its value is named the way a <select> is. Radix's is a button of type button.
+    assert.equal(label(element('button', [text('ada@example.com')], { type: 'button', role: 'combobox' })), 'button', labels);
   }
   // A click beside an editor or a textarea reads no text inside them: React keeps a textarea's text the same as its value.
   const composer = element('div', [element('div', [text('Hi Ada, the password is hunter2')], { contenteditable: 'true' }), element('button', [text('Send')])]);

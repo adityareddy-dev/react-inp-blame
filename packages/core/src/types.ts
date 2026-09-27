@@ -654,8 +654,8 @@ export interface InstallOptions {
    * field's value. Anything a person types in counts as a form field: an element inside a
    * `contenteditable` editor, or one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`.
    *
-   * `'attributes'`: only what the page's code wrote on the element: its `aria-label`, a form
-   * field's `placeholder`, `aria-placeholder`, `name` or `type`, or its `data-testid` or `data-test`.
+   * `'attributes'`: only what the page's code wrote on the element: its `aria-label`, a form field's
+   * `placeholder`, `aria-placeholder` or `name`, an input's `type`, or its `data-testid` or `data-test`.
    * `'text'`: the same, except that an element with no `aria-label` that is not a form field is
    * named by its first run of text, the way a person would name it. That text can be what the page
    * shows about a person (a name in a table cell), and it travels with every report you forward to
