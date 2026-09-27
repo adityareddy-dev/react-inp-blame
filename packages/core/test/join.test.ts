@@ -58,6 +58,11 @@ function element(tag: string, children: Record<string, unknown>[], attributes: R
     nextSibling: null,
     firstChild: children[0] ?? null,
     getAttribute: (name: string) => attributes[name] ?? null,
+    matches: (selector: string) => matches(el, selector),
+    closest: (selector: string) => {
+      for (let at: Record<string, unknown> | null = el; at; at = at.parentElement as Record<string, unknown> | null) if (matches(at, selector)) return at;
+      return null;
+    },
   };
   Object.defineProperty(el, 'textContent', {
     get() {
@@ -70,6 +75,16 @@ function element(tag: string, children: Record<string, unknown>[], attributes: R
     child.nextSibling = children[i + 1] ?? null;
   });
   return el;
+}
+
+/** `Element.matches` for the attribute selectors a label asks about: `[name]`, `[name="value"]`, and `:not()` of those. */
+function matches(el: Record<string, unknown>, selector: string): boolean {
+  const not = /^(.+):not\((.+)\)$/.exec(selector);
+  if (not) return matches(el, not[1]!) && !matches(el, not[2]!);
+  const attribute = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(selector);
+  if (!attribute) throw new Error(`the stand-in DOM cannot match ${selector}`);
+  const value = (el.getAttribute as (name: string) => string | null)(attribute[1]!);
+  return attribute[2] === undefined ? value !== null : value === attribute[2];
 }
 
 function text(value: string): Record<string, unknown> {
@@ -296,6 +311,42 @@ test("with attributes only, the label comes from what the page's code wrote on t
   assert.equal(label(element('button', [text('×')], { 'aria-label': 'Remove member', 'data-test': 'remove' })), 'button "Remove member"');
   assert.equal(label(element('input', [], { placeholder: 'Search members', 'data-test': 'search' })), 'input "Search members"');
   assert.equal(label(element('div', [], { 'aria-label': 'B'.repeat(60) })), `div "${'B'.repeat(40)}"`);
+});
+
+test('an editor is named like a form field whatever labels allows, never by the text a person typed into it', () => {
+  for (const labels of ['text', 'attributes'] as const) {
+    const label = (target: Record<string, unknown>) => labelOf(target, labels);
+    // Rich-text editors are elements the page made editable, and a key press lands on the one holding the caret.
+    const editable = (tag: string, children: Record<string, unknown>[], attributes: Record<string, string> = {}) => Object.assign(element(tag, children, attributes), { isContentEditable: true });
+    assert.equal(label(editable('div', [text('Hi Ada, the password is hunter2')], { contenteditable: 'true' })), 'div', labels);
+    const paragraph = editable('p', [text('My SSN is 078-05-1120, card 4111 1111')]);
+    editable('div', [paragraph], { contenteditable: 'true', role: 'textbox' });
+    assert.equal(label(paragraph), 'p', labels);
+    // Where isContentEditable is not there to ask, the attribute on an element above says the same.
+    const plain = element('p', [text('Dear Dr. Smith, my diagnosis is')]);
+    element('div', [element('div', [plain])], { contenteditable: '' });
+    assert.equal(label(plain), 'p', labels);
+    // A document in designMode is editable throughout, with no attribute anywhere to say so.
+    assert.equal(label(editable('p', [text('Notes on Ada Lovelace')])), 'p', labels);
+    // A mention chip is marked not editable inside the editor, and its text is still what was typed.
+    const chip = element('span', [text('@Ada Lovelace')], { contenteditable: 'false' });
+    editable('div', [text('Thanks '), chip], { contenteditable: 'true' });
+    assert.equal(label(chip), 'span', labels);
+    // An element with a text field's role is a field, named by what the page's code wrote on it.
+    assert.equal(label(element('div', [text('typed search query')], { role: 'textbox' })), 'div', labels);
+    assert.equal(label(element('div', [text('typed search query')], { role: 'searchbox', 'data-testid': 'search' })), 'div "search"', labels);
+    assert.equal(label(element('div', [text('Nice work, Ada')], { role: 'textbox', 'aria-placeholder': 'Write a comment' })), 'div "Write a comment"', labels);
+    // A select trigger that shows its value is named the way a <select> is.
+    assert.equal(label(element('button', [text('ada@example.com')], { role: 'combobox' })), 'button', labels);
+  }
+  // A click beside an editor or a textarea reads no text inside them: React keeps a textarea's text the same as its value.
+  const composer = element('div', [element('div', [text('Hi Ada, the password is hunter2')], { contenteditable: 'true' }), element('button', [text('Send')])]);
+  assert.equal(labelOf(composer, 'text'), 'div "Send"');
+  assert.equal(labelOf(element('div', [element('textarea', [text('Hi Ada, the password is hunter2')])]), 'text'), 'div');
+  assert.equal(labelOf(element('div', [element('div', [text('typed search query')], { role: 'searchbox' })]), 'text'), 'div');
+  // The text a page shows beside an editor still names what was clicked.
+  const toolbar = element('div', [element('span', [text('Bold')]), element('div', [text('Hi Ada')], { contenteditable: 'true' })]);
+  assert.equal(labelOf(toolbar, 'text'), 'div "Bold"');
 });
 
 test('a click on an icon is labelled by the control it is inside, and its selector stays the element it landed on', () => {

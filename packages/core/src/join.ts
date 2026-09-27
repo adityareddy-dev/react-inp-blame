@@ -124,6 +124,12 @@ const LABEL_NODES = 32;
 // Siblings joined into that run once it starts, the separators between them counted: an interpolated
 // string is a handful of nodes, so a long row of them is a list, not a label.
 const RUN_NODES = 16;
+// The roles of an element a person types or picks a value in. Its text is that value, so it is named
+// the way a form field is.
+const FIELD_ROLES = ['textbox', 'searchbox', 'combobox', 'spinbutton'];
+// An element inside one the page made editable, whose text is what a person typed. A mention chip an
+// editor marks contenteditable="false" is still inside it.
+const EDITING = '[contenteditable]:not([contenteditable="false"])';
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
@@ -817,9 +823,11 @@ function describeTarget(node: Node, owners: readonly string[], handler: string |
 
 /**
  * 'button "Add to cart"': the element's kind and what names it. The name comes from what the page's
- * code wrote on the element: its aria-label, a form field's placeholder, name or type, or its
- * data-testid or data-test. Where `labels` is 'text', an element with no aria-label that is not a
- * form field is named by its first run of text before those data attributes are tried.
+ * code wrote on the element: its aria-label, a form field's placeholder, aria-placeholder, name or
+ * type, or its data-testid or data-test. Where `labels` is 'text', an element with no aria-label that
+ * is not a form field is named by its first run of text before those data attributes are tried. What a
+ * person types in is a form field wherever it is: an element with a text field's role, and anything
+ * inside an editor, whose text is what they typed.
  */
 export function labelOf(node: Node, labels: LabelSource): string | null {
   const landed = elementOf(node);
@@ -827,16 +835,26 @@ export function labelOf(node: Node, labels: LabelSource): string | null {
   const el = controlAround(landed);
   const tag = el.tagName.toLowerCase();
   const word = tag === 'a' ? 'link' : tag;
-  const field = tag === 'input' || tag === 'textarea' || tag === 'select';
+  const field = tag === 'input' || tag === 'select' || typedIn(el) || editing(landed);
   const written = (name: string) => el.getAttribute(name);
   const name =
     written('aria-label') ||
-    (field ? written('placeholder') || written('name') || written('type') : labels === 'text' ? firstText(el) : null) ||
+    (field ? written('placeholder') || written('aria-placeholder') || written('name') || written('type') : labels === 'text' ? firstText(el) : null) ||
     written('data-testid') ||
     written('data-test');
   const label = name ? clip(name) : '';
   return label ? `${word} "${label}"` : word;
 }
+
+/** Is `el` itself one a person types in: a textarea, an element with a text field's role, or an editor? */
+const typedIn = (el: Element): boolean => el.tagName.toLowerCase() === 'textarea' || FIELD_ROLES.includes(el.getAttribute('role') ?? '') || !!el.matches?.(EDITING);
+
+/**
+ * Is `el` in an editor, or in a document in designMode? Asked of the element an input landed on, which
+ * is inside anything the control around it is inside. `closest` rather than a walk up, since a label is
+ * read at every key press.
+ */
+const editing = (el: Element): boolean => (el as HTMLElement).isContentEditable === true || !!el.closest?.(EDITING);
 
 /** Whitespace collapsed, cut at 40 characters. */
 function clip(text: string): string {
@@ -874,7 +892,9 @@ function firstText(el: Element): string {
 function nextNode(node: Node, root: Node): Node | null {
   // Text nobody can see names nothing: a key press with nothing focused lands on the body, and the
   // first text in a Vite or CRA page's body is its noscript line, "You need to enable JavaScript".
-  if (node.firstChild && !UNSEEN_TEXT_TAGS.includes((node as Element).tagName?.toLowerCase() ?? '')) return node.firstChild;
+  // Nor is text a person typed read on the way: an editor's, or a textarea's, which React keeps the
+  // same as its value.
+  if (node.firstChild && !UNSEEN_TEXT_TAGS.includes((node as Element).tagName?.toLowerCase() ?? '') && !typedIn(node as Element)) return node.firstChild;
   for (let n: Node | null = node; n && n !== root; n = n.parentNode) if (n.nextSibling) return n.nextSibling;
   return null;
 }

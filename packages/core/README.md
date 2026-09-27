@@ -425,10 +425,11 @@ at most 40 characters. A control is a button, link, summary, label or form field
 control's ARIA role such as `button`, `link` or `tab`, within five ancestors of the click, so a click on
 the `path` of an icon button is labelled by the button; `target.selector` stays the element the click
 landed on. Under a production build of React the name comes only from what the page's code wrote on the
-element it names: its aria-label, a form field's placeholder, name or type, or its data-testid or
-data-test. The text an element shows can be someone's name or email, and reports are made to be
-forwarded, so reading it is opt-in there: `install({ labels: 'text' })`. Development builds read it by
-default.
+element it names: its aria-label, a form field's placeholder, aria-placeholder, name or type, or its
+data-testid or data-test. The text an element shows can be someone's name or email, and reports are made
+to be forwarded, so reading it is opt-in there: `install({ labels: 'text' })`. Development builds read it
+by default. Text someone types is never read: an element inside a contenteditable editor, or with the
+role `textbox`, `searchbox`, `combobox` or `spinbutton`, is named like a form field.
 
 ## Clicks that land before hydration
 
