@@ -1372,19 +1372,18 @@ function explain(r: InteractionReport): Explanation {
   /**
    * The script a verdict names once React is ruled out: the longest anywhere in the interaction, except
    * where a render ran in the late script. The screen update's note says that script and the render in
-   * it, and the verdict is about the working time, so the script it names is the longest that ran there.
-   * A pointerdown, pointerup and click that ran for 60, 60 and 70 ms, then a scroll listener that forced a
-   * 100 ms render in its 150 ms, were put on the listener as though it had run in the working time, whether
-   * or not the handlers rendered 3 components of their own. Where nothing there ran for long it is the late
-   * script still, said as after it, but only where it held half of the screen update: a 40 ms listener in a
-   * 157 ms screen update that spent 110 ms on style and layout is under half of either phase, and the
-   * verdict is left to what the working time holds. Under that it is the longest script before the handlers
-   * finished: a 62 ms timer the click waited behind was otherwise dropped, and the verdict said no long task
-   * was recorded beside a note that named a 40 ms listener.
+   * it, so the verdict takes it only where it held half of the screen update, and says it ran after the
+   * handler finished: a scroll listener that forced a 100 ms render in its 150 ms, after a pointerdown,
+   * pointerup and click of 60, 60 and 70 ms, was once put on as though it had run in the working time. A
+   * 40 ms listener in a 157 ms screen update that spent 110 ms on style and layout is under half of either
+   * phase, and is left to the note. The rest is ranked by length, not by where it ran, against every script
+   * up to the end of the handlers: ranked by where, a 20 ms click handler took the verdict from the 150 ms
+   * listener, and a 25 ms pointerdown listener from a 120 ms timer the click waited behind, which was then
+   * said nowhere.
    */
   const lateOnly = insideLate.length > 0 && !c;
-  const workingScript = insideLate.length ? longestPart(whileHandling) : null;
-  const ranScript = insideLate.length ? (workingScript ?? lateLeads ?? longestPart(scriptParts(frames, r.start, processingEnd))) : anyScript;
+  const earlyScript = insideLate.length ? longestPart(scriptParts(frames, r.start, processingEnd)) : null;
+  const ranScript = !insideLate.length ? anyScript : lateLeads && (!earlyScript || lateLeads.ms > earlyScript.ms) ? lateLeads : earlyScript;
   // Where every render ran in the script after the handlers, the screen update's note says it: React did
   // render, just not in the working time, and a verdict that names no render says that much.
   const noneWorking = lateOnly && !unjoined ? "React didn't render anything in the working time" : renderedNothing;
@@ -2008,8 +2007,17 @@ function explain(r: InteractionReport): Explanation {
     const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(ranScript.ms) < Math.round(ranScript.script.duration) ? ' of it' : '';
-    const after = insideLate.length && ranScript === lateLeads ? ' after the handler finished' : '';
-    const ran = `${scriptPhrase(ranScript.script)} ran for ${ms(ranScript.ms)}${ofIt}${after}`;
+    // Where a render ran in the script after the handlers the sentence begins with the working time, so a
+    // script outside it says where it ran: after the handlers, or before them, a timer the input waited behind.
+    const s = ranScript.script;
+    const where = !insideLate.length
+      ? ''
+      : ranScript === lateLeads
+        ? ' after the handler finished'
+        : s.start + s.duration <= processingStart + STAMP_TOLERANCE
+          ? ' before the handler started'
+          : '';
+    const ran = `${scriptPhrase(s)} ran for ${ms(ranScript.ms)}${ofIt}${where}`;
     cause = say(confidence, `${small}; ${ran}.`, `${small}; ${HEDGE} ${ran}.`);
     blame = { kind: 'script', name: scriptBlameName(ranScript.script), detail: ranAsHandler(ranScript.script) ? component : null, ms: ranScript.ms, confidence };
   } else if (r.frames) {

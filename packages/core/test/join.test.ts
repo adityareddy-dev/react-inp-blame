@@ -3545,9 +3545,9 @@ test('a screen update over 100 ms gets its note under another verdict where the 
     'React rendered during it, but 1 commit could not be tied to this click; most likely a script (INPUT.onclick, app.js) ran for 150 ms.',
   );
 
-  // The handlers split across three listeners, each shorter than the scroll listener after them. The
-  // verdict is on the working time, so it names the longest script that ran there, and the note the
-  // listener the screen update waited on.
+  // The handlers split across three listeners, each shorter than the scroll listener after them, which held
+  // the screen update. The verdict names the longest script wherever it ran, and says it ran after the
+  // handler finished, so it does not read as working time; the note says the render inside it.
   const splitUp = (handlers: ScriptSummary[]) =>
     report(
       [entry('click', 0, 360, 3, 203)],
@@ -3555,18 +3555,24 @@ test('a screen update over 100 ms gets its note under another verdict where the 
       [frame(0, 360, [...handlers, script('DIV.onscroll', 205, 150)], 356)],
       [input(0, 'click')],
     ).explanation;
-  const split = splitUp([script('BUTTON.onpointerdown', 3, 60), script('BUTTON.onpointerup', 65, 60), script('BUTTON.onclick', 130, 70)]);
-  assert.deepEqual(split.blame, { kind: 'script', name: 'BUTTON.onclick', detail: null, ms: 70, confidence: 'measured' });
-  assert.equal(split.cause, "React didn't render anything in the working time; a script (BUTTON.onclick, app.js) ran for 70 ms.");
+  const threeListeners = [script('BUTTON.onpointerdown', 3, 60), script('BUTTON.onpointerup', 65, 60), script('BUTTON.onclick', 130, 70)];
+  const split = splitUp(threeListeners);
+  assert.deepEqual(split.blame, { kind: 'script', name: 'DIV.onscroll', detail: null, ms: 150, confidence: 'measured' });
+  assert.equal(split.cause, "React didn't render anything in the working time; a script (DIV.onscroll, app.js) ran for 150 ms after the handler finished.");
   assert.deepEqual(split.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 150 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
   ]);
-  // Where no script there ran for long, the scroll listener is named still, as it held the screen update,
-  // and said to have run after it.
+  // Ranked by where they ran, ten click handlers of 20 ms took the verdict from the 150 ms listener that ten of
+  // 19 ms left it to. By length, neither does, and a handler longer than the listener takes it.
   const tenClicks = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15));
-  const spread = splitUp(tenClicks);
-  assert.equal(spread.blame.name, 'DIV.onscroll');
-  assert.equal(spread.cause, "React didn't render anything in the working time; a script (DIV.onscroll, app.js) ran for 150 ms after the handler finished.");
+  for (const each of [15, 19, 20]) {
+    const spread = splitUp(Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, each)));
+    assert.deepEqual(spread.blame, split.blame, `${each} ms handlers`);
+    assert.equal(spread.cause, split.cause, `${each} ms handlers`);
+  }
+  const longer = splitUp([script('BUTTON.onclick', 3, 190)]);
+  assert.deepEqual(longer.blame, { kind: 'script', name: 'BUTTON.onclick', detail: null, ms: 190, confidence: 'measured' });
+  assert.equal(longer.cause, "React didn't render anything in the working time; a script (BUTTON.onclick, app.js) ran for 190 ms.");
   // The same where the handlers rendered too: 3 components in a production build do not put the listener in
   // the working time.
   const alongside = (handlers: ScriptSummary[]) =>
@@ -3579,12 +3585,15 @@ test('a screen update over 100 ms gets its note under another verdict where the 
       [frame(0, 360, [...handlers, script('DIV.onscroll', 205, 150)], 356)],
       [input(0, 'click')],
     ).explanation;
-  const small = alongside([script('BUTTON.onpointerdown', 3, 60), script('BUTTON.onpointerup', 65, 60), script('BUTTON.onclick', 130, 70)]);
-  assert.deepEqual(small.blame, { kind: 'script', name: 'BUTTON.onclick', detail: null, ms: 70, confidence: 'measured' });
-  assert.equal(small.cause, "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (BUTTON.onclick, app.js) ran for 70 ms.");
+  const small = alongside(threeListeners);
+  assert.deepEqual(small.blame, split.blame);
   assert.equal(
-    alongside(tenClicks).cause,
+    small.cause,
     "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (DIV.onscroll, app.js) ran for 150 ms after the handler finished.",
+  );
+  assert.equal(
+    alongside([script('BUTTON.onclick', 3, 190)]).cause,
+    "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (BUTTON.onclick, app.js) ran for 190 ms.",
   );
   // A 40 ms listener in a 157 ms screen update that went mostly on the frame's style and layout held neither
   // phase, so the verdict does not name it. It is the note's, with the render inside it.
@@ -3630,7 +3639,8 @@ test("a verdict does not say no long task was recorded where the screen update's
   );
 
   // A 62 ms timer the click waited 63 ms behind, then the handlers and a 40 ms listener as above. The timer is
-  // the longest script outside the one the note names, so the verdict names it, and not as after the handlers.
+  // the longest script outside the one the note names, so the verdict names it, as before the handler started:
+  // it did not run in the working time the sentence begins with.
   const shifted = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 63 + i * 20, 15));
   const behind = report(
     [entry('click', 0, 420, 63, 263)],
@@ -3639,10 +3649,26 @@ test("a verdict does not say no long task was recorded where the screen update's
     [input(0, 'click')],
   ).explanation;
   assert.deepEqual(behind.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 62, confidence: 'measured' });
-  assert.equal(behind.cause, "React didn't render anything in the working time; a script (TimerHandler:setTimeout, app.js) ran for 62 ms.");
+  assert.equal(behind.cause, "React didn't render anything in the working time; a script (TimerHandler:setTimeout, app.js) ran for 62 ms before the handler started.");
   assert.deepEqual(behind.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 110 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
   ]);
+
+  // A 120 ms timer the click waited 121 ms behind, a 25 ms pointerdown listener, then a 40 ms scroll listener
+  // that held the 61 ms screen update and forced a render. The timer is the longest, and is not dropped for the
+  // pointerdown because the render moved out of the working time.
+  const sixClicks = Array.from({ length: 6 }, (_, i) => script('BUTTON.onclick', 150 + i * 17, 16));
+  const timerFirst = (commits: CommitSummary[]) =>
+    report(
+      [entry('click', 0, 312, 121, 251)],
+      commits,
+      [frame(0, 312, [script('TimerHandler:setTimeout', 0, 120), script('BUTTON.onpointerdown', 121, 25), ...sixClicks, script('DIV.onscroll', 253, 40)], 300)],
+      [input(0, 'click')],
+    ).explanation;
+  assert.equal(timerFirst([]).cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 120 ms.");
+  const forced = timerFirst([commit(290, 0, { ...table, total: 30, rendered: 200, startedAt: 255 })]);
+  assert.deepEqual(forced.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 120, confidence: 'measured' });
+  assert.equal(forced.cause, "React didn't render anything in the working time; a script (TimerHandler:setTimeout, app.js) ran for 120 ms before the handler started.");
 });
 
 test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {
