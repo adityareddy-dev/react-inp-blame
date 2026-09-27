@@ -320,8 +320,8 @@ test("under Vite's default builder, a browser environment of another name decide
 });
 
 test('where environments build in parallel, the page transform decides from the environment building the page, not the one that started last', () => {
-  // A buildApp of the app's own can start every environment's build before any page is transformed. Vite 7 and
-  // later hand the page transform the plugin context of the environment building the page.
+  // A buildApp, the app's or a framework's, can start every environment's build before any page is transformed.
+  // Vite 7 and later hand the page transform the plugin context of the environment building the page.
   const client = { consumer: 'client', build: { rollupOptions: {} } };
   const old = { consumer: 'client', build: { rollupOptions: { input: 'about.html', output: { format: 'iife' } } } };
   const ssr = { consumer: 'server', build: { rollupOptions: { input: 'src/server.js' } } };

@@ -608,8 +608,8 @@ export function inpBlame(options = {}) {
         // browsers that ignore module scripts; where the script below is added, this one would only
         // repeat it.
         order: 'pre',
-        // Vite 7 and later call it with the plugin context of the environment building the page, the one to
-        // decide from where a buildApp of the app's own builds environments in parallel. Vite 6 gives it none.
+        // Vite 7 and later call it with the plugin context of the environment building the page, the one to decide
+        // from where a buildApp, the app's or a framework's, builds environments in parallel. Vite 6 hands it none.
         handler(_html, { path }) {
           return entry === undefined && pages(path) && !buildsPages(config, this?.environment ?? building, pages)
             ? [{ tag: 'script', attrs: { type: 'module' }, children: `import '${INSTALL_MODULE}';`, injectTo: 'head-prepend' }]
