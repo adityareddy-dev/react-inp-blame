@@ -204,7 +204,7 @@ interface HookState {
   registries: WeakMap<DevtoolsHook, Map<number, Renderer>>;
   /**
    * Per hook, what its `onCommitFiberRoot` and `onPostCommitFiberRoot` read as when the library last took it up,
-   * wrapped or not, or put the page's own back (`turnedOff`). Absent where a copy of an earlier version made the state.
+   * wrapped or not, or let it go on dispose() (`turnedOff`). Absent where a copy of an earlier version made the state.
    */
   commitMethods?: WeakMap<DevtoolsHook, Pick<DevtoolsHook, 'onCommitFiberRoot' | 'onPostCommitFiberRoot'>>;
   /** The last 8 inputs seen, oldest first. */
@@ -710,7 +710,11 @@ export function installHook(opts: HookOptions): void {
 
 /** Stops reading commits, forgets what was read, and puts a chained hook back the way it was. The shim stays: React still holds it. */
 export function uninstallHook(): void {
+  const hook = state.attached;
   state.detach?.();
+  // React calls whatever the hook holds now, the page's own methods put back or another tool's wrapped around the
+  // library's, so a later install() over a hook turned off since React registered tells that apart from a no-op.
+  if (hook) noteCommitMethods(hook);
   state.detach = null;
   state.attached = null;
   state.options = null;
@@ -758,8 +762,13 @@ function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   state.mode = as;
   state.unsupported = null;
   state.detach = detach;
-  (state.commitMethods ??= new WeakMap()).set(hook, { onCommitFiberRoot: hook.onCommitFiberRoot, onPostCommitFiberRoot: hook.onPostCommitFiberRoot });
+  noteCommitMethods(hook);
   for (const renderer of registryOf(hook).values()) admit(renderer);
+}
+
+/** Records the two methods React calls on `hook` as the library takes it up or lets it go, for `turnedOff`. */
+function noteCommitMethods(hook: DevtoolsHook): void {
+  (state.commitMethods ??= new WeakMap()).set(hook, { onCommitFiberRoot: hook.onCommitFiberRoot, onPostCommitFiberRoot: hook.onPostCommitFiberRoot });
 }
 
 /** The page has turned the hook off, or locked it or the global, against developer tools: nothing is attached, and the page is unsupported. */
@@ -1125,22 +1134,15 @@ function chain(hook: DevtoolsHook): () => void {
   };
   const undo = (failed?: boolean) => {
     live = false;
-    // React calls the page's own methods again, so each one put back is recorded, and a later install() over a hook
-    // turned off since React registered tells that apart from a no-op in its place.
-    const left = state.commitMethods?.get(hook);
     // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through. Where
     // wrapping failed, each one that no longer reads as the page's own goes back.
     if (failed ? hook.inject !== prevInject : hook.inject === inject) putBack(() => (hook.inject = prevInject));
-    if (failed ? hook.onCommitFiberRoot !== prevCommit : hook.onCommitFiberRoot === onCommitFiberRoot) {
-      putBack(() => (hook.onCommitFiberRoot = prevCommit));
-      if (left) left.onCommitFiberRoot = hook.onCommitFiberRoot;
-    }
+    if (failed ? hook.onCommitFiberRoot !== prevCommit : hook.onCommitFiberRoot === onCommitFiberRoot) putBack(() => (hook.onCommitFiberRoot = prevCommit));
     if (failed ? hook.onPostCommitFiberRoot !== prevPostCommit : hook.onPostCommitFiberRoot === onPostCommitFiberRoot) {
       // Put back before it is removed, so that on a hook sealed since, which keeps the property, React calls only
       // what it did before (nothing, or a method the hook inherits) and a later install() does not wrap ours.
       putBack(() => (hook.onPostCommitFiberRoot = prevPostCommit));
       if (!hadPostCommit) putBack(() => delete hook.onPostCommitFiberRoot);
-      if (left) left.onPostCommitFiberRoot = hook.onPostCommitFiberRoot;
     }
   };
   try {
