@@ -420,7 +420,8 @@ export function inpBlame(options = {}) {
     let config = null;
     // Its environment, from buildStart, whose options the page transform decides from as the build does. A
     // browser environment of any name builds pages, and where the app builds with sharedConfigBuild, as RSC
-    // setups do, config is the top-level one, not any environment's.
+    // setups do, config is the top-level one, not any environment's. Vite 7 and later hand the page transform
+    // the environment building the page, so this, the one whose build started last, is for Vite 6 and before.
     let building = null;
     // `entry` as the absolute path Vite gives the module, once the root is known.
     let entryFile = null;
@@ -607,10 +608,13 @@ export function inpBlame(options = {}) {
         // browsers that ignore module scripts; where the script below is added, this one would only
         // repeat it.
         order: 'pre',
-        handler: (_html, { path }) =>
-          entry === undefined && pages(path) && !buildsPages(config, building, pages)
+        // Vite 7 and later call it with the plugin context of the environment building the page, the one to
+        // decide from where a buildApp of the app's own builds environments in parallel. Vite 6 gives it none.
+        handler(_html, { path }) {
+          return entry === undefined && pages(path) && !buildsPages(config, this?.environment ?? building, pages)
             ? [{ tag: 'script', attrs: { type: 'module' }, children: `import '${INSTALL_MODULE}';`, injectTo: 'head-prepend' }]
-            : undefined,
+            : undefined;
+        },
       },
     });
     /**
