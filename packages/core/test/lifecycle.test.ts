@@ -210,7 +210,8 @@ test('a late entry publishes the next revision as a new report, and the revision
 
 test('a quiet key press published for the render it set off keeps that render in the revision its slower keyup makes', () => {
   // The keydown painted at 7024 and its render landed at 7150, before the key came up at 7300. The keyup's
-  // entry was the longer one, and the revision it made said React didn't render anything.
+  // entry was the longer one, and the revision it made said React didn't render anything. It still says that
+  // of the keyup's working time, and then says the render.
   const input = (ts: number, type: string) => ({ ts, type, gestureTs: 7000, press: 'KeyA', target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
   const ring = [input(7000, 'keydown')];
   const { life, published, render } = lifecycle({ inputs: () => ring });
@@ -222,7 +223,7 @@ test('a quiet key press published for the render it set off keeps that render in
   assert.equal(published.length, 2);
   assert.equal(published[1]?.duration, 48);
   assert.deepEqual(published[1]?.followUps.map((c) => c.at), [7150]);
-  assert.match(published[1]?.verdict ?? '', /A React render landed 126 ms after the press updated the screen, before the release/);
+  assert.match(published[1]?.verdict ?? '', /React didn't render anything in the working time\. A React render landed 126 ms after the press updated the screen, before the release/);
 });
 
 test('a quiet key press is not published for a render stamped with its keyup when another key went down in between', () => {

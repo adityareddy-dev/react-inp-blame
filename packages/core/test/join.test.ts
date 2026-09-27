@@ -987,6 +987,40 @@ test("a render a key press set off after it painted is still a later render once
   // Measured from the keydown's paint, the one it came after, and said as the press's: it is not a second
   // render after the screen the report is about updated.
   assert.match(note(next), /^A React render landed 126 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it, but people still wait for it\.$/);
+  // The keyup's working time is what the cause is about, and the render was not in it. Said bare, the cause
+  // told the reader React didn't render anything and the next sentence that it did.
+  assert.match(next.explanation.cause, /; React didn't render anything in the working time\.$/);
+});
+
+test("a verdict that names no render says so of the working time where a press rendered before the release, whichever rung says it", () => {
+  // The keyup's handlers ran for 2 ms, too short to be the verdict, and the press's render landed at 150.
+  const ring = [input(0, 'keydown', { press: 'KeyA' }), input(300, 'keyup', { press: 'KeyA', gestureTs: 0 })];
+  const keys = [entry('keydown', 0, 24, 1, 10), entry('keyup', 300, 48, 301, 303)];
+  const render = commit(150, 0, { inputType: 'keydown', rendered: 400, total: 60 });
+  const cause = (commits: CommitSummary[], frames: FrameSummary[] | null) => report(keys, commits, frames, ring).explanation.cause;
+  assert.equal(cause([render], []), "React didn't render anything in the working time and no long task was recorded, so the time went to waiting and painting.");
+  assert.equal(cause([], []), "React didn't render anything and no long task was recorded, so the time went to waiting and painting.");
+  // Without Long Animation Frames.
+  assert.equal(cause([render], null), "React didn't render anything in the working time; this browser does not report long tasks, so what ran instead is unknown.");
+  assert.equal(cause([], null), "React didn't render anything; this browser does not report long tasks, so what ran instead is unknown.");
+  // Where a listener after the handlers is what ran.
+  const listener = [entry('keydown', 0, 24, 1, 10), entry('keyup', 300, 72, 303, 323)];
+  const frames = [frame(290, 90, [script('BUTTON.onkeyup', 303, 15), script('DIV.onscroll', 325, 20)], 350)];
+  assert.match(report(listener, [render], frames, ring).explanation.cause, /^React didn't render anything in the working time; a script \(DIV\.onscroll, app\.js\) ran for 20 ms after the handler finished\.$/);
+  // A render after the paint the report is about leaves the cause as it was: its note puts it after that paint.
+  const late = commit(600, 0, { inputType: 'keydown', rendered: 400, total: 60 });
+  assert.deepEqual(report(keys, [late], [], ring).followUps.map((c) => c.at), [600]);
+  assert.equal(cause([late], []), "React didn't render anything and no long task was recorded, so the time went to waiting and painting.");
+  // Where the working time did render, a little, the long task clause keeps its own "in the working time":
+  // "in it" follows only the clause that says React didn't render anything there.
+  const pointer = [input(-300, 'pointerdown'), input(0, 'pointerup', { gestureTs: -300 }), input(0, 'click', { gestureTs: -300 })];
+  const listed = (x: CommitSummary) => ({ ...x, gestureTs: -300, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], hasDurations: false, total: 0 });
+  const three = commit(195, 0, { gestureTs: -300, hasDurations: false, total: 0, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] });
+  const held = commit(-150, -300, { inputType: 'pointerdown', rendered: 400, total: 60 });
+  const tenClicks = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15));
+  const small = report([entry('click', 0, 360, 3, 203)], [held, three, listed(commit(270, 0))], [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, 70)], 280)], pointer);
+  assert.deepEqual(small.followUps.map((c) => c.at), [-150]);
+  assert.match(small.explanation.cause, /^React's render was small \(.*\) and no long task was recorded in the working time, so the rest went to waiting and painting\.$/);
 });
 
 test("a press's render before a slower release is looked at from the press's paint for anything that came between", () => {
@@ -1016,9 +1050,11 @@ test('a render a press too quick for an entry set off is a later render of the r
   assert.deepEqual(held.followUps.map((c) => c.at), [100]);
   // From the latest the press can have painted, 16 ms after it went down.
   assert.match(note(held), /^A React render landed 84 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it/);
+  assert.match(held.explanation.cause, /; React didn't render anything in the working time\.$/);
   // One inside those 16 ms can be the press's own work before its paint, which `holdMs` covers.
   const handlers = report(click, [commit(10, 0, { inputType: 'pointerdown', rendered: 400, total: 60 })], [], ring);
   assert.deepEqual(handlers.followUps, []);
+  assert.match(handlers.explanation.cause, /; React didn't render anything\.$/);
   assert.ok(!handlers.verdict.includes('Infinity'), handlers.verdict);
   // A press with an entry is measured from that entry's paint, however short: the page's first input comes at any duration.
   const first = report([entry('pointerdown', 0, 8, 1, 4, { entryType: 'first-input' }), ...click], [commit(100, 0, { inputType: 'pointerdown', rendered: 400, total: 60 })], [], ring);

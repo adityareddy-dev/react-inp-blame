@@ -1557,8 +1557,11 @@ function explain(r: InteractionReport): Explanation {
   const earlyScript = lateNoted ? longestPart(scriptParts(frames, r.start, processingEnd)) : null;
   const ranScript = !lateNoted ? anyScript : lateTaken && (!earlyScript || lateTaken.ms > earlyScript.ms) ? lateTaken : earlyScript;
   // Where every render ran in the script after the handlers, the screen update's note says it: React did
-  // render, just not in the working time, and a verdict that names no render says that much.
-  const noneWorking = lateOnly && !unjoined ? "React didn't render anything in the working time" : renderedNothing;
+  // render, just not in the working time, and a verdict that names no render says that much. So it does where
+  // a press rendered after it painted, before a slower release: the later render's note, right after it, says
+  // that render, and said bare the two sentences read as React rendering nothing and then something.
+  const workingOnly = (lateOnly || (!c && r.followUps.some((x) => x.at < r.end))) && !unjoined;
+  const noneWorking = workingOnly ? "React didn't render anything in the working time" : renderedNothing;
   /**
    * The window the scripts, and so the forced layout, were counted across. It runs to the end of the
    * library's own walk, because the walk happens inside the same script the handlers did, and
@@ -2289,7 +2292,7 @@ function explain(r: InteractionReport): Explanation {
     const unmeasured = r.frames.length === 0 ? ` No long animation frame covered the ${kind}, so how much of the working time went to any styles and layout it forced is unmeasured.` : '';
     // Where the screen update's note names the script after the handlers, 70 ms of it in a 157 ms screen
     // update, the sentence says only that none ran long before it.
-    const noLongTask = `no long task was recorded${lateNoted ? ` in ${lateOnly && !unjoined ? 'it' : 'the working time'}` : ''}`;
+    const noLongTask = `no long task was recorded${lateNoted ? ` in ${workingOnly ? 'it' : 'the working time'}` : ''}`;
     cause = shortOf
       ? `${shortOf}; the rest went to waiting and painting.${unmeasured}`
       : c
@@ -2302,7 +2305,7 @@ function explain(r: InteractionReport): Explanation {
     // Without Long Animation Frames there is no record to say no long task ran.
     cause = c
       ? `${shortOf ?? `React's render was small (${renderPhrase(c)})`}; this browser does not report long tasks, so what else ran is unknown.`
-      : `${renderedNothing}; this browser does not report long tasks, so what ran instead is unknown.`;
+      : `${noneWorking}; this browser does not report long tasks, so what ran instead is unknown.`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   }
 
