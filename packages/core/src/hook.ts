@@ -1258,15 +1258,17 @@ function chain(hook: DevtoolsHook): () => void {
     if ((typeof prevInject === 'function' && hook.inject === prevInject) || hook.onCommitFiberRoot === prevCommit || hook.onPostCommitFiberRoot === prevPostCommit) {
       throw new TypeError();
     }
+    // Renderers that registered before install(): React DevTools' hook kept what they handed it. Read inside the
+    // guard, so a hook whose renderers cannot be read is put back as it was too.
+    if (hook.renderers instanceof Map) {
+      const registry = registryOf(hook);
+      for (const [id, internals] of hook.renderers) if (!registry.has(id)) register(hook, id, internals);
+    }
   } catch (error) {
-    // A method that cannot be assigned: the ones already wrapped are put back, so the page's hook is as it was.
+    // A method that cannot be assigned, or renderers that cannot be read: the ones already wrapped are put back,
+    // so the page's hook is as it was.
     undo(true);
     throw error;
-  }
-  // Renderers that registered before install(): React DevTools' hook kept what they handed it.
-  if (hook.renderers instanceof Map) {
-    const registry = registryOf(hook);
-    for (const [id, internals] of hook.renderers) if (!registry.has(id)) register(hook, id, internals);
   }
   return undo;
 }
