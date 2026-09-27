@@ -2,7 +2,7 @@ import type { FrameSummary, ScriptSummary } from './types.js';
 import { dropped, guarded } from './warn.js';
 
 /** The browser sends no `event` entry for an interaction under this many ms, whatever threshold an observer asks for. */
-const EVENT_TIMING_FLOOR_MS = 16;
+export const EVENT_TIMING_FLOOR_MS = 16;
 /** Long animation frames kept to join to reports. A report keeps the frames it joined for as long as it is kept itself. */
 const MAX_FRAMES = 60;
 
