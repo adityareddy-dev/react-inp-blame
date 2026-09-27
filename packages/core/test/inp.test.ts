@@ -118,12 +118,17 @@ test('after a navigation, interactions counted but too quick to be observed read
 
 test('after a navigation with no interaction since, the page hidden reports no INP, not one unseen 8 ms interaction', () => {
   // A restore from the back/forward cache, and the tab closed without a touch.
-  const t = createInpTracker(() => 1);
+  let count = 1;
+  const t = createInpTracker(() => count);
   t.add([interaction(1, 304)]);
   t.reset('navigation');
   t.update();
   assert.equal(t.estimate(), null);
-  // The same on a browser without performance.interactionCount, where the count comes from id spacing.
+  // One quick tap after it, and the page hidden again, is the one unseen 8 ms interaction.
+  count = 2;
+  t.update();
+  assert.deepEqual(t.estimate(), { id: null, value: 8, interactionCount: 1 });
+  // No interaction since reads the same on a browser without performance.interactionCount, where the count comes from id spacing.
   const spaced = feed(3);
   spaced.reset('navigation');
   spaced.update();
