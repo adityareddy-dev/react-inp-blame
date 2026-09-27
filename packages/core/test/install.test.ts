@@ -1977,13 +1977,34 @@ test("an error while a report's explanation is built, on its first read, never r
       );
       // Read again, it is the same, and the console is not told twice.
       assert.equal(api.last()?.verdict, `120 ms click. ${cause}`);
+      // Its 'none' is the library's error, not a finding, so analytics are not handed it as one.
+      assert.deepEqual(attributeINP({ entries: [{ interactionId: 7 }] }), { react: null });
       page.paint([click(14, 2000, 150)]);
       t.mock.timers.tick(0);
       assert.equal(sent.length, 2);
       assert.notEqual(sent[1]?.explanation.cause, cause);
       assert.match(String(sent[1]?.verdict), /^150 ms click\. /);
+      assert.equal(attributeINP({ entries: [{ interactionId: 14 }] }).react?.interactionId, 14);
       assert.deepEqual(reported, []);
       assert.equal(caught(warn).length, 1);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
+test('attributeINP gives react null for a report whose explanation throws when attributeINP is the first to read it', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    try {
+      page.paint([click(7, 1000, 300)]);
+      t.mock.method(Math, 'round').mock.mockImplementationOnce(() => {
+        throw new TypeError('rounding moved');
+      });
+      assert.deepEqual(attributeINP({ entries: [{ interactionId: 7 }] }), { react: null });
+      assert.equal(caught(warn).length, 1);
+      assert.equal(api.last()?.explanation.blame.kind, 'none');
     } finally {
       api.dispose();
     }

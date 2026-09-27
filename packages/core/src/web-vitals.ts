@@ -1,7 +1,7 @@
 import { heaviest, readableName } from './commits.js';
 import { selector } from './element.js';
 import { namingFiber, ownersOf } from './fiber.js';
-import { page } from './install-state.js';
+import { page, unexplainedReports } from './install-state.js';
 import type { Blame, CommitSummary, InteractionReport, RenderedComponent } from './types.js';
 
 /**
@@ -167,7 +167,8 @@ function shortened(element: string, max: number): string {
  * that interaction: one under `install({ threshold })` that no later render made worth publishing,
  * one the page has since pushed out of the 50 reports it keeps, which the ten slowest and those INP
  * can still point at never are, or one the library dropped after an error of its own, which the
- * console's `library-error` warning says. It is never a guess.
+ * console's `library-error` warning says. It is null too where such an error kept the library from
+ * explaining the report. It is never a guess.
  *
  * It never throws. A metric missing its entries, or one whose getters throw, gives `react: null`
  * rather than an exception inside the page's own analytics callback.
@@ -204,14 +205,19 @@ function reportFor(entries: readonly InpMetricEntry[]): InteractionReport | null
   return null;
 }
 
-/** Frozen, like the report it reads: what a caller forwards to an analytics endpoint is not a thing to edit. */
-function describe(r: InteractionReport): ReactAttribution {
+/**
+ * Frozen, like the report it reads: what a caller forwards to an analytics endpoint is not a thing to edit.
+ * Null for a report the library could not explain, whose `'none'` is its own error and not a finding.
+ */
+function describe(r: InteractionReport): ReactAttribution | null {
+  // A report explains itself on first read, in this callback rather than in the one that built it.
+  const { blame } = r.explanation;
+  if (unexplainedReports.has(r)) return null;
   const main = r.commits.length ? heaviest(r.commits) : null;
   return Object.freeze({
     schemaVersion: SCHEMA_VERSION,
     interactionId: r.interactionId,
-    // A report explains itself on first read, in this callback rather than in the one that built it.
-    blame: r.explanation.blame,
+    blame,
     handler: r.target?.handler ?? null,
     hotPath: main?.hotPath ?? Object.freeze([]),
     components: Object.freeze(main ? main.components.slice(0, MAX_COMPONENTS) : []),
