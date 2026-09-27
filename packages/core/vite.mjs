@@ -310,6 +310,15 @@ function pagePath(root, input) {
 }
 
 /**
+ * The build options of `environment`'s build. The page transform has no environment to hand, and its pages
+ * are the client environment's, whose options are not the top-level ones where the app builds with
+ * `builder: { sharedConfigBuild: true }`, as RSC setups do: the plugins get the top-level config then.
+ */
+function buildOptions(config, environment) {
+  return environment?.config?.build ?? clientEnvironment(config)?.build ?? config.build;
+}
+
+/**
  * Whether this build can put the install call in a script of its own. A dev server needs no chunk
  * (module scripts already run in document order there), a server build has no page, and a library,
  * a single-file output format or the SystemJS bundle @vitejs/plugin-legacy adds either cannot be
@@ -318,7 +327,7 @@ function pagePath(root, input) {
 function separateScript(config, environment) {
   if (config?.command !== 'build') return false;
   if (environment?.config?.consumer === 'server') return false;
-  const build = environment?.config?.build ?? config.build;
+  const build = buildOptions(config, environment);
   if (!build || build.lib || build.ssr || singleFile(build)) return false;
   // @vitejs/plugin-legacy builds a second, SystemJS bundle for the browsers that ignore module
   // scripts. Document order buys nothing there, and a second entry only splits the install away from
@@ -333,10 +342,9 @@ function separateScript(config, environment) {
  */
 function buildsPages(config, environment, pages) {
   if (!separateScript(config, environment)) return false;
-  const build = environment?.config?.build ?? config.build;
+  const build = buildOptions(config, environment);
   // Vite 8.2's `input`, written at the top level or for the client environment, is what Vite builds from
-  // when the bundler's options name none. The page transform has no environment to hand, and its pages are
-  // the client environment's.
+  // when the bundler's options name none.
   const input = build.rollupOptions?.input ?? build.rolldownOptions?.input ?? (environment?.config ?? clientEnvironment(config))?.input;
   // Vite's own default, when the config names no input, is the root index.html.
   const entries = input === undefined ? [`${config.root}/index.html`] : typeof input === 'string' ? [input] : Array.isArray(input) ? input : Object.values(input);
