@@ -202,8 +202,10 @@ export interface UnsupportedReason {
    * its methods made no-ops, or emptied the global over the shim before react-dom registered, which the
    * next interaction notices;
    * or the hook is frozen, sealed without `onPostCommitFiberRoot`, or has a method that cannot be assigned,
-   * so it cannot be wrapped and was left as it was. The other three stop the reading of one react-dom's
-   * commits, and the page is 'unsupported' when that leaves no react-dom it can read:
+   * so it cannot be wrapped and was left as it was;
+   * or the global, or the hook on it, throws when read, on install() or before react-dom registered, so no
+   * hook the library can reach hears React. The other three stop the reading of one react-dom's commits,
+   * and the page is 'unsupported' when that leaves no react-dom it can read:
    * 'react-version', a react-dom outside React 17 to 19; 'fiber-shape', a first commit whose root is not
    * the shape this library reads; 'walk-threw', reading a commit threw. Reports carry on without components.
    */
