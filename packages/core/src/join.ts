@@ -1990,8 +1990,10 @@ function explain(r: InteractionReport): Explanation {
    * milliseconds as a leftover would say them twice. A `waiting` verdict can take the blame with a
    * rung closed, and there `closedByTheWait` says it instead, worded for the wait. The handler a
    * production build cannot time is said only there: its rung already asks for working time at least
-   * as long as the screen update, so the screen update never closes it. The render is placed where
-   * `renderRan` puts it.
+   * as long as the screen update, so the screen update never closes it. Nor is it said where a forced
+   * layout outran it, which closed the layout's rung and not the handler's, and whose note says that
+   * time: said, handleSave "still took the 200 ms" of which the layout took 160. The render is placed
+   * where `renderRan` puts it.
    */
   const spentIn = (when: string, lead: string) => placed(lead, `in the ${ms(r.processing)} of working time ${when}`);
   /**
@@ -2023,7 +2025,7 @@ function explain(r: InteractionReport): Explanation {
                   : `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${spentIn(when, heldAll ? ', ' : ' ')}.`
                 : `React was ${HEDGE} still ${renderPhrase(rc)}${spentIn(when, ', ')}.`,
           )
-        : untimedHandler
+        : untimedHandler && !layoutOutruns
           ? `${cap(handler)} ${HEDGE} still took ${untimedTook} of working time ${when}.`
           : null;
   const closedByTheScreen = screenOutranks ? closedOff('before that') : null;

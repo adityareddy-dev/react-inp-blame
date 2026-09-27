@@ -2707,6 +2707,12 @@ test('a handler, a render or a forced layout shorter than a long wait before the
   const layout = report([entry('keydown', 0, 192, 80, 140), entry('keyup', 100, 92, 180, 181)], [], [frame(70, 125, [script('INPUT.onkeydown', 80, 60, 55)])], [input(0, 'keydown')]);
   assert.deepEqual(layout.explanation.blame, { ...waited, ms: 80 });
   assert.match(layout.verdict, /The browser also spent 55 ms recalculating styles and layout in scripts before the paint\./);
+  // Where it closed the rung, a production build's handler is not said to have taken the time it did: 160 ms of
+  // forced layout in 200 ms of working time after a 200 ms wait read as handleSave taking all 200 ms, then as the
+  // browser spending 160 ms of them on styles and layout.
+  const forced = report([entry('click', 0, 420, 200, 400)], [commit(395, 0, counted(3))], [frame(-10, 430, [script('BUTTON.onclick', 200, 200, 160)])], save).explanation;
+  assert.deepEqual(forced.blame, { ...waited, ms: 200 });
+  assert.deepEqual(forced.notes, ["The browser also spent 160 ms recalculating styles and layout in scripts before the paint. That happens when code reads an element's size right after changing styles, often in a layout effect."]);
   // A wait shorter than the working time leaves the render its verdict, and one short of a long task
   // leaves the handler its own: a 38 ms handler after 45 ms is not nothing. A wait of 50 ms is not over
   // a long task either.
