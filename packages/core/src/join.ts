@@ -1794,6 +1794,26 @@ function explain(r: InteractionReport): Explanation {
   const layoutMatters = layoutOutruns && !waitingWins && !screenOutranks;
   // What the handler still ran for, in a closed rung's note: all of the working time where both read the same.
   const outsideRan = ms(outside) === ms(r.processing) ? `all ${ms(r.processing)}` : `about ${ms(outside)} of the ${ms(r.processing)}`;
+  /**
+   * Where the render a sentence gives a figure for ran, set against the working time. One committed after the
+   * handlers ran after them, and is said to have: a 43 ms render in the task after 15 ms of handlers read "43 ms
+   * ... in the 15 ms of working time after the wait". One that began before the handlers, or ran longer than they
+   * did and still committed with them, was not all in the working time either, and where it ran is left unsaid: a
+   * 43 ms render in the task the click waited behind, committed as its handlers began, was said as that wait and
+   * then as 43 ms in the 15 ms of working time after it. Only a render in the working time is said against it.
+   */
+  const renderRan = !rc
+    ? 'in'
+    : rc.startedAt !== null && rc.startedAt < processingStart - STAMP_TOLERANCE
+      ? 'unplaced'
+      : rc.at > processingEnd + STAMP_TOLERANCE
+        ? 'after'
+        : hasDurations && rc.total > r.processing + STAMP_TOLERANCE
+          ? 'unplaced'
+          : 'in';
+  // The render's place, said after `lead`: `within` where that is the working time, and nothing where it is unknown.
+  const placed = (lead: string, within: string) =>
+    renderRan === 'after' ? `${lead}after the handlers, before the next frame` : renderRan === 'in' ? `${lead}${within}` : '';
 
   /**
    * What the ladder would have named had the screen update not outrun the whole working time. The
@@ -1812,12 +1832,10 @@ function explain(r: InteractionReport): Explanation {
    * milliseconds as a leftover would say them twice. A `waiting` verdict can take the blame with a
    * rung closed, and there `closedByTheWait` says it instead, worded for the wait. The handler a
    * production build cannot time is said only there: its rung already asks for working time at least
-   * as long as the screen update, so the screen update never closes it. A render committed after the
-   * handlers ran after them, and is said to have, not to have been in the working time: a 43 ms render
-   * in the task after 15 ms of handlers read "43 ms ... in the 15 ms of working time after the wait".
+   * as long as the screen update, so the screen update never closes it. The render is placed where
+   * `renderRan` puts it.
    */
-  const spentIn = (when: string) =>
-    rc && rc.at > processingEnd + STAMP_TOLERANCE ? 'after the handlers, before the next frame' : `in the ${ms(r.processing)} of working time ${when}`;
+  const spentIn = (when: string, lead: string) => placed(lead, `in the ${ms(r.processing)} of working time ${when}`);
   const closedOff = (when: string): string | null =>
     handlerWins
       ? say(
@@ -1828,12 +1846,12 @@ function explain(r: InteractionReport): Explanation {
       : c && rc && renderMatters
         ? say(
             measuredFrom(rc),
-            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} ${spentIn(when)}.`,
+            `React still spent ${ms(rc.total)} ${renderPhrase(rc)}${committed}${spentIn(when, `${committedEnd} `)}.`,
             hasDurations
-              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${committedEnd} ${spentIn(when)}.`
+              ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${committed}${spentIn(when, `${committedEnd} `)}.`
               : effectsFigure >= 1
-                ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldAll ? ',' : ''} ${spentIn(when)}.`
-                : `React was ${HEDGE} still ${renderPhrase(rc)}, ${spentIn(when)}.`,
+                ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${spentIn(when, heldAll ? ', ' : ' ')}.`
+                : `React was ${HEDGE} still ${renderPhrase(rc)}${spentIn(when, ', ')}.`,
           )
         : untimedHandler
           ? `${cap(handler)} ${HEDGE} still took ${untimedTook} of working time ${when}.`
@@ -2017,11 +2035,15 @@ function explain(r: InteractionReport): Explanation {
     // working time is what the count is read against, so the sentence gives it: 55 ms hung on a render of
     // 161 components is a claim the reader can weigh, and the same render in 7 ms elsewhere is not. After
     // a comma, so a count's own clause ("31 of them inside DismissableLayer") does not read as what took it.
+    // A render that did not run in the working time is not said against it, as in a closed rung's note: a
+    // 43 ms render in React's task after 15 ms of handlers read "about 43 ms of the 15 ms of working time".
     const likely = hasDurations
       ? // The measured render is the claim; the working time is context. Saying React spent all of it
         // rendering and then that other code ran for a third of it was two claims that cannot both hold.
-        `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}.`
-      : `React was ${HEDGE} ${renderPhrase(rc)}, in the ${ms(r.processing)} of working time. This React build records no render durations, so that is read from the component counts, not measured.`;
+        renderRan === 'in'
+        ? `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}.`
+        : `React ${HEDGE} spent about ${ms(rc.total)} ${renderPhrase(rc)}${placed(' ', '')}.`
+      : `React was ${HEDGE} ${renderPhrase(rc)}${placed(', ', `in the ${ms(r.processing)} of working time`)}. This React build records no render durations, so that is read from the component counts, not measured.`;
     // A production build times the effects but not the render, so there the effects lead.
     cause =
       !hasDurations && effectsFigure >= 1

@@ -1117,11 +1117,16 @@ click that waited 400 ms and then ran its handler for 58 ms was blamed on the ha
 said nowhere but the phases, and optimising that handler would barely have moved it. What ran after
 the wait is still said, in a note with the figure and the hedge the closed branch would have given it:
 "The click handler handleSave still ran for about 58 ms of the 60 ms of working time after the wait."
-A render that committed after the handlers ran after them, and the note says so, "after the handlers,
-before the next frame", here and under a screen update that closed the render's branch: until
-2026-09-26 a 43 ms render in the task after 15 ms of handlers was said to be "in the 15 ms of working
-time after the wait", a part larger than the whole. A production build names the handler the same way,
-hedged, and a forced layout keeps the note it has under any verdict but its own. Where the screen
+A production build names the handler the same way, hedged, and a forced layout keeps the note it has
+under any verdict but its own. A render that committed after the handlers ran after them, and the
+note says so, "after the handlers, before the next frame", here and under a screen update that closed
+the render's branch: until 2026-09-26 a 43 ms render in the task after 15 ms of handlers was said to
+be "in the 15 ms of working time after the wait", a part larger than the whole. The render verdict
+places its render the same way, in a production build too: kept from React's task after the handlers,
+a 43 ms render read "about 43 ms of the 15 ms of working time". One that began before the handlers,
+or ran longer than they did and committed with them, was not all in the working time either, and is
+given no place: a 43 ms render in the task the click waited behind, committed as its handlers began,
+was said as that wait and again as 43 ms in the 15 ms of working time after it. Where the screen
 update outranks the working time too, the working time is the smallest of the three phases, and no
 note is added. The wait itself is said in a note under every verdict but its own, whatever React
 rendered: "It also waited 70 ms before the handler could start, because the main thread was busy."

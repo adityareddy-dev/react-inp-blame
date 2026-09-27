@@ -2266,7 +2266,7 @@ test('a handler, a render or a forced layout shorter than a long wait before the
   assert.deepEqual(briefLayout.explanation.blame, { kind: 'layout', name: 'BUTTON.onclick', detail: null, ms: 40, confidence: 'measured' });
 });
 
-test('a render committed after the handlers a closed verdict does not take is said to have run after them, not in the working time', () => {
+test('a render a closed verdict does not take is said to have run after the handlers where it committed after them, and in the working time only where it ran there', () => {
   // The click waited 300 ms, ran handleSave for 15, and React rendered for 43 ms in the task after the handlers.
   // The render was said to be 43 ms in the 15 ms of working time, a part larger than the whole.
   const save = loginClick('handleSave');
@@ -2287,6 +2287,48 @@ test('a render committed after the handlers a closed verdict does not take is sa
   assert.deepEqual(report([entry('click', 0, 380, 300, 360)], [commit(359, 0, counted)], [], save).explanation.notes, [
     'React was most likely still re-rendering 60 components inside List, mostly Row (60 of them), in the 60 ms of working time after the wait.',
   ]);
+  // One that began before the handlers, or ran longer than they did, was not all in the working time, and is given no
+  // place. Joined by overlap, a 43 ms render in the task the click waited behind, committed as the handlers began, was
+  // said as that wait and then as 43 ms in the 15 ms of working time after it.
+  const behind = report(
+    [entry('click', 0, 360, 300, 315)],
+    [commit(299.5, -200, { total: 43, startedAt: 256 })],
+    [frame(0, 360, [script('MessagePort.onmessage', 255, 44.8), script('BUTTON.onclick', 300, 15)])],
+    save,
+  ).explanation;
+  assert.equal(behind.cause, 'The click waited 300 ms before its handler could start: a script (MessagePort.onmessage, app.js) ran first and held the main thread for 45 ms of that wait.');
+  assert.deepEqual(behind.notes, ['React most likely still spent about 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).']);
+  const edge = report([entry('click', 0, 360, 300, 315)], [commit(315.8, 0, { total: 43 })], [], save);
+  assert.deepEqual(edge.explanation.notes, ['React still spent 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).']);
+  const begun = report([entry('click', 0, 400, 300, 360)], [commit(320, 0, { total: 40, startedAt: 280 })], [], save);
+  assert.deepEqual(begun.explanation.notes, ['React still spent 40 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).']);
+});
+
+test("a render the verdict keeps from React's task after the handlers is said to have run after them, not in a working time shorter than it", () => {
+  // handleSave ran from 5 to 20 ms, then React's task rendered for 43 ms, from 22 to 65. The screen update does not
+  // outrank the working time, so the render stays the verdict, and it read "about 43 ms of the 15 ms of working time".
+  const save = loginClick('handleSave');
+  const click = [entry('click', 0, 70, 5, 20)];
+  const frames = [frame(0, 70, [script('BUTTON.onclick', 5, 15), script('MessagePort.onmessage', 21, 45)])];
+  const said = 'React most likely spent about 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.';
+  const stopped = report(click, [commit(65, 0, { total: 43, startedAt: 22 })], frames, save, 'attributes', [], undefined, 'unreadable').explanation;
+  assert.deepEqual(stopped.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 43, confidence: 'inferred' });
+  assert.equal(stopped.cause, said);
+  // The same where React is read and the render joined by overlap, and for a production build's count.
+  assert.equal(report(click, [commit(65, -200, { total: 43, startedAt: 22 })], frames, save).explanation.cause, said);
+  const rows = { hasDurations: false, total: 0, rendered: 800, components: [{ name: 'Row', count: 800, self: null, total: null }] };
+  const task = [frame(0, 116, [script('BUTTON.onclick', 1, 60), script('MessagePort.onmessage', 62, 5.5)])];
+  assert.match(
+    report([entry('click', 0, 116, 1, 61)], [commit(67, 0, rows)], task, save).explanation.cause,
+    /^React was most likely re-rendering 800 components inside List, mostly Row \(800 of them\), after the handlers, before the next frame\. This React build/,
+  );
+  // One that began before the handlers is given no place, and one that ran in them is still said against them.
+  const early = report([entry('click', 0, 70, 20, 60)], [commit(55, 0, { total: 30, startedAt: 10 })], [], save, 'attributes', [], undefined, 'unreadable');
+  assert.equal(early.explanation.cause, 'React most likely spent about 30 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
+  const handled = [frame(0, 70, [script('BUTTON.onclick', 5, 45)])];
+  const inside = report([entry('click', 0, 70, 5, 50)], [commit(45, 0, { total: 30, startedAt: 12 })], handled, save, 'attributes', [], undefined, 'unreadable');
+  assert.equal(inside.explanation.cause, 'React most likely spent about 30 ms of the 45 ms of working time re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
+  assert.match(report([entry('click', 0, 116, 1, 61)], [commit(60, 0, rows)], task, save).explanation.cause, /mostly Row \(800 of them\), in the 60 ms of working time\. This React build/);
 });
 
 test("a render between one event's handlers and the next's is working time a long wait before them has to outlast", () => {
