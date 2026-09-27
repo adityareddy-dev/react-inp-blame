@@ -1240,8 +1240,8 @@ function explain(r: InteractionReport): Explanation {
       : `between the ${onlyGap.after}'s handlers and the ${onlyGap.before}'s`;
   // A script is the handler only when it started while the input's handlers ran. One that was already
   // running when the input came (the task the input waited behind), or that ran after the handlers, is
-  // named by what the browser says ran it.
-  const ranAsHandler = (s: ScriptSummary) => s.start >= processingStart - STAMP_TOLERANCE && s.start <= processingEnd && !startsInAGap(s.start);
+  // named by what the browser says ran it. One that started on the timestamp they ended on came after them.
+  const ranAsHandler = (s: ScriptSummary) => s.start >= processingStart - STAMP_TOLERANCE && s.start < processingEnd && !startsInAGap(s.start);
   const scriptPhrase = (s: ScriptSummary) => (handler && ranAsHandler(s) ? handler : aScript(s));
   const scriptBlameName = (s: ScriptSummary) => (handlerName && ranAsHandler(s) ? handlerName : scriptName(s));
 

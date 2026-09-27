@@ -3562,6 +3562,31 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   assert.deepEqual(split.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 150 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
   ]);
+  // A task starts only once the one before it has finished, so a listener that starts on the very timestamp the
+  // handlers ended on is not the handler, and is named by what ran it: a clamped clock puts a scroll task right
+  // after the click's on the same value. Taken for the handler, it read as handleSave running after the handler
+  // finished, and the blame had handleSave's name.
+  const saveClick = [input(0, 'click', { target: element('button', [text('Save')]) as unknown as Node, owners: ['SaveButton'], handler: 'handleSave' })];
+  const onTheEnd = report(
+    [entry('click', 0, 360, 3, 203)],
+    [commit(340, 0, { total: 100, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 210 })],
+    [frame(0, 360, [...threeListeners, script('DIV.onscroll', 203, 152)], 356)],
+    saveClick,
+  ).explanation;
+  assert.deepEqual(onTheEnd.blame, { kind: 'script', name: 'DIV.onscroll', detail: null, ms: 152, confidence: 'measured' });
+  assert.equal(onTheEnd.cause, "React didn't render anything in the working time; a script (DIV.onscroll, app.js) ran for 152 ms after the handler finished.");
+  assert.deepEqual(onTheEnd.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 152 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
+  ]);
+  // The same where the screen update outranked the working time and took the blame.
+  const painted = report(
+    [entry('click', 0, 460, 3, 203)],
+    [],
+    [frame(0, 460, [...threeListeners, script('DIV.onscroll', 203, 250)], 456)],
+    saveClick,
+  ).explanation;
+  assert.deepEqual(painted.blame, { kind: 'painting', name: 'DIV.onscroll', detail: null, ms: 257, confidence: 'measured' });
+  assert.equal(painted.cause, 'After the click was handled, the screen took another 257 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 250 ms before the next frame.');
   // React's own task after the same handlers is React rendering what they scheduled, a transition started from
   // the click, and not a script that forced a render. With the working time the longer part, that render stays
   // in it, measured or read from the counts, and the note says only how long the task ran.
