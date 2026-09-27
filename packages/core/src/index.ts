@@ -261,7 +261,7 @@ function installNow(opts: InstallOptions): Api {
   // entries its observer has not been handed yet. The observers here are flushed too, so the interaction it
   // reports has its report. This listener is on the window in the capture phase and added before the app
   // runs, so it comes before web-vitals' own. Frames go first, so a report is built with its frame in it, and
-  // each flush is guarded on its own, so frames that cannot be read keep neither the entries nor the delivery.
+  // neither flush throws, so frames that cannot be read keep neither the entries nor the delivery.
   const onVisibilityChange = guarded(() => {
     if (document.visibilityState !== 'hidden') return;
     frameObserver.flush();

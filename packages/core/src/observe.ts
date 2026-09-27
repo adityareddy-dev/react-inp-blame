@@ -1,5 +1,5 @@
 import type { FrameSummary, ScriptSummary } from './types.js';
-import { guarded } from './warn.js';
+import { dropped, guarded } from './warn.js';
 
 /** The browser sends no `event` entry for an interaction under this many ms, whatever threshold an observer asks for. */
 const EVENT_TIMING_FLOOR_MS = 16;
@@ -103,17 +103,22 @@ export function observeEventTiming(onBatch: (entries: InteractionTiming[]) => vo
 
 export function observeFrames(store: FrameSummary[], onFrame: (f: FrameSummary) => void): Observing {
   if (!supportsLongAnimationFrames()) return NOT_OBSERVING;
+  // One at a time, so a frame that cannot be read drops only itself, and not the frames delivered with it.
   const take = (entries: PerformanceLongAnimationFrameTiming[]) => {
     for (const e of entries) {
-      const f = summarizeFrame(e);
-      store.push(f);
-      if (store.length > MAX_FRAMES) store.splice(0, store.length - MAX_FRAMES);
-      onFrame(f);
+      try {
+        const f = summarizeFrame(e);
+        store.push(f);
+        if (store.length > MAX_FRAMES) store.splice(0, store.length - MAX_FRAMES);
+        onFrame(f);
+      } catch (error) {
+        dropped(error);
+      }
     }
   };
-  const po = new PerformanceObserver(guarded((list: PerformanceObserverEntryList) => take(list.getEntries() as PerformanceLongAnimationFrameTiming[])));
+  const po = new PerformanceObserver((list) => take(list.getEntries() as PerformanceLongAnimationFrameTiming[]));
   po.observe({ type: 'long-animation-frame', buffered: true });
-  return { stop: () => po.disconnect(), flush: guarded(() => take(po.takeRecords() as PerformanceLongAnimationFrameTiming[])) };
+  return { stop: () => po.disconnect(), flush: () => take(po.takeRecords() as PerformanceLongAnimationFrameTiming[]) };
 }
 
 /** A frame summary is frozen: reports hold the same object from the revision it joins onwards. */

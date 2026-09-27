@@ -431,22 +431,25 @@ commit with a rendered tree already behind it means `install()` ran after that r
 warning says so once.
 
 **Errors of its own.** Every callback the library hands the browser or a router runs inside a guard:
-both observers' callbacks and their flushes, the window listeners for inputs, resizes, `pageshow` and
-`visibilitychange`, the timers that deliver reports and check for react-dom, the idle callback that
+the Event Timing observer's callback and its flush, the window listeners for inputs, resizes, `pageshow`
+and `visibilitychange`, the timers that deliver reports and check for react-dom, the idle callback that
 draws them, the App Router's navigation announcement, and the setter that hears another tool assign
 the DevTools hook. An error in one is caught, what it was working on is dropped, and the console says so
 once (`library-error`). Until 2026-09-26 an error while a report was built went from the Event Timing
 callback to `window.onerror`, where Sentry or Datadog counted it as the app's, and the report was lost
-anyway. A click on a form with a field named `tagName` still throws in there, since a form's fields
-shadow its own properties. The interactions in one batch are built one at a time, so that click drops
-only its own report, and at hide each observer is flushed under a guard of its own, so a frame that
-cannot be read keeps neither the entries from their reports nor the reports from being heard. An
-input's target is read under a guard of its own when the input is recorded, so that click is recorded
-naming nothing: the commits in its dispatch are still read as its own, and the page's other reports keep
-their components. Before, recording it threw again inside the commit its handler rendered, and stopped
-that renderer for good as a walk that threw. React's calls into the hook were guarded already: a walk
-that throws stops that renderer, as above. An error a report listener throws is the page's own, and
-still goes to `reportError`.
+anyway. Where one error could take more with it, the guard is finer. The interactions in one batch are
+built one at a time, and long animation frames are read one at a time, so each drops only itself. At
+hide neither flush throws, so a frame that cannot be read keeps neither the entries from their reports
+nor the reports from being heard. An input's target is read under a guard of its own when the input is
+recorded. An input in a form with a field named `tagName` still throws in there, since a form's fields
+shadow its own properties, and so does building its report. It is recorded naming nothing, so the
+commits in its dispatch are still read as its own and the page's other reports keep their components,
+and only its own report is dropped. Before, recording it threw again inside the commit its handler
+rendered, and stopped that renderer for good as a walk that threw. Each guard has a test that forces
+an error through it, except the setter's: now that a hook that cannot be chained onto is reported as
+above, nothing in it is known to throw, and its guard is only in case. React's calls into the hook
+were guarded already: a walk that throws stops that renderer, as above. An error a report listener
+throws is the page's own, and still goes to `reportError`.
 
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
