@@ -2056,8 +2056,11 @@ order their elements were reached, waiting for each one's whole module graph bef
 running it to completion before starting the next (HTML Standard, "The script element" §4.12.1 and
 "The end" §13.2.7; the install graph uses no top-level await, which is the one thing that would end
 that script before its work was done). Looking the chunk up by `facadeModuleId` rather than holding
-the reference `emitFile` returns also keeps the plugin correct when Vite 6 and later build several
-environments in parallel from one plugin instance.
+the reference `emitFile` returns also keeps the tag right when Vite 6 and later build several
+environments in parallel from one plugin instance. Whether a page also needs the inline import below
+is decided from the environment building it, which Vite 7 and later hand the `pre` hook as
+`this.environment`. Vite 6 hands it none, so there the hook reads the environment whose build started
+last, which is right only while they build one at a time, as Vite's own builder does.
 
 The inline `import 'virtual:react-inp-blame/install'` the `pre` hook used to add in builds as well is
 now the fallback for the outputs that can have no second script: `output.format: 'iife'` or `'umd'`,

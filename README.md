@@ -1069,6 +1069,9 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   pages. For those four, and for a build whose inputs are all scripts, the plugin warns when that happens and
   names the fix; any other framework gets no warning. On a Vite-based one, `entry` naming the first of the
   app's modules the browser runs may be enough. React Native is out of scope: only react-dom commits are walked.
+- On Vite 6, a `buildApp` of your own that builds environments at the same time can leave a page with no
+  install or with it twice, since Vite 6 does not tell the plugin which environment a page is built in.
+  Vite's own builder builds them one at a time.
 - **React DevTools loaded after the library is locked out, and nothing can detect it**: it installs nothing
   over an existing hook. The extension loads first, so there the library chains; the lockout takes a page that
   installs React DevTools later, like react-devtools-inline's `initialize()`. `hook: 'chain'` never creates it.

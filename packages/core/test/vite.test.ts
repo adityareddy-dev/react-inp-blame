@@ -319,6 +319,28 @@ test("under Vite's default builder, a browser environment of another name decide
   assert.deepEqual(decided(() => true, iife, '/index.html'), { chunk: false, inline: true });
 });
 
+test('where environments build in parallel, the page transform decides from the environment building the page, not the one that started last', () => {
+  // A buildApp of the app's own can start every environment's build before any page is transformed. Vite 7 and
+  // later hand the page transform the plugin context of the environment building the page.
+  const client = { consumer: 'client', build: { rollupOptions: {} } };
+  const old = { consumer: 'client', build: { rollupOptions: { input: 'about.html', output: { format: 'iife' } } } };
+  const ssr = { consumer: 'server', build: { rollupOptions: { input: 'src/server.js' } } };
+  const started = (...names: ('client' | 'old' | 'ssr')[]) => {
+    const install = buildPlugins({}, { build: { rollupOptions: {} }, environments: { client, old, ssr } }).find((p) => p.name === INSTALL)!;
+    const environments = { client, old, ssr };
+    const contexts = Object.fromEntries(names.map((name) => [name, buildContext(environments[name].consumer as 'client' | 'server', environments[name], name)]));
+    for (const name of names) install.buildStart.call(contexts[name]);
+    return (name: string | null, path: string) => install.transformIndexHtml.handler.call(name ? contexts[name] : undefined, '<!doctype html>', { path }) !== undefined;
+  };
+
+  // The one-file build's page keeps the inline import, though the client's build started after it.
+  assert.equal(started('old', 'client')('old', '/about.html'), true);
+  // The client's page gets the install's own script alone, though the server's build started after it.
+  assert.equal(started('client', 'ssr')('client', '/index.html'), false);
+  // Vite 6 hands it no context, and there it decides from the environment whose build started last.
+  assert.equal(started('client', 'old')(null, '/about.html'), true);
+});
+
 test('pages picks the pages that get the runtime, and runtime: false keeps only the transform', () => {
   const plugins = pluginsFor('serve', { pages: (path) => path !== '/devtools-hook.html' });
   assert.equal(tagsFor(plugins, '/devtools-hook.html'), undefined);
