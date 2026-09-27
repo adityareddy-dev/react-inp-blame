@@ -2028,6 +2028,24 @@ test('a few milliseconds of committing do not make a small render outrank a wait
   assert.equal(r.explanation.blame.kind, 'waiting');
 });
 
+test('a wait that is the verdict is not said again in a note, and one under another verdict still is', () => {
+  // A click that waited 200 ms, rendered for 20 ms of its 30 ms of working time, and took 114 ms more to
+  // paint. The screen update outranks the working time, so the render is closed off and the wait is the verdict.
+  const waited = report([entry('click', 0, 344, 200, 230)], [commit(225, 0, { total: 20 })], []);
+  assert.equal(waited.explanation.blame.kind, 'waiting');
+  assert.equal(waited.verdict.match(/waited 200 ms/g)?.length, 1);
+  assert.doesNotMatch(waited.verdict, /also waited/);
+  // A render that is the verdict after a 150 ms wait still carries the wait as a note.
+  const rendered = report([entry('click', 0, 400, 150, 380)], [commit(370, 0, { total: 200 })], []);
+  assert.equal(rendered.explanation.blame.kind, 'render');
+  assert.ok(rendered.explanation.notes.includes('It also waited 150 ms before the handler could start, because the main thread was busy.'));
+  // So does the screen update, beside the render it outranked.
+  const painted = report([entry('click', 0, 400, 100, 130)], [commit(125, 0, { total: 20 })], []);
+  assert.equal(painted.explanation.blame.kind, 'painting');
+  assert.match(painted.verdict, /It also waited 100 ms before the handler could start/);
+  assert.match(painted.verdict, /React still spent 20 ms/);
+});
+
 test('the render blame names the commit whose committing took the time', () => {
   // List renders for 30 ms and commits in 2; a layout effect of it sets state, and Tooltip renders in
   // 1 ms and then runs 200 ms of layout effects. The 200 ms is Tooltip's, so the blame is too.
