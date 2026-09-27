@@ -77,15 +77,19 @@ function element(tag: string, children: Record<string, unknown>[], attributes: R
   return el;
 }
 
-/** `Element.matches` for the attribute selectors a label asks about: `[name]`, `[name="value"]`, `:not()` of those, and a list of them. */
+/**
+ * `Element.matches` for the attribute selectors a label asks about: `[name]`, `[name="value"]`, the same with the
+ * `i` flag that compares the value in any case, `:not()` of those, and a list of them.
+ */
 function matches(el: Record<string, unknown>, selector: string): boolean {
   if (selector.includes(',')) return selector.split(',').some((one) => matches(el, one.trim()));
   const not = /^(.+):not\((.+)\)$/.exec(selector);
   if (not) return matches(el, not[1]!) && !matches(el, not[2]!);
-  const attribute = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(selector);
+  const attribute = /^\[([\w-]+)(?:="([^"]*)"( i)?)?\]$/.exec(selector);
   if (!attribute) throw new Error(`the stand-in DOM cannot match ${selector}`);
   const value = (el.getAttribute as (name: string) => string | null)(attribute[1]!);
-  return attribute[2] === undefined ? value !== null : value === attribute[2];
+  if (attribute[2] === undefined) return value !== null;
+  return attribute[3] ? value?.toLowerCase() === attribute[2].toLowerCase() : value === attribute[2];
 }
 
 function text(value: string): Record<string, unknown> {
@@ -366,6 +370,9 @@ test('an editor is named like a form field whatever labels allows, never by the 
   // And so does the text of an element marked not editable outside any editor.
   assert.equal(labelOf(element('div', [text('Plain text')], { contenteditable: 'false' }), 'text'), 'div "Plain text"');
   assert.equal(labelOf(element('div', [element('div', [text('Plain text')], { contenteditable: 'false' })]), 'text'), 'div "Plain text"');
+  // Written in any case: the browser reads "FALSE" as "false".
+  assert.equal(labelOf(element('div', [text('Plain text')], { contenteditable: 'FALSE' }), 'text'), 'div "Plain text"');
+  assert.equal(labelOf(element('div', [element('div', [text('Plain text')], { contenteditable: 'False' })]), 'text'), 'div "Plain text"');
 });
 
 test('a click on an icon is labelled by the control it is inside, and its selector stays the element it landed on', () => {
