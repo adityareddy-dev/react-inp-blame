@@ -1288,12 +1288,14 @@ function explain(r: InteractionReport): Explanation {
     ? `: the frame ${nextScriptMs >= nextShare ? '' : `${HEDGE} `}waited on the next ${kindOf(heldByNext.type, heldByNext.pointerType)}, which the page handled first.${longestSaid(lateScript)}`
     : '';
 
+  const holds = (s: ScriptSummary, t: number) => t >= s.start && t <= s.start + s.duration + 1e-6;
   const ranInside = (x: CommitSummary, s: ScriptSummary) =>
     carriesWork(x) &&
     x.hydratedTarget == null &&
     x.at > processingEnd + STAMP_TOLERANCE &&
     x.at >= s.start - STAMP_TOLERANCE &&
     x.at <= s.start + s.duration + STAMP_TOLERANCE &&
+    (holds(s, x.at) || !frames.some((f) => f.scripts.some((o) => o !== s && holds(o, x.at)))) &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
   const ranInLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
