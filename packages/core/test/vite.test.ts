@@ -285,7 +285,7 @@ test('before Vite 8.2, an input written at the top level, which Vite does not bu
   assert.deepEqual(decided(about, older('about.html'), '/index.html'), { chunk: false, inline: false });
 });
 
-test('where the app builds with sharedConfigBuild, as RSC setups do, the page transform reads the client environment the build reads', () => {
+test('where the app builds with sharedConfigBuild, as RSC setups do, the page transform reads the environment the build reads', () => {
   // The plugins get the top-level config then, and the client environment's build is the top-level one with its
   // own laid over it.
   const shared = (build: Record<string, any>) => [{ build: { rollupOptions: {} }, environments: { client: { consumer: 'client', build } } }, { build }] as const;
@@ -295,10 +295,28 @@ test('where the app builds with sharedConfigBuild, as RSC setups do, the page tr
   assert.deepEqual(decided(admin, shared({ rollupOptions: { input } }), '/admin/index.html'), { chunk: true, inline: false });
   // A client build of one file by format has no chunk to point a script at, so the page keeps the inline import.
   assert.deepEqual(decided(admin, shared({ rollupOptions: { input, output: { format: 'iife' } } }), '/admin/index.html'), { chunk: false, inline: true });
-  // A browser environment of another name builds from its own input.
+  // A browser environment of another name builds from its own options, and its pages are decided from them too.
   const client = { consumer: 'client', build: { rollupOptions: {} } };
-  const browser = { consumer: 'client', input, build: { rollupOptions: {} } };
-  assert.equal(decided(admin, [{ build: { rollupOptions: {} }, environments: { client, browser } }, browser, 'browser'], '/admin/index.html').chunk, true);
+  const named = (build: Record<string, any>) => {
+    const browser = { consumer: 'client', input, build };
+    return [{ build: { rollupOptions: {} }, environments: { client, browser } }, browser, 'browser'] as const;
+  };
+  assert.deepEqual(decided(admin, named({ rollupOptions: {} }), '/admin/index.html'), { chunk: true, inline: false });
+  assert.deepEqual(decided(() => true, named({ rollupOptions: { output: { format: 'iife' } } }), '/index.html'), { chunk: false, inline: true });
+});
+
+test("under Vite's default builder, a browser environment of another name decides its pages from its own options, not the client environment's", () => {
+  // Each environment is built from a config of its own then, whose build is the environment's.
+  const client = { consumer: 'client', build: { rollupOptions: {} } };
+  const own = (browser: Record<string, any>) => [{ build: browser.build, environments: { client, browser } }, browser, 'browser'] as const;
+  const admin = (path: string) => path.startsWith('/admin/');
+  const input = { main: 'index.html', admin: 'admin/index.html' };
+
+  assert.deepEqual(decided(admin, own({ consumer: 'client', build: { rollupOptions: { input } } }), '/admin/index.html'), { chunk: true, inline: false });
+  assert.deepEqual(decided(admin, own({ consumer: 'client', input, build: { rollupOptions: {} } }), '/admin/index.html'), { chunk: true, inline: false });
+  // One file by format: no chunk to point a script at, so the page keeps the inline import.
+  const iife = own({ consumer: 'client', build: { rollupOptions: { input: 'index.html', output: { format: 'iife' } } } });
+  assert.deepEqual(decided(() => true, iife, '/index.html'), { chunk: false, inline: true });
 });
 
 test('pages picks the pages that get the runtime, and runtime: false keeps only the transform', () => {
