@@ -1109,17 +1109,20 @@ larger part of the interaction. The screen update's sentence says what held it w
 saw it: the longest script after the handlers, from 20 ms and half the screen update, with any React render
 that committed inside it and began there (a render react-virtual's scroll listener forced with `flushSync`,
 which is then not counted in the working time before it); or, with no such script, the browser's own work from
-half the screen update, and a shorter script from 20 ms after it as the longest the browser recorded, with any
-render inside it, said even where the browser gave that script no name. A 20 ms timer is not why a 370 ms
-screen update that spent 250 ms on style and layout was slow, and the sentence once said it was. A render
-inside that script is never counted in the working time, however short the screen update, and a `script`
-verdict then names the longest script that ran in the working time, or, only where it held half the screen
-update, the script after the handlers, or else the longest before the handlers finished, a timer the input
+half the screen update, or else all the scripts after the handlers from half of it together, said with their
+total the way the scripts between one event's handlers and the next are. A shorter script from 20 ms is then
+said as the longest the browser recorded, with any render inside it, even where the browser gave that script
+no name. A 20 ms timer is not why a 370 ms screen update that spent 250 ms on style and layout was slow, and
+the sentence once said it was. Where the frame waited on the next interaction's press, as above, the sentence
+says that instead, in the screen update's note too where another verdict took the blame: typing fast, the
+script after the handlers is the next key's handler, whose work belongs to the next report. Otherwise a render
+inside the script after the handlers is never counted in the working time, however short the screen update,
+and a `script` verdict then names the longest of the scripts up to the end of the handlers and, only where it
+held half the screen update, the script after them, ranked by length and not by where they ran. One outside
+the working time is said as after the handler finished, or as before the handler started for a timer the input
 waited behind. With none of those, the verdict says no long task was recorded in the working time, and not
-that none was recorded at all, since the note names that script. Where the
-frame waited on the next interaction's press, as above, the sentence says that instead, in the screen update's
-note too where another verdict took the blame: typing fast, the script after the handlers is the next key's
-handler, whose work belongs to the next report. The browser's own work is the frame's style, layout and paint
+that none was recorded at all, since the note names that script. The browser's own work is the frame's style,
+layout and paint
 where the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does after
 a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a click
 Chromium does most of that work for the pointer's hit test, before the frame starts rendering. After Enter the
