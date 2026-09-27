@@ -3890,9 +3890,9 @@ function inputOn(page: Page, clock: { now: number }, commit: (ms: number) => voi
 }
 
 test('a key or a finger let go pairs with its own press, not the newest one, when keys roll over or two fingers are down', async (t) => {
-  // A fast typist presses H before letting go of T. Paired with the newest press, T's keyup took H's keydown,
-  // and the render T's keyup made carried H's stamp, as if H had made it. Two fingers on a touch screen, the
-  // first lifted while the second is still down, are the same by pointerId.
+  // A fast typist presses H before letting go of T. Paired with the newest press, T's keyup would take H's
+  // keydown, and the render T's keyup made would carry H's stamp, as if H had made it. Two fingers on a touch
+  // screen, the first lifted while the second is still down, are the same by pointerId.
   const clock = useClock(t);
   await inBrowser(async (page) => {
     const existing = existingHook();
@@ -4387,7 +4387,8 @@ test('text that arrives with no key pressed, one input event a second after a cl
 test("a click or a key a script dispatches is not taken for the user's input, so a render after it is still the click's before it", async (t) => {
   // A page that calls el.click() or dispatchEvent() from code: analytics, a focus trap, a test harness left in.
   // The event has no Event Timing entry. Taken for the newest input, it would stamp the renders after it with an
-  // input no report has, and the click's report would lose them.
+  // input no report has, and the click's report would lose them. It is the same for a render React makes
+  // inside the script's dispatch: flushSync in a handler, el.click() on a controlled checkbox, a legacy root.
   const clock = useClock(t);
   await inBrowser(async (page) => {
     const existing = existingHook();
@@ -4405,12 +4406,20 @@ test("a click or a key a script dispatches is not taken for the user's input, so
     page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
     page.duringClick(() => commit(1010));
     await nextTask();
-    page.fire('click', { isTrusted: false, type: 'click', timeStamp: 1100, target: null, pointerId: -1 });
+    const click = { isTrusted: false, type: 'click', timeStamp: 1100, target: null, pointerId: -1 };
+    page.fire('click', click);
+    page.window.event = click;
+    commit(1110);
+    delete page.window.event;
     commit(1120);
     await nextTask();
-    page.fire('keydown', { isTrusted: false, type: 'keydown', timeStamp: 1200, target: null, code: 'KeyA' });
+    const key = { isTrusted: false, type: 'keydown', timeStamp: 1200, target: null, code: 'KeyA' };
+    page.fire('keydown', key);
+    page.window.event = key;
+    commit(1210);
+    delete page.window.event;
     commit(1220);
-    assert.deepEqual(api.debug.commits().map((c) => c.inputTs), [1000, 1000, 1000]);
+    assert.deepEqual(api.debug.commits().map((c) => c.inputTs), [1000, 1000, 1000, 1000, 1000]);
     api.dispose();
   });
 });
