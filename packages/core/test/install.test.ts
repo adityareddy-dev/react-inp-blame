@@ -1137,6 +1137,76 @@ test('a page that only sets isDisabled on the hook once react-dom has registered
   }
 });
 
+test('a page that only sets isDisabled once react-dom has registered is still read where a tool wrapped some of the methods the library left', async (t) => {
+  // Fast Refresh wraps inject and onCommitFiberRoot when it loads after the library, the usual order in development,
+  // and passes React's calls on. The scripts that keep developer tools out make every method a no-op.
+  const warn = t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  ownShim(t);
+  for (const wrapped of [['inject', 'onCommitFiberRoot'], ['onPostCommitFiberRoot']]) {
+    // The chained hook is the one React DevTools installs, which has an onPostCommitFiberRoot of its own.
+    for (const existing of [null, { ...existingHook(), onPostCommitFiberRoot() {} }]) {
+      session?.slots.warnings?.clear();
+      warn.mock.resetCalls();
+      await inBrowser(async (page) => {
+        if (existing) page.window[HOOK] = existing;
+        let api = install({ threshold: 40, devtoolsTrack: false });
+        const hook = page.window[HOOK];
+        for (const method of wrapped) {
+          const own = hook[method];
+          hook[method] = function (this: unknown, ...args: unknown[]) {
+            return own.apply(this, args);
+          };
+        }
+        const id = hook.inject(reactDom('19.3.0'));
+        const root = mountedRoot(0b11, 4);
+        hook.onCommitFiberRoot(id, root);
+        hook.isDisabled = true;
+        for (const at of [1000, 2000, 3000]) {
+          // The last click comes after dispose() and another install(), which finds the same hook.
+          if (at === 3000) {
+            api.dispose();
+            api = install({ threshold: 40, devtoolsTrack: false });
+          }
+          clock.now = at;
+          page.fire('click', { isTrusted: true, type: 'click', timeStamp: at, target: null });
+          page.duringClick(() => {
+            clock.now = at + 150;
+            commitAgain(root, 150);
+            hook.onCommitFiberRoot(id, root, 1, false);
+          });
+          page.paint([click(at, at, 200)]);
+          await nextTask();
+          const stats = api.stats();
+          assert.deepEqual({ mode: stats.mode, react: stats.react }, { mode: existing ? 'chained' : 'shim', react: 'reading' });
+          assert.match(api.last()?.explanation.cause ?? '', /^React spent 150 ms .*Counter/);
+        }
+        assert.equal(warn.mock.callCount(), 0);
+        api.dispose();
+      });
+    }
+  }
+});
+
+test('a chained hook the page turns off between dispose() and another install() is unsupported from the start', async (t) => {
+  // dispose() takes away the onPostCommitFiberRoot the library added to a hook that had none, so only the page's own
+  // onCommitFiberRoot is left to tell a no-op in its place from the method React still calls.
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0'));
+    existing.onCommitFiberRoot(id, mountedRoot(0b11, 4));
+    api.dispose();
+    turnOff(existing);
+    const again = install({ devtoolsTrack: false });
+    assert.deepEqual({ mode: again.stats().mode, kind: again.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' });
+    assert.equal(warn.mock.callCount(), 1);
+    again.dispose();
+  });
+});
+
 test("hook: 'shim' over a frozen hook says only that it cannot be wrapped, not that it chained onto it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {

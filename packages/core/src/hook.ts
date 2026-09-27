@@ -203,10 +203,10 @@ interface HookState {
   /** Renderers per hook object, by the id that hook's inject() returned. */
   registries: WeakMap<DevtoolsHook, Map<number, Renderer>>;
   /**
-   * Per hook, what its `onCommitFiberRoot` read as when the library last took it up, wrapped or not, or put the
-   * page's own back (`turnedOff`). Absent where a copy of an earlier version made the state.
+   * Per hook, what its `onCommitFiberRoot` and `onPostCommitFiberRoot` read as when the library last took it up,
+   * wrapped or not, or put the page's own back (`turnedOff`). Absent where a copy of an earlier version made the state.
    */
-  commitMethods?: WeakMap<DevtoolsHook, unknown>;
+  commitMethods?: WeakMap<DevtoolsHook, Pick<DevtoolsHook, 'onCommitFiberRoot' | 'onPostCommitFiberRoot'>>;
   /** The last 8 inputs seen, oldest first. */
   inputs: InputRecord[];
   /** The newest input while the task that dispatched it is still running; null once a task queued behind it has run. */
@@ -622,14 +622,17 @@ export function checkHookReplaced(): void {
 /**
  * Whether the page has turned `hook` off. React reads `isDisabled` and `supportsFiber` only as a react-dom
  * registers, and goes on calling the hook it registered with whatever they say later. So once one has, the page
- * has stopped React's commits only where it has also replaced the `onCommitFiberRoot` the library left there. A
- * method that is not the library's says nothing by itself: Fast Refresh wraps the shim's when it loads after the
- * library, and passes React's calls on.
+ * has stopped React's commits only where it has also replaced both methods the library left there, as the scripts
+ * that keep developer tools out do. One method that is not the library's says nothing by itself: Fast Refresh wraps
+ * the shim's `inject` and `onCommitFiberRoot` when it loads after the library, and passes React's calls on.
  */
 function turnedOff(hook: DevtoolsHook): boolean {
   if (!hook.isDisabled && hook.supportsFiber) return false;
   for (const renderer of registryOf(hook).values()) {
-    if (renderer.isReactDom) return hook.onCommitFiberRoot !== state.commitMethods?.get(hook);
+    if (!renderer.isReactDom) continue;
+    const left = state.commitMethods?.get(hook);
+    // A hook that had no onPostCommitFiberRoot has none left once dispose() took the library's away.
+    return !left || (hook.onCommitFiberRoot !== left.onCommitFiberRoot && (typeof left.onPostCommitFiberRoot !== 'function' || hook.onPostCommitFiberRoot !== left.onPostCommitFiberRoot));
   }
   return true;
 }
@@ -736,7 +739,7 @@ function attach(hook: DevtoolsHook, as: 'shim' | 'chained'): void {
   state.mode = as;
   state.unsupported = null;
   state.detach = detach;
-  (state.commitMethods ??= new WeakMap()).set(hook, hook.onCommitFiberRoot);
+  (state.commitMethods ??= new WeakMap()).set(hook, { onCommitFiberRoot: hook.onCommitFiberRoot, onPostCommitFiberRoot: hook.onPostCommitFiberRoot });
   for (const renderer of registryOf(hook).values()) admit(renderer);
 }
 
@@ -1103,20 +1106,22 @@ function chain(hook: DevtoolsHook): () => void {
   };
   const undo = (failed?: boolean) => {
     live = false;
+    // React calls the page's own methods again, so each one put back is recorded, and a later install() over a hook
+    // turned off since React registered tells that apart from a no-op in its place.
+    const left = state.commitMethods?.get(hook);
     // Put the originals back unless another tool has wrapped ours since; then ours stay and pass through. Where
     // wrapping failed, each one that no longer reads as the page's own goes back.
     if (failed ? hook.inject !== prevInject : hook.inject === inject) putBack(() => (hook.inject = prevInject));
     if (failed ? hook.onCommitFiberRoot !== prevCommit : hook.onCommitFiberRoot === onCommitFiberRoot) {
       putBack(() => (hook.onCommitFiberRoot = prevCommit));
-      // React calls the page's own again, so a later install() over a hook turned off since React registered
-      // tells that apart from a no-op in its place.
-      state.commitMethods?.set(hook, hook.onCommitFiberRoot);
+      if (left) left.onCommitFiberRoot = hook.onCommitFiberRoot;
     }
     if (failed ? hook.onPostCommitFiberRoot !== prevPostCommit : hook.onPostCommitFiberRoot === onPostCommitFiberRoot) {
       // Put back before it is removed, so that on a hook sealed since, which keeps the property, React calls only
       // what it did before (nothing, or a method the hook inherits) and a later install() does not wrap ours.
       putBack(() => (hook.onPostCommitFiberRoot = prevPostCommit));
       if (!hadPostCommit) putBack(() => delete hook.onPostCommitFiberRoot);
+      if (left) left.onPostCommitFiberRoot = hook.onPostCommitFiberRoot;
     }
   };
   try {
