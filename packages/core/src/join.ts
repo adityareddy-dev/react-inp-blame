@@ -126,8 +126,9 @@ const LABEL_NODES = 32;
 const RUN_NODES = 16;
 // The elements a person types or picks a value in: one the page made editable, and one with a text field's
 // role. The text inside one is that value, so it is named the way a form field is. A mention chip an editor
-// marks contenteditable="false" is still inside the editor.
-const TYPED_IN = '[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="searchbox"],[role="combobox"],[role="spinbutton"]';
+// marks contenteditable="false" is still inside the editor. The browser reads "FALSE" as "false", and a
+// selector compares a value that way only with the i flag.
+const TYPED_IN = '[contenteditable]:not([contenteditable="false" i]),[role="textbox"],[role="searchbox"],[role="combobox"],[role="spinbutton"]';
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
