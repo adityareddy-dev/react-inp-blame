@@ -1267,6 +1267,8 @@ function explain(r: InteractionReport): Explanation {
   // nothing about what React did, and nothing said about React's work here is a measurement. The ladder
   // has a rung for it, in place of the guesses at the working time below the browser's own measurements.
   const blind = r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable';
+  // Where React stopped being read with renders read by then, those are in the report, and only the rest is unknown.
+  const partway = r.reactStatus === 'unreadable' && r.commits.length + r.followUps.length > 0;
   const unsure = unjoined || blind;
   const renderedNothing = unjoined ? `React rendered during it, but ${plural(r.unjoinedCommits, 'commit')} could not be tied to this ${kind}` : `React didn't render anything`;
   /**
@@ -1796,25 +1798,28 @@ function explain(r: InteractionReport): Explanation {
   // the build records: a 300 ms handler that set no state is the handler's, as it is beside a 1 ms render. A render
   // the screen update's note ties to the script after the handlers is not in the working time, so a click whose
   // every render ran there is the same: 200 ms of short handlers before a 40 ms scroll listener that rendered read
-  // as waiting and painting. So is one where React stopped being read after that render, or after any render it read
-  // once the handlers had ended, in React's own task or a later one: React was read all through them. Taken as
+  // as waiting and painting. So is one where React stopped being read after that render, or after any render of its
+  // own it read once the handlers had ended, in React's own task too: React was read all through them. Taken as
   // unknown, 200 ms of handleSave before a scroll listener that rendered was blamed on nothing and the render said to
   // be unseen, and so was 20 ms of it before a render React scheduled for right after it, so the rung for a react-dom
   // that is not read passes such a report on too, and the forced layout's sentence, in `whereRead`, takes the handlers
-  // as read. Where a long animation frame was recorded over the handlers, the browser's own record decides, in any
-  // build, where it names a script of 20 ms or more that a verdict would name, as it did. Where it lists only shorter
-  // ones, or none, or only one after the handlers that no verdict takes, under half of the screen update or on the next
-  // press, it names nothing that ran in them, so the handler keeps its verdict rather than the time reading as waiting
-  // and painting. That holds with no note to name the one after them, as `ledScript` weighs it: taken there, a 30 ms
-  // timer after 110 ms of short handlers was the verdict under a 99 ms screen update, and the handler's under a 104 ms
-  // one. A frame that ended as they began holds only what the click waited behind: a 30 ms timer there no longer takes
-  // a 45 ms handler's verdict, which the handler keeps before that frame arrives and beside a 1 ms render.
+  // as read. A render that landed after the screen updated is not one of those: it says nothing of the react-dom the
+  // handlers ran beside, and counted, a click under 'installed-late' read "React didn't render anything" beside the
+  // note that nothing React did is in the report. Where a long animation frame was recorded over the handlers, the
+  // browser's own record decides, in any build, where it names a script of 20 ms or more that a verdict would name,
+  // as it did. Where it lists only shorter ones, or none, or only one after the handlers that no verdict takes, under
+  // half of the screen update or on the next press, it names nothing that ran in them, so the handler keeps its
+  // verdict rather than the time reading as waiting and painting. That holds with no note to name the one after
+  // them, as `ledScript` weighs it: taken there, a 30 ms timer after 110 ms of short handlers was the verdict under a
+  // 99 ms screen update, and the handler's under a 104 ms one. A frame that ended as they began holds only what the
+  // click waited behind: a 30 ms timer there no longer takes a 45 ms handler's verdict, which the handler keeps before
+  // that frame arrives and beside a 1 ms render.
   // A click React never dispatched, on server-rendered HTML it had not hydrated, is left out: the handler named
   // there is a hydrated component's above the boundary, which never ran, and the working time can be React's own
   // attempt at hydrating it. "Not loaded yet" is 'waiting', which the page's looks for React's marks decide, so a
   // react-dom that loaded before install() and mounted after the last look is taken for none: a known limit, the
   // one every rung that says React rendered nothing already had.
-  const unseen = blind && ![...r.commits, ...r.followUps].some((x) => x.at > processingEnd + STAMP_TOLERANCE);
+  const unseen = blind && !r.commits.some((x) => x.at > processingEnd + STAMP_TOLERANCE);
   const reactIdle = !inWorkingTime.length && !unseen && !unjoined && r.hydration?.kind !== 'not-hydrated';
   const framedHandlers = frames.some((f) => f.start < processingEnd && f.start + f.duration > processingStart);
   const idleHandler = reactIdle && !(framedHandlers && ledScript);
@@ -2289,8 +2294,9 @@ function explain(r: InteractionReport): Explanation {
     const why = r.reactStatus === 'installed-late' ? 'install() ran after react-dom loaded' : 'no react-dom on this page is being read';
     const recorded = longestPart(whileHandling);
     const held = recorded ? ` The browser recorded ${aScript(recorded.script)} running for ${ms(recorded.ms)} of it, which holds React's render as well as the handler.` : '';
-    // Where it was read before it stopped, what it rendered by then is in the report, and only the rest is unknown.
-    const unknown = r.commits.length || r.followUps.length ? 'What React did after it stopped being read is unknown,' : `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen,`;
+    // Where it was read before it stopped, only the rest is unknown. A react-dom install() ran too late for was never
+    // read, whatever another rendered later.
+    const unknown = partway ? 'What React did after it stopped being read is unknown,' : `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen,`;
     cause = `${unknown} and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   } else if (ranScript && !(shortOf && ranAsHandler(ranScript.script))) {
@@ -2370,7 +2376,7 @@ function explain(r: InteractionReport): Explanation {
     // The page can turn its hook off, or a walk throw, after this interaction's commits were read and before its
     // report was built, and the commits read by then stay in it.
     notes.push(
-      r.commits.length || r.followUps.length
+      partway
         ? `React stopped being read partway through this ${kind}, so only what it did before that is in this report, and stats().unsupportedReason says why.`
         : "No react-dom on this page is being read, so nothing React did is in this report: either no React DevTools hook is in use (hook: 'chain' found none to wrap), or stats().unsupportedReason says why (the page turns its DevTools hook off or locks it, or the react-dom that registered cannot be read).",
     );

@@ -2099,6 +2099,18 @@ test('where React stopped being read partway through an interaction, the note sa
   assert.deepEqual(partway.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
   assert.equal(partway.cause, 'What React did after it stopped being read is unknown, and the 190 ms of working time cannot be put on the click handler or on a render.');
   assert.match(partway.notes[0]!, stopped);
+  // A render that landed after the screen updated says nothing of what React did while the handlers ran, so the
+  // verdict stays unknown: counted, the click went to code outside React, which "didn't render anything". Where
+  // install() ran too late, nothing React did was read at all, whatever rendered later.
+  const later = sealReport(after).explanation;
+  assert.deepEqual(later.blame, partway.blame);
+  assert.equal(later.cause, 'What React did after it stopped being read is unknown, and the 97 ms of working time cannot be put on the click handler or on a render.');
+  const tooLate = sealReport(attachLaterRender(buildReport(click, [], [], [], 'attributes', [], undefined, 'installed-late'), commit(400, 0, { total: 40 }), [])!).explanation;
+  assert.deepEqual(tooLate.blame, partway.blame);
+  assert.equal(
+    tooLate.cause,
+    'What React did is unknown: install() ran after react-dom loaded, so whatever it rendered for this click was not seen, and the 97 ms of working time cannot be put on the click handler or on a render.',
+  );
   // With nothing read, nothing React did is in it.
   assert.match(notesOf(report(click, [], [], [], 'attributes', [], undefined, 'unreadable')), /^No react-dom on this page is being read, so nothing React did is in this report/m);
 });
