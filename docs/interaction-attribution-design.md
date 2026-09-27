@@ -440,9 +440,13 @@ callback to `window.onerror`, where Sentry or Datadog counted it as the app's, a
 anyway. A click on a form with a field named `tagName` still throws in there, since a form's fields
 shadow its own properties. The interactions in one batch are built one at a time, so that click drops
 only its own report, and at hide each observer is flushed under a guard of its own, so a frame that
-cannot be read keeps neither the entries from their reports nor the reports from being heard. React's
-calls into the hook were guarded already: a walk that throws stops that renderer, as above. An error a
-report listener throws is the page's own, and still goes to `reportError`.
+cannot be read keeps neither the entries from their reports nor the reports from being heard. An
+input's target is read under a guard of its own when the input is recorded, so that click is recorded
+naming nothing: the commits in its dispatch are still read as its own, and the page's other reports keep
+their components. Before, recording it threw again inside the commit its handler rendered, and stopped
+that renderer for good as a walk that threw. React's calls into the hook were guarded already: a walk
+that throws stops that renderer, as above. An error a report listener throws is the page's own, and
+still goes to `reportError`.
 
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
