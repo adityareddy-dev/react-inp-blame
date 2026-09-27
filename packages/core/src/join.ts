@@ -324,6 +324,20 @@ function keypressReached(inputs: readonly InputRecord[], e: InteractionTiming): 
   return inputs.find((i) => i.type === 'keydown' && i.keypressHandler !== undefined && near(i.ts, e.startTime))?.keypressHandler;
 }
 
+/**
+ * What the key that made this click reached, where the click landed on another element than the key's.
+ * Enter in a field submits the form by clicking its submit button, inside the keypress, so the button's
+ * onClick runs before the onSubmit that does the work: one for analytics, or the one a library's button
+ * always has, would take the onSubmit's name. The keypress, read as it was dispatched, names that onSubmit.
+ * Null for a click on the key's own element, as Enter on the button makes, for one no key made, and where
+ * the keypress reached no handler, so a form with no onSubmit is named by the button's onClick.
+ */
+function submittedBy(inputs: readonly InputRecord[], click: InputRecord | undefined): string | null {
+  if (click?.type !== 'click') return null;
+  const key = inputs.find((i) => i.type === 'keydown' && i.ts === click.gestureTs);
+  return (key && key.target !== click.target && key.keypressHandler) || null;
+}
+
 /** The input in the ring that one of these entries is, by its timestamp and type. */
 function ringInput(inputs: readonly InputRecord[], stamps: readonly Stamp[]): InputRecord | null {
   return inputs.find((i) => stamps.some((s) => isInput(s, i.ts, i.type))) ?? null;
@@ -492,11 +506,12 @@ export function buildReport(
       // two buttons in one frame are two records under a millisecond apart. The element is read now only for
       // an event the ring has no reading of, and for one on server HTML, which had no handler to read until
       // React hydrated it to run the event. A keydown there with a keypress after it has a reading all the
-      // same: React hydrates inside the keydown, and the element was read again as the keypress came.
+      // same: React hydrates inside the keydown, and the element was read again as the keypress came. The
+      // click Enter in a field makes on the form's submit button is named by what its keypress reached.
       const own = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime) && (!e.target || i.target === e.target));
       const reached = keypressReached(inputs, e);
       if (own && (!own.dehydrated || own.keypressHandler !== undefined)) {
-        handler = own.handler;
+        handler = submittedBy(inputs, own) ?? own.handler;
       } else if (reached !== undefined) {
         handler = reached;
       } else {
@@ -512,7 +527,8 @@ export function buildReport(
   } else if (ring) {
     owners = ring.owners;
     for (const e of byWork(sorted)) {
-      handler = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime))?.handler ?? keypressReached(inputs, e) ?? null;
+      const own = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime));
+      handler = submittedBy(inputs, own) ?? own?.handler ?? keypressReached(inputs, e) ?? null;
       if (handler) break;
     }
   }

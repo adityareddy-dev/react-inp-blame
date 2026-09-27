@@ -2134,6 +2134,21 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 3500, target: field, code: 'Enter', keyCode: 229 });
     page.paint([{ ...pointer('keydown', 10, 3500, 140), target: field }]);
     assert.equal(api.last()?.target?.handler, 'setEmail');
+    // Chromium submits the form from Enter in its field by clicking the submit button, inside the keypress, and times
+    // that click in an entry of its own with the keypress's work. The button's onClick runs first and did none of it.
+    function trackClick() {}
+    const buttonProps = { type: 'submit', onClick: trackClick };
+    const buttonFiber: Record<string, unknown> = { tag: 5, elementType: 'button', type: 'button', memoizedProps: buttonProps, return: formFiber };
+    const button = { ...node('button', buttonFiber, form), __reactProps$demo: buttonProps };
+    buttonFiber.stateNode = button;
+    page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 3700, target: field, code: 'Enter' });
+    page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: 3700, target: field, code: 'Enter' });
+    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 3700, target: button, pointerId: -1, pointerType: '' });
+    form.__reactProps$demo = { onSubmit: finish };
+    const submitted = { ...pointer('keydown', 15, 3700, 140), processingEnd: 3703, target: field };
+    const submitWork = { processingStart: 3703, processingEnd: 3823 };
+    page.paint([submitted, { ...submitted, name: 'keypress', ...submitWork }, { ...submitted, name: 'click', ...submitWork, target: button }]);
+    assert.equal(api.last()?.target?.handler, 'goNext');
     // Server HTML React had not hydrated by the keypress has no handler to read yet: the form is read when the
     // entries come, once React hydrated it to run the submit.
     const dehydrate = () => {

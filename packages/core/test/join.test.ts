@@ -3246,6 +3246,35 @@ test("Enter on server HTML React hydrated inside the keydown is named by the key
   assert.equal(report(hydrating, [], [], keydown({})).target?.handler, 'finish');
 });
 
+test("Enter in a field that submits by clicking the form's submit button is named by the onSubmit its keypress reached", () => {
+  // Chromium submits a form from Enter in its field by clicking the submit button, inside the keypress, and times that
+  // click in an entry of its own with the keypress's work. The button's onClick runs before the onSubmit that does the
+  // work, and one for analytics, or the one a library's button always has, took the onSubmit's name.
+  function placeOrder() {}
+  function trackClick() {}
+  function Checkout() {}
+  const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null }) as Record<string, unknown>;
+  const form = fiberOf(5, 'form', fiberOf(0, Checkout, null), { onSubmit: placeOrder });
+  const node = (tag: string, props: Record<string, unknown>) =>
+    Object.assign(element(tag, []), { __reactFiber$k1: fiberOf(5, tag, form, props), __reactProps$k1: props }) as unknown as Node;
+  const field = node('input', { type: 'text', name: 'qty' });
+  const buy = node('button', { type: 'submit', onClick: trackClick });
+  const pressed = (on: Node) => [entry('keydown', 0, 100, 1, 1.5, { target: on }), entry('keypress', 0, 100, 2, 82, { target: on }), entry('click', 0, 100, 2, 82, { target: buy })];
+  const ring = (on: Node, keypressHandler: string | null, clickHandler = 'trackClick') => [
+    input(0, 'keydown', { target: on, press: 'Enter', key: 'Enter', owners: ['Checkout'], keypressHandler }),
+    input(0, 'click', { target: buy, press: -1, owners: ['Checkout'], handler: clickHandler }),
+  ];
+  assert.equal(report(pressed(field), [], [], ring(field, 'placeOrder')).target?.handler, 'placeOrder');
+  // A form the submit took off the page: the entries have no target, and the keypress's reading still names it.
+  const gone = pressed(field).map((e) => ({ ...e, target: null }));
+  assert.equal(report(gone, [], [], ring(field, 'placeOrder')).target?.handler, 'placeOrder');
+  // A form with no onSubmit: the keypress reached nothing, and the button's onClick that the click ran did the work.
+  assert.equal(report(pressed(field), [], [], ring(field, null, 'saveOrder')).target?.handler, 'saveOrder');
+  // Enter on the button itself clicks the element the key was on, which is named as a click on it is.
+  assert.equal(report(pressed(buy), [], [], ring(buy, 'placeOrder')).target?.handler, 'trackClick');
+});
+
 test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {
   // A row that selects itself on click, holding a menu button that opens on pointerdown, as Radix's
   // DropdownMenu does: the pointerdown's handlers ran for 90 ms, the pointerup's and the click's for none.
