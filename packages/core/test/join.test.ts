@@ -1654,6 +1654,8 @@ test('where React is read and rendered nothing, all of the working time is outsi
     assert.equal(r.explanation.cause, "The click handler handleSave ran for about 300 ms; React didn't render anything.");
   }
   assert.equal(report(click, [], null, [input(0, 'click')]).explanation.cause, "Code outside React (the click handler or other scripts) ran for about 300 ms; React didn't render anything.");
+  // So is a page where no react-dom has loaded yet, such as an Astro page before its islands hydrate: React ran nothing.
+  assert.deepEqual(report(click, [], null, save, 'attributes', [], undefined, 'waiting').explanation.blame, handler);
   // Where the screen update outranks the working time, the handler is the note it leaves.
   const painted = report([entry('click', 0, 200, 2, 62)], [], null, save);
   assert.equal(painted.explanation.blame.kind, 'painting');
