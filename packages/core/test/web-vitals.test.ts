@@ -81,11 +81,27 @@ test("an icon inside a button is placed by the button, as reports name it", () =
 });
 
 test('a node with no fiber of its own is placed by the nearest element that has one', () => {
-  // React puts a fiber on every element it renders, so in a page this is the text inside the button.
+  // React writes an element's only string child in as its text, with no fiber: `<button>Open</button>`.
   const tile = element('button', { classes: ['tile'], fiber: owners('ProfilePage', 'PhotoTile') });
   assert.equal(generateTarget(asNode(textNode('Open', tile))), 'ProfilePage > PhotoTile (button.tile)');
   // An element the app created outside React is described as itself, under the components above it.
   assert.equal(generateTarget(asNode(element('span', { parentNode: tile }))), 'ProfilePage > PhotoTile (span)');
+});
+
+test('text a component returned adds that component to the path of the element holding it', () => {
+  const button = { tag: 5, elementType: 'button', type: 'button', memoizedProps: {}, return: owners('ProfilePage', 'PhotoTile') };
+  const tile = element('button', { classes: ['tile'], fiber: button });
+  // Any other text React creates as a node of its own, with a fiber whose `return` is what returned the text.
+  const text = (value: string, returnedBy: Record<string, unknown>): Record<string, unknown> => {
+    const node = textNode(value, tile);
+    node[FIBER_KEY] = { tag: 6, elementType: null, type: null, memoizedProps: value, return: returnedBy };
+    return node;
+  };
+  // `<button><FormattedMessage id="open" /></button>`, where the component returns a string.
+  const message = text('Open', component('FormattedMessage', button));
+  assert.equal(generateTarget(asNode(message)), 'ProfilePage > PhotoTile > FormattedMessage (button.tile)');
+  // Text beside the element's other children is the element's own: `<button>{icon} Open</button>`.
+  assert.equal(generateTarget(asNode(text(' Open', button))), 'ProfilePage > PhotoTile (button.tile)');
 });
 
 test('the element is described from its attributes, never from the text it shows', () => {
