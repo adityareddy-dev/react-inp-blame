@@ -577,6 +577,21 @@ test("where the working time was longer, the screen update's note says the frame
     waited.notes.find((n) => n.startsWith('After the handler finished')),
     'After the handler finished, the screen took another 122 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 105 ms.',
   );
+  // With the working time split into short handlers and a small render, the next key's handler is not the
+  // verdict's either, at 70 ms over half of the 122 ms or at 50 ms under it: the note says whose it is.
+  const keys = Array.from({ length: 9 }, (_, i) => script('DIV#root.onkeydown', 1001 + i * 20, 19));
+  const three = commit(1175, 1000, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 3, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 3, self: null, total: null }] });
+  const shortKeys = (ms: number) =>
+    report([entry('keydown', 1000, 304, 1001, 1180), entry('keyup', 1060, 244, 1181, 1182)], [three], [frame(1000, 304, [...keys, script('DIV#root.onkeydown', 1200, ms)], 1292)], ring).explanation;
+  const held = shortKeys(70);
+  assert.deepEqual(held.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
+  assert.equal(held.cause, "React's render was small (re-rendering 3 components inside Editor, mostly Row (3 of them)) and no long task was recorded in the working time, so the rest went to waiting and painting.");
+  assert.deepEqual(held.notes, [
+    'After the handler finished, the screen took another 122 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 70 ms.',
+  ]);
+  const under = shortKeys(50);
+  assert.deepEqual([under.blame, under.cause], [held.blame, held.cause]);
+  assert.match(under.notes[0], /: the frame most likely waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 50 ms\.$/);
 });
 
 test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {
@@ -3280,7 +3295,19 @@ test('a render that committed inside the script the screen update waited on is s
     [input(0, 'click')],
   );
   assert.match(scheduled.explanation.cause, /MessagePort\.onmessage.*React rendered inside it: 150 ms /);
-  assert.ok(scheduled.explanation.notes.some((n) => n.startsWith('React rendered 2 times')), scheduled.explanation.notes.join(' | '));
+  assert.deepEqual(scheduled.explanation.notes, [
+    'React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.',
+    'React still spent 160 ms re-rendering 721 components inside TableBody in the 169 ms of working time before that.',
+  ]);
+  // Where it is the heavier, it is still taken out of the working time, as the handlers' own render is said there.
+  const scheduledHeavier = report(
+    [entry('click', 0, 368, 2, 171)],
+    [handled, { ...forced, total: 170, priority: 3 }],
+    [frame(0, 368, [script('INPUT.onclick', 2, 169), script('MessagePort.onmessage', 175, 174)])],
+    [input(0, 'click')],
+  );
+  assert.match(scheduledHeavier.explanation.cause, /React rendered inside it: 170 ms /);
+  assert.deepEqual(scheduledHeavier.explanation.notes, scheduled.explanation.notes);
 
   // React 17 gives every commit priority 99, so there the task a render ran in is what says an effect set it off.
   const legacy = (invoker: string) =>
@@ -3713,6 +3740,10 @@ test("a verdict does not say no long task was recorded where the screen update's
   const unnoted = listened(299, 70, 280);
   assert.deepEqual([unnoted.blame.kind, unnoted.blame.name, unnoted.notes], ['script', 'DIV.onscroll', []]);
   assert.equal(unnoted.cause, "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (DIV.onscroll, app.js) ran for 70 ms after the handler finished.");
+  // At exactly 100 ms as well, for a 40 ms listener under half of it.
+  const hundred = listened(303, 40, 280);
+  assert.deepEqual([hundred.blame.kind, hundred.blame.name, hundred.notes], ['script', 'DIV.onscroll', []]);
+  assert.match(hundred.cause, /; a script \(DIV\.onscroll, app\.js\) ran for 40 ms after the handler finished\.$/);
   // And where a commit could not be tied to the click, "it" would be the click, so the working time is said.
   assert.equal(
     seventy([commit(270, 0, table)], [input(0, 'click', { work: { endedAt: 0, unjoined: [100] } })]).cause,

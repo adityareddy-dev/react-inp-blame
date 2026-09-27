@@ -1127,7 +1127,9 @@ handlers and, only where it held half the screen update, the script after them, 
 where they ran. A timer the input waited behind is then said as before the handler started. With none of
 those, the verdict says no long task was recorded in the working time, and not that none was recorded at all,
 since the note names that script. Ranked that way only where a render ran in it, a 70 ms listener with none
-was a `script` verdict, and with one `none`. A script after the handlers is said as after the handler finished
+was a `script` verdict, and with one `none`. Where the frame waited on the next press, the verdict does not
+take the script after the handlers even from half, since it is usually that press's handler: a keyup's verdict
+once named the next key's 50 ms handler. A script after the handlers is said as after the handler finished
 wherever a verdict names it. The browser's own work is the frame's style, layout and paint where the frame
 timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does after a key
 press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a click
