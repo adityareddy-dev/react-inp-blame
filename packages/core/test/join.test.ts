@@ -3487,6 +3487,21 @@ test('a screen update over 100 ms gets its note under another verdict where the 
     checkbox(296).cause,
     'After the click was handled, the screen took another 150 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 130 ms before the next frame, and React rendered inside it: 89 ms re-rendering 721 components inside TableBody.',
   );
+  // On a faster machine the screen update is under 100 ms, and the render the listener forced is still the
+  // listener's: said with it in the note, and not counted as a second render, as though an effect made it.
+  const faster = report(
+    [entry('click', 0, 242, 3, 146)],
+    [
+      commit(140, 0, { total: 129, rendered: 737, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 8 }),
+      commit(228, 0, { total: 70, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 150 }),
+    ],
+    [frame(0, 242, [script('INPUT.onclick', 3, 143), script('DIV.onscroll', 148, 85)], 234)],
+    [input(0, 'click')],
+  ).explanation;
+  assert.equal(faster.cause, onscroll.cause);
+  assert.deepEqual(faster.notes, [
+    'After the handler finished, the screen took another 96 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 85 ms before the next frame, and React rendered inside it: 70 ms re-rendering 721 components inside TableBody.',
+  ]);
   // Where the handler rendered nothing and the script's render was the only one, the verdict does not say
   // React rendered nothing at all.
   const scrolledBy = (ring: InputRecord[]) =>
