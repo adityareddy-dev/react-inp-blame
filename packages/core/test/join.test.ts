@@ -3578,6 +3578,50 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   ]);
 });
 
+test("a verdict does not say no long task was recorded where the screen update's note names one, and names a script the click waited behind", () => {
+  // Ten 15 ms click handlers, then a 70 ms scroll listener that forced a render of 721 rows: under half of the
+  // 157 ms screen update, so the note says it after the browser's 80 ms. The verdict is on the working time.
+  const tenClicks = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15));
+  const table = { total: 25, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 210 };
+  const seventy = (commits: CommitSummary[], ring = [input(0, 'click')]) =>
+    report([entry('click', 0, 360, 3, 203)], commits, [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, 70)], 280)], ring).explanation;
+  const listener = seventy([commit(270, 0, table)]);
+  assert.deepEqual(listener.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
+  assert.equal(listener.cause, "React didn't render anything in the working time and no long task was recorded in it, so the time went to waiting and painting.");
+  assert.deepEqual(listener.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 80 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 70 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
+  ]);
+  // The same where the handlers rendered 3 components of their own in a production build.
+  const small = seventy([
+    commit(195, 0, { hasDurations: false, total: 0, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] }),
+    commit(270, 0, { ...table, hasDurations: false, total: 0, startedAt: null }),
+  ]);
+  assert.equal(
+    small.cause,
+    "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)) and no long task was recorded in the working time, so the rest went to waiting and painting.",
+  );
+  // And where a commit could not be tied to the click, "it" would be the click, so the working time is said.
+  assert.equal(
+    seventy([commit(270, 0, table)], [input(0, 'click', { work: { endedAt: 0, unjoined: [100] } })]).cause,
+    'React rendered during it, but 1 commit could not be tied to this click and no long task was recorded in the working time, so the time went to waiting and painting.',
+  );
+
+  // A 62 ms timer the click waited 63 ms behind, then the handlers and a 40 ms listener as above. The timer is
+  // the longest script outside the one the note names, so the verdict names it, and not as after the handlers.
+  const shifted = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 63 + i * 20, 15));
+  const behind = report(
+    [entry('click', 0, 420, 63, 263)],
+    [commit(300, 0, { ...table, startedAt: 270 })],
+    [frame(0, 420, [script('TimerHandler:setTimeout', 0, 62), ...shifted, script('DIV.onscroll', 265, 40)], 310)],
+    [input(0, 'click')],
+  ).explanation;
+  assert.deepEqual(behind.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 62, confidence: 'measured' });
+  assert.equal(behind.cause, "React didn't render anything in the working time; a script (TimerHandler:setTimeout, app.js) ran for 62 ms.");
+  assert.deepEqual(behind.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 110 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
+  ]);
+});
+
 test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {
   // Enter on a button whose click changed a class on 30,000 cells, in Chromium: the keydown and the click it
   // made took 1 ms, then 147 ms went by before the keyup's handler ran, the browser restyling the page.

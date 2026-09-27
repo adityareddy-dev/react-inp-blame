@@ -1371,11 +1371,13 @@ function explain(r: InteractionReport): Explanation {
    * or not the handlers rendered 3 components of their own. Where nothing there ran for long it is the late
    * script still, said as after it, but only where it held half of the screen update: a 40 ms listener in a
    * 157 ms screen update that spent 110 ms on style and layout is under half of either phase, and the
-   * verdict is left to what the working time holds.
+   * verdict is left to what the working time holds. Under that it is the longest script before the handlers
+   * finished: a 62 ms timer the click waited behind was otherwise dropped, and the verdict said no long task
+   * was recorded beside a note that named a 40 ms listener.
    */
   const lateOnly = insideLate.length > 0 && !c;
   const workingScript = insideLate.length ? longestPart(whileHandling) : null;
-  const ranScript = insideLate.length ? (workingScript ?? lateLeads) : anyScript;
+  const ranScript = insideLate.length ? (workingScript ?? lateLeads ?? longestPart(scriptParts(frames, r.start, processingEnd))) : anyScript;
   // Where every render ran in the script after the handlers, the screen update's note says it: React did
   // render, just not in the working time, and a verdict that names no render says that much.
   const noneWorking = lateOnly && !unjoined ? "React didn't render anything in the working time" : renderedNothing;
@@ -1999,7 +2001,7 @@ function explain(r: InteractionReport): Explanation {
     const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(ranScript.ms) < Math.round(ranScript.script.duration) ? ' of it' : '';
-    const after = insideLate.length && !workingScript ? ' after the handler finished' : '';
+    const after = insideLate.length && ranScript === lateLeads ? ' after the handler finished' : '';
     const ran = `${scriptPhrase(ranScript.script)} ran for ${ms(ranScript.ms)}${ofIt}${after}`;
     cause = say(confidence, `${small}; ${ran}.`, `${small}; ${HEDGE} ${ran}.`);
     blame = { kind: 'script', name: scriptBlameName(ranScript.script), detail: ranAsHandler(ranScript.script) ? component : null, ms: ranScript.ms, confidence };
@@ -2015,11 +2017,14 @@ function explain(r: InteractionReport): Explanation {
     // and its scripts are either too short to name or the handler's, which holds React's render (above).
     // A count under the library's own bars reads as it did, in any build.
     const unmeasured = r.frames.length === 0 ? ` No long animation frame covered the ${kind}, so how much of the working time went to any styles and layout it forced is unmeasured.` : '';
+    // Where a render ran in the script after the handlers, the screen update's note names that script,
+    // 70 ms of it in a 157 ms screen update, so the sentence says only that none ran long before it.
+    const noLongTask = `no long task was recorded${insideLate.length ? ` in ${lateOnly && !unjoined ? 'it' : 'the working time'}` : ''}`;
     cause = shortOf
       ? `${shortOf}; the rest went to waiting and painting.${unmeasured}`
       : c
-        ? `React's render was small (${renderPhrase(c)}) and no long task was recorded, so the rest went to waiting and painting.`
-        : `${noneWorking} and no long task was recorded, so the time went to waiting and painting.`;
+        ? `React's render was small (${renderPhrase(c)}) and ${noLongTask}, so the rest went to waiting and painting.`
+        : `${noneWorking} and ${noLongTask}, so the time went to waiting and painting.`;
     // Nothing is named, so there is nothing to hedge; the confidence says whether the absence of a
     // long task was itself observed or merely assumed.
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: unsure ? 'inferred' : 'measured' };

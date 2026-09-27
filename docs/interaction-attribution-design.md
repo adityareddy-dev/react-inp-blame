@@ -1114,7 +1114,9 @@ render inside it, said even where the browser gave that script no name. A 20 ms 
 screen update that spent 250 ms on style and layout was slow, and the sentence once said it was. A render
 inside that script is never counted in the working time, however short the screen update, and a `script`
 verdict then names the longest script that ran in the working time, or, only where it held half the screen
-update, the script after the handlers. Where the
+update, the script after the handlers, or else the longest before the handlers finished, a timer the input
+waited behind. With none of those, the verdict says no long task was recorded in the working time, and not
+that none was recorded at all, since the note names that script. Where the
 frame waited on the next interaction's press, as above, the sentence says that instead, in the screen update's
 note too where another verdict took the blame: typing fast, the script after the handlers is the next key's
 handler, whose work belongs to the next report. The browser's own work is the frame's style, layout and paint
