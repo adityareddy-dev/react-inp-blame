@@ -598,9 +598,10 @@ function unreadableReactDom(): UnsupportedReason | null {
 }
 
 /**
- * Looks for a page that turned the hook in use off where it is, and for a tool that replaced the shim by
- * redefining or deleting the global, which its accessor cannot see (an assignment it can). install() calls
- * it at fixed points, so reading `stats()` or `debug.hook()` never changes what they report.
+ * Looks for a page that turned the hook in use off where it is, or emptied the global over the shim, and for
+ * a tool that replaced the shim by redefining or deleting the global, which its accessor cannot see (an
+ * assignment it can). install() calls it at fixed points, so reading `stats()` or `debug.hook()` never
+ * changes what they report.
  */
 export function checkHookReplaced(): void {
   const { attached, shim } = state;
@@ -615,7 +616,18 @@ export function checkHookReplaced(): void {
     warnOnce('hook-disabled', message);
   } else if (attached === shim) {
     const current = (window as unknown as HookHolder)[HOOK_KEY];
-    if (current !== shim) replaced(shim, current);
+    if (current === shim) return;
+    if (Object(current) !== current && !reactDomOn(shim)) {
+      // Not an object or function: the page emptied the global (undefined, false, or a delete) before react-dom
+      // loaded, which then finds no hook it can register with. Looked for here and not in the accessor, so a tool
+      // that assigns a hook of its own right after is still followed.
+      const message =
+        "the page emptied its __REACT_DEVTOOLS_GLOBAL_HOOK__ after install(), so React registers with no hook and its commits cannot be read. Interactions are still reported, without components.";
+      unusable(message);
+      warnOnce('hook-disabled', message);
+    } else {
+      replaced(shim, current);
+    }
   }
 }
 
@@ -628,15 +640,18 @@ export function checkHookReplaced(): void {
  */
 function turnedOff(hook: DevtoolsHook): boolean {
   if (!hook.isDisabled && hook.supportsFiber) return false;
-  // A global that holds no object has neither field, and nothing registers with it.
-  if (typeof hook !== 'object' && typeof hook !== 'function') return true;
-  for (const renderer of registryOf(hook).values()) {
-    if (!renderer.isReactDom) continue;
-    const left = state.commitMethods?.get(hook);
-    // A hook that had no onPostCommitFiberRoot has none left once dispose() took the library's away.
-    return !left || (hook.onCommitFiberRoot !== left.onCommitFiberRoot && (typeof left.onPostCommitFiberRoot !== 'function' || hook.onPostCommitFiberRoot !== left.onPostCommitFiberRoot));
-  }
-  return true;
+  // Until a react-dom registers, the two fields are all React goes by. A global that holds no object has neither
+  // field, and nothing registers with it.
+  if (!reactDomOn(hook)) return true;
+  const left = state.commitMethods?.get(hook);
+  // A hook that had no onPostCommitFiberRoot has none left once dispose() took the library's away.
+  return !left || (hook.onCommitFiberRoot !== left.onCommitFiberRoot && (typeof left.onPostCommitFiberRoot !== 'function' || hook.onPostCommitFiberRoot !== left.onPostCommitFiberRoot));
+}
+
+/** Whether a react-dom has registered with `hook`, which can be a global that holds no object. */
+function reactDomOn(hook: DevtoolsHook): boolean {
+  for (const renderer of state.registries.get(hook)?.values() ?? []) if (renderer.isReactDom) return true;
+  return false;
 }
 
 function owner(): string {

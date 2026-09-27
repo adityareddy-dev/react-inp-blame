@@ -199,7 +199,8 @@ export interface UnsupportedReason {
    * page, so this one installed nothing. 'hook-disabled': the page's DevTools hook has `isDisabled` set
    * or no `supportsFiber`, or the global is empty and read-only, so React registers with no hook;
    * or the page turned the hook in use off that way after install(), before react-dom registered or with
-   * its methods made no-ops, which the next interaction notices;
+   * its methods made no-ops, or emptied the global over the shim before react-dom registered, which the
+   * next interaction notices;
    * or the hook is frozen, sealed without `onPostCommitFiberRoot`, or has a method that cannot be assigned,
    * so it cannot be wrapped and was left as it was. The other three stop the reading of one react-dom's
    * commits, and the page is 'unsupported' when that leaves no react-dom it can read:
