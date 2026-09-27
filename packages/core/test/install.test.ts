@@ -889,6 +889,27 @@ test('a page that freezes its DevTools hook after install() can still dispose(),
   });
 });
 
+test('a page that freezes its DevTools hook after install() and before React registers can dispose() it, and again, and the next install() is a new one', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    assert.equal(api.stats().mode, 'chained');
+    Object.freeze(existing);
+    assert.doesNotThrow(() => api.dispose());
+    assert.equal(installState.installed, null, 'dispose() stopped before the install was let go');
+    assert.doesNotThrow(() => api.dispose());
+
+    const again = install({ hook: 'chain', devtoolsTrack: false });
+    assert.notEqual(again, api, 'install() after dispose() returned the API it disposed');
+    assert.equal(again.stats().mode, 'unsupported');
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /cannot be wrapped/);
+    again.dispose();
+  });
+});
+
 test('a page that seals its DevTools hook after install() gets its methods back on dispose(), and the next install() wraps it again', async () => {
   await inBrowser((page) => {
     const existing = existingHook();
