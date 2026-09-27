@@ -564,7 +564,8 @@ hotPath, components, commits, followUps }`, frozen, from this library's own repo
 It is `null` when nothing is installed on the page, and when there is no report for the interaction:
 one that stayed under `threshold` and set off no later render INP leaves out, one already pushed out
 of the 50 reports a page keeps, which the ten slowest and those INP can still point at never are, or one
-whose report the library dropped, or could not explain, after [an error of its own](#library-error).
+whose report the library dropped after [an error of its own](#library-error). It is `null` too for a
+report such an error kept the library from explaining, though `reports()` still has that report.
 It never guesses, and like `generateTarget` it never throws: a metric it cannot
 read gives `react: null` rather than an exception inside your analytics callback. web-vitals keeps
 everything else it owns: which interaction is
