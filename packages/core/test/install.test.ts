@@ -965,6 +965,136 @@ test("a hook that turns React's support off and replaces the shim before React r
   }
 });
 
+/**
+ * Gives the test a shim of its own, as each page has one, and puts the shared one back after it. The react-doms
+ * other tests registered with the shared shim would be read, and those this test registers would be read in theirs.
+ */
+function ownShim(t: TestContext): void {
+  const hookState = (session?.slots as Record<string, { shim: unknown }>).hook!;
+  const shared = hookState.shim;
+  hookState.shim = null;
+  t.after(() => {
+    hookState.shim = shared;
+  });
+}
+
+/** What the common scripts that keep React DevTools out of production do to the hook they find, where it is: each method a no-op and every other field null. */
+function turnOff(hook: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(hook)) hook[key] = typeof value === 'function' ? () => {} : null;
+}
+
+test('a page that turns the DevTools hook off where it is after install() is unsupported, not read as React rendering nothing', async (t) => {
+  // The library is the first import, so such a script in the app runs once react-dom has registered, on the hook
+  // react-dom registered with: the shim, or the hook the library chained onto.
+  const warn = t.mock.method(console, 'warn', () => {});
+  const clock = useClock(t);
+  ownShim(t);
+  for (const existing of [null, existingHook()]) {
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+    await inBrowser(async (page) => {
+      if (existing) page.window[HOOK] = existing;
+      const api = install({ threshold: 40, devtoolsTrack: false });
+      const hook = page.window[HOOK];
+      const id = hook.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      hook.onCommitFiberRoot(id, root);
+      turnOff(hook);
+      clock.now = 500;
+      page.fire('click', { isTrusted: true, type: 'click', timeStamp: 500, target: null });
+      page.duringClick(() => {
+        clock.now = 650;
+        commitAgain(root, 150);
+        hook.onCommitFiberRoot(id, root, 1, false);
+      });
+      page.paint([click(3, 500, 200)]);
+      await nextTask();
+      const stats = api.stats();
+      assert.deepEqual({ mode: stats.mode, kind: stats.unsupportedReason?.kind, react: stats.react }, { mode: 'unsupported', kind: 'hook-disabled', react: 'unreadable' });
+      const r = api.last();
+      assert.ok(r);
+      assert.doesNotMatch(r.explanation.cause, /didn't render anything/);
+      assert.match(r.explanation.notes.join('\n'), /the page turns its DevTools hook off or locks it/);
+      assert.equal(warn.mock.callCount(), 1);
+      assert.match(warn.mock.calls[0].arguments[0], /off after install\(\)/);
+      api.dispose();
+      // Installed again over it, the page is unsupported from the start rather than from the next batch.
+      const again = install({ threshold: 40, devtoolsTrack: false });
+      assert.equal(again.stats().mode, 'unsupported');
+      again.dispose();
+    });
+  }
+});
+
+test('a chained hook whose supportsFiber the page clears after install() gets its own methods back', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const existing = existingHook();
+    const { inject, onCommitFiberRoot } = existing;
+    page.window[HOOK] = existing;
+    const api = install({ devtoolsTrack: false });
+    existing.supportsFiber = false;
+    page.paint([slowClick(120)]);
+    assert.equal(api.stats().mode, 'unsupported');
+    assert.equal(existing.inject, inject, 'the hook was left wrapped');
+    assert.equal(existing.onCommitFiberRoot, onCommitFiberRoot, 'the hook was left wrapped');
+    assert.equal('onPostCommitFiberRoot' in existing, false, 'the hook was left wrapped');
+    api.dispose();
+  });
+});
+
+test('a page that turns the shim off where it is before react-dom loads is unsupported, not told install() ran late', async (t) => {
+  // React finds support off and registers with no hook, and renders all the same.
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  ownShim(t);
+  await inBrowser((page) => {
+    const app: Record<string, unknown> = {};
+    Object.defineProperty(globalThis, 'document', { value: documentOf([{}, app]), configurable: true, writable: true });
+    const api = install({ threshold: 40, devtoolsTrack: false });
+    turnOff(page.window[HOOK]);
+    app.__reactContainer$x1y2 = {};
+    t.mock.timers.tick(3000);
+    const stats = api.stats();
+    assert.deepEqual({ mode: stats.mode, kind: stats.unsupportedReason?.kind, react: stats.react }, { mode: 'unsupported', kind: 'hook-disabled', react: 'unreadable' });
+    page.paint([slowClick(120)]);
+    assert.equal(api.last()?.reactStatus, 'unreadable');
+    assert.doesNotMatch(api.last()?.explanation.notes.join('\n') ?? '', /install\(\) ran after react-dom loaded/);
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /off after install\(\)/);
+    api.dispose();
+  });
+});
+
+test("a tool that wraps the shim's methods after install() leaves it the hook in use, and its commits are read", async (t) => {
+  // Fast Refresh's runtime does this when it loads after the library, so a method that is no longer the shim's
+  // own does not mean the page turned it off.
+  const warn = t.mock.method(console, 'warn', () => {});
+  ownShim(t);
+  await inBrowser((page) => {
+    const api = install({ threshold: 40, devtoolsTrack: false });
+    const hook = page.window[HOOK];
+    for (const method of ['inject', 'onCommitFiberRoot']) {
+      const own = hook[method];
+      hook[method] = function (this: unknown, ...args: unknown[]) {
+        return own.apply(this, args);
+      };
+    }
+    const id = hook.inject(reactDom('19.3.0'));
+    const root = mountedRoot(0b11, 4);
+    hook.onCommitFiberRoot(id, root);
+    page.duringClick(() => {
+      commitAgain(root, 150);
+      hook.onCommitFiberRoot(id, root, 1, false);
+    });
+    page.paint([slowClick(200)]);
+    assert.deepEqual({ mode: api.stats().mode, react: api.stats().react }, { mode: 'shim', react: 'reading' });
+    assert.equal(api.debug.commits().length, 1);
+    assert.equal(warn.mock.callCount(), 0);
+    api.dispose();
+  });
+});
+
 test("hook: 'shim' over a frozen hook says only that it cannot be wrapped, not that it chained onto it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
