@@ -3538,10 +3538,44 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   assert.deepEqual(split.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 150 ms before the next frame, and React rendered inside it: 100 ms re-rendering 721 components inside TableBody.',
   ]);
-  // Where no script there ran for long, the scroll listener is named still, and said to have run after it.
-  const spread = splitUp(Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15)));
+  // Where no script there ran for long, the scroll listener is named still, as it held the screen update,
+  // and said to have run after it.
+  const tenClicks = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15));
+  const spread = splitUp(tenClicks);
   assert.equal(spread.blame.name, 'DIV.onscroll');
   assert.equal(spread.cause, "React didn't render anything in the working time; a script (DIV.onscroll, app.js) ran for 150 ms after the handler finished.");
+  // The same where the handlers rendered too: 3 components in a production build do not put the listener in
+  // the working time.
+  const alongside = (handlers: ScriptSummary[]) =>
+    report(
+      [entry('click', 0, 360, 3, 203)],
+      [
+        commit(195, 0, { hasDurations: false, total: 0, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] }),
+        commit(340, 0, { hasDurations: false, total: 0, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'] }),
+      ],
+      [frame(0, 360, [...handlers, script('DIV.onscroll', 205, 150)], 356)],
+      [input(0, 'click')],
+    ).explanation;
+  const small = alongside([script('BUTTON.onpointerdown', 3, 60), script('BUTTON.onpointerup', 65, 60), script('BUTTON.onclick', 130, 70)]);
+  assert.deepEqual(small.blame, { kind: 'script', name: 'BUTTON.onclick', detail: null, ms: 70, confidence: 'measured' });
+  assert.equal(small.cause, "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (BUTTON.onclick, app.js) ran for 70 ms.");
+  assert.equal(
+    alongside(tenClicks).cause,
+    "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (DIV.onscroll, app.js) ran for 150 ms after the handler finished.",
+  );
+  // A 40 ms listener in a 157 ms screen update that went mostly on the frame's style and layout held neither
+  // phase, so the verdict does not name it. It is the note's, with the render inside it.
+  const minor = report(
+    [entry('click', 0, 360, 3, 203)],
+    [commit(240, 0, { total: 25, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], startedAt: 210 })],
+    [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, 40)], 250)],
+    [input(0, 'click')],
+  ).explanation;
+  assert.deepEqual(minor.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
+  assert.match(minor.cause, /^React didn't render anything in the working time and /);
+  assert.deepEqual(minor.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 110 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
+  ]);
 });
 
 test("a wait between one event's handlers and the next is put on the wait, not on the handlers", () => {

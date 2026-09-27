@@ -1111,7 +1111,10 @@ that committed inside it and began there (a render react-virtual's scroll listen
 which is then not counted in the working time before it); or, with no such script, the browser's own work from
 half the screen update, and a shorter script from 20 ms after it as the longest the browser recorded, with any
 render inside it, said even where the browser gave that script no name. A 20 ms timer is not why a 370 ms
-screen update that spent 250 ms on style and layout was slow, and the sentence once said it was. Where the
+screen update that spent 250 ms on style and layout was slow, and the sentence once said it was. A render
+inside that script is never counted in the working time, however short the screen update, and a `script`
+verdict then names the longest script that ran in the working time, or, only where it held half the screen
+update, the script after the handlers. Where the
 frame waited on the next interaction's press, as above, the sentence says that instead, in the screen update's
 note too where another verdict took the blame: typing fast, the script after the handlers is the next key's
 handler, whose work belongs to the next report. The browser's own work is the frame's style, layout and paint
