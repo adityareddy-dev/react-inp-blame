@@ -3189,6 +3189,10 @@ test("Enter's submit is named by the onSubmit its keypress reached at dispatch, 
   assert.equal(report(press, [], [], keydown({ keypressHandler: null })).target?.handler, null);
   // With no reading, as for a keypress on server HTML React had not hydrated, the form is read now.
   assert.equal(report(press, [], [], keydown({})).target?.handler, 'finish');
+  // A Shift pressed with the Enter in the same millisecond has a keydown and no keypress, so no reading: the
+  // Enter's is the one taken.
+  const shift = input(0, 'keydown', { target, press: 'ShiftLeft', owners: ['Wizard'] });
+  assert.equal(report(press, [], [], [shift, ...keydown({ keypressHandler: 'goNext' })]).target?.handler, 'goNext');
   // A form the submit took off the page: the entries have no target, and the reading still names it.
   const gone = press.map((e) => ({ ...e, target: null }));
   assert.equal(report(gone, [], [], keydown({ keypressHandler: 'goNext' })).target?.handler, 'goNext');
