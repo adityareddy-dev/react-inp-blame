@@ -159,7 +159,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
    * renders of a quiet interaction are all waiting ones: any other would have published it. Each is
    * settled on its own, so one that cannot be published keeps back neither the others nor the batch.
    */
-  const settle =(batch: readonly InteractionTiming[] | null) => {
+  const settle = (batch: readonly InteractionTiming[] | null) => {
     for (const held of quiet.slice()) {
       alone(() => {
         const { interactionId, entries, followUps } = held.data;
