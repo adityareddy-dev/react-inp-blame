@@ -290,7 +290,7 @@ warning of its own, where before a report read it as React rendering nothing, or
 run late. React reads the two fields only as a react-dom registers, so once one has, they say nothing by
 themselves: a page that only sets `isDisabled` after its imports is still read, and the hook counts as
 switched off only where its `onCommitFiberRoot` and `onPostCommitFiberRoot` are both no longer the ones
-the library left there, or put back on `dispose()`. One method that is no longer the library's says
+the library left there, on `install()` or on `dispose()`. One method that is no longer the library's says
 nothing by itself, since Fast Refresh wraps the shim's `inject` and `onCommitFiberRoot` when it loads
 after the library, and passes React's calls on. A known limit: where a tool wraps both commit methods
 after `install()` and the page then sets only `isDisabled`, the hook reads as switched off, and React's
