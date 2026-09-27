@@ -2351,7 +2351,8 @@ function phasesOf(r: InteractionReport, hydrationMs: number): readonly Phase[] {
 
 /**
  * What a report reads as where building its explanation threw: its headline and phases, nothing blamed,
- * and a cause that says so. The console has the error (`dropped`).
+ * and a cause that says so. It points to the library-error warning (`dropped`) rather than to its own
+ * error, since that warning shows once a page and quotes the first error caught.
  */
 function unexplained(r: InteractionReport): Explanation {
   const kind = kindOf(r.type, r.pointerType);
@@ -2360,7 +2361,7 @@ function unexplained(r: InteractionReport): Explanation {
     blame: Object.freeze<Blame>({ kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' }),
     rating: rateInp(r.duration),
     where: null,
-    cause: `Where the time went is unknown: this library hit an error of its own while it worked that out for this ${kind}, so nothing is blamed. The console has the error.`,
+    cause: `Where the time went is unknown: this library hit an error of its own while it worked that out for this ${kind}, so nothing is blamed. See the library-error warning in the console.`,
     notes: Object.freeze([]),
     phases: phasesOf(r, 0),
   });

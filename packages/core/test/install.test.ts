@@ -1897,10 +1897,14 @@ test("an error while a report is built never reaches the page's error handlers: 
         [14, 21],
       );
       assert.equal(warn.mock.callCount(), 1);
+      const [message, error] = warn.mock.calls[0]?.arguments ?? [];
       assert.match(
-        String(warn.mock.calls[0]?.arguments[0]),
-        /^\[react-inp-blame\] an error inside the library \(TypeError: .+\) was kept from the page, and what it was working on, usually one report, was dropped\. Please open an issue with this message\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#library-error$/,
+        String(message),
+        /^\[react-inp-blame\] an error inside the library \(TypeError: .+\) was kept from the page\. Only the step it threw in was skipped, so a report may be missing or blame nothing, and later interactions are reported as usual\. Please open an issue with this message and the error logged with it\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#library-error$/,
       );
+      // The error itself is logged with it, so the console shows where it was thrown.
+      assert.ok(error instanceof TypeError);
+      assert.ok(String(message).includes(`(${String(error)})`));
     } finally {
       api.dispose();
     }
@@ -1970,7 +1974,7 @@ test("an error while a report's explanation is built, on its first read, never r
       assert.doesNotThrow(() => t.mock.timers.tick(0));
       assert.deepEqual(reported, []);
       assert.equal(caught(warn).length, 1);
-      const cause = 'Where the time went is unknown: this library hit an error of its own while it worked that out for this click, so nothing is blamed. The console has the error.';
+      const cause = 'Where the time went is unknown: this library hit an error of its own while it worked that out for this click, so nothing is blamed. See the library-error warning in the console.';
       assert.deepEqual(
         sent.map((r) => ({ id: r.interactionId, blame: r.explanation.blame, cause: r.explanation.cause, phases: r.explanation.phases.map((p) => p.ms), verdict: r.verdict })),
         [{ id: 7, blame: { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' }, cause, phases: [2, 110, 8], verdict: `120 ms click. ${cause}` }],
