@@ -116,8 +116,8 @@ the wrapper has to leave out `instrumentationClientInject` and print the `instru
 the Vite app has to give a production build whose page installs the library, and in the TypeScript app a
 module importing every subpath has to type-check under `moduleResolution` `node10`, `node16`, `nodenext`
 and `bundler`. In the Jest app a test requiring the browser entries has to pass under each setup the
-READMEs give for Jest, and stop at Jest's ES module error with the part each setup needs taken away. It
-needs the npm registry and no
+READMEs give for Jest, and fail with the part each setup needs taken away, mostly at Jest's ES module
+error. It needs the npm registry and no
 port. Name fixtures to run only those; `next-canary` runs only when named, because a canary is allowed
 to break. `--tarball` checks a tarball
 that already exists, which is how CI runs the script on Node 20.19, the oldest Node the package supports:

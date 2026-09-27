@@ -412,8 +412,9 @@ function typeChecks(app) {
 }
 
 // Jest's error for an ES module it was left to load as CommonJS, which its default runtime does with
-// everything. The package is ES modules only, so this is where a test that reaches it stops. It is the
-// error from Jest 30.5 on; before that Jest says "Cannot use import statement outside a module".
+// everything. The package is ES modules only, so this is where a test that reaches it stops. Without
+// --experimental-vm-modules it is the error from Jest 30.5 on, and before that Jest says "Cannot use import
+// statement outside a module".
 const ESM_REFUSED = 'Must use import to load ES Module';
 
 // The entries a module of the app's own imports, and so the ones its tests reach.
@@ -445,19 +446,24 @@ test('onInteraction', () => {
 // real path, and pnpm's real path for a package is node_modules/.pnpm/<name>@<version>/node_modules/<name>.
 // So the pattern has to let the package through at the first node_modules there as well as at npm's only one.
 const JEST_PATTERN = `/node_modules/(?!(.pnpm/)?${PACKAGE}[@/])`;
+// An app's own pattern for another ES module package, and the READMEs' pattern put inside it rather than
+// beside it. A file is left uncompiled where any one pattern matches, so beside it each keeps Babel from
+// the package the other lets through.
+const OTHER_PATTERN = '/node_modules/(?!(.pnpm/)?lodash-es[@/])';
+const JEST_MERGED = `/node_modules/(?!(.pnpm/)?(lodash-es|${PACKAGE})[@/])`;
 
 const JEST_PLAIN = "module.exports = { testEnvironment: 'jsdom' };\n";
-/** The Jest config the READMEs give for Babel, under a preset where there is one. */
-const jestBabel = (preset) => `module.exports = {
+/** The Jest config the READMEs give for Babel, under a preset where there is one, and with the patterns given. */
+const jestBabel = ({ preset, patterns = [JEST_PATTERN] } = {}) => `module.exports = {
 ${preset ? `  preset: '${preset}',\n` : ''}  testEnvironment: 'jsdom',
-  transformIgnorePatterns: ['${JEST_PATTERN}'],
+  transformIgnorePatterns: [${patterns.map((pattern) => `'${pattern}'`).join(', ')}],
 };
 `;
 const JEST_NEXT = `const nextJest = require('next/jest');
 
 module.exports = nextJest({ dir: __dirname })({ testEnvironment: 'jsdom' });
 `;
-// The READMEs' babel.config.js, and the same presets as a .babelrc holds them.
+// The READMEs' babel.config.cjs, and the same presets as a .babelrc holds them.
 const BABEL_CONFIG = "module.exports = { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] };\n";
 const BABELRC = `${JSON.stringify({ presets: [['@babel/preset-env', { targets: { node: 'current' } }]] })}\n`;
 // The README's next.config, less the options, so next/jest reads the config withInpBlame hands back.
@@ -474,8 +480,9 @@ const jestRequiresEsm = nodeMajor > 24 || (nodeMajor === 24 && nodeMinor >= 9);
 
 // The setups the READMEs give under Jest, each beside the one thing it needs taken away, so passing says
 // the setup is what did it. `loads` is whether every test has to pass or the run has to stop at
-// ESM_REFUSED. A setup's files are removed once it has run, so an app a failure leaves behind holds the
-// setup that failed, for `npx jest` there to run again.
+// ESM_REFUSED, or at `stopsAt` where a setup gives one. `type` is what the app's package.json says for the
+// setup, where it is not the fixture's own. A setup's files are removed and its type put back once it has
+// run, so an app a failure leaves behind holds the setup that failed, for `npx jest` there to run again.
 const JEST_SETUPS = [
   {
     setup: 'run with NODE_OPTIONS=--experimental-vm-modules',
@@ -496,20 +503,45 @@ const JEST_SETUPS = [
     loads: false,
   },
   {
-    setup: 'with transformIgnorePatterns and the presets in babel.config.js',
-    files: { 'jest.config.js': jestBabel(), 'babel.config.js': BABEL_CONFIG },
+    setup: 'with transformIgnorePatterns and the presets in babel.config.cjs',
+    files: { 'jest.config.js': jestBabel(), 'babel.config.cjs': BABEL_CONFIG },
+    loads: true,
+  },
+  {
+    setup: "with the pattern beside another package's and babel.config.cjs",
+    files: { 'jest.config.js': jestBabel({ patterns: [OTHER_PATTERN, JEST_PATTERN] }), 'babel.config.cjs': BABEL_CONFIG },
+    loads: false,
+  },
+  {
+    setup: "with the pattern inside another package's and babel.config.cjs",
+    files: { 'jest.config.js': jestBabel({ patterns: [JEST_MERGED] }), 'babel.config.cjs': BABEL_CONFIG },
+    loads: true,
+  },
+  // Where package.json says "type": "module", Node loads a .js file as an ES module, Babel's config
+  // included, and the README's module.exports is not defined there. A .cjs is CommonJS under either type.
+  {
+    setup: 'in a "type": "module" app with transformIgnorePatterns and the presets in babel.config.js',
+    type: 'module',
+    files: { 'jest.config.cjs': jestBabel(), 'babel.config.js': BABEL_CONFIG },
+    loads: false,
+    stopsAt: 'module is not defined in ES module scope',
+  },
+  {
+    setup: 'in a "type": "module" app with transformIgnorePatterns and the presets in babel.config.cjs',
+    type: 'module',
+    files: { 'jest.config.cjs': jestBabel(), 'babel.config.cjs': BABEL_CONFIG },
     loads: true,
   },
   // babel-jest runs only where the Jest config sets no `transform`. ts-jest's preset sets one for .ts files
   // alone, so nothing compiles the package's .js, and its js-with-babel preset hands .js to babel-jest.
   {
-    setup: "under ts-jest's preset with transformIgnorePatterns and babel.config.js",
-    files: { 'jest.config.js': jestBabel('ts-jest'), 'babel.config.js': BABEL_CONFIG },
+    setup: "under ts-jest's preset with transformIgnorePatterns and babel.config.cjs",
+    files: { 'jest.config.js': jestBabel({ preset: 'ts-jest' }), 'babel.config.cjs': BABEL_CONFIG },
     loads: false,
   },
   {
-    setup: "under ts-jest's js-with-babel preset with transformIgnorePatterns and babel.config.js",
-    files: { 'jest.config.js': jestBabel('ts-jest/presets/js-with-babel'), 'babel.config.js': BABEL_CONFIG },
+    setup: "under ts-jest's js-with-babel preset with transformIgnorePatterns and babel.config.cjs",
+    files: { 'jest.config.js': jestBabel({ preset: 'ts-jest/presets/js-with-babel' }), 'babel.config.cjs': BABEL_CONFIG },
     loads: true,
   },
   // next/jest compiles with Next.js's own SWC, and in node_modules only the packages in transpilePackages.
@@ -546,7 +578,10 @@ function runsUnderJest(app) {
   fs.mkdirSync(path.join(app, 'app'));
   fs.writeFileSync(path.join(app, 'app/page.js'), 'export default function Page() {\n  return null;\n}\n');
   const jest = path.join('node_modules/jest', installed(app, 'jest').bin);
-  for (const { setup, files, env, loads } of JEST_SETUPS) {
+  const manifest = path.join(app, 'package.json');
+  const own = fs.readFileSync(manifest, 'utf8');
+  for (const { setup, type, files, env, loads, stopsAt = ESM_REFUSED } of JEST_SETUPS) {
+    if (type) fs.writeFileSync(manifest, `${JSON.stringify({ ...JSON.parse(own), type }, null, 2)}\n`);
     for (const [file, source] of Object.entries(files)) fs.writeFileSync(path.join(app, file), source);
     const { status, stdout, stderr, error } = spawnSync(process.execPath, [jest, '--no-cache'], {
       cwd: app,
@@ -557,9 +592,10 @@ function runsUnderJest(app) {
     if (loads) {
       assert.ok(status === 0, `Jest ${setup} exited ${status}, where the READMEs say it loads the package:\n${output}`);
     } else {
-      assert.ok(status !== 0 && output.includes(ESM_REFUSED), `Jest ${setup} was to stop at "${ESM_REFUSED}" and exited ${status}:\n${output}`);
+      assert.ok(status !== 0 && output.includes(stopsAt), `Jest ${setup} was to stop at "${stopsAt}" and exited ${status}:\n${output}`);
     }
     for (const file of Object.keys(files)) fs.rmSync(path.join(app, file));
+    fs.writeFileSync(manifest, own);
   }
 }
 
@@ -583,10 +619,11 @@ const FIXTURES = {
   // The types, as an app's tsconfig finds them. TypeScript 5, the last with node10 as it was: 6.0 fails
   // a config that sets it unless ignoreDeprecations says "6.0", and 7.0 removed it.
   types: { install: ['typescript@5'], beside: ['typescript'], check: typeChecks },
-  // Jest from 30.5, the first to give ESM_REFUSED, with each setup the READMEs give it, the Next.js and
-  // ts-jest ones included. @babel/preset-env 7 is the Babel Jest's own packages are on; 8 works as well,
-  // with npm warning that it overrides their peer ranges. ts-jest 29 is the one that takes Jest 30, and npm
-  // installs the TypeScript it asks for.
+  // Jest from 30.5, the first to give ESM_REFUSED without --experimental-vm-modules, with each setup the
+  // READMEs give it, the Next.js and ts-jest ones included. @babel/preset-env 7 is the Babel Jest's own
+  // packages are on. 8 installs beside Jest only in the same npm command, with npm warning that it overrides
+  // their peer ranges, and added to an app that already has Jest it stops at ERESOLVE, so the READMEs say 7.
+  // ts-jest 29 is the one that takes Jest 30, and npm installs the TypeScript it asks for.
   jest: {
     install: ['jest@^30.5', 'jest-environment-jsdom@^30.5', '@babel/preset-env@7', 'ts-jest@29', `next@${nextDemo.dependencies.next}`],
     beside: ['jest', 'babel-jest', 'jest-environment-jsdom', '@babel/preset-env', 'ts-jest', 'typescript', ...NEXT_APP],

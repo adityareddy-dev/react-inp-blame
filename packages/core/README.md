@@ -491,11 +491,14 @@ Under Jest, whose default runtime loads everything as CommonJS, a test that reac
 fails with "Cannot use import statement outside a module" (from Jest 30.5, "Must use import to load ES Module")
 unless Jest compiles them. With `next/jest`, add `transpilePackages: ['react-inp-blame']` to your Next.js config.
 Anywhere else, add `transformIgnorePatterns: ['/node_modules/(?!(.pnpm/)?react-inp-blame[@/])']` to the Jest
-config, which covers npm's `node_modules` and pnpm's, install `@babel/preset-env`, and put
-`presets: [['@babel/preset-env', { targets: { node: 'current' } }]]` in a `babel.config.js` beside
-`package.json`: a `.babelrc` is never read for a file in `node_modules`. A Jest config that sets its own
-`transform`, as ts-jest's preset does, has to hand `.js` files to babel-jest as well, which
-`preset: 'ts-jest/presets/js-with-babel'` does. With Jest 30.4 or later on Node 24.9 or later, running Jest with
+config, which covers npm's `node_modules` and pnpm's (where the config already has a pattern, put
+`react-inp-blame` inside its `(?!...)` instead, since Jest leaves a file uncompiled when any one matches),
+install `@babel/preset-env@7`, since Jest is on Babel 7, and put
+`presets: [['@babel/preset-env', { targets: { node: 'current' } }]]` in a `babel.config.cjs` beside
+`package.json`: a `.babelrc` is never read for a file in `node_modules`, and `.cjs` keeps the file CommonJS
+where `package.json` says `"type": "module"`. A Jest config that sets its own `transform` has to compile `.js`
+files as well; ts-jest's preset compiles only TypeScript, and `preset: 'ts-jest/presets/js-with-babel'` hands
+the rest to babel-jest. With Jest 30.4 or later on Node 24.9 or later, running Jest with
 `NODE_OPTIONS=--experimental-vm-modules` also works, with no Babel config or pattern.
 
 While on 0.x a minor release can break things (an export, an option, what a report field holds, an oldest

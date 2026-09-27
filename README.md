@@ -922,21 +922,25 @@ react-dom as it registers.
 **Under Jest.** The package is ES modules only, and Jest's default runtime loads everything as CommonJS, so a
 test that reaches it fails with "Cannot use import statement outside a module" (from Jest 30.5,
 "Must use import to load ES Module") unless Jest compiles it first. With `next/jest`, add
-`transpilePackages: ['react-inp-blame']` to your Next.js config. Anywhere else, install `@babel/preset-env`, add
-`transformIgnorePatterns: ['/node_modules/(?!(.pnpm/)?react-inp-blame[@/])']` to the Jest config, which lets
-Babel at the package in npm's `node_modules` and in pnpm's, and put the presets in a `babel.config.js`, the kind
-of Babel config that reaches into `node_modules`:
+`transpilePackages: ['react-inp-blame']` to your Next.js config. Anywhere else, install `@babel/preset-env@7`,
+since Jest is on Babel 7, add `transformIgnorePatterns: ['/node_modules/(?!(.pnpm/)?react-inp-blame[@/])']` to
+the Jest config, which lets Babel at the package in npm's `node_modules` and in pnpm's, and put the presets in a
+`babel.config.cjs`, the kind of Babel config that reaches into `node_modules`:
 
 ```js
-// babel.config.js, beside package.json
+// babel.config.cjs, beside package.json
 module.exports = { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] };
 ```
 
 The pattern alone is not enough, since babel-jest, which comes with Jest, leaves `import` and `export` as they
 are when Babel has no config, and a `.babelrc` or a `babel` key in `package.json` is not enough either: Babel
-reads those for your own files, never for one in `node_modules`. And babel-jest only runs where the Jest config
-sets no `transform` of its own, so a config that sets one, as ts-jest's preset does, has to hand `.js` files to
-babel-jest as well, which `preset: 'ts-jest/presets/js-with-babel'` does. Jest 30.5's error also offers Node
+reads those for your own files, never for one in `node_modules`. The file is `.cjs` so that it loads where
+`package.json` says `"type": "module"`, as a Vite app's does, which makes a `babel.config.js` an ES module.
+Where the Jest config already has a `transformIgnorePatterns`, put `react-inp-blame` inside its `(?!...)`
+rather than adding a second pattern, since Jest leaves a file uncompiled when any one of them matches. And
+babel-jest only runs where the Jest config sets no `transform` of its own, so a config that sets one has to
+compile `.js` files as well; ts-jest's preset compiles only TypeScript, and
+`preset: 'ts-jest/presets/js-with-babel'` hands the rest to babel-jest. Jest 30.5's error also offers Node
 24.9 or later, but there Jest loads the package as it is only from Jest 30.4 and only when run with
 `NODE_OPTIONS=--experimental-vm-modules`; on Node 20 and 22, or an older Jest, not even then. CI checks all of it
 on Jest 30, ts-jest 29, the Next.js `apps/next-demo` pins and Node 20.19, except a pnpm install, the `babel` key
