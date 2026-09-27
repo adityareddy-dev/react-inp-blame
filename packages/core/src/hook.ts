@@ -187,6 +187,11 @@ interface HookState {
   options: HookOptions | null;
   /** The hook commits are read from while installed. */
   attached: DevtoolsHook | null;
+  /**
+   * The hook in use when the page turned it off after install() (`checkHookReplaced`), which `debug.hook()` goes on
+   * describing, with the renderers that registered with it. Absent where a copy of an earlier version made the state.
+   */
+  turnedOffHook?: DevtoolsHook | null;
   /** Puts a chained hook back the way it was. */
   detach: (() => void) | null;
   /** The hook this library created. React keeps the hook it registered with for the page's life, so a second install reuses it. */
@@ -579,9 +584,10 @@ export function hookInfo(): HookInfo {
   return { owner: owner(), renderers: knownRenderers(), devtoolsLockedOut: state.devtoolsLockedOut };
 }
 
-/** What each renderer known to the hook in use handed `inject()`. */
+/** What each renderer known to the hook in use, or to the one the page turned off, handed `inject()`. */
 export function knownRenderers(): RendererInfo[] {
-  return state.attached ? [...registryOf(state.attached).values()].map((r) => r.info) : [];
+  const hook = state.attached ?? state.turnedOffHook;
+  return hook ? [...registryOf(hook).values()].map((r) => r.info) : [];
 }
 
 /** Why no react-dom on the page can be read, when every one registered has a problem; null while one can be, or before any registers. */
@@ -613,6 +619,7 @@ export function checkHookReplaced(): void {
       "the page turned its __REACT_DEVTOOLS_GLOBAL_HOOK__ off after install() (isDisabled, or no supportsFiber), so React's commits cannot be read. Interactions are still reported, without components.";
     state.detach?.();
     unusable(message);
+    state.turnedOffHook = attached;
     warnOnce('hook-disabled', message);
   } else if (attached === shim) {
     const current = (window as unknown as HookHolder)[HOOK_KEY];
@@ -655,10 +662,11 @@ function reactDomOn(hook: DevtoolsHook): boolean {
 }
 
 function owner(): string {
-  const { attached } = state;
-  if (!attached) return 'none';
-  if (attached.reactInpBlame) return 'react-inp-blame';
-  const keys = Object.keys(attached);
+  const hook = state.attached ?? state.turnedOffHook;
+  if (!hook) return 'none';
+  // The page turning the shim off empties its mark too.
+  if (hook.reactInpBlame || hook === state.shim) return 'react-inp-blame';
+  const keys = Object.keys(hook);
   return keys.length ? `existing hook (${keys.slice(0, 8).join(', ')}${keys.length > 8 ? ', ...' : ''})` : 'existing hook';
 }
 
@@ -717,6 +725,7 @@ export function uninstallHook(): void {
   if (hook) noteCommitMethods(hook);
   state.detach = null;
   state.attached = null;
+  state.turnedOffHook = null;
   state.options = null;
   state.mode = 'none';
   state.unsupported = null;

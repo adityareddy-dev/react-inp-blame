@@ -1026,6 +1026,10 @@ test('a page that turns the DevTools hook off where it is after install() is uns
       await nextTask();
       const stats = api.stats();
       assert.deepEqual({ mode: stats.mode, kind: stats.unsupportedReason?.kind, react: stats.react }, { mode: 'unsupported', kind: 'hook-disabled', react: 'unreadable' });
+      // debug.hook() still describes the hook the page turned off, and the react-dom that registered with it.
+      const info = api.debug.hook();
+      assert.match(info.owner, existing ? /^existing hook \(/ : /^react-inp-blame$/);
+      assert.deepEqual(info.renderers.map((renderer) => renderer.version), ['19.3.0']);
       const r = api.last();
       assert.ok(r);
       assert.doesNotMatch(r.explanation.cause, /didn't render anything/);
