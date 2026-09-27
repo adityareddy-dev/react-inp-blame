@@ -1,5 +1,6 @@
 import { heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
+import { unexplainedReports } from './install-state.js';
 import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
@@ -506,8 +507,12 @@ function where(c: CommitSummary): string {
 /** What a later render was made of, in the words its blame's `detail` would use, and the count for one component. */
 export const laterDetail = (c: CommitSummary): string => mostlyOf(c) ?? renderedCount(c);
 
-function blameLine(r: InteractionReport): Child[] {
+/** The row's line under its title: what took the time, or why nothing is blamed. */
+export function blameLine(r: InteractionReport): Child[] {
   const blame = r.explanation.blame;
+  // A report the library could not explain blames nothing for an error of its own, not because nothing
+  // stood out or React is not being read. Asked after the read above, which is where that error is met.
+  if (unexplainedReports.has(r)) return ['nothing is blamed: the library hit an error of its own'];
   // Nothing is blamed where React is not being read; the cause line under this says why.
   if (blame.kind === 'none' && (r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable')) return ['nothing is blamed: React is not being read'];
   // An inferred blame is the likeliest reading of component counts and phase times, not a measurement.

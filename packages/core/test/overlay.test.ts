@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { laterRenderOf, renderedVerb } from '../src/join.ts';
-import { laterDetail, titleFor } from '../src/overlay.ts';
+import { buildReport, laterRenderOf, renderedVerb, sealReport } from '../src/join.ts';
+import { blameLine, laterDetail, titleFor } from '../src/overlay.ts';
 import type { CommitSummary, InteractionReport } from '../src/types.ts';
 
 // Only what a row's title reads: the report's type, its target's label and the names of its entries.
@@ -65,4 +65,23 @@ test('the panel names the later render the note speaks of: one INP left out befo
   // Where INP timed every one, the heaviest of them.
   assert.equal(laterRenderOf({ ...r, followUps: [release] }), release);
   assert.equal(laterRenderOf({ ...r, followUps: [] }), null);
+});
+
+test('a row whose report the library could not explain says the library hit an error of its own, not that nothing stood out', (t) => {
+  t.mock.method(console, 'warn', () => {});
+  // A 40 ms click whose handlers ran from 5 to 10 ms: nothing in it stands out.
+  const click = { name: 'click', interactionId: 7, startTime: 0, duration: 40, processingStart: 5, processingEnd: 10, target: null };
+  const reading = (status: InteractionReport['reactStatus']) => sealReport(buildReport([click], [], [], [], 'attributes', [], undefined, status));
+  assert.deepEqual(blameLine(reading('reading')), ['nothing stood out']);
+  assert.deepEqual(blameLine(reading('unreadable')), ['nothing is blamed: React is not being read']);
+  // The same click again, where the first number its explanation rounds throws, whatever is true of React.
+  const round = t.mock.method(Math, 'round');
+  for (const status of ['reading', 'waiting', 'unreadable'] as const) {
+    const r = reading(status);
+    round.mock.mockImplementationOnce(() => {
+      throw new TypeError('rounding moved');
+    });
+    assert.deepEqual(blameLine(r), ['nothing is blamed: the library hit an error of its own'], status);
+    assert.equal(r.explanation.blame.kind, 'none', status);
+  }
 });
