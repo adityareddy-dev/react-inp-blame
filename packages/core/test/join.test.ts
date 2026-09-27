@@ -4017,6 +4017,31 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   ]);
 });
 
+test("a render stamped inside React's own task stays there, not in a longer script starting under a millisecond after it", () => {
+  // handleSave ran from 1 to 61 ms, React's own task from 62 to 67.5 ms committed a production render of 800 rows at
+  // 67 ms, and a timer ran from 68 to 90 ms. The stamp is a millisecond from the timer's start, and it was put in the
+  // timer, so React rendered nothing in the working time and the render was said to be the timer's.
+  const click = [entry('click', 0, 116, 1, 61)];
+  const save = loginClick('handleSave');
+  const rows = commit(67, 0, { hasDurations: false, total: 0, rendered: 800, components: [{ name: 'Row', count: 800, self: null, total: null }] });
+  const handled = script('BUTTON.onclick', 1, 60);
+  const run = (at: number, scripts: ScriptSummary[]) => report(click, [{ ...rows, at }], [frame(0, 116, [handled, ...scripts])], save);
+  const counted = { kind: 'render', name: 'List', detail: 'Row ×800', ms: null, confidence: 'inferred' };
+  const tie = run(67, [script('MessagePort.onmessage', 62, 5.5), script('TimerHandler:setTimeout', 68, 22)]);
+  assert.deepEqual(tie.explanation.blame, counted);
+  assert.doesNotMatch(tie.verdict, /React rendered inside/);
+  // A stamp at the end of React's task is in it, though 62.3 + 4.6 adds up to a hair under 66.9.
+  assert.deepEqual(run(66.9, [script('MessagePort.onmessage', 62.3, 4.6), script('TimerHandler:setTimeout', 67.5, 22)]).explanation.blame, counted);
+  // The same a millisecond past the end of a longer script before React's task.
+  const past = run(84.8, [script('TimerHandler:setTimeout', 62, 22), script('MessagePort.onmessage', 84.5, 5.5)]);
+  assert.deepEqual(past.explanation.blame, counted);
+  assert.doesNotMatch(past.verdict, /React rendered inside/);
+  // A stamp no script holds is still the timer's where it starts within a millisecond after it.
+  const between = run(67, [script('MessagePort.onmessage', 62, 4.5), script('TimerHandler:setTimeout', 68, 22)]);
+  assert.equal(between.explanation.blame.kind, 'script');
+  assert.match(between.verdict, /TimerHandler:setTimeout \(app\.js\), 22 ms, and React rendered inside it: re-rendering 800 components/);
+});
+
 test("a verdict does not say no long task was recorded where the screen update's note names one, and names a script the click waited behind", () => {
   // Ten 15 ms click handlers, then a 70 ms scroll listener that forced a render of 721 rows: under half of the
   // 157 ms screen update, so the note says it after the browser's 80 ms. The verdict is on the working time.

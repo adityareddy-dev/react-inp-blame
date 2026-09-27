@@ -1186,15 +1186,19 @@ unless the script is React's own task, which Long Animation Frames names `Messag
 screen update did not outrank the working time: that render is one the handlers scheduled, a transition
 started from the click, and it stays the interaction's render. The sentence still says React rendered inside
 that task, or the task reads as a script that held the screen update, and not as the render the verdict names.
-Where it is taken out, or where the screen update's note names the script after the handlers without a render
-in it, as it does over 100 ms, a `script` verdict names the longest of the scripts up to the end of the
-handlers and, only where it held half the screen update, the script after them, ranked by length and not by
-where they ran. A timer the input waited behind is then said as before the handler started. With none of
-those, the verdict says no long task was recorded in the working time, and not that none was recorded at all, since
-the note names that script. Ranked that way only where a render ran in it, a 70 ms listener with none was a
-`script` verdict, and with one `none`. Where React rendered nothing in the working time, the handlers are weighed
-first, as where it rendered nothing at all, and take the verdict where they ran long enough. Where the frame waited
-on the next press, the verdict does not take the script after the handlers even from half, since it is usually that
+A render is inside a script where its commit is stamped, give or take a millisecond, only where no other
+script the browser recorded holds the stamp: taken a millisecond wide regardless, a production render
+committed at the end of React's own task goes into a timer that started under a millisecond later, and so out
+of the working time, as though React had rendered nothing there. Where it is taken out, or where the screen
+update's note names the script after the handlers without a render in it, as it does over 100 ms, a `script`
+verdict names the longest of the scripts up to the end of the handlers and, only where it held half the
+screen update, the script after them, ranked by length and not by where they ran. A timer the input waited
+behind is then said as before the handler started. With none of those, the verdict says no long task was
+recorded in the working time, and not that none was recorded at all, since the note names that script. Ranked
+that way only where a render ran in it, a 70 ms listener with none was a `script` verdict, and with one
+`none`. Where React rendered nothing in the working time, the handlers are weighed first, as where it
+rendered nothing at all, and take the verdict where they ran long enough. Where the frame waited on the next
+press, the verdict does not take the script after the handlers even from half, since it is usually that
 press's handler: a keyup's verdict once named the next key's 50 ms handler. A script after the handlers is said as
 after the handler finished wherever a verdict names it. The browser's own work is the frame's style, layout and
 paint where the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does

@@ -1312,15 +1312,21 @@ function explain(r: InteractionReport): Explanation {
    * `MessagePort.onmessage`, as though React had rendered nothing. The clause still says the render ran inside
    * the task, though, or the note put 150 ms on `MessagePort.onmessage` and never said that the render the
    * verdict named was what it did. Where the build keeps when a render began, it has to have begun inside the
-   * script too, and a render duration longer than the script cannot have been in it. A hydration is left
-   * where it was: it has a sentence of its own.
+   * script too, and a render duration longer than the script cannot have been in it. A stamp up to a
+   * millisecond either side of the script is its only where no other script the browser recorded holds it: a
+   * production render committed at the end of React's own task was put in a timer that started under a
+   * millisecond later, and so out of the working time, as though React had rendered nothing there. (The end is
+   * compared a hair wide, as for the layout's commits below.) A hydration is left where it was: it has a
+   * sentence of its own.
    */
+  const holds = (s: ScriptSummary, t: number) => t >= s.start && t <= s.start + s.duration + 1e-6;
   const ranInside = (x: CommitSummary, s: ScriptSummary) =>
     carriesWork(x) &&
     x.hydratedTarget == null &&
     x.at > processingEnd + STAMP_TOLERANCE &&
     x.at >= s.start - STAMP_TOLERANCE &&
     x.at <= s.start + s.duration + STAMP_TOLERANCE &&
+    (holds(s, x.at) || !frames.some((f) => f.scripts.some((o) => o !== s && holds(o, x.at)))) &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
   const ranInLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
