@@ -1381,19 +1381,19 @@ function explain(r: InteractionReport): Explanation {
   const hasDurations = (c ?? r.commits[0])?.hasDurations ?? false;
   /**
    * The script a verdict names once React is ruled out: the longest anywhere in the interaction, except
-   * where a render ran in the late script. The screen update's note says that script and the render in
-   * it, so the verdict takes it only where it held half of the screen update, and says it ran after the
-   * handler finished: a scroll listener that forced a 100 ms render in its 150 ms, after a pointerdown,
-   * pointerup and click of 60, 60 and 70 ms, was once named as though it had run in the working time. A
-   * 40 ms listener in a 157 ms screen update that spent 110 ms on style and layout is under half of either
-   * phase, and is left to the note. The rest is ranked by length, not by where it ran, against every script
-   * up to the end of the handlers: ranked by where, a 20 ms click handler took the verdict from the 150 ms
-   * listener, and a 25 ms pointerdown listener from a 120 ms timer the click waited behind, which was then
-   * said nowhere.
+   * where the screen update's note names the late script, which it does wherever a render ran in it and,
+   * with none, over PRESENTATION_NOTE_MS. The verdict then takes that script only where it held half of
+   * the screen update: a 40 ms listener in a 157 ms screen update that spent 110 ms on style and layout is
+   * under half of either phase, and is left to the note, with a render in it or without. Taken without, a
+   * 60 ms listener was a `script` verdict where the same listener with a render in it was `none`. The rest
+   * is ranked by length, not by where it ran, against every script up to the end of the handlers: ranked by
+   * where, a 20 ms click handler took the verdict from the 150 ms listener, and a 25 ms pointerdown listener
+   * from a 120 ms timer the click waited behind, which was then said nowhere.
    */
   const lateOnly = insideLate.length > 0 && !c;
-  const earlyScript = insideLate.length ? longestPart(scriptParts(frames, r.start, processingEnd)) : null;
-  const ranScript = !insideLate.length ? anyScript : lateLeads && (!earlyScript || lateLeads.ms > earlyScript.ms) ? lateLeads : earlyScript;
+  const lateNoted = insideLate.length > 0 || (!!lateScript && !heldByNext && r.presentation > PRESENTATION_NOTE_MS);
+  const earlyScript = lateNoted ? longestPart(scriptParts(frames, r.start, processingEnd)) : null;
+  const ranScript = !lateNoted ? anyScript : lateLeads && (!earlyScript || lateLeads.ms > earlyScript.ms) ? lateLeads : earlyScript;
   // Where every render ran in the script after the handlers, the screen update's note says it: React did
   // render, just not in the working time, and a verdict that names no render says that much.
   const noneWorking = lateOnly && !unjoined ? "React didn't render anything in the working time" : renderedNothing;
@@ -2017,14 +2017,14 @@ function explain(r: InteractionReport): Explanation {
     const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(ranScript.ms) < Math.round(ranScript.script.duration) ? ' of it' : '';
-    // Where a render ran in the script after the handlers the sentence begins with the working time, so a
-    // script outside it says where it ran: after the handlers, or before them, a timer the input waited behind.
+    // A script that started after the handlers says so wherever it is named: said bare, a 22 ms timer after a
+    // Sheet's 49 ms of working time read as the handler's. Where the note names the script after the handlers,
+    // the verdict is ranked against the ones before it, so a timer the input waited behind says so too.
     const s = ranScript.script;
-    const where = !insideLate.length
-      ? ''
-      : ranScript === lateLeads
+    const where =
+      s.start >= processingEnd
         ? ' after the handler finished'
-        : s.start + s.duration <= processingStart + STAMP_TOLERANCE
+        : lateNoted && s.start + s.duration <= processingStart + STAMP_TOLERANCE
           ? ' before the handler started'
           : '';
     const ran = `${scriptPhrase(s)} ran for ${ms(ranScript.ms)}${ofIt}${where}`;
@@ -2042,9 +2042,9 @@ function explain(r: InteractionReport): Explanation {
     // and its scripts are either too short to name or the handler's, which holds React's render (above).
     // A count under the library's own bars reads as it did, in any build.
     const unmeasured = r.frames.length === 0 ? ` No long animation frame covered the ${kind}, so how much of the working time went to any styles and layout it forced is unmeasured.` : '';
-    // Where a render ran in the script after the handlers, the screen update's note names that script,
-    // 70 ms of it in a 157 ms screen update, so the sentence says only that none ran long before it.
-    const noLongTask = `no long task was recorded${insideLate.length ? ` in ${lateOnly && !unjoined ? 'it' : 'the working time'}` : ''}`;
+    // Where the screen update's note names the script after the handlers, 70 ms of it in a 157 ms screen
+    // update, the sentence says only that none ran long before it.
+    const noLongTask = `no long task was recorded${lateNoted ? ` in ${lateOnly && !unjoined ? 'it' : 'the working time'}` : ''}`;
     cause = shortOf
       ? `${shortOf}; the rest went to waiting and painting.${unmeasured}`
       : c

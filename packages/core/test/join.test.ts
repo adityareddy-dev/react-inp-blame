@@ -3096,10 +3096,14 @@ test('a render known only by its counts is not blamed under a long task of worki
   const covered = at(52.4, [frame(0, 80, [script('#document.onclick', 3, 10, 0)])]);
   assert.equal(covered.blame.kind, 'none');
   assert.equal(covered.cause, 'In 49 ms of working time, short of a long task, React was re-rendering 56 components inside Presence; the rest went to waiting and painting.');
-  // A script the frame lists after the handlers is still named: React's render did not run in it.
+  // A script the frame lists after the handlers is still named: React's render did not run in it. It is said
+  // to have run after the handler finished, or it reads as the handler's.
   const later = at(52.4, [frame(0, 80, [script('setTimeout', 58, 22, 0)])]);
   assert.deepEqual([later.blame.kind, later.blame.name, later.blame.detail, later.blame.confidence], ['script', 'setTimeout', null, 'measured']);
-  assert.equal(later.cause, 'In 49 ms of working time, short of a long task, React was re-rendering 56 components inside Presence; a script (setTimeout, app.js) ran for 22 ms.');
+  assert.equal(
+    later.cause,
+    'In 49 ms of working time, short of a long task, React was re-rendering 56 components inside Presence; a script (setTimeout, app.js) ran for 22 ms after the handler finished.',
+  );
   // A frame that covered the click and listed the handler's script: 300 components re-rendered inside List in
   // 45 ms of working time, with 45 ms charged to the root's click listener. That script holds React's render
   // as well as the handler, so it is not measured in the render's place; the report blames nothing, as it
@@ -3670,14 +3674,30 @@ test("a verdict does not say no long task was recorded where the screen update's
     'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 80 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 70 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
   ]);
   // The same where the handlers rendered 3 components of their own in a production build.
-  const small = seventy([
-    commit(195, 0, { hasDurations: false, total: 0, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] }),
-    commit(270, 0, { ...table, hasDurations: false, total: 0, startedAt: null }),
-  ]);
+  const three = commit(195, 0, { hasDurations: false, total: 0, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] });
+  const small = seventy([three, commit(270, 0, { ...table, hasDurations: false, total: 0, startedAt: null })]);
   assert.equal(
     small.cause,
     "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)) and no long task was recorded in the working time, so the rest went to waiting and painting.",
   );
+  // With no render in the listener the note names it all the same, over 100 ms, and the verdict is the same:
+  // taken without the render, the listener was a `script` verdict, and with it `none`, for the same 70 ms.
+  const bare = seventy([three]);
+  assert.deepEqual([bare.blame, bare.cause], [small.blame, small.cause]);
+  assert.deepEqual(bare.notes, [
+    'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 80 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 70 ms.',
+  ]);
+  // From half of the screen update the listener is the verdict's, said as after the handler finished, and so is
+  // one in a screen update of 100 ms or under, which has no note to name it.
+  const listened = (end: number, duration: number, styleAndLayoutStart: number) =>
+    report([entry('click', 0, end, 3, 203)], [three], [frame(0, end, [...tenClicks, script('DIV.onscroll', 205, duration)], styleAndLayoutStart)], [input(0, 'click')])
+      .explanation;
+  const half = listened(360, 80, 290);
+  assert.deepEqual(half.blame, { kind: 'script', name: 'DIV.onscroll', detail: null, ms: 80, confidence: 'measured' });
+  assert.equal(half.cause, "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (DIV.onscroll, app.js) ran for 80 ms after the handler finished.");
+  const unnoted = listened(299, 70, 280);
+  assert.deepEqual([unnoted.blame.kind, unnoted.blame.name, unnoted.notes], ['script', 'DIV.onscroll', []]);
+  assert.equal(unnoted.cause, "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them)); a script (DIV.onscroll, app.js) ran for 70 ms after the handler finished.");
   // And where a commit could not be tied to the click, "it" would be the click, so the working time is said.
   assert.equal(
     seventy([commit(270, 0, table)], [input(0, 'click', { work: { endedAt: 0, unjoined: [100] } })]).cause,
@@ -3699,6 +3719,15 @@ test("a verdict does not say no long task was recorded where the screen update's
   assert.deepEqual(behind.notes, [
     'After the handler finished, the screen took another 157 ms to update, mostly the browser recalculating styles and layout and painting the frame: 110 ms. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms, and React rendered inside it: 25 ms re-rendering 721 components inside TableBody, mostly Row (30 of them, 20 ms).',
   ]);
+  // And with no render in the listener, which the note names all the same.
+  const behindBare = report(
+    [entry('click', 0, 420, 63, 263)],
+    [],
+    [frame(0, 420, [script('TimerHandler:setTimeout', 0, 62), ...shifted, script('DIV.onscroll', 265, 40)], 310)],
+    [input(0, 'click')],
+  ).explanation;
+  assert.deepEqual(behindBare.blame, behind.blame);
+  assert.equal(behindBare.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 62 ms before the handler started.");
 
   // A 120 ms timer the click waited 121 ms behind, a 25 ms pointerdown listener, then a 40 ms scroll listener
   // that held the 61 ms screen update and forced a render. The timer is the longest, and is not dropped for the

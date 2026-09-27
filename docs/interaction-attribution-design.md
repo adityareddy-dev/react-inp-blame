@@ -1121,13 +1121,15 @@ unless the script is React's own task, which Long Animation Frames names `Messag
 screen update did not outrank the working time: that render is one the handlers scheduled, a transition
 started from the click, and it stays the interaction's render. The sentence still says React rendered inside
 that task, or the task reads as a script that held the screen update, and not as the render the verdict names.
-Where it is taken out, a `script` verdict names the longest of the scripts up to the end of the handlers and,
-only where it held half the screen update, the script after them, ranked by length and not by where they ran.
-One outside the working time is said as after the handler finished, or as before the handler started for a
-timer the input waited behind. With none of those, the verdict says no long task was recorded in the working
-time, and not that none was recorded at all, since the note names that script. The browser's own work is the
-frame's style, layout and paint where the
-frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does after a key
+Where it is taken out, or where the screen update's note names the script after the handlers without a render
+in it, as it does over 100 ms, a `script` verdict names the longest of the scripts up to the end of the
+handlers and, only where it held half the screen update, the script after them, ranked by length and not by
+where they ran. A timer the input waited behind is then said as before the handler started. With none of
+those, the verdict says no long task was recorded in the working time, and not that none was recorded at all,
+since the note names that script. Ranked that way only where a render ran in it, a 70 ms listener with none
+was a `script` verdict, and with one `none`. A script after the handlers is said as after the handler finished
+wherever a verdict names it. The browser's own work is the frame's style, layout and paint where the frame
+timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does after a key
 press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a click
 Chromium does most of that work for the pointer's hit test, before the frame starts rendering. After Enter the
 same work lands inside the working time instead: the keydown's handlers and the click's took 1 ms, then the keyup
