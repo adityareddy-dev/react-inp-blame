@@ -719,10 +719,13 @@ export function installHook(opts: HookOptions): void {
 /** Stops reading commits, forgets what was read, and puts a chained hook back the way it was. The shim stays: React still holds it. */
 export function uninstallHook(): void {
   const hook = state.attached;
+  // Looked at before the undo changes the methods: a hook the page turned off since the last look keeps the record
+  // it has, or the next install() would take its no-ops for methods React still calls.
+  const stillOn = hook && !turnedOff(hook);
   state.detach?.();
   // React calls whatever the hook holds now, the page's own methods put back or another tool's wrapped around the
   // library's, so a later install() over a hook turned off since React registered tells that apart from a no-op.
-  if (hook) noteCommitMethods(hook);
+  if (stillOn) noteCommitMethods(hook);
   state.detach = null;
   state.attached = null;
   state.turnedOffHook = null;
