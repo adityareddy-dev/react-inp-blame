@@ -1636,7 +1636,10 @@ function explain(r: InteractionReport): Explanation {
   // with no commit at all is React rendering nothing, so the whole working time is outside it whatever the build
   // records: a 300 ms handler that set no state is the handler's, as it is beside a 1 ms render. Where a long
   // animation frame recorded a script over the interaction, the browser's own record of it names it, as it did.
-  const reactIdle = !r.commits.length && !blind && !unjoined;
+  // A click React never dispatched, on server-rendered HTML it had not hydrated, is left out: the handler named
+  // there is a hydrated component's above the boundary, which never ran, and the working time can be React's own
+  // attempt at hydrating it.
+  const reactIdle = !r.commits.length && !blind && !unjoined && r.hydration?.kind !== 'not-hydrated';
   const outsideMatters = (hasDurations || (reactIdle && !anyScript)) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
   // Without durations (production builds) a render only earns the blame when it is big; a
   // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler

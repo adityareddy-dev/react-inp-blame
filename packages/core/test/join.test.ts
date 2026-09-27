@@ -1666,6 +1666,17 @@ test('where React is read and rendered nothing, all of the working time is outsi
   assert.equal(report(click, [], null, save, 'attributes', [], undefined, 'installed-late').explanation.blame.kind, 'none');
   const unjoinable = [{ ...save[0]!, work: { endedAt: 0, unjoined: [50] } }];
   assert.deepEqual(report(click, [], null, unjoinable).explanation.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
+  // Nor is a click React never dispatched, on server-rendered HTML it had not hydrated yet: the handler named is a
+  // hydrated component's above the boundary, which never ran, and the working time can be React's own attempt at
+  // hydrating it.
+  const undispatched = [input(0, 'click', { ...save[0]!, dehydrated: { scope: 'boundary', owner: 'ProductPage' } })];
+  const blocked = report(click, [], null, undispatched);
+  assert.deepEqual(blocked.explanation.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
+  assert.equal(
+    blocked.explanation.cause,
+    "This click landed on server-rendered HTML that React had not hydrated yet, so React did not dispatch it and no React handler ran for it. React didn't render anything; this browser does not report long tasks, so what ran instead is unknown.",
+  );
+  assert.doesNotMatch(report(click, [], [], undispatched).explanation.cause, /handleSave/);
   // And a handler short of the bar is still nobody's.
   assert.equal(report([entry('click', 0, 40, 5, 20)], [], [], save).explanation.blame.kind, 'none');
 });

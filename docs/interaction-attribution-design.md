@@ -1122,7 +1122,10 @@ and painting, while a 1 ms commit beside the same handler made it the handler's,
 read, or no react-dom has loaded yet, and `unjoinedCommits` is 0, no commit means none of the working
 time was React's, so the handler is weighed as it is beside a render. Where a long animation frame
 recorded a script over the interaction, the browser's record of it still names it, and where install()
-ran too late or react-dom cannot be read, the setup is still the verdict.
+ran too late or react-dom cannot be read, the setup is still the verdict. A click React never dispatched,
+on server-rendered HTML it had not hydrated yet, is left as it was: the handler named there is a hydrated
+component's above the boundary, which never ran, and the working time can be React's own attempt at
+hydrating it.
 
 **How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's own time (the
