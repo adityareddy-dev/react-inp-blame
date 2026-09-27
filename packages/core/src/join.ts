@@ -1726,11 +1726,17 @@ function explain(r: InteractionReport): Explanation {
   const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
   // A wait before the handlers that is a long task itself, and at least the handlers' own time and the screen
   // update, is the answer over anything inside them: a 58 ms handler or a 40 ms render after a 400 ms wait did
-  // not make the click slow. The same test opens the waiting rung and closes every rung between here and it, the
-  // handler a production build cannot time included, so a rung this closes is one the wait takes. A wait short of
-  // a long task closes nothing, or a 38 ms handler after a 45 ms wait would be nobody's. What a closed rung would
-  // have named is said under the wait, in `closedByTheWait`.
+  // not make the click slow. The same test opens the waiting rung and closes each rung from the forced layout down
+  // to it, the handler a production build cannot time included, so a rung this closes is one the wait takes. A
+  // wait short of a long task closes nothing, or a 38 ms handler after a 45 ms wait would be nobody's. What a
+  // closed rung would have named is said under the wait, in `closedByTheWait`, and a forced layout in the note
+  // that follows every blame that is not one.
   const waitingWins = r.inputDelay > LONG_TASK_MS && r.inputDelay >= r.processing - between && r.inputDelay >= r.presentation;
+  // The handler a build that records no durations cannot time, named where the rungs above it are not and the
+  // working time was a long task and at least the screen update. The effects are measured in every build, so they
+  // come off what it is said to have taken.
+  const untimedHandler = !!c && !hasDurations && !!handler && longTaskOfWork && r.processing >= r.presentation;
+  const untimedTook = effects >= 1 || between >= 1 ? `about ${ms(r.processing - between - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
@@ -1744,9 +1750,9 @@ function explain(r: InteractionReport): Explanation {
     forcedWhileHandling >= FORCED_LAYOUT_MIN_SHARE * handledWindow &&
     forcedWhileHandling > renderTotal &&
     forcedWhileHandling > outside &&
-    // A longer wait before the handlers is the answer, as it is for the handler and render rungs: 26 ms
+    // A long wait before the handlers is the answer, on the same test as the handler and render rungs: 26 ms
     // of layout at the end of a 300 ms wait did not make the click slow.
-    r.processing >= r.inputDelay &&
+    !waitingWins &&
     !screenOutranks;
 
   /**
@@ -1764,7 +1770,9 @@ function explain(r: InteractionReport): Explanation {
    * where the verdict really is the screen update, because its wording ("... before that") is about
    * the screen update. Hydration sits above the comparison and closes nothing, so repeating its
    * milliseconds as a leftover would say them twice. A `waiting` verdict can take the blame with a
-   * rung closed, and there `closedByTheWait` says it instead, worded for the wait.
+   * rung closed, and there `closedByTheWait` says it instead, worded for the wait. The handler a
+   * production build cannot time is said only there: its rung already asks for working time at least
+   * as long as the screen update, so the screen update never closes it.
    */
   const closedOff = (when: string): string | null =>
     handlerWins
@@ -1783,7 +1791,9 @@ function explain(r: InteractionReport): Explanation {
                 ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldAll ? ',' : ''} in the ${ms(r.processing)} of working time ${when}.`
                 : `React was ${HEDGE} still ${renderPhrase(rc)}, in the ${ms(r.processing)} of working time ${when}.`,
           )
-        : null;
+        : untimedHandler
+          ? `${cap(handler)} ${HEDGE} still took ${untimedTook} of working time ${when}.`
+          : null;
   const closedByTheScreen = screenOutranks ? closedOff('before that') : null;
   // The same for a wait before the handlers that took the verdict: a 380 ms render after a 400 ms wait is worth
   // knowing about too. It says "after the wait" rather than "after that", since other notes can come between it
@@ -1979,7 +1989,7 @@ function explain(r: InteractionReport): Explanation {
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
     blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
-  } else if (c && !hasDurations && handler && longTaskOfWork && r.processing >= r.inputDelay && r.processing >= r.presentation && !waitingWins) {
+  } else if (untimedHandler && !waitingWins) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list
     // among the components, and more of the working time than a tree accounts for.
     const howLittle =
@@ -1988,10 +1998,8 @@ function explain(r: InteractionReport): Explanation {
         : c.rendered < RENDER_MIN_COMPONENTS_BESIDE_HANDLER
           ? `React ${renderedVerb(c)} only ${plural(c.rendered, 'component')}`
           : `React ${renderedVerb(c)} ${renderedWhere(c)}, none of them ${RENDER_MIN_COMPONENTS_BESIDE_HANDLER} times over, and ${ms(r.processing)} is more than ${RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER} ms for each of them`;
-    // The effects are measured in every build, so they come off what the handler is said to have taken.
-    const took = effects >= 1 || between >= 1 ? `about ${ms(r.processing - between - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
     const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';
-    cause = `${cap(handler)} ${HEDGE} took ${took}: ${howLittle}${ranEffects}.${profiling}`;
+    cause = `${cap(handler)} ${HEDGE} took ${untimedTook}: ${howLittle}${ranEffects}.${profiling}`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (waitingWins) {
     // What the input waited behind is usually on record: the long animation frame that was open when

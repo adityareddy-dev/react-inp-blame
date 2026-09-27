@@ -1092,17 +1092,21 @@ site, paging a calendar forward one month (5 ms of working time, 82 of the scree
 85) came back `painting` and `measured` because its commit touched two. Two interactions of the same
 shape, one offered as a guess and the other as a measurement. They now read the same.
 
-**A long wait before the handlers outranks what ran in them.** A wait of 50 ms or more, a long task
-itself, that is at least the handlers' own time and the screen update is the verdict over a handler or
-a render inside the working time, as it was over a forced layout. It is the test the waiting branch
-asks, so a branch it closes is one the wait takes, and a wait under 50 ms closes nothing: a 38 ms
-handler after a 45 ms wait stays the handler's. Until 2026-09-26 only a forced layout, and a handler a
-production build could not time, stepped aside for it: a 480 ms click that waited 400 ms and then ran
-its handler for 58 ms was blamed on the handler, with the wait said nowhere but the phases, and optimising
-that handler would barely have moved it. What ran after the wait is still said, in a note with the figure
-and the hedge the closed branch would have given it: "The click handler handleSave still ran for about
-58 ms of the 60 ms of working time after the wait." Where the screen update outranks the working time
-too, the working time is the smallest of the three phases, and no note is added.
+**A long wait before the handlers outranks what ran in them.** A wait over 50 ms, a long task itself,
+that is at least the handlers' own time and the screen update is the verdict over a handler, a render
+or a forced layout inside the working time. It is the test the waiting branch asks, so a branch it
+closes is one the wait takes, and a wait of 50 ms or less closes nothing: a 38 ms handler after a 45 ms
+wait stays the handler's, and 40 ms of forced layout after a 48 ms wait stays the layout's. Until
+2026-09-26 only a forced layout, and a handler a production build could not time, stepped aside for it,
+on a test of their own: any wait longer than the working time, under 50 ms too, and never one shorter,
+even where part of the working time went by between the handlers. A 480 ms click that waited 400 ms and
+then ran its handler for 58 ms was blamed on the handler, with the wait said nowhere but the phases, and
+optimising that handler would barely have moved it. What ran after the wait is still said, in a note
+with the figure and the hedge the closed branch would have given it: "The click handler handleSave still
+ran for about 58 ms of the 60 ms of working time after the wait." A production build names the handler
+the same way, hedged, and a forced layout keeps the note it has under any verdict but its own. Where the
+screen update outranks the working time too, the working time is the smallest of the three phases, and
+no note is added.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click
@@ -1121,7 +1125,7 @@ the render durations plus the forced layout), and only when that is a quarter of
 (in a production build committing the demo's 1441-row list takes a fifth of it outside React's
 durations); a render from 5 ms with durations, or from 10 components by counts
 and 50 beside a named handler, and by counts never under 50 ms of working time; forced layout from 50 ms, or 25 ms without render durations, and half the
-window it was counted across, and never over a longer wait before the handlers,
+window it was counted across, and never over a long wait before the handlers, as above,
 with one script having to hold nine tenths of a window's forced layout before its name is used for
 all of it; a Long Animation
 Frames script from 20 ms; waiting, painting and

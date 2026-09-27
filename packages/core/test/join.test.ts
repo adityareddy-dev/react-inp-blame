@@ -2085,7 +2085,7 @@ test('a wait that is the verdict is not said again in a note, and one under anot
   assert.ok(between.explanation.notes.includes('It also waited 60 ms before the handler could start, because the main thread was busy.'));
 });
 
-test('a handler or a render shorter than a long wait before the handlers does not take the verdict from it', () => {
+test('a handler, a render or a forced layout shorter than a long wait before the handlers does not take the verdict from it', () => {
   // A 480 ms click that waited 400 ms, then ran handleSave for 58 ms and rendered for 2. Optimising
   // handleSave would barely move it.
   const click = [entry('click', 0, 480, 400, 460)];
@@ -2114,20 +2114,37 @@ test('a handler or a render shorter than a long wait before the handlers does no
   assert.deepEqual(near.explanation.blame, waited);
   assert.deepEqual(near.explanation.notes, ['React still spent 380 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) in the 390 ms of working time after the wait.']);
   // A production build's handler, which it cannot time, steps aside on the same test, where the wait ties the
-  // working time and where a keyup handled later in the frame puts time between the handlers. Its sentence is
-  // for a count that does not explain the working time, and 60 of one component does.
-  const rows = { hasDurations: false, total: 0, rendered: 60, components: [{ name: 'Row', count: 60, self: null, total: null }] };
-  const tied = report([entry('click', 0, 216, 100, 200)], [commit(190, 0, rows)], [], save);
-  assert.deepEqual(tied.explanation.blame, { ...waited, ms: 100 });
-  assert.deepEqual(tied.explanation.notes, ['React was most likely still re-rendering 60 components inside List, mostly Row (60 of them), in the 100 ms of working time after the wait.']);
-  const keyed = report([entry('keydown', 0, 192, 90, 150), entry('keyup', 100, 92, 180, 181)], [commit(149, 0, rows)], [], [{ ...loginClick('handleKey')[0]!, type: 'keydown' }]);
-  assert.deepEqual(keyed.explanation.blame, { ...waited, ms: 90 });
-  assert.doesNotMatch(keyed.verdict, /handleKey/);
+  // working time and where a keyup handled later in the frame puts time between the handlers, and is said after
+  // the wait as a render is. Its sentence is for a count that does not explain the working time: 3 components
+  // do not, and 60 of one component do, so there the render is said.
+  const counted = (n: number) => ({ hasDurations: false, total: 0, rendered: n, components: [{ name: 'Row', count: n, self: null, total: null }] });
+  const tied = (n: number) => report([entry('click', 0, 216, 100, 200)], [commit(190, 0, counted(n))], [], save);
+  assert.deepEqual(tied(3).explanation.blame, { ...waited, ms: 100 });
+  assert.deepEqual(tied(3).explanation.notes, ['The click handler handleSave most likely still took the 100 ms of working time after the wait.']);
+  assert.deepEqual(tied(60).explanation.blame, { ...waited, ms: 100 });
+  assert.deepEqual(tied(60).explanation.notes, ['React was most likely still re-rendering 60 components inside List, mostly Row (60 of them), in the 100 ms of working time after the wait.']);
+  const keyed = (n: number) => report([entry('keydown', 0, 192, 90, 150), entry('keyup', 100, 92, 180, 181)], [commit(149, 0, counted(n))], [], [{ ...loginClick('handleKey')[0]!, type: 'keydown' }]);
+  assert.deepEqual(keyed(3).explanation.blame, { ...waited, ms: 90 });
+  assert.deepEqual(keyed(3).explanation.notes, ['The key press handler handleKey most likely still took about 61 ms of the 91 ms of working time after the wait.']);
+  assert.deepEqual(keyed(60).explanation.blame, { ...waited, ms: 90 });
+  assert.doesNotMatch(keyed(60).verdict, /handleKey/);
+  // The 400 ms wait in a production build says the handler after it too, as the build that times it does.
+  assert.deepEqual(report(click, [commit(450, 0, counted(3))], [], save).explanation.notes, ['The click handler handleSave most likely still took the 60 ms of working time after the wait.']);
+  // A forced layout steps aside on the same test: 55 ms of it in the key press's first 60 ms of handlers, after an
+  // 80 ms wait and before a keyup handled 40 ms later. It is still said, in the note on forced layout.
+  const layout = report([entry('keydown', 0, 192, 80, 140), entry('keyup', 100, 92, 180, 181)], [], [frame(70, 125, [script('INPUT.onkeydown', 80, 60, 55)])], [input(0, 'keydown')]);
+  assert.deepEqual(layout.explanation.blame, { ...waited, ms: 80 });
+  assert.match(layout.verdict, /The browser also spent 55 ms recalculating styles and layout in scripts before the paint\./);
   // A wait shorter than the working time leaves the render its verdict, and one short of a long task
-  // leaves the handler its own: a 38 ms handler after 45 ms is not nothing.
+  // leaves the handler its own: a 38 ms handler after 45 ms is not nothing. A wait of 50 ms is not over
+  // a long task either.
   assert.equal(report([entry('click', 0, 110, 30, 90)], [commit(80, 0, { total: 40 })], []).explanation.blame.kind, 'render');
   const brief = report([entry('click', 0, 96, 45, 85)], [commit(84, 0, { total: 2 })], [], save);
   assert.deepEqual(brief.explanation.blame, { kind: 'handler', name: 'handleSave', detail: 'SignInPage', ms: 38, confidence: 'measured' });
+  assert.equal(report([entry('click', 0, 104, 50, 95)], [commit(94, 0, { total: 2 })], [], save).explanation.blame.kind, 'handler');
+  // Nor does it close a forced layout: 40 ms of it in 45 ms of working time after a 48 ms wait is the layout's.
+  const briefLayout = report([entry('click', 0, 104, 48, 93)], [], [frame(0, 104, [script('BUTTON.onclick', 48, 45, 40)])], [input(0, 'click')]);
+  assert.deepEqual(briefLayout.explanation.blame, { kind: 'layout', name: 'BUTTON.onclick', detail: null, ms: 40, confidence: 'measured' });
 });
 
 test('the render blame names the commit whose committing took the time', () => {
