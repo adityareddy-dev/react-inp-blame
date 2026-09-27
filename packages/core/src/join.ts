@@ -129,6 +129,11 @@ const RUN_NODES = 16;
 // marks contenteditable="false" is still inside the editor. The browser reads "FALSE" as "false", and a
 // selector compares a value that way only with the i flag.
 const TYPED_IN = '[contenteditable]:not([contenteditable="false" i]),[role="textbox"],[role="searchbox"],[role="combobox"],[role="spinbutton"]';
+// How many elements above the one an input landed on are asked whether an EditContext is attached. An
+// editor built on one takes key presses in the element it is attached to and draws what was typed inside
+// it, a word in a line, and nothing in the markup says so, so it is looked for the way a control is, not
+// by a selector.
+const EDIT_CONTEXT_ANCESTORS = 5;
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
@@ -826,8 +831,9 @@ function describeTarget(node: Node, owners: readonly string[], handler: string |
  * input's type, or its data-testid or data-test. Where `labels` is 'text', an element with no aria-label
  * that is not a form field is named by its first run of text before those data attributes are tried.
  * What a person types in is a form field wherever it is: anything inside an editor, or inside an element
- * with a text field's role, whose text is what they typed. Only an input is named by its type: a select
- * trigger with the role combobox is a button, and the type on a button names nothing.
+ * with a text field's role, whose text is what they typed, and an element an EditContext is attached to,
+ * or one up to five elements inside it. Only an input is named by its type: a select trigger with the
+ * role combobox is a button, and the type on a button names nothing.
  */
 export function labelOf(node: Node, labels: LabelSource): string | null {
   const landed = elementOf(node);
@@ -847,14 +853,28 @@ export function labelOf(node: Node, labels: LabelSource): string | null {
 }
 
 /** Is `el` itself one a person types in: a textarea, an editor, or an element with a text field's role? */
-const typedIn = (el: Element): boolean => el.tagName.toLowerCase() === 'textarea' || !!el.matches?.(TYPED_IN);
+const typedIn = (el: Element): boolean => el.tagName.toLowerCase() === 'textarea' || !!el.matches?.(TYPED_IN) || hasEditContext(el);
 
 /**
  * Is `el` inside an editor or an element with a text field's role, or in a document in designMode? Asked
  * of the element an input landed on, which is inside anything the control around it is inside. `closest`
- * rather than a walk up, since a label is read at every key press.
+ * rather than a walk up, since a label is read at every key press, except for an EditContext, which no
+ * selector can find: that is looked for on the element and its five nearest ancestors.
  */
-const editing = (el: Element): boolean => (el as HTMLElement).isContentEditable === true || !!el.closest?.(TYPED_IN);
+const editing = (el: Element): boolean => (el as HTMLElement).isContentEditable === true || !!el.closest?.(TYPED_IN) || editContextAround(el);
+
+/**
+ * Is an EditContext attached to `el` or to one of its five nearest ancestors? A key press lands on the
+ * element it is attached to, and a click on what it drew lands a few elements inside that one.
+ */
+function editContextAround(el: Element): boolean {
+  let at: Element | null = el;
+  for (let up = 0; at && up <= EDIT_CONTEXT_ANCESTORS; up++, at = at.parentElement) if (hasEditContext(at)) return true;
+  return false;
+}
+
+/** Has the page's code attached an EditContext to `el`, which Chromium then hands its key presses to? */
+const hasEditContext = (el: Element): boolean => (el as { editContext?: object | null }).editContext != null;
 
 /** Whitespace collapsed, cut at 40 characters. */
 function clip(text: string): string {

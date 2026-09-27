@@ -429,9 +429,10 @@ element it names: its aria-label, a form field's placeholder, aria-placeholder o
 or its data-testid or data-test. The text an element shows can be someone's name or email, and reports
 are made to be forwarded, so reading it is opt-in there: `install({ labels: 'text' })`. Development
 builds read it by default. An element inside a contenteditable editor, or inside one with the role
-`textbox`, `searchbox`, `combobox` or `spinbutton`, is named like a form field, so the text someone typed
-there is not read. An editor that draws its text in ordinary elements and takes key presses in a hidden
-one, as Monaco does, cannot be told from the rest of the page, so a click on that text can be named by it.
+`textbox`, `searchbox`, `combobox` or `spinbutton`, is named like a form field, and so is an element an
+EditContext is attached to, or one up to five elements inside it, so the text someone typed there is not
+read. An editor that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco
+does, cannot be told from the rest of the page, so a click on that text can be named by it.
 
 ## Clicks that land before hydration
 

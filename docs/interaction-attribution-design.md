@@ -491,13 +491,16 @@ and, where text is allowed, from the first run of text of an element with no ari
 form field. Anything a person types in is a form field here, since its text is what they typed: anything
 inside an element with the role textbox, searchbox, combobox or spinbutton, or inside a contenteditable
 editor, a mention chip it marks contenteditable="false" included. That is asked of `closest` rather than
-found by walking up, since a label is read at every key press. The search for the first run of text never
-goes inside one of those either, nor inside a textarea, whose text React keeps the same as its value, so
-a click beside a chat box is not named by the message in it. An editor that draws its text in ordinary
-elements and takes key presses in a hidden one, as Monaco does, cannot be told from the page's own text:
-a key press lands on the hidden one, but a click on a line is named by the line. Only an input is named
-by its type: a select trigger with the role combobox is a button, and the type on a button is button, which
-names nothing. A run
+found by walking up, since a label is read at every key press. An editor built on Chromium's EditContext
+has nothing in its markup to find it by: the page's code attaches one to the element that takes the key
+presses, which draws what was typed inside itself, a word in a line. That element counts, and so does
+anything up to five elements inside it, looked for the way a control is, since no selector can ask for
+it. The search for the first run of text never goes inside one of those either, nor inside a textarea,
+whose text React keeps the same as its value, so a click beside a chat box is not named by the message in
+it. An editor that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco
+does, cannot be told from the page's own text: a key press lands on the hidden one, but a click on a line
+is named by the line. Only an input is named by its type: a select trigger with the role combobox is a
+button, and the type on a button is button, which names nothing. A run
 is the adjacent text nodes React renders an interpolated string as, `Add to cart ({n})` as three, and
 it takes in the `<!-- -->` the server renderer puts between them to keep hydration straight: without
 that, the same button would be labelled `Add to cart (` after hydration and `Add to cart (3)` after a
