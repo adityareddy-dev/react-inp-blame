@@ -579,10 +579,10 @@ the usual controlled field, `<input value={email} onChange={setEmail}>`, they na
 onSubmit does little in the keypress, so its entry ties with the keydown's, which comes first. An Enter
 that commits an input method's text is another matter. It submits nothing and fires no keypress, and the
 field's onChange runs from the input event that ends the composition. Its keydown has keyCode 229, which
-is how React itself tells a key the input method took, and the ring reads it as any other key. The
-element is read when the entry arrives only for an event the ring keeps no reading of, such as the
-`input` an input method sends, and for one on server HTML, which had no handler to read until React
-hydrated it to run the event.
+is how React itself tells a key the input method took, and the ring reads it as any other key and keeps
+that key for a later read of the element. The element is read when the entry arrives only for an event
+the ring keeps no reading of, such as the `input` an input method sends, and for one on server HTML,
+which had no handler to read until React hydrated it to run the event.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every

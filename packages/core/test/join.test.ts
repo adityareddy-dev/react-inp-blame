@@ -40,7 +40,7 @@ function commit(at: number, inputTs: number, opts: Partial<CommitSummary> = {}):
 }
 
 function input(ts: number, type: string, extra: Partial<InputRecord> = {}): InputRecord {
-  return { ts, type, gestureTs: ts, press: undefined, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] }, ...extra };
+  return { ts, type, gestureTs: ts, press: undefined, target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: ts, unjoined: [] }, ...extra };
 }
 
 /** An input whose own dispatch rendered, ending at `until`: what the hook sets `ownEndedAt` to. */
@@ -3162,10 +3162,10 @@ test("Enter's work in the keypress entry is named by the form's onSubmit, from t
   const field = fiberOf(5, 'input', formEl, { type: 'text', name: 'qty' });
   const target = Object.assign(element('input', [], { name: 'qty' }), { __reactFiber$k1: field });
   const press = [entry('keydown', 0, 140, 1, 3, { target }), entry('keypress', 0, 140, 3, 123, { target })];
-  const ring = [input(0, 'keydown', { target: target as unknown as Node, press: 'Enter', owners: ['OrderForm'] })];
+  const ring = [input(0, 'keydown', { target: target as unknown as Node, press: 'Enter', key: 'Enter', owners: ['OrderForm'] })];
   assert.equal(report(press, [], [], ring).target?.handler, 'submitOrder');
   // Any other key submits nothing, so nothing is named for the keypress's work.
-  const other = [input(0, 'keydown', { target: target as unknown as Node, press: 'KeyA', owners: ['OrderForm'] })];
+  const other = [input(0, 'keydown', { target: target as unknown as Node, press: 'KeyA', key: 'KeyA', owners: ['OrderForm'] })];
   assert.equal(report(press, [], [], other).target?.handler, null);
 });
 
@@ -3183,7 +3183,7 @@ test("Enter's submit is named by the onSubmit its keypress reached at dispatch, 
   const field = fiberOf(5, 'input', form, { type: 'text', name: 'email' });
   const target = Object.assign(element('input', [], { name: 'email' }), { __reactFiber$k1: field }) as unknown as Node;
   const press = [entry('keydown', 0, 140, 1, 3, { target }), entry('keypress', 0, 140, 3, 123, { target })];
-  const keydown = (extra: Partial<InputRecord>) => [input(0, 'keydown', { target, press: 'Enter', owners: ['Wizard'], ...extra })];
+  const keydown = (extra: Partial<InputRecord>) => [input(0, 'keydown', { target, press: 'Enter', key: 'Enter', owners: ['Wizard'], ...extra })];
   assert.equal(report(press, [], [], keydown({ keypressHandler: 'goNext' })).target?.handler, 'goNext');
   // Where the keypress reached nothing at dispatch, nothing ran, whatever the form has now.
   assert.equal(report(press, [], [], keydown({ keypressHandler: null })).target?.handler, null);
@@ -3191,7 +3191,7 @@ test("Enter's submit is named by the onSubmit its keypress reached at dispatch, 
   assert.equal(report(press, [], [], keydown({})).target?.handler, 'finish');
   // A Shift pressed with the Enter in the same millisecond has a keydown and no keypress, so no reading: the
   // Enter's is the one taken.
-  const shift = input(0, 'keydown', { target, press: 'ShiftLeft', owners: ['Wizard'] });
+  const shift = input(0, 'keydown', { target, press: 'ShiftLeft', key: 'ShiftLeft', owners: ['Wizard'] });
   assert.equal(report(press, [], [], [shift, ...keydown({ keypressHandler: 'goNext' })]).target?.handler, 'goNext');
   // A form the submit took off the page: the entries have no target, and the reading still names it.
   const gone = press.map((e) => ({ ...e, target: null }));
@@ -3201,8 +3201,26 @@ test("Enter's submit is named by the onSubmit its keypress reached at dispatch, 
   // now, in a form that would run finish. The keydown's own record is still the one read.
   const next = Object.assign(element('input', [], { name: 'name' }), { __reactFiber$k1: fiberOf(5, 'input', form, { type: 'text', name: 'name' }) }) as unknown as Node;
   const moved = [entry('keydown', 0, 140, 1, 3), entry('keypress', 0, 140, 3, 5), entry('keyup', 80, 16, 81, 81.5, { target: next })];
-  const keyup = input(80, 'keyup', { target: next, press: 'Enter', gestureTs: 0, owners: ['Wizard'] });
+  const keyup = input(80, 'keyup', { target: next, press: 'Enter', key: 'Enter', gestureTs: 0, owners: ['Wizard'] });
   assert.equal(report(moved, [], [], [...keydown({ handler: 'goNext', keypressHandler: 'goNext' }), keyup]).target?.handler, 'goNext');
+});
+
+test("an input method's Enter read from the element when the entry comes is read with the key the ring kept, as any other key", () => {
+  // The Enter that commits an input method's text submits nothing, and the field's onChange runs from the input
+  // event that ends the composition. On server HTML React had not hydrated at dispatch the ring had no handler to
+  // read, so the field is read when the entry comes, and it is read as the ring read the key.
+  function setEmail() {}
+  function goNext() {}
+  const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null }) as Record<string, unknown>;
+  const form = fiberOf(5, 'form', null, { onSubmit: goNext });
+  const field = fiberOf(5, 'input', form, { type: 'email', onChange: setEmail });
+  const target = Object.assign(element('input', []), { __reactFiber$k1: field, __reactProps$k1: { type: 'email', onChange: setEmail } }) as unknown as Node;
+  const keydown = (key: string | null) => [input(0, 'keydown', { target, press: 'Enter', key, dehydrated: { scope: 'boundary', owner: 'SignUp' } })];
+  const composed = [entry('keydown', 0, 140, 1, 60, { target })];
+  assert.equal(report(composed, [], [], keydown(null)).target?.handler, 'setEmail');
+  // An Enter the input method did not take submits the form.
+  assert.equal(report(composed, [], [], keydown('Enter')).target?.handler, 'goNext');
 });
 
 test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {

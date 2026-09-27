@@ -500,10 +500,11 @@ export function buildReport(
         handler = reached;
       } else {
         // An Event Timing entry does not say which key was pressed; the ring entry for the same event
-        // does, and which key it was decides whether the press could have submitted a form.
+        // does, and which key it was decides whether the press could have submitted a form. It is the key
+        // the ring read the handler for, so an input method's Enter is not one here either.
         // A keypress has no ring entry of its own and shares its keydown's key.
-        const pressed = inputs.find((i) => (i.type === e.name || (e.name === 'keypress' && i.type === 'keydown')) && near(i.ts, e.startTime))?.press;
-        handler = handlerOf(fiber, e.name, typeof pressed === 'string' ? pressed : null);
+        const key = inputs.find((i) => (i.type === e.name || (e.name === 'keypress' && i.type === 'keydown')) && near(i.ts, e.startTime))?.key;
+        handler = handlerOf(fiber, e.name, key);
       }
       if (handler) break;
     }
