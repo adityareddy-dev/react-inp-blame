@@ -588,7 +588,15 @@ which had no handler to read until React hydrated it to run the event. A keydown
 is the exception. React hydrates the HTML inside the keydown, so its entry carries the hydration and can
 outweigh the keypress's, and read when it arrived, Enter on the wizard's first step named finish. The
 keydown's element is read again as the keypress is dispatched instead, hydrated by then and before the
-submit renders.
+submit renders. It is read from its own node, not the keypress's: an onKeyDown that moves focus sends the
+keypress to the element it focused.
+
+Where the form has a submit button, Chromium submits it from Enter in a field by clicking the button
+inside the keypress, and times that click in an entry of its own with the keypress's work. The click
+ranks first, and its own record holds the button's onClick, which runs before the onSubmit: an onClick
+for analytics, or the one a library's button always has, would take the name of the onSubmit that did the
+work. So a click a key made on another element than its own is named by what the keypress reached, or by
+the button's onClick where the keypress reached nothing, as in a form with no onSubmit.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every
