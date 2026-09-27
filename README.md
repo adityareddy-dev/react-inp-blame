@@ -1305,8 +1305,10 @@ means the library is installed twice, for example by a plugin and by your own `i
 #### The page's DevTools hook turns React's developer tools support off
 
 Something on the page set `__REACT_DEVTOOLS_GLOBAL_HOOK__` with `isDisabled`, or without `supportsFiber`,
-before react-dom loaded. Packages that disable React DevTools in production do this. React then reports to
-no hook, so reports come without components. Remove that script where you want blame.
+before react-dom loaded, or turned the hook already there off that way, the library's own included, which the
+next interaction notices. Packages that disable React DevTools in production do this, most of them making each
+of the hook's methods do nothing as well. React's commits then reach no hook, so reports come without
+components. Remove that script where you want blame.
 
 Some freeze the hook instead, or seal one that has no `onPostCommitFiberRoot`, or give its methods only a
 getter, or a setter that drops what it is given. The library cannot wrap a hook like that, so it leaves it as

@@ -282,7 +282,13 @@ silenced React's "Download the React DevTools" message. `dispose()` puts a chain
 `onCommitFiberRoot` and `onPostCommitFiberRoot` back, removing the last of those when the hook had none.
 A hook the page has switched off (`isDisabled`, or no `supportsFiber`) is not chained onto at all,
 because React registers with nothing there: `stats().mode` is `'unsupported'` with
-`kind: 'hook-disabled'`, and Event Timing reports carry on without components. A hook the page has
+`kind: 'hook-disabled'`, and Event Timing reports carry on without components. The library loads first,
+so the common scripts that keep developer tools out switch off the hook in use where it is, the shim
+included: `supportsFiber` null and each method a no-op, once react-dom has registered or before. That is
+checked for at each Event Timing batch and 3 s after `install()`, and gives the same kind with a
+warning of its own, where before a report read it as React rendering nothing, or as `install()` having
+run late. A method that is no longer the library's says nothing by itself, since Fast Refresh wraps the
+shim's the same way when it loads after the library. A hook the page has
 locked against developer tools, frozen, sealed without `onPostCommitFiberRoot`, or with a method that has
 only a getter or a setter that drops what it is given, cannot be wrapped: each method is read back after
 it is assigned, and one that still reads as the page's own did not take. The methods already wrapped are
