@@ -435,35 +435,37 @@ warning says so once.
 and panel's, runs inside a guard: the Event Timing observer's callback and its flush, the window
 listeners for inputs, resizes, `pageshow` and `visibilitychange`, the timers that deliver reports and
 check for react-dom, the idle callback that draws them, the App Router's navigation announcement, and
-the setter that hears another tool assign the DevTools hook. An error in one is caught, what it was
-working on is dropped, and the console says so once (`library-error`). Until 2026-09-26 an error while a
-report was built went from the Event Timing callback to `window.onerror`, where Sentry or Datadog
-counted it as the app's, and the report was lost anyway. A report's explanation and verdict are built
-later, on first read, and that read is the page's own code: a listener, `api.last()`, a
-`JSON.stringify`. So that build is guarded too. A report whose explanation throws is kept, with its own
-fields as they were, blaming nothing (`kind: 'none'`, inferred) and with a cause that says the library
-hit an error of its own. Before, the error went out of the page's listener to `reportError`, as the
-page's. The badge and panel, which a developer turns on, draw under a guard of their own
-(`overlay-draw`). Where one error could take more with it, the guard is finer. The interactions in one
-batch are built one at a time, and long animation frames are read one at a time, so each drops only
-itself. So does the batch's count toward INP, each quiet report a batch or the hide publishes,
-and each report a frame revises. The check each batch makes on the DevTools hook global is
-housekeeping, under a guard of its own, so one that goes on throwing never keeps a batch from
-its reports. At hide neither flush throws, and the reports waiting are heard whatever the hide
-itself throws, so a frame that cannot be read keeps neither the entries from their reports
-nor the reports from being heard. An input's target is read under a guard of its own when
-the input is recorded. An input in a form with a field named `tagName` still throws in there, since a
-form's fields shadow its own properties, and so does building its report. It is recorded naming nothing,
-so the commits in its dispatch are still read as its own and the page's other reports keep their
-components, and only its own report is dropped. Before, recording it threw again inside the commit its
-handler rendered, and stopped that renderer for good as a walk that threw. Each guard has a test that
-forces an error through it, except the setter's: now that a hook that cannot be chained onto is reported
-as above, nothing in it is known to throw, and its guard is only in case. React's calls into the hook
-were guarded already: a walk that throws stops that renderer, as above. A report taking in a commit once
-its walk is done, as a later render revises it, is guarded apart from the walk, so an error there is a
-`library-error` and that react-dom's commits are still read. Before, it was taken for a walk that threw,
-and none of them was read again. An error a report listener throws is the page's own, and still goes to
-`reportError`.
+the setter that hears another tool assign the DevTools hook. An error in one is caught, only the step it
+threw in is skipped, and the console says so once (`library-error`), quoting the first error and logging
+it after the message so its stack shows. Until 2026-09-26 an error while a report was built went from
+the Event Timing callback to `window.onerror`, where Sentry or Datadog counted it as the app's, and the
+report was lost anyway. A report's explanation and verdict are built later, on first read, and that read
+is the page's own code: a listener, `api.last()`, a `JSON.stringify`. So that build is guarded too. A
+report whose explanation throws is kept, with its own fields as they were, blaming nothing
+(`kind: 'none'`, inferred) and with a cause that says the library hit an error of its own.
+`attributeINP` gives `react: null` for it, since that `'none'` is no finding. Before, the error went out
+of the page's listener to `reportError`, as the page's. The badge and panel, which a developer turns on,
+draw under a guard of their own (`overlay-draw`). Where one error could take more with it, the guard is
+finer. The interactions in one batch are built one at a time, and long animation frames are read one at
+a time, so each drops only itself. So does the batch's count toward INP, each quiet report a batch or
+the hide publishes, and each report a frame revises. A report is queued for its listeners before it is
+drawn, so an idle callback the page refuses costs it the drawing alone. The check each batch makes on
+the DevTools hook global is housekeeping, under a guard of its own, so one that goes on throwing never
+keeps a batch from its reports. At hide neither flush throws, and the reports waiting are heard whatever
+the hide itself throws, so a frame that cannot be read keeps neither the entries from their reports nor
+the reports from being heard. An input's target is read under a guard of its own when the input is
+recorded. An input in a form with a field named `tagName` still throws in there, since a form's fields
+shadow its own properties, and building its report can throw too, as a click's on the form does. It is
+recorded naming nothing, so the commits in its dispatch are still read as its own and the page's other
+reports keep their components, and at most its own report is dropped. Before, recording it threw again
+inside the commit its handler rendered, and stopped that renderer for good as a walk that threw. Each
+guard has a test that forces an error through it, except the setter's: now that a hook that cannot be
+chained onto is reported as above, nothing in it is known to throw, and its guard is only in case.
+React's calls into the hook were guarded already: a walk that throws stops that renderer, as above. A
+report taking in a commit once its walk is done, as a later render revises it, is guarded apart from the
+walk, so an error there is a `library-error` and that react-dom's commits are still read. Before, it was
+taken for a walk that threw, and none of them was read again. An error a report listener throws is the
+page's own, and still goes to `reportError`.
 
 **The walk.** After a commit the current tree is walked once. A component fiber that rendered
 carries the `PerformedWork` flag. A fiber whose alternate still points at the same child list
