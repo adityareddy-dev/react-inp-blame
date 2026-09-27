@@ -1127,6 +1127,57 @@ test('a page that turns the shim off where it is before react-dom loads is unsup
   });
 });
 
+test('a page that empties the global over the shim before react-dom loads is unsupported, not told install() ran late', async (t) => {
+  // React finds no hook there, or one it cannot register with, and renders all the same.
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  ownShim(t);
+  for (const empty of ['undefined', 'false', 'delete']) {
+    session?.slots.warnings?.clear();
+    warn.mock.resetCalls();
+    await inBrowser((page) => {
+      const app: Record<string, unknown> = {};
+      Object.defineProperty(globalThis, 'document', { value: documentOf([{}, app]), configurable: true, writable: true });
+      const api = install({ threshold: 40, devtoolsTrack: false });
+      if (empty === 'delete') delete page.window[HOOK];
+      else page.window[HOOK] = empty === 'false' ? false : undefined;
+      app.__reactContainer$x1y2 = {};
+      t.mock.timers.tick(3000);
+      const stats = api.stats();
+      assert.deepEqual({ mode: stats.mode, kind: stats.unsupportedReason?.kind, react: stats.react }, { mode: 'unsupported', kind: 'hook-disabled', react: 'unreadable' });
+      page.paint([slowClick(120)]);
+      assert.equal(api.last()?.reactStatus, 'unreadable');
+      assert.doesNotMatch(api.last()?.explanation.notes.join('\n') ?? '', /install\(\) ran after react-dom loaded/);
+      assert.equal(warn.mock.callCount(), 1);
+      assert.match(warn.mock.calls[0].arguments[0], /emptied its __REACT_DEVTOOLS_GLOBAL_HOOK__ after install\(\)/);
+      api.dispose();
+    });
+  }
+  // A tool that deletes the global and then defines a hook of its own is still followed.
+  await inBrowser((page) => {
+    const api = install({ threshold: 40, devtoolsTrack: false });
+    delete page.window[HOOK];
+    page.window[HOOK] = existingHook();
+    page.paint([slowClick(120)]);
+    assert.equal(api.stats().mode, 'chained');
+    api.dispose();
+  });
+  // Once react-dom has registered with the shim, React goes on calling it whatever the global holds. That counts as
+  // a tool locked out, which lasts the page's life, so the tests after this one start without it.
+  const hookState = (session?.slots as Record<string, { devtoolsLockedOut: boolean }>).hook!;
+  t.after(() => {
+    hookState.devtoolsLockedOut = false;
+  });
+  await inBrowser((page) => {
+    const api = install({ threshold: 40, devtoolsTrack: false });
+    page.window[HOOK].inject(reactDom('19.3.0'));
+    delete page.window[HOOK];
+    page.paint([slowClick(120)]);
+    assert.deepEqual({ mode: api.stats().mode, react: api.stats().react }, { mode: 'shim', react: 'reading' });
+    api.dispose();
+  });
+});
+
 test("a tool that wraps the shim's methods after install() leaves it the hook in use, and its commits are read", async (t) => {
   // Fast Refresh's runtime does this when it loads after the library, so a method that is no longer the shim's
   // own does not mean the page turned it off.
