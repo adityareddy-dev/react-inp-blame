@@ -521,10 +521,10 @@ current:
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 78.1 KB | 27.7 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 82.6 KB | 29.3 KB |
 | The badge and panel, a chunk loaded by `import()` only when shown | 15.1 KB | 5.9 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 25.3 KB | 9.5 KB |
-| `react-inp-blame/web-vitals`, on top of `/auto` | 1.4 KB | 0.7 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 27.8 KB | 10.1 KB |
+| `react-inp-blame/web-vitals`, on top of `/auto` | 1.5 KB | 0.8 KB |
 <!-- size:end -->
 
 `react-inp-blame/web-vitals` pulls in none of the hook, the observers or the badge: an app that only wants
