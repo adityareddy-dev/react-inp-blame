@@ -277,7 +277,7 @@ function installNow(opts: InstallOptions): Api {
     navigated({ url, type: 'soft-navigation', start: at, router: { type, input: input && { inputTs: input.ts, inputType: input.type, gestureTs: input.gestureTs } } });
   });
 
-  installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit, label: (control) => labelOf(control, labels()) });
+  installHook({ hook: settings.hook, walkBudget: settings.walkBudget, inputWindow: settings.inputWindow, onSummary: lifecycle.onCommit, label: (target) => labelOf(target, labels()) });
   for (const t of INPUT_TYPES) window.addEventListener(t, noteInput, { capture: true, passive: true });
   for (const t of CLOSER_TYPES) window.addEventListener(t, noteCloser, { capture: true, passive: true });
   window.addEventListener('keypress', noteKeypress, { capture: true, passive: true });

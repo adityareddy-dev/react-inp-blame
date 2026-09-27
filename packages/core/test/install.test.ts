@@ -1399,6 +1399,24 @@ test('a label names an element by its attributes under a production React, and b
   assert.equal(await labelUnder(1, 'attributes'), 'button "save"');
 });
 
+test('a key press in an editor inside a label is labelled at dispatch as the report would label it, like a form field', async () => {
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false, labels: 'text' });
+    // <label>Comment <div contenteditable>...</div></label>: the key press lands on the editor, and the label is the control around it.
+    const label: Record<string, unknown> = { nodeType: 1, tagName: 'LABEL', id: '', classList: { length: 0 }, parentNode: null, parentElement: null, getAttribute: () => null };
+    const editor: Record<string, unknown> = {
+      nodeType: 1, tagName: 'DIV', id: '', classList: { length: 0 }, parentNode: label, parentElement: label, nextSibling: null, isContentEditable: true,
+      getAttribute: (name: string) => (name === 'contenteditable' ? 'true' : null),
+    };
+    editor.firstChild = { nodeType: 3, nodeValue: 'Hi Ada, the password is hunter2', parentNode: editor, nextSibling: null, firstChild: null };
+    label.firstChild = { nodeType: 3, nodeValue: 'Comment ', parentNode: label, nextSibling: editor, firstChild: null };
+    page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 1000, target: editor, code: 'KeyA' });
+    page.paint([{ ...pointer('keydown', 7, 1000, 120), target: editor }]);
+    assert.equal(api.last()?.target?.label, 'label');
+    api.dispose();
+  });
+});
+
 test('dispose() drops every listener, and the next install() takes its own options', async () => {
   await inBrowser(async (page) => {
     const heard: string[] = [];
