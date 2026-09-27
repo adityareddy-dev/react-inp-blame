@@ -1217,6 +1217,9 @@ note is added. The wait itself is said in a note under every verdict but its own
 rendered: "It also waited 70 ms before the handler could start, because the main thread was busy."
 Until 2026-09-26 that note needed a render big enough to be the verdict, so a 70 ms wait before a
 98 ms handler went unsaid beside a 2 ms render, or none, and was said beside a 10 ms one.
+The one exception is a `script` verdict on a timer the input waited behind, said as before the handler
+started, where that timer held half of the wait: it is the wait, and the note would say it twice. A 62 ms
+timer in a 63 ms wait leaves the note out, and a 30 ms timer in a 120 ms wait keeps it.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click
