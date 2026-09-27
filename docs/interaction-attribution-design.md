@@ -1116,10 +1116,13 @@ floor after its input or it would have sent one, so a render stamped with it cou
 leaves such a render out. It is measured from that earlier paint, said as landing after the press
 updated the screen and before the release, and a newer input or a script's `input`, `change` or
 `submit` is looked for from that paint too, since the interaction's own inputs go on past the render.
-Until 2026-09-27 every render before the headline's input was dropped as time `holdMs` covers, and a key
-press published for its render was told in its keyup's revision that React didn't render anything. One
-inside another entry, its handlers or the wait before them, or inside the 16 ms after a press with no
-entry, is still left to `holdMs`. Where the commit's own input
+Where nothing rendered in the release's working time, the cause says React didn't render anything in
+the working time, and the note after it says the render. Until 2026-09-27 every render before the
+headline's input was dropped, and a key press published for its render was told in its keyup's revision
+that React didn't render anything. One inside another entry, its handlers or the wait before them, or
+inside the 16 ms after a press with no entry, is still left out of the report. `holdMs` spans the
+entries alone: it keeps the first one's time, but where the press sent no entry it starts at the
+release's and holds none of the second. Where the commit's own input
 is a later one of the same interaction whose work ended after the paint, the click that releases a
 pointer held down past it or a click whose pointerdown was the slow part and painted first, the window
 runs from the end of that input's work (`work.endedAt` in the ring), which is where the hook measured

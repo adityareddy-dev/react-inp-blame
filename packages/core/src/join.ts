@@ -577,10 +577,12 @@ export function buildReport(
       if (c.at < start - STAMP_TOLERANCE) {
         // Work before the headline entry's own input is not part of what INP measured for it. Inside
         // another of the interaction's entries (a press held before a click), or before its press can
-        // have painted, `holdMs` covers it. After one of them painted it is a later render of that paint,
-        // as one after the headline's is: a keydown's render before its slower keyup, or a pointerdown's
-        // while the pointer was held. Anything newer is looked for from that paint. An entry runs to its
-        // paint as `timed` has it, or a render INP timed would be kept as one it left out.
+        // have painted, it is left out of the report. `holdMs` spans the entries alone, so it keeps the
+        // time of the first, and none of the second where the press was too quick for an entry. After
+        // one of them painted it is a later render of that paint, as one after the headline's is: a
+        // keydown's render before its slower keyup, or a pointerdown's while the pointer was held.
+        // Anything newer is looked for from that paint. An entry runs to its paint as `timed` has it, or
+        // a render INP timed would be kept as one it left out.
         const from = paintBefore(entries, c);
         const inEntry = entries.some((e) => c.at >= e.startTime - STAMP_TOLERANCE && c.at <= paintOf(e) + STAMP_TOLERANCE);
         if (from > -Infinity && !inEntry && isFollowUp(c, from, inputs, stamps, inputWindow, from)) followUps.push(joined(c, 'exact'));

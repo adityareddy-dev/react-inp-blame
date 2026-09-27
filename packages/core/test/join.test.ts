@@ -1051,9 +1051,11 @@ test('a render a press too quick for an entry set off is a later render of the r
   // From the latest the press can have painted, 16 ms after it went down.
   assert.match(note(held), /^A React render landed 84 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it/);
   assert.match(held.explanation.cause, /; React didn't render anything in the working time\.$/);
-  // One inside those 16 ms can be the press's own work before its paint, which `holdMs` covers.
+  // One inside those 16 ms can be the press's own work before its paint, and it is left out of the report.
+  // `holdMs` starts at the interaction's first entry, the click's, so it does not reach the press either.
   const handlers = report(click, [commit(10, 0, { inputType: 'pointerdown', rendered: 400, total: 60 })], [], ring);
   assert.deepEqual(handlers.followUps, []);
+  assert.equal(handlers.holdMs, 0);
   assert.match(handlers.explanation.cause, /; React didn't render anything\.$/);
   assert.ok(!handlers.verdict.includes('Infinity'), handlers.verdict);
   // A press with an entry is measured from that entry's paint, however short: the page's first input comes at any duration.
@@ -1089,7 +1091,7 @@ test("a render a held pointer's press set off after it painted is a later render
   const atPaint = commit(24.5, 0, { inputType: 'pointerdown', rendered: 400, total: 60 });
   assert.deepEqual(buildReport([entry('pointerdown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [atPaint], [], ring).followUps, []);
   // The pointerup's handlers made one after the pointerdown painted, and it is inside the pointerup's entry:
-  // `holdMs` covers it, as it does the pointerdown's own.
+  // it is left out of the report, as the pointerdown's own is.
   const slowUp = [input(0, 'pointerdown'), input(200, 'pointerup', { gestureTs: 0 }), input(230, 'click', { gestureTs: 0 })];
   const released = commit(210, 200, { inputType: 'pointerup', gestureTs: 0, total: 40 });
   const entries = [entry('pointerdown', 0, 24, 1, 10), entry('pointerup', 200, 40, 201, 230), entry('click', 230, 120, 231, 330)];
