@@ -297,7 +297,10 @@ function singleFile(build) {
 function pagePath(root, input) {
   const file = input.replaceAll('\\', '/');
   const within = `${String(root).replaceAll('\\', '/').replace(/\/$/, '')}/`;
-  return file.startsWith(within) ? file.slice(within.length - 1) : `/${file.split('/').pop()}`;
+  if (file.startsWith(within)) return file.slice(within.length - 1);
+  // A relative path is one from the root: Vite 8 reads it from there, and Rollup (Vite 7 and before) from the
+  // working directory, which is the root when Vite runs in the project's folder.
+  return /^([a-z]:)?\//i.test(file) ? `/${file.split('/').pop()}` : posix.normalize(`/${file}`);
 }
 
 /**
