@@ -602,9 +602,9 @@ test('a build of scripts only is told what to do where its inputs are named for 
     runtime.configResolved(resolved({ command: 'serve', logger: { warn: (message: string) => warnings.push(message) }, ...config }));
     return warnings;
   };
-  // What Vite 6 and later resolve: the top-level build lists nothing, and the client environment's build
-  // is the top-level one with the environment's own laid over it.
-  const client = (environment: Record<string, any>, build: Record<string, any> = { rollupOptions: {} }) => ({ build, environments: { client: environment } });
+  // What Vite 6 and later resolve: the top-level build lists nothing, and the client environment has its
+  // consumer set and a build that is the top-level one with the environment's own laid over it.
+  const client = (environment: Record<string, any>, build: Record<string, any> = { rollupOptions: {} }) => ({ build, environments: { client: { consumer: 'client', ...environment } } });
   const scriptsOnly = /^\[react-inp-blame\] this build has no HTML page, only scripts.*#install-with-vite$/;
 
   assert.match((await warningsFor(client({ build: { rollupOptions: { input: { index: 'virtual:vite-rsc/entry-browser' } } } })))[0]!, scriptsOnly);
@@ -621,6 +621,13 @@ test('a build of scripts only is told what to do where its inputs are named for 
   assert.deepEqual(await warningsFor(client({ build: { rollupOptions: {} } })), []);
   assert.deepEqual(await warningsFor(client({ build: { lib: { entry: 'src/index.ts' }, rollupOptions: { input: 'src/index.ts' } } })), []);
   assert.deepEqual(await warningsFor(client({ build: { ssr: 'src/server.ts', rollupOptions: { input: 'src/server.ts' } } })), []);
+
+  // Vite 5 passes an `environments` block through as written, with no consumer, and builds from the top level.
+  const raw = (environment: Record<string, any>, build: Record<string, any>) => ({ build, environments: { client: environment } });
+  assert.match((await warningsFor(raw({ build: { rollupOptions: { input: 'index.html' } } }, { rollupOptions: { input: 'src/main.ts' } })))[0]!, scriptsOnly);
+  assert.deepEqual(await warningsFor(raw({ build: { rollupOptions: { input: { index: 'src/entry.browser.tsx' } } } }, { rollupOptions: {} })), []);
+  assert.deepEqual(await warningsFor(raw({ build: { rollupOptions: { input: 'src/entry.browser.tsx' } } }, { rollupOptions: { input: 'index.html' } })), []);
+  assert.deepEqual(await warningsFor(raw({ input: 'src/entry.browser.tsx' }, { rollupOptions: {} })), []);
 });
 
 test("on an HTML page, an app's own manualChunks cannot put the library in its vendor chunk", () => {
