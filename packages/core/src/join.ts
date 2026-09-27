@@ -101,8 +101,8 @@ const FORCED_LAYOUT_MIN_MS_NO_DURATIONS = HANDLER_MIN_MS;
 const FORCED_LAYOUT_ONE_SCRIPT_SHARE = 0.9;
 // The screen update gets a note of its own over 100 ms, half of INP's 200 ms budget for "good".
 const PRESENTATION_NOTE_MS = 100;
-// A screen update with no script in it is put on the browser's own work from half of it, the share that
-// lets a script name a wait.
+// Where no script after the handlers held half of the screen update, it is put on the browser's own work
+// from half of it, the share that lets a script name a wait.
 const BROWSER_WORK_MIN_SHARE = 0.5;
 // React's scheduler runs its work from a MessageChannel, so Long Animation Frames names its tasks after the port.
 const REACT_TASK = 'MessagePort.onmessage';
