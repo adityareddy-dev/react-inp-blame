@@ -1093,9 +1093,10 @@ Base UI, and no job builds Base UI or a shadcn project of either style.
   says "most likely" in its sentence and in the overlay; take it as the likeliest reading, not a measurement.
   A count says nothing about time, so the render rung blames a render known by its count alone only from
   50 ms of working time, the length of a long task, and its sentence gives the working time the count is
-  read against. Under that the count is not a slow render, however large: the cause leads with the working
-  time and says the count sat in it, short of a long task, before what else the report knows. A hydration
-  the interaction waited for is still named by its count at any working time, as before.
+  read against, or says the render ran after the handlers where it did. Under that the count is not a
+  slow render, however large: the cause leads with the working time and says the count sat in it, short
+  of a long task, before what else the report knows. A hydration the interaction waited for is still
+  named by its count at any working time, as before.
   The exceptions are what the browser times itself and the build cannot change: waiting, the screen update,
   a Long Animation Frames script, and forced layout inside the handlers, which stay `'measured'` in a
   production build. So does a handler where React rendered nothing in the working time, on a page where it
