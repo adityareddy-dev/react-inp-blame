@@ -972,9 +972,9 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
     // Kept as times, not as a count: a page with a clock in it commits all day, and only a commit that
     // landed while this interaction's own handlers were running says anything about this interaction.
     // `join.ts` does that filtering; here there is no Event Timing entry to filter against yet.
-    const dropped = input.work.unjoined;
-    dropped.push(now);
-    if (dropped.length > MAX_UNJOINED) dropped.shift();
+    const unjoined = input.work.unjoined;
+    unjoined.push(now);
+    if (unjoined.length > MAX_UNJOINED) unjoined.shift();
     return;
   }
   // In the input's own task the commit is inside that input's Event Timing entry, so INP timed it, even
@@ -1005,7 +1005,13 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   if (state.commits.length >= MAX_COMMITS) state.commits.shift();
   state.commits.push(summary);
   place.summary = summary;
-  options.onSummary(summary);
+  // The walk is done. An error while a report takes the commit in is not the walk's, so it drops that
+  // report's revision and leaves this react-dom read.
+  try {
+    options.onSummary(summary);
+  } catch (error) {
+    dropped(error);
+  }
 }
 
 /**
