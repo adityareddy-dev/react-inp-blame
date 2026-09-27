@@ -3223,6 +3223,29 @@ test("an input method's Enter read from the element when the entry comes is read
   assert.equal(report(composed, [], [], keydown('Enter')).target?.handler, 'goNext');
 });
 
+test("Enter on server HTML React hydrated inside the keydown is named by the keydown's element as the keypress was dispatched", () => {
+  // React hydrates the boundary a key lands on inside the keydown, so the keydown's entry carries the hydration and
+  // outweighs the keypress's. By the keypress the field was hydrated and its keydown read again, before the submit's
+  // render put finish on the form. Read when the entries came, it named the step after.
+  function goNext() {}
+  function finish() {}
+  function Wizard() {}
+  const fiberOf = (tag: number, type: unknown, parent: Record<string, unknown> | null, props: Record<string, unknown> | null = null) =>
+    ({ tag, flags: 1, mode: 0, elementType: type, type, memoizedProps: props, memoizedState: null, return: parent, child: null, sibling: null, alternate: null }) as Record<string, unknown>;
+  const form = fiberOf(5, 'form', fiberOf(0, Wizard, null), { onSubmit: goNext });
+  form.stateNode = Object.assign(element('form', []), { __reactFiber$k1: form, __reactProps$k1: { onSubmit: finish } });
+  const field = fiberOf(5, 'input', form, { type: 'text', name: 'email' });
+  const target = Object.assign(element('input', [], { name: 'email' }), { __reactFiber$k1: field }) as unknown as Node;
+  const hydrating = [entry('keydown', 0, 400, 1, 361, { target }), entry('keypress', 0, 400, 361, 393, { target })];
+  const keydown = (extra: Partial<InputRecord>) => [input(0, 'keydown', { target, press: 'Enter', key: 'Enter', owners: ['Wizard'], dehydrated: { scope: 'boundary', owner: 'Wizard' }, ...extra })];
+  assert.equal(report(hydrating, [], [], keydown({ handler: 'goNext', keypressHandler: 'goNext' })).target?.handler, 'goNext');
+  // A field with its own onKeyDown ran it in the keydown, which is that entry's handler and not the onSubmit its
+  // keypress reached.
+  assert.equal(report(hydrating, [], [], keydown({ handler: 'checkShortcut', keypressHandler: 'goNext' })).target?.handler, 'checkShortcut');
+  // With no keypress while hydrated, the keydown had nothing read, and the form is read now.
+  assert.equal(report(hydrating, [], [], keydown({})).target?.handler, 'finish');
+});
+
 test('the handler named is the one whose event did the work, with PREFERRED settling a tie', () => {
   // A row that selects itself on click, holding a menu button that opens on pointerdown, as Radix's
   // DropdownMenu does: the pointerdown's handlers ran for 90 ms, the pointerup's and the click's for none.

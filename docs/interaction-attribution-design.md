@@ -582,7 +582,11 @@ field's onChange runs from the input event that ends the composition. Its keydow
 is how React itself tells a key the input method took, and the ring reads it as any other key and keeps
 that key for a later read of the element. The element is read when the entry arrives only for an event
 the ring keeps no reading of, such as the `input` an input method sends, and for one on server HTML,
-which had no handler to read until React hydrated it to run the event.
+which had no handler to read until React hydrated it to run the event. A keydown with a keypress after it
+is the exception. React hydrates the HTML inside the keydown, so its entry carries the hydration and can
+outweigh the keypress's, and read when it arrived, Enter on the wizard's first step named finish. The
+keydown's element is read again as the keypress is dispatched instead, hydrated by then and before the
+submit renders.
 
 **The join.** A capture-phase listener keeps a ring of the last 8 inputs (pointerdown,
 pointerup, click, keydown, keyup) with their `Event.timeStamp`, target and fiber. Every

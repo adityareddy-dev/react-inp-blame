@@ -491,10 +491,11 @@ export function buildReport(
       // onto its keydown's record. Only the record of the entry's own node is taken, since two fingers on
       // two buttons in one frame are two records under a millisecond apart. The element is read now only for
       // an event the ring has no reading of, and for one on server HTML, which had no handler to read until
-      // React hydrated it to run the event.
+      // React hydrated it to run the event. A keydown there with a keypress after it has a reading all the
+      // same: React hydrates inside the keydown, and the element was read again as the keypress came.
       const own = inputs.find((i) => i.type === e.name && near(i.ts, e.startTime) && (!e.target || i.target === e.target));
       const reached = keypressReached(inputs, e);
-      if (own && !own.dehydrated) {
+      if (own && (!own.dehydrated || own.keypressHandler !== undefined)) {
         handler = own.handler;
       } else if (reached !== undefined) {
         handler = reached;
