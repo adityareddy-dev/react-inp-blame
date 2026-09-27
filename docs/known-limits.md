@@ -115,7 +115,8 @@
 - **A commit outside any dispatch joins the newest input when it lands within 1.5 s (`inputWindow`) of the end
   of the last commit inside that input's dispatch**, or of the input itself where there was none. An unrelated
   update landing in that window is read as the interaction's follow-up render. One that lands after a newer
-  input arrived is left out of the report, as is one after an `input`, `change` or `submit` a script
+  input arrived is left out of the report, as is one stamped with a keyup or a pointerup where another press
+  came between that release and its own press, or one after an `input`, `change` or `submit` a script
   dispatched once the interaction had painted (Playwright's `selectOption` changes a select that way), and
   one that lands past the window is dropped; a dropped commit
   that ran while the interaction's own handlers were still running is counted as `unjoinedCommits`, which
