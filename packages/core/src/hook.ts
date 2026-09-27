@@ -1065,9 +1065,9 @@ function chain(hook: DevtoolsHook): () => void {
     if (failed ? hook.inject !== prevInject : hook.inject === inject) putBack(() => (hook.inject = prevInject));
     if (failed ? hook.onCommitFiberRoot !== prevCommit : hook.onCommitFiberRoot === onCommitFiberRoot) putBack(() => (hook.onCommitFiberRoot = prevCommit));
     if (failed ? hook.onPostCommitFiberRoot !== prevPostCommit : hook.onPostCommitFiberRoot === onPostCommitFiberRoot) {
-      // Emptied before it is removed, so that on a hook sealed since, which keeps the property, React calls
-      // nothing there and a later install() does not wrap ours.
-      putBack(() => (hook.onPostCommitFiberRoot = hadPostCommit ? prevPostCommit : undefined));
+      // Put back before it is removed, so that on a hook sealed since, which keeps the property, React calls only
+      // what it did before (nothing, or a method the hook inherits) and a later install() does not wrap ours.
+      putBack(() => (hook.onPostCommitFiberRoot = prevPostCommit));
       if (!hadPostCommit) putBack(() => delete hook.onPostCommitFiberRoot);
     }
   };
