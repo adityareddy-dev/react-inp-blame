@@ -663,9 +663,12 @@ function propsFor(fiber: Fiber | null, eventType: string, key: string | null | u
   if (!base) return undefined;
   if (eventType === 'keydown' || eventType === 'keyup' || eventType === 'keypress') {
     const props = base.slice();
+    const submits = eventType !== 'keyup' && submitsOnEnter(fiber, key);
     // A keystroke fires onChange only in something React watches for changes; on a div it fires none.
-    if (isFormControl(fiber)) props.push(...TYPING);
-    if (eventType !== 'keyup' && submitsOnEnter(fiber, key)) props.push('onSubmit');
+    // Nor does the keypress of an Enter that submits: it changes no value, so a controlled field's onChange
+    // would take the name of the onSubmit that ran.
+    if (isFormControl(fiber) && !(submits && eventType === 'keypress')) props.push(...TYPING);
+    if (submits) props.push('onSubmit');
     return props;
   }
   if (base.includes('onChange') || !firesChange(fiber, eventType)) return base;

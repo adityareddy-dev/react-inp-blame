@@ -2082,6 +2082,7 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     function Wizard() {}
     function goNext() {}
     function finish() {}
+    function setEmail() {}
     const node = (tag: string, fiber: Record<string, unknown>, parent: Record<string, unknown> | null) => ({
       nodeType: 1, tagName: tag.toUpperCase(), id: '', classList: { length: 0 }, parentNode: parent, parentElement: parent, firstChild: null,
       getAttribute: () => null, __reactFiber$demo: fiber,
@@ -2089,12 +2090,15 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     const rootFiber = { tag: 3, elementType: null, type: null, memoizedProps: null, memoizedState: { isDehydrated: false }, return: null };
     const wizardFiber = { tag: 0, elementType: Wizard, type: Wizard, memoizedProps: {}, return: rootFiber };
     const formFiber: Record<string, unknown> = { tag: 5, elementType: 'form', type: 'form', memoizedProps: { onSubmit: goNext }, return: wizardFiber };
-    const fieldFiber = { tag: 5, elementType: 'input', type: 'input', memoizedProps: { type: 'text' }, return: formFiber };
+    // The field is controlled, as most are. Enter changes no value, so its onChange is not what the keypress reached.
+    const fieldProps = { type: 'email', value: 'a@b.c', onChange: setEmail };
+    const fieldFiber: Record<string, unknown> = { tag: 5, elementType: 'input', type: 'input', memoizedProps: fieldProps, return: formFiber };
     const container = { ...node('div', rootFiber, null), __reactContainer$demo: rootFiber };
     delete (container as Record<string, unknown>).__reactFiber$demo;
     const form: Record<string, unknown> = { ...node('form', formFiber, container), __reactProps$demo: { onSubmit: goNext } };
     formFiber.stateNode = form;
-    const field: Record<string, unknown> = node('input', fieldFiber, form);
+    const field: Record<string, unknown> = { ...node('input', fieldFiber, form), __reactProps$demo: fieldProps };
+    fieldFiber.stateNode = field;
     const enter = (id: number, ts: number, render: () => void) => {
       page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' });
       page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: field, code: 'Enter' });
@@ -2114,10 +2118,11 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     delete form.__reactFiber$demo;
     delete form.__reactProps$demo;
     delete field.__reactFiber$demo;
+    delete field.__reactProps$demo;
     const hydrate = () => {
       rootFiber.memoizedState = { isDehydrated: false };
       Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit: finish } });
-      field.__reactFiber$demo = fieldFiber;
+      Object.assign(field, { __reactFiber$demo: fieldFiber, __reactProps$demo: fieldProps });
     };
     assert.equal(enter(8, 2000, hydrate), 'finish');
     api.dispose();
