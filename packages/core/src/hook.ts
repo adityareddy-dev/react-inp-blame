@@ -1174,7 +1174,7 @@ function threw(hook: DevtoolsHook, id: number, error: unknown): void {
   if (renderer) stopReading(renderer, 'walk-threw', `reading a commit of react-dom ${renderer.info.version ?? 'without a version'} threw (${String(error)})`);
 }
 
-/** Wraps a hook someone else installed; returns the undo. */
+/** Wraps a hook someone else installed; returns the undo. Throws for a hook that cannot be wrapped, such as a frozen one. */
 function chain(hook: DevtoolsHook): () => void {
   const prevInject = hook.inject;
   const prevCommit = hook.onCommitFiberRoot;

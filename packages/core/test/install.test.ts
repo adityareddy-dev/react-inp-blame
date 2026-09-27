@@ -1875,38 +1875,50 @@ test("an input on an element the library cannot read never reaches the page's er
   });
 });
 
-test("a hook the library cannot chain onto never reaches the page's error handlers, from the assignment that puts it over the shim or from the check 3 s after install, the Event Timing batch or the hide that finds it", async (t) => {
+test("a DevTools hook the library cannot chain onto, such as a frozen one, leaves the page 'unsupported' with the reason, whether install() finds it, it is assigned over the shim, or the check 3 s after install, an Event Timing batch or the hide finds it", async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  for (const finds of ['assignment', 'check', 'batch', 'hide']) {
+  for (const finds of ['install', 'assignment', 'check', 'batch', 'hide']) {
     await inBrowser((page) => {
+      // React has rendered, which the check 3 s after install would take for install() running late.
+      Object.defineProperty(globalThis, 'document', { value: documentOf([{}, { __reactFiber$x1y2: {} }]), configurable: true, writable: true });
+      // A script that locks the page down puts a frozen hook there before React loads: before install(), or
+      // after it, assigned, which the shim's accessor hears at once, or redefined, which it cannot see.
+      const frozen = Object.freeze(existingHook());
+      if (finds === 'install') page.window[HOOK] = frozen;
       const api = install({ devtoolsTrack: false });
       try {
         const heard: number[] = [];
         onInteraction((r) => heard.push(r.interactionId));
         page.paint([click(7, 1000, 120)]);
-        // A script that locks the page down puts a frozen hook there before React loads: assigned, which the
-        // shim's accessor hears at once, or redefined, which it cannot see.
-        const frozen = Object.freeze(existingHook());
         if (finds === 'assignment') {
           assert.doesNotThrow(() => {
             page.window[HOOK] = frozen;
           });
-        } else {
+        } else if (finds !== 'install') {
           Object.defineProperty(page.window, HOOK, { value: frozen, configurable: true, writable: true });
         }
-        if (finds === 'check') assert.doesNotThrow(() => t.mock.timers.tick(3000));
-        if (finds === 'batch') assert.doesNotThrow(() => page.paint([click(14, 2000, 200)]));
+        if (finds === 'check') t.mock.timers.tick(3000);
+        if (finds === 'batch') page.paint([click(14, 2000, 200)]);
         if (finds === 'hide') {
           page.queue([click(14, 2000, 200)]);
-          assert.doesNotThrow(() => page.hide());
+          page.hide();
           assert.deepEqual(heard, [7, 14], 'the report waiting was not heard at the hide');
         }
-        // A hook that cannot be wrapped is the page's doing, which the locked hook warning says, not an error
-        // of the library's own.
-        assert.deepEqual({ caught: caught(warn).length, warnings: warn.mock.callCount() }, { caught: 0, warnings: 1 }, finds);
+        // React registers with the frozen hook, and reports to it alone.
+        frozen.inject(reactDom('19.3.0'));
+        t.mock.timers.tick(3000);
+        assert.deepEqual({ mode: api.stats().mode, kind: api.stats().unsupportedReason?.kind }, { mode: 'unsupported', kind: 'hook-disabled' }, finds);
+        assert.equal(warn.mock.callCount(), 1, finds);
+        assert.match(
+          String(warn.mock.calls[0]?.arguments[0]),
+          /^\[react-inp-blame\] the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ is frozen, or has a method that cannot be assigned or added, so it cannot be wrapped and React's commits cannot be read\. Interactions are still reported, without components\. See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#hook-locked$/,
+          finds,
+        );
+        // The library uses no hook then, not the shim the frozen one replaced.
+        assert.equal(api.debug.hook().owner, 'none', finds);
         page.paint([click(21, 3000, 200)]);
-        assert.equal(api.last()?.interactionId, 21, finds);
+        assert.deepEqual({ id: api.last()?.interactionId, react: api.last()?.reactStatus }, { id: 21, react: 'unreadable' }, finds);
       } finally {
         api.dispose();
       }
@@ -1914,6 +1926,24 @@ test("a hook the library cannot chain onto never reaches the page's error handle
     session?.slots.warnings?.clear();
     warn.mock.resetCalls();
   }
+});
+
+test('a sealed DevTools hook without a post-commit call, which the library cannot add one to, is left as it was', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    // Its methods can be replaced, but nothing can be added to it.
+    const sealed = Object.seal(existingHook());
+    const { inject, onCommitFiberRoot } = sealed;
+    page.window[HOOK] = sealed;
+    const api = install({ devtoolsTrack: false });
+    try {
+      assert.equal(api.stats().unsupportedReason?.kind, 'hook-disabled');
+      assert.equal(sealed.inject, inject);
+      assert.equal(sealed.onCommitFiberRoot, onCommitFiberRoot);
+    } finally {
+      api.dispose();
+    }
+  });
 });
 
 test('a render that a report listener causes is never read, so a panel showing reports never joins the report it shows', async (t) => {
