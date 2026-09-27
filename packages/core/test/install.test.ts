@@ -1859,6 +1859,30 @@ test("an error while a report is built never reaches the page's error handlers: 
   });
 });
 
+test('an error with no string form, such as a bare object, is still kept from the page, and the warning says it cannot be printed', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    try {
+      // An input whose every property throws an object with no prototype, which has no string form.
+      const input = new Proxy(
+        {},
+        {
+          get() {
+            throw Object.create(null);
+          },
+        },
+      );
+      assert.doesNotThrow(() => page.fire('pointerdown', input));
+      assert.match(String(caught(warn)[0]), /an error inside the library \(a value that cannot be printed\) was kept from the page/);
+      page.paint([click(7, 2000, 120)]);
+      assert.equal(api.last()?.interactionId, 7);
+    } finally {
+      api.dispose();
+    }
+  });
+});
+
 test("an interaction whose report was dropped after an error of the library's own still counts toward INP, and the INP estimate and attributeINP point at it with no report", async (t) => {
   t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {

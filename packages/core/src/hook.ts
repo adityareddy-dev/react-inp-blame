@@ -3,7 +3,7 @@ import { controlOf } from './element.js';
 import { shared } from './session.js';
 import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
-import { dropped, guarded, warnOnce } from './warn.js';
+import { dropped, errorText, guarded, warnOnce } from './warn.js';
 
 const HOOK_KEY = '__REACT_DEVTOOLS_GLOBAL_HOOK__';
 const MAX_COMMITS = 300;
@@ -1196,7 +1196,7 @@ function guardedPostCommit(hook: DevtoolsHook, id: number, root: FiberRoot): voi
 
 function threw(hook: DevtoolsHook, id: number, error: unknown): void {
   const renderer = registryOf(hook).get(id);
-  if (renderer) stopReading(renderer, 'walk-threw', `reading a commit of react-dom ${renderer.info.version ?? 'without a version'} threw (${String(error)})`);
+  if (renderer) stopReading(renderer, 'walk-threw', `reading a commit of react-dom ${renderer.info.version ?? 'without a version'} threw (${errorText(error)})`);
 }
 
 /** Wraps a hook someone else installed; returns the undo. Throws for a hook that cannot be wrapped, such as a frozen one. */
