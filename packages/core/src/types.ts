@@ -197,7 +197,7 @@ export interface UnsupportedReason {
    * 'browser': no Event Timing `interactionId` (Chrome 96, Firefox 144, Safari 26.2), so nothing was
    * installed. 'another-copy': a copy of this library from an incompatible version is already on the
    * page, so this one installed nothing. 'hook-disabled': the page's DevTools hook has `isDisabled` set
-   * or no `supportsFiber`, or the global is empty and cannot be redefined, so React registers with no hook;
+   * or no `supportsFiber`, or the global is empty and read-only, so React registers with no hook;
    * or the hook is frozen, sealed without `onPostCommitFiberRoot`, or has a method that cannot be assigned,
    * so it cannot be wrapped and was left as it was. The other three stop the reading of one react-dom's
    * commits, and the page is 'unsupported' when that leaves no react-dom it can read:
