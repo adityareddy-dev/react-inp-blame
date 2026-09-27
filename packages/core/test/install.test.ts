@@ -2638,6 +2638,7 @@ test("an error in a window listener of the library's, or in what it does when a 
       await nextTask();
       page.fire('input', unreadableEvent());
     },
+    keypress: (page) => page.fire('keypress', unreadableEvent()),
     resize: (page) => page.fire('resize', unreadableEvent()),
     pageshow: (page) => page.fire('pageshow', unreadableEvent()),
     visibilitychange: (page) => {

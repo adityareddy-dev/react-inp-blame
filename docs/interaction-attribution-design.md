@@ -435,11 +435,11 @@ on without components. Since 0.1.0 `stats().unsupportedReason` says which of the
 commit with a rendered tree already behind it means `install()` ran after that root rendered, and a
 warning says so once.
 
-**Errors of its own.** Every callback the library hands the browser or a router, apart from the badge
-and panel's, runs inside a guard: the Event Timing observer's callback and its flush, the window
-listeners for inputs, resizes, `pageshow` and `visibilitychange`, the timers that deliver reports and
-check for react-dom, the idle callback that draws them, the App Router's navigation announcement, and
-the setter that hears another tool assign the DevTools hook. An error in one is caught, only the step it
+**Errors of its own.** Every callback the library hands the browser or a router, apart from the badge and
+panel's, runs inside a guard: the Event Timing observer's callback and its flush, the window listeners
+for inputs, keypresses, resizes, `pageshow` and `visibilitychange`, the timers that deliver reports and
+check for react-dom, the idle callback that draws them, the App Router's navigation announcement, and the
+setter that hears another tool assign the DevTools hook. An error in one is caught, only the step it
 threw in is skipped, and the console says so once (`library-error`), quoting the first error and logging
 it after the message so its stack shows. Until 2026-09-26 an error while a report was built went from
 the Event Timing callback to `window.onerror`, where Sentry or Datadog counted it as the app's, and the
