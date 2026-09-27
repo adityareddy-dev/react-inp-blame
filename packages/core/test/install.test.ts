@@ -2174,20 +2174,29 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     // React hydrates the HTML a key lands on inside the keydown, and then the keydown's entry carries the hydration
     // and outweighs the keypress's. Its element is read again as the keypress is dispatched: hydrated by then, and
     // not yet rendered by the submit.
-    const hydratedInKeydown = (id: number, ts: number, props: Record<string, unknown>) => {
+    const hydratedInKeydown = (id: number, ts: number, props: Record<string, unknown>, keypressOn = field) => {
       dehydrate();
       page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: ts, target: field, code: 'Enter' });
       hydrate(goNext, props);
-      page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: field, code: 'Enter' });
+      page.fire('keypress', { isTrusted: true, type: 'keypress', timeStamp: ts, target: keypressOn, code: 'Enter' });
       form.__reactProps$demo = { onSubmit: finish };
       const keydown = { ...pointer('keydown', id, ts, 400), processingEnd: ts + 361, target: field };
-      page.paint([keydown, { ...keydown, name: 'keypress', processingStart: ts + 361, processingEnd: ts + 393 }]);
+      page.paint([keydown, { ...keydown, name: 'keypress', processingStart: ts + 361, processingEnd: ts + 393, target: keypressOn }]);
       return api.last()?.target?.handler;
     };
     assert.equal(hydratedInKeydown(13, 6000, fieldProps), 'goNext');
     // A field with its own onKeyDown ran it in the keydown, and that is what the keydown is named by.
     function checkShortcut() {}
     assert.equal(hydratedInKeydown(14, 7000, { ...fieldProps, onKeyDown: checkShortcut }), 'checkShortcut');
+    // One that moves focus sends the keypress to the element it focused, whose own onKeyDown never ran for the key.
+    // The keydown is read again from its own element.
+    function focusResults() {}
+    function moveThroughResults() {}
+    const resultsProps = { tabIndex: -1, onKeyDown: moveThroughResults };
+    const resultsFiber: Record<string, unknown> = { tag: 5, elementType: 'ul', type: 'ul', memoizedProps: resultsProps, return: wizardFiber };
+    const results = { ...node('ul', resultsFiber, container), __reactProps$demo: resultsProps };
+    resultsFiber.stateNode = results;
+    assert.equal(hydratedInKeydown(16, 8000, { ...fieldProps, onKeyDown: focusResults }, results), 'focusResults');
     api.dispose();
   });
 });
