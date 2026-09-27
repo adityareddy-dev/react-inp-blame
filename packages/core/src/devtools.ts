@@ -94,7 +94,8 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
     ['Where', x.where || 'n/a'],
     ['Handler', r.target?.handler || 'n/a'],
     ['React renders before the paint', String(r.commits.length)],
-    ['React renders after the paint', String(r.followUps.length)],
+    // Not "after the paint": a press's render before a slower release is one, and it came before this paint.
+    ['Later React renders', String(r.followUps.length)],
   ];
   if (main && main.hotPath.length) properties.push(['Heaviest path', main.hotPath.join(' > ')]);
   if (r.walkMs > 0) properties.push(['react-inp-blame itself', ms(r.walkMs)]);
@@ -124,7 +125,7 @@ function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boo
   measure(label, start, c.at, {
     track: RENDER_TRACK,
     color,
-    tooltipText: `${counted} rendered${later ? ' after the screen updated' : ''}${c.hotPath.length ? `; heaviest path ${c.hotPath.join(' > ')}` : ''}`,
+    tooltipText: `${counted} rendered${later ? (c.at < r.end ? ' after the press painted' : ' after the screen updated') : ''}${c.hotPath.length ? `; heaviest path ${c.hotPath.join(' > ')}` : ''}`,
     properties: c.components.slice(0, 6).map((y) => [y.name, y.self != null ? `${y.count} rendered, ${ms(y.self)}` : `${y.count} rendered`]),
   });
 }
