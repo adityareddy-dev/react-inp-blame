@@ -1641,6 +1641,35 @@ test('where React stopped being read partway through an interaction, the note sa
   assert.match(notesOf(report(click, [], [], [], 'attributes', [], undefined, 'unreadable')), /^No react-dom on this page is being read, so nothing React did is in this report/m);
 });
 
+test('where React stopped being read after the only render it read, in a listener after the handlers, it was read all through them and rendered nothing there', () => {
+  // handleSave ran from 20 to 220 ms and set no state, a scroll listener rendered 3 components from 221 to 245 ms,
+  // and the page turned its DevTools hook off before the report was built. That render was read once the handlers
+  // had ended, so React was read all through them. Taken as unknown, the click was blamed on nothing, and the cause
+  // said the render the note names was not seen.
+  const click = [entry('click', 0, 280, 20, 220)];
+  const save = loginClick('handleSave');
+  const scrolled = [commit(245, 0, { total: 20, rendered: 3, startedAt: 221 })];
+  const listener = script('DIV.onscroll', 221, 25);
+  const stopped = (frames: FrameSummary[]) => report(click, scrolled, frames, save, 'attributes', [], undefined, 'unreadable').explanation;
+  const handler = { kind: 'handler', name: 'handleSave', detail: 'SignInPage', ms: 200, confidence: 'inferred' };
+  // The verdict is the one React read gives, hedged, since what React did after that is not in the report.
+  const framed = stopped([frame(0, 280, [script('BUTTON.onclick', 20, 200), listener])]);
+  assert.deepEqual(framed.blame, { ...handler, kind: 'script' });
+  assert.equal(framed.cause, "React didn't render anything in the working time; most likely the click handler handleSave ran for 200 ms.");
+  assert.match(framed.notes[0]!, /^React stopped being read partway through this click/);
+  assert.match(framed.notes[1]!, /DIV\.onscroll \(app\.js\), 25 ms, and React rendered inside it: 20 ms re-rendering 3 components/);
+  const read = report(click, scrolled, [frame(0, 280, [script('BUTTON.onclick', 20, 200), listener])], save).explanation.blame;
+  assert.deepEqual(read, { ...handler, kind: 'script', confidence: 'measured' });
+  // Where no frame recorded the listener handleSave ran in, the handler is named, as it is where React is read.
+  const bare = stopped([frame(0, 280, [listener])]);
+  assert.deepEqual(bare.blame, handler);
+  assert.equal(bare.cause, "The click handler handleSave most likely took about 200 ms; React didn't render anything in the working time.");
+  // With no render read, what React did is still unknown.
+  const unread = report(click, [], [frame(0, 280, [script('BUTTON.onclick', 20, 200), listener])], save, 'attributes', [], undefined, 'unreadable').explanation;
+  assert.deepEqual(unread.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' });
+  assert.match(unread.cause, /^What React did is unknown/);
+});
+
 test('where React is read and rendered nothing, all of the working time is outside it in any build, so a slow handler is named', () => {
   // A click whose handleSave ran from 2 to 302 ms and set no state. With a 1 ms commit it was the handler's,
   // measured; with none it read as unknown, or as time that went to waiting and painting.

@@ -1141,17 +1141,21 @@ build. One that lists only shorter scripts, or none, or only the one after the h
 names, names nothing that ran in them, so the handler keeps its verdict rather than the time going to
 waiting and painting. One that ended as they began holds only what the click waited behind, so a 30 ms
 timer there leaves a 45 ms handler its verdict, as it has before that frame arrives and beside a 1 ms
-render. Where install() ran too late or react-dom cannot be read, the setup is still the verdict. A click
-React never dispatched, on server-rendered HTML it had not hydrated yet, is left as it was: the handler
-named there is a hydrated component's above the boundary, which never ran, and the working time can be
-React's own attempt at hydrating it. One limit is known. No react-dom having loaded yet is the status
-`'waiting'`, and the page is looked at for React's marks only five times, besides the check 3 s after
-install and the one at the first interaction after that, before it is taken to have none. A react-dom that
-loaded before install() and mounts its root after those looks renders unseen while the status stays
-`'waiting'`, and its render is then put on the handler, measured. The status already stood for React
-rendering nothing before this, in the verdict that names a long animation frame's script and in the one
-that sends the time to waiting and painting, and looking again for every report would bring back the cost
-the looks are capped to save.
+render. Where install() ran too late or react-dom cannot be read, the setup is still the verdict, unless
+every render read ran in the script after the handlers: those were read once the handlers had ended, so
+React was read all through them and rendered nothing there, and the handler or the script is named as
+where React is read, hedged. Taken as unknown, 200 ms of handleSave before a scroll listener that
+rendered would be blamed on nothing, and the render the note names said to be unseen. A click React never
+dispatched, on server-rendered HTML it had not hydrated yet, is left as it was: the handler named there
+is a hydrated component's above the boundary, which never ran, and the working time can be React's own
+attempt at hydrating it. One limit is known. No react-dom having loaded yet is the status `'waiting'`,
+and the page is looked at for React's marks only five times, besides the check 3 s after install and the
+one at the first interaction after that, before it is taken to have none. A react-dom that loaded before
+install() and mounts its root after those looks renders unseen while the status stays `'waiting'`, and
+its render is then put on the handler, measured. The status already stood for React rendering nothing
+before this, in the verdict that names a long animation frame's script and in the one that sends the time
+to waiting and painting, and looking again for every report would bring back the cost the looks are
+capped to save.
 
 **How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's own time (the

@@ -1637,18 +1637,23 @@ function explain(r: InteractionReport): Explanation {
   // the build records: a 300 ms handler that set no state is the handler's, as it is beside a 1 ms render. A render
   // the screen update's note ties to the script after the handlers is not in the working time, so a click whose
   // every render ran there is the same: 200 ms of short handlers before a 40 ms scroll listener that rendered read
-  // as waiting and painting. Where a long animation frame was recorded over the handlers, the browser's own record
-  // decides, in any build, where it names a script of 20 ms or more that a verdict would name, as it did. Where it
-  // lists only shorter ones, or none, or only the one the note names after the handlers, it names nothing that ran
-  // in them, so the handler keeps its verdict rather than the time reading as waiting and painting. A frame that
-  // ended as they began holds only what the click waited behind: a 30 ms timer there no longer takes a 45 ms
-  // handler's verdict, which the handler keeps before that frame arrives and beside a 1 ms render.
+  // as waiting and painting. So is one where React stopped being read after that render: it was read once the
+  // handlers had ended, so React was read all through them. Taken as unknown, 200 ms of handleSave before a scroll
+  // listener that rendered was blamed on nothing and the render said to be unseen, so the rung for a react-dom that
+  // is not read passes such a report on too. Where a long animation frame was recorded over the handlers, the
+  // browser's own record decides, in any build, where it names a script of 20 ms or more that a verdict would name,
+  // as it did. Where it lists only shorter ones, or none, or only the one the note names after the handlers, it
+  // names nothing that ran in them, so the handler keeps its verdict rather than the time reading as waiting and
+  // painting. A frame that ended as they began holds only what the click waited behind: a 30 ms timer there no
+  // longer takes a 45 ms handler's verdict, which the handler keeps before that frame arrives and beside a 1 ms
+  // render.
   // A click React never dispatched, on server-rendered HTML it had not hydrated, is left out: the handler named
   // there is a hydrated component's above the boundary, which never ran, and the working time can be React's own
   // attempt at hydrating it. "Not loaded yet" is 'waiting', which the page's looks for React's marks decide, so a
   // react-dom that loaded before install() and mounted after the last look is taken for none: a known limit, the
   // one every rung that says React rendered nothing already had.
-  const reactIdle = !inWorkingTime.length && !blind && !unjoined && r.hydration?.kind !== 'not-hydrated';
+  const unseen = blind && !lateOnly;
+  const reactIdle = !inWorkingTime.length && !unseen && !unjoined && r.hydration?.kind !== 'not-hydrated';
   const framedHandlers = frames.some((f) => f.start < processingEnd && f.start + f.duration > processingStart);
   const idleHandler = reactIdle && !(framedHandlers && ranScript);
   const outsideMatters = (hasDurations || idleHandler) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
@@ -2062,7 +2067,7 @@ function explain(r: InteractionReport): Explanation {
     // be refused for the screen update and then fall past it.
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`;
     blame = { kind: 'painting', name: lateLeads ? scriptBlameName(lateLeads.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
-  } else if (blind) {
+  } else if (unseen) {
     // No react-dom is read, so what React rendered for this input, if anything, is unknown, and with it
     // the split of the working time: a handler and the render its state update sets off run in one
     // script, the listener's, which is all the browser records. Naming the handler for that script read
