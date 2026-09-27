@@ -576,7 +576,10 @@ form after the commit instead, `onSubmit={step < 2 ? goNext : finish}` named fin
 Enter. None of Enter's three events looks for an `onChange` in a field, since Enter changes no value: in
 the usual controlled field, `<input value={email} onChange={setEmail}>`, they named setEmail until
 2026-09-26, and React runs no onChange for Enter. The keydown matters as much as the keypress: an async
-onSubmit does little in the keypress, so its entry ties with the keydown's, which comes first. The
+onSubmit does little in the keypress, so its entry ties with the keydown's, which comes first. An Enter
+that commits an input method's text is another matter. It submits nothing and fires no keypress, and the
+field's onChange runs from the input event that ends the composition. Its keydown has keyCode 229, which
+is how React itself tells a key the input method took, and the ring reads it as any other key. The
 element is read when the entry arrives only for an event the ring keeps no reading of, such as the
 `input` an input method sends, and for one on server HTML, which had no handler to read until React
 hydrated it to run the event.

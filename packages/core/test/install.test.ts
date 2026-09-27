@@ -2128,6 +2128,12 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
     // keydown reaches the same onSubmit and no onChange either: React runs none for Enter in a field.
     form.__reactProps$demo = { onSubmit: goNext };
     assert.equal(enter(9, 3000, () => (form.__reactProps$demo = { onSubmit: finish }), undefined, 2), 'goNext');
+    // The Enter that commits an input method's text submits nothing and fires no keypress: the field's onChange runs,
+    // from the input event that ends the composition. The keydown's keyCode is 229, whatever the key.
+    form.__reactProps$demo = { onSubmit: goNext };
+    page.fire('keydown', { isTrusted: true, type: 'keydown', timeStamp: 3500, target: field, code: 'Enter', keyCode: 229 });
+    page.paint([{ ...pointer('keydown', 10, 3500, 140), target: field }]);
+    assert.equal(api.last()?.target?.handler, 'setEmail');
     // Server HTML React had not hydrated by the keypress has no handler to read yet: the form is read when the
     // entries come, once React hydrated it to run the submit.
     rootFiber.memoizedState = { isDehydrated: true };
@@ -2140,7 +2146,7 @@ test("Enter in a form's field is named by the onSubmit its keypress reached, rea
       Object.assign(form, { __reactFiber$demo: formFiber, __reactProps$demo: { onSubmit: finish } });
       Object.assign(field, { __reactFiber$demo: fieldFiber, __reactProps$demo: fieldProps });
     };
-    assert.equal(enter(10, 4000, hydrate), 'finish');
+    assert.equal(enter(11, 4000, hydrate), 'finish');
     api.dispose();
   });
 });
