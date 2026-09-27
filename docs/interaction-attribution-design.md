@@ -287,8 +287,11 @@ so the common scripts that keep developer tools out switch off the hook in use w
 included: `supportsFiber` null and each method a no-op, once react-dom has registered or before. That is
 checked for at each Event Timing batch and 3 s after `install()`, and gives the same kind with a
 warning of its own, where before a report read it as React rendering nothing, or as `install()` having
-run late. A method that is no longer the library's says nothing by itself, since Fast Refresh wraps the
-shim's the same way when it loads after the library. A hook the page has
+run late. React reads the two fields only as a react-dom registers, so once one has, they say nothing by
+themselves: a page that only sets `isDisabled` after its imports is still read, and the hook counts as
+switched off only where its `onCommitFiberRoot` is no longer the one the library left there, or put back
+on `dispose()`. A method that is no longer the library's says nothing by itself either, since Fast Refresh
+wraps the shim's the same way when it loads after the library. A hook the page has
 locked against developer tools, frozen, sealed without `onPostCommitFiberRoot`, or with a method that has
 only a getter or a setter that drops what it is given, cannot be wrapped: each method is read back after
 it is assigned, and one that still reads as the page's own did not take. The methods already wrapped are
