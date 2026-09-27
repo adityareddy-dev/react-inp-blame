@@ -310,15 +310,6 @@ function pagePath(root, input) {
 }
 
 /**
- * The build options of `environment`'s build. The page transform has no environment to hand, and its pages
- * are the client environment's, whose options are not the top-level ones where the app builds with
- * `builder: { sharedConfigBuild: true }`, as RSC setups do: the plugins get the top-level config then.
- */
-function buildOptions(config, environment) {
-  return environment?.config?.build ?? clientEnvironment(config)?.build ?? config.build;
-}
-
-/**
  * Whether this build can put the install call in a script of its own. A dev server needs no chunk
  * (module scripts already run in document order there), a server build has no page, and a library,
  * a single-file output format or the SystemJS bundle @vitejs/plugin-legacy adds either cannot be
@@ -327,7 +318,7 @@ function buildOptions(config, environment) {
 function separateScript(config, environment) {
   if (config?.command !== 'build') return false;
   if (environment?.config?.consumer === 'server') return false;
-  const build = buildOptions(config, environment);
+  const build = environment?.config?.build ?? config.build;
   if (!build || build.lib || build.ssr || singleFile(build)) return false;
   // @vitejs/plugin-legacy builds a second, SystemJS bundle for the browsers that ignore module
   // scripts. Document order buys nothing there, and a second entry only splits the install away from
@@ -342,11 +333,11 @@ function separateScript(config, environment) {
  */
 function buildsPages(config, environment, pages) {
   if (!separateScript(config, environment)) return false;
-  const build = buildOptions(config, environment);
-  // Vite 8.2's `input`, written at the top level or for the client environment, is what Vite builds from
-  // when the bundler's options name none. It is read from the environment's resolved options, as the page
-  // transform reads it: the environment's own config hands on the top-level keys it does not have, and
-  // before 8.2 an app's `input` is one of those, left as written and never built from.
+  const build = environment?.config?.build ?? config.build;
+  // Vite 8.2's `input`, written for the environment or, for the client one, at the top level, is what Vite
+  // builds from when the bundler's options name none. It is read from the environment's resolved options:
+  // the environment's own config hands on the top-level keys it does not have, and before 8.2 an app's
+  // `input` is one of those, left as written and never built from.
   const options = environment ? config.environments?.[environment.name ?? 'client'] : clientEnvironment(config);
   const input = build.rollupOptions?.input ?? build.rolldownOptions?.input ?? options?.input;
   // Vite's own default, when the config names no input, is the root index.html.
@@ -427,6 +418,10 @@ export function inpBlame(options = {}) {
   if (install) {
     // The build in progress, from configResolved: its `base`, and whether it is a build at all.
     let config = null;
+    // Its environment, from buildStart, whose options the page transform decides from as the build does. A
+    // browser environment of any name builds pages, and where the app builds with sharedConfigBuild, as RSC
+    // setups do, config is the top-level one, not any environment's.
+    let building = null;
     // `entry` as the absolute path Vite gives the module, once the root is known.
     let entryFile = null;
     // The builds, by environment, that have put the install first in `entry`, which a wrong path never does.
@@ -489,6 +484,7 @@ export function inpBlame(options = {}) {
        * to point a second script tag at.
        */
       buildStart() {
+        building = this.environment;
         entryImports.delete(environmentOf(this));
         warnedReactDom.delete(environmentOf(this));
         moduleInfos.delete(environmentOf(this));
@@ -612,7 +608,7 @@ export function inpBlame(options = {}) {
         // repeat it.
         order: 'pre',
         handler: (_html, { path }) =>
-          entry === undefined && pages(path) && !buildsPages(config, null, pages)
+          entry === undefined && pages(path) && !buildsPages(config, building, pages)
             ? [{ tag: 'script', attrs: { type: 'module' }, children: `import '${INSTALL_MODULE}';`, injectTo: 'head-prepend' }]
             : undefined,
       },
