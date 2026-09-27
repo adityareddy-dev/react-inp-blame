@@ -8,10 +8,6 @@ on:
 
 permissions:
   contents: read
-  # The OIDC token GitHub issues to this run. Trusted publishing exchanges it for the right to publish,
-  # and --provenance signs the provenance statement with it (npm generates provenance only for public
-  # repositories).
-  id-token: write
 
 jobs:
   # The whole of CI for this commit, the e2e suites included, before anything reaches npm. ci.yml's own
@@ -19,38 +15,58 @@ jobs:
   ci:
     uses: ./.github/workflows/ci.yml
 
-  publish:
+  # Installs, builds, tests and packs the release in a job that cannot publish. Everything that runs code
+  # from the repository or its dependencies runs here, and only the packed tarball goes on to publish.
+  build:
     needs: ci
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
-          # Trusted publishing needs npm 11.5.1 or later and Node 22.14 or later; npm's own example runs it on Node 24.
           node-version: 24
-          registry-url: https://registry.npmjs.org
           # A release installs from the lockfile alone, never from a cache.
           package-manager-cache: false
       - name: Check that the tag names the version being published
         run: test "$GITHUB_REF_NAME" = "v$(node -p "require('./packages/core/package.json').version")"
-      - run: npm ci
+      # No install scripts run. Nothing in the lockfile needs one on Linux: fsevents, the one package
+      # that has one, is macOS only.
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run test:unit
-      # npm authenticates the publish in one of two ways.
-      #
-      # Trusted publishing, preferred, needs no secret. On npmjs.com, in the package's settings under
-      # Trusted publishing, choose GitHub Actions with organization or user adityareddy-dev, repository
+      # Packs the build the unit tests just ran against, so `prepack` does not build it a second time.
+      - run: npm pack -w packages/core --ignore-scripts --pack-destination "$RUNNER_TEMP"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tarball
+          path: ${{ runner.temp }}/react-inp-blame-*.tgz
+          if-no-files-found: error
+
+  # The one job that can publish. It checks out nothing and installs nothing, and npm runs no lifecycle
+  # script when it publishes a tarball, so no code from the repository or its dependencies runs while
+  # the job can ask for the token.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The OIDC token GitHub issues to this job. Trusted publishing exchanges it for the right to
+      # publish, and --provenance signs the provenance statement with it (npm generates provenance only
+      # for public repositories).
+      id-token: write
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          # Trusted publishing needs npm 11.5.1 or later and Node 22.14 or later; npm's own example runs it on Node 24.
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: tarball
+      # Trusted publishing needs no secret. On npmjs.com, in the package's settings under Trusted
+      # publishing, choose GitHub Actions with organization or user adityareddy-dev, repository
       # react-inp-blame and workflow filename publish.yml, and tick `npm publish` under Allowed actions:
-      # a configuration created after 2026-09-03 allows only `npm stage publish` unless it is ticked. npm
-      # configures trusted publishing only for a package that already exists on the registry, so it
-      # cannot make the first publish.
+      # a configuration created after 2026-09-03 allows only `npm stage publish` unless it is ticked.
       #
-      # An NPM_TOKEN repository secret, which setup-node's .npmrc hands to npm as NODE_AUTH_TOKEN: a
-      # granular access token with Read and write (publish and stage) on All Packages, since the package
-      # does not exist before its first publish, and Bypass two-factor authentication checked. npm has
-      # announced that publishing directly with a granular access token ends in January 2027. npm tries
-      # OIDC before a token, so once trusted publishing is configured the secret can be deleted and this
-      # step left as it is.
-      - run: npm publish --provenance --access public -w packages/core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # The tarball is named by the tag, so only the version the tag names can go out.
+      - run: npm publish "./react-inp-blame-${GITHUB_REF_NAME#v}.tgz" --provenance --access public
