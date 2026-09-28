@@ -1108,22 +1108,25 @@ commits get no effects' time. React 17 makes no call at all, so nothing changes 
 stamped with the same input, with no newer input in between and no `input`, `change` or `submit` a
 script dispatched after the paint. Effects, transitions and data-driven
 re-renders show up here. The window runs from the paint, not from the input, so an interaction that took
-three seconds still gets the render its effects schedule a moment after it. A render before the headline
-entry's input is one too, where another of the interaction's entries painted before it and it is inside
-none of them: a keydown's render before a slower keyup, or a pointerdown's while the pointer is held
-before a slow click. INP leaves such a render out. It is measured from that earlier paint, said as
-landing after the press updated the screen and before the release, and a newer input or a script's
-`input`, `change` or `submit` is looked for from that paint too, since the interaction's own inputs go
-on past the render. Where nothing rendered in the release's working time, the cause says React didn't
-render anything in the working time, and the note after it says the render. Until 2026-09-27 every
-render before the headline's input was dropped, and a key press published for its render was told in
-its keyup's revision that React didn't render anything. One inside another entry, its handlers or the
-wait before them, is still left out of the report, and so is one before any entry painted. A press too
-quick for an entry of its own, the usual one, paints none, and it is not taken to have painted: the hook
-stamps a drag's move renders with its pointerdown wherever it cannot tell them apart (React 18 and 19.0,
-a production build, touch), and every move would read as a later render of the drop and publish a quiet
-one. `holdMs` spans the entries alone: it keeps the first one's time, but where the press sent no entry
-it starts at the release's and holds none of the second. Where the commit's own input
+three seconds still gets the render its effects schedule a moment after it. A key's render before the
+headline entry's input is one too, where another of the interaction's entries painted before it and it
+is inside none of them: a keydown's render before a slower keyup, or before the click the key made. INP
+leaves such a render out. It is measured from that earlier paint, said as landing after the press
+updated the screen and before the release, and a newer input or a script's `input`, `change` or
+`submit` is looked for from that paint too, since the interaction's own inputs go on past the render.
+Where nothing rendered in the release's working time, the cause says React didn't render anything in
+the working time, and the note after it says the render. Until 2026-09-27 every render before the
+headline's input was dropped, and a key press published for its render was told in its keyup's revision
+that React didn't render anything. One inside another entry, its handlers or the wait before them, is
+still left out of the report, and so is one before any entry painted: a press too quick for an entry of
+its own, the usual one, paints none, and it is not taken to have painted. A pointer's render before its
+release is left out as it always was, whether the pointerdown sent an entry or not. The hook stamps a
+drag's move renders with its pointerdown wherever it cannot tell them apart (React 18 and 19.0, a
+production build, touch), and nothing in the report tells them from a render the press set off, so
+once the press painted, every move read as a later render of the drop and published a quiet one. A
+render a held pointer's press did set off is lost with them. `holdMs` spans the entries alone: it keeps
+the time of a press that sent an entry, but where the press sent none it starts at the release's and
+holds none of it. Where the commit's own input
 is a later one of the same interaction whose work ended after the paint, the click that releases a
 pointer held down past it or a click whose pointerdown was the slow part and painted first, the window
 runs from the end of that input's work (`work.endedAt` in the ring), which is where the hook measured
