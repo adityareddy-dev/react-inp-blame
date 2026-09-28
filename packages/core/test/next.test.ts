@@ -39,10 +39,22 @@ function added(config: Record<string, any>): typeof EVERYTHING {
 /** What next-client reads, as Next.js inlines it from `env`. */
 const clientSettings = (config: Record<string, any>) => JSON.parse(config.env.REACT_INP_BLAME_NEXT);
 
-test('by default next dev gets the runtime and the loader, and next build gets the config back untouched', () => {
+/** The one `env` entry a run `enabled` leaves out gets, empty, so that the line's module compiles to nothing. */
+const LEFT_OUT_ENV = { REACT_INP_BLAME_NEXT: '' };
+
+test('by default next dev gets the runtime and the loader, and next build gets the config back with one empty env entry', () => {
   const config = { reactStrictMode: true };
   assert.deepEqual(added(wrapped('development', config)), EVERYTHING);
-  assert.equal(wrapped('production', config), config);
+  assert.deepEqual(wrapped('production', config), { reactStrictMode: true, env: LEFT_OUT_ENV });
+  // A copy: the object the app passed in is left as it was.
+  assert.deepEqual(config, { reactStrictMode: true });
+});
+
+test("a run enabled leaves out keeps the app's own env beside the empty entry", () => {
+  const config = { env: { API: 'x' } };
+  assert.deepEqual(wrapped('production', config).env, { API: 'x', REACT_INP_BLAME_NEXT: '' });
+  assert.deepEqual(wrapped('development', config, { enabled: false }).env, { API: 'x', REACT_INP_BLAME_NEXT: '' });
+  assert.deepEqual(config, { env: { API: 'x' } });
 });
 
 test('next build says once that the default leaves the library out, and next start and an enabled written out do not', (t) => {
@@ -64,10 +76,11 @@ test('next build says once that the default leaves the library out, and next sta
   process.argv = [argv[0]!, '/app/node_modules/next/dist/compiled/jest-worker/processChild.js'];
   wrapped('production', {});
   assert.equal(warn.mock.callCount(), 0);
-  // The config comes back untouched, and the line is printed once however often Next.js reads it.
+  // The config comes back with the one empty env entry and nothing else, and the line is printed once
+  // however often Next.js reads it.
   const config = { reactStrictMode: true };
   process.argv = [argv[0]!, '/app/node_modules/next/dist/bin/next', 'build', '--turbopack'];
-  assert.equal(wrapped('production', config), config);
+  assert.deepEqual(wrapped('production', config), { reactStrictMode: true, env: LEFT_OUT_ENV });
   run(['build']);
   assert.equal(warn.mock.callCount(), 1);
   assert.match(
@@ -96,7 +109,8 @@ test('the runtime installs with the options it is given, and runtime: false keep
 
   const loaderOnly = wrapped('development', {}, { runtime: false });
   assert.deepEqual(added(loaderOnly), { ...EVERYTHING, runtime: false });
-  assert.equal(loaderOnly.env, undefined);
+  // Empty, as in a run `enabled` leaves out, so a next-client line in instrumentation-client compiles to nothing.
+  assert.deepEqual(loaderOnly.env, LEFT_OUT_ENV);
   assert.throws(() => wrapped('development', {}, { runtime: 'query' }), /runtime is true, false or the options for install\(\)/);
 });
 
@@ -228,6 +242,20 @@ test('an async function config is awaited', async () => {
   const config = await wrappedFunction('production', async () => ({ basePath: '/docs' }), 'phase-production-build', {}, { enabled: true });
   assert.deepEqual(added(config), EVERYTHING);
   assert.equal(config.basePath, '/docs');
+});
+
+test('a function config in a run enabled leaves out comes back as a function, whose config has every setting and the empty env entry', async () => {
+  const project = async (phase: string) => ({ basePath: '/shop', output: 'standalone', phaseSeen: phase, env: { API: 'x' } });
+  const config = await wrappedFunction('production', project, 'phase-production-build', {});
+  assert.deepEqual(config, { basePath: '/shop', output: 'standalone', phaseSeen: 'phase-production-build', env: { API: 'x', REACT_INP_BLAME_NEXT: '' } });
+  assert.deepEqual(added(config), NOTHING);
+});
+
+test('a Promise or null goes back as it came from a run enabled leaves out', () => {
+  // Next.js awaits a Promise export, and a copy made by spreading one would drop the whole config.
+  const pending = Promise.resolve({ reactStrictMode: true });
+  assert.equal(wrapped('production', pending as never), pending);
+  assert.equal(wrapped('production', null as never), null);
 });
 
 const CLIENT_LINE = `export { onRouterTransitionStart } from '${CLIENT_MODULE}';`;
@@ -431,9 +459,9 @@ test('a Next.js older than 14.2 gets its config back as it was, with a warning t
   assert.ok(message.endsWith(' See https://github.com/adityareddy-dev/react-inp-blame#next-too-old'), message);
   // A prerelease of a later version passes every floor. A peer range would have refused it at install time.
   assert.deepEqual(added(inProject(canary, () => wrapped('development', {}))), EVERYTHING);
-  // enabled: false adds nothing to the config, so there is nothing to warn about.
+  // enabled: false adds only the empty env entry, which every Next.js takes, so there is nothing to warn about.
   forgetWarnings();
-  assert.equal(inProject(old, () => wrapped('development', project, { enabled: false })), project);
+  assert.deepEqual(inProject(old, () => wrapped('development', project, { enabled: false })), { reactStrictMode: true, env: LEFT_OUT_ENV });
   assert.equal(warn.mock.callCount(), 1);
   forgetWarnings();
 });

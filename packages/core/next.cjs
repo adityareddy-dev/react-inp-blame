@@ -251,6 +251,20 @@ function installOptions(runtime) {
   throw new TypeError(`withInpBlame: runtime is true, false or the options for install(), not ${JSON.stringify(runtime)}.`);
 }
 
+/**
+ * The config for a run that gets no runtime, because `enabled` leaves it out or `runtime` is false, with
+ * one entry added: REACT_INP_BLAME_NEXT set to ''. Next.js inlines an empty value and leaves an unset one
+ * for the browser to read, so only the empty one lets next-client compile to nothing. On Next.js 15.3 to
+ * 16.2 the line in instrumentation-client brings that module into every build, which otherwise carried
+ * the library unused. A function config gets the same around what it returns. Anything else goes back
+ * as it came: null, or a Promise, which Next.js awaits and a copy made by spreading would empty.
+ */
+function leftOut(nextConfig) {
+  if (typeof nextConfig === 'function') return async (phase, context) => leftOut(await nextConfig(phase, context));
+  if (!nextConfig || typeof nextConfig !== 'object' || typeof nextConfig.then === 'function') return nextConfig;
+  return { ...nextConfig, env: { ...nextConfig.env, [CLIENT_SETTINGS]: '' } };
+}
+
 function withInpBlame(nextConfig = {}, options = {}) {
   return wrap(nextConfig, options, projectDirs());
 }
@@ -260,7 +274,9 @@ function wrap(nextConfig, options, dirs) {
   checkOptionKeys(options);
   const { enabled = 'development', runtime = true } = options;
   const install = installOptions(runtime);
-  // Off means the config comes back as it went in, so the build carries nothing from here.
+  // Off means the config comes back as it went in, with one empty env entry that tells the line's module,
+  // which is in every build on Next.js 15.3 to 16.2, to compile to nothing. So the build carries nothing
+  // from here.
   if (!isEnabled(enabled, process.env.NODE_ENV)) {
     // Left at its default, that looks exactly like the library failing: `next build` prints nothing and
     // `next start` shows no badge. So the build says so, and not for an `enabled` the app wrote itself.
@@ -271,7 +287,7 @@ function wrap(nextConfig, options, dirs) {
         'left-out-of-a-production-build',
       );
     }
-    return nextConfig;
+    return leftOut(nextConfig);
   }
   const found = projectNextVersion(dirs);
   if (!atLeast(found, NEXT_ENTRY)) {
@@ -349,7 +365,7 @@ function wrap(nextConfig, options, dirs) {
 
   // Before 15.3 Next.js has no top-level `turbopack` key and warns about it, and builds with webpack only.
   const withLoader = byEntry ? { ...nextConfig, webpack } : { ...nextConfig, turbopack: { ...(nextConfig.turbopack || {}), rules }, webpack };
-  if (!install) return withLoader;
+  if (!install) return leftOut(withLoader);
   const withSettings = { ...withLoader, env: { ...nextConfig.env, [CLIENT_SETTINGS]: JSON.stringify({ install, basePath: nextConfig.basePath || '' }) } };
   // Below 16.3 the line in instrumentation-client installs the library (before 15.3, webpack's entries do).
   // Kept after an upgrade, it still does, and a second copy from instrumentationClientInject would hear
