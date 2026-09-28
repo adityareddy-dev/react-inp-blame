@@ -1894,19 +1894,24 @@ function explain(r: InteractionReport): Explanation {
   // ("31 of them inside DismissableLayer") do not read as what took it. A count that committed after the
   // handlers did not sit in the working time, and is said to come after it, as the render verdict places it: 800 rows
   // committed after 30 ms of handlers read "In 30 ms of working time, short of a long task, React was
-  // re-rendering 800 components", and the same rows after 55 ms "after the handlers, before the next frame". One the
-  // handler's own script held sat in the working time, whatever its stamp: 800 rows committed at 43 ms in a handler
-  // that ran to 43.5, past the paint the duration's rounding put at 40, read as "After the 35 ms of working time".
+  // re-rendering 800 components", and the same rows after 55 ms "after the handlers, before the next frame". One
+  // committed inside an event's own handlers, or that the handler's own script held, sat in the working time, whatever
+  // its stamp: 800 rows committed at 43 ms in a handler that ran to 43.5, past the paint the duration's rounding put at
+  // 40, read as "After the 35 ms of working time", and without a long animation frame, the commonest recording of a
+  // 40 ms click, still did. A count that sat there is the one said, beside a larger one after the handlers: with 150
+  // rows committed in the handler and 800 after it, the sentence gave the 800 and said nothing of what the 30 ms held.
   const cameAfter = (x: CommitSummary) => {
     const s = holderOf(x);
-    return x.at > processingEnd + STAMP_TOLERANCE && !(s && ranAsHandler(s));
+    return x.at > processingEnd + STAMP_TOLERANCE && !(s && ranAsHandler(s)) && !inOneHandler(x.at, x.at);
   };
-  const countAfter = !!c && cameAfter(c);
+  const countedIn = inWorkingTime.filter((x) => countSays(x) && !cameAfter(x));
+  const sc = countedIn.length ? heaviest(countedIn) : c;
+  const countAfter = !!sc && cameAfter(sc);
   const shortOf =
-    c && !hasDurations && !longTaskOfWork && countSays(c)
+    sc && !hasDurations && !longTaskOfWork && countSays(sc)
       ? countAfter
-        ? `After the ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(c)}, before the next frame`
-        : `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(c)}`
+        ? `After the ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}, before the next frame`
+        : `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}`
       : null;
   // The commit a render blame names is the one React spent longest on, committing and effects included,
   // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
@@ -2351,7 +2356,7 @@ function explain(r: InteractionReport): Explanation {
     const unknown = partway ? 'What React did after it stopped being read is unknown,' : `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen,`;
     cause = `${unknown} and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
-  } else if (ranScript && !(shortOf && ranAsHandler(ranScript.script) && inWorkingTime.some((x) => countSays(x) && !cameAfter(x)))) {
+  } else if (ranScript && !(shortOf && ranAsHandler(ranScript.script) && !countAfter)) {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the
     // interaction is exactly what stops this from being a finding. A script that ran as the handler holds
     // React's render as well (the blind rung above says why), so where the count would have named that

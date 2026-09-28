@@ -4606,17 +4606,30 @@ test('a render known only by its counts is not blamed under a long task of worki
   // It is kept from the verdict where a count that sat in the working time would have named a render too, and a count
   // the handler's own script held sat there, whatever its stamp: beside 150 rows committed in the handler, the 800
   // after it made the 28 ms handleSave the verdict, and so did 800 rows committed at 43 ms in a handler that ran to
-  // 43.5, past the paint the duration's rounding put at 40, which also read as "After the 35 ms of working time".
+  // 43.5, past the paint the duration's rounding put at 40, which also read as "After the 35 ms of working time". The
+  // sentence is about the count in the working time, too: the 150 rows, where it put the 800 after it and said the
+  // 150 nowhere. The 800 are the second of the two renders the note counts.
   const counted = (at: number, rendered: number) => commit(at, 0, { hasDurations: false, total: 0, rendered, components: [{ name: 'Row', count: rendered, self: null, total: null }] });
-  const alsoInside = report([entry('click', 0, 72, 5, 35)], [counted(20, 150), rows], task, loginClick('handleSave')).explanation;
-  assert.deepEqual(alsoInside.blame, afterShort([]).blame);
-  assert.equal(alsoInside.cause, 'After the 30 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them), before the next frame; the rest went to waiting and painting.');
-  const heldInside = report([entry('click', 0, 40, 5, 43.5)], [counted(43, 800)], [frame(0, 50, [script('BUTTON.onclick', 6, 37.5)])], loginClick('handleSave')).explanation;
-  assert.equal(heldInside.blame.kind, 'none');
-  assert.equal(heldInside.cause, 'In 35 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them); the rest went to waiting and painting.');
+  const alsoInside = (frames: FrameSummary[] | null) => report([entry('click', 0, 72, 5, 35)], [counted(20, 150), rows], frames, loginClick('handleSave')).explanation;
+  assert.deepEqual(alsoInside(task).blame, afterShort([]).blame);
+  assert.equal(alsoInside(task).cause, 'In 30 ms of working time, short of a long task, React was re-rendering 150 components inside List, mostly Row (150 of them); the rest went to waiting and painting.');
+  assert.deepEqual(alsoInside(task).notes, ['React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.']);
+  assert.equal(alsoInside(null).cause, 'In 30 ms of working time, short of a long task, React was re-rendering 150 components inside List, mostly Row (150 of them); this browser does not report long tasks, so what else ran is unknown.');
+  // Without a frame, the entries' handler window holds the 800 rows committed at 43 ms, as the handler's script did.
+  const heldInside = (frames: FrameSummary[] | null) => report([entry('click', 0, 40, 5, 43.5)], [counted(43, 800)], frames, loginClick('handleSave')).explanation;
+  const inHandler = heldInside([frame(0, 50, [script('BUTTON.onclick', 6, 37.5)])]);
+  assert.equal(inHandler.blame.kind, 'none');
+  assert.equal(inHandler.cause, 'In 35 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them); the rest went to waiting and painting.');
+  assert.equal(
+    heldInside([]).cause,
+    'In 35 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them); the rest went to waiting and painting. No long animation frame covered the click, so how much of the working time went to any styles and layout it forced is unmeasured.',
+  );
+  assert.equal(heldInside(null).cause, 'In 35 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them); this browser does not report long tasks, so what else ran is unknown.');
   // The render verdict places it the same way over a long task of working time, where it read "after the handlers".
-  const heldLonger = report([entry('click', 0, 60, 5, 63.5)], [counted(63, 800)], [frame(0, 70, [script('BUTTON.onclick', 6, 57.5)])], loginClick('handleSave')).explanation;
-  assert.match(heldLonger.cause, /^React was most likely re-rendering 800 components inside List, mostly Row \(800 of them\), in the 55 ms of working time\. /);
+  const heldLonger = (frames: FrameSummary[] | null) => report([entry('click', 0, 60, 5, 63.5)], [counted(63, 800)], frames, loginClick('handleSave')).explanation;
+  for (const frames of [[frame(0, 70, [script('BUTTON.onclick', 6, 57.5)])], [], null]) {
+    assert.match(heldLonger(frames).cause, /^React was most likely re-rendering 800 components inside List, mostly Row \(800 of them\), in the 55 ms of working time\. /);
+  }
   // A frame that covered the click and listed the handler's script: 300 components re-rendered inside List in
   // 45 ms of working time, with 45 ms charged to the root's click listener. That script holds React's render
   // as well as the handler, so it is not measured in the render's place; the report blames nothing, as it
