@@ -96,8 +96,9 @@ its own React does not switch off the app's own. Reports carry on without compon
   boundary, to tell one React hydrated from one it rendered on the client), `actualDuration`, `elementType`
   and `type` (for names: `displayName` or `name`, through `render` for forwardRef and `type` for memo; on a
   DOM element's fiber, its tag name), `memoizedProps` (a form control's `type`, the event's handler prop,
-  such as `onClick`, on an element with no `__reactProps$` and on one read once the event is over, and the
-  handlers a clicked icon was handed, to name what it belongs to), `memoizedState` (whether a root or a
+  such as `onClick`, on an element with no `__reactProps$` and on one read once the event is over, the
+  handlers a clicked icon was handed, to name what it belongs to, and `children`, whether React wrote an
+  element's text straight into it, for an icon a script drew there), `memoizedState` (whether a root or a
   boundary was still server-rendered HTML: `isDehydrated` and `dehydrated`), and `stateNode` (the root
   fiber's, the FiberRoot, to reach its `current`, and a DOM element's fiber's, the element).
 - On DOM nodes: React's `__reactFiber$` key, `__reactProps$` (the props React runs the element's handlers
