@@ -1583,9 +1583,11 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   cleared, and in production that hands them to any analytics tag or third-party script there.
   `devtoolsTrack: true` draws them under production and profiling builds too.
 
-`apps/demo/e2e/devtools-track.spec.ts` reads the trace JSON for all of this, in development and
-production builds and with a Chrome 133 user agent. Older Chrome shows the measures in the
-Timings track. Nobody has yet opened the trace in the Performance panel and looked.
+`apps/demo/e2e/devtools-track.spec.ts` reads the trace JSON for all of this in a development
+build, also with a Chrome 133 user agent, and checks that a production build draws none of it, in
+the trace or to a `PerformanceObserver` on the page. What one draws with `devtoolsTrack: true` is
+left to `devtools.test.ts`. Older Chrome shows the measures in the Timings track. Nobody has yet
+opened the trace in the Performance panel and looked.
 
 **The badge and panel** (`overlay: true`, or `'query'` for production pages, 2026-09-14).
 A corner badge with the page's INP so far, coloured by the INP thresholds, and a panel that
@@ -2167,9 +2169,9 @@ build as well as on the dev server.
 
 - **Nobody has looked at the Performance panel tracks by eye.** `apps/demo/e2e/devtools-track.spec.ts`
   records a trace of a slow click and reads its JSON, checking the track group, the track names, the
-  colours, the tooltip and that the measures are cleared again, in development and production builds
-  and behind a Chrome 133 user agent. Opening `apps/demo/traces/context-storm-dev.json` in the panel
-  beside React's own tracks is still to do.
+  colours, the tooltip and that the measures are cleared again, in a development build and behind a
+  Chrome 133 user agent, and that a production build draws nothing. Opening
+  `apps/demo/traces/context-storm-dev.json` in the panel beside React's own tracks is still to do.
 - **Real applications have been run by hand, not in CI**: Excalidraw, two TanStack Table examples, the
   shadcn/ui documentation site and Twenty, from 2026-09-20. What they turned up is in the sections
   above and in the changelog. Nothing has run on Next.js's own bench apps.

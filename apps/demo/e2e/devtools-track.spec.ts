@@ -6,6 +6,13 @@ import { settle } from './page';
 
 const prod = process.env.INP_MODE === 'prod';
 
+declare global {
+  interface Window {
+    /** The names of the library's measures a PerformanceObserver on the page was handed. */
+    measuresObserved?: string[];
+  }
+}
+
 /** An entry the Chrome Performance panel draws in a custom track, as the trace holds it. */
 interface TrackEntry {
   via: 'measure' | 'timeStamp';
@@ -75,9 +82,16 @@ const ours = (entries: TrackEntry[]) => entries.filter((e) => e.group === 'react
 // The track group, the track names and the colours are what docs/api.md tells people to look for, so
 // they are checked exactly. Entry names and tooltips are display text like the verdict: they are only
 // checked for the component and the track they have to name.
+//
+// A production build draws them only with `devtoolsTrack: true`, since any script on the page can read
+// each measure, verdict and label included, through a PerformanceObserver. So the tests that read them run
+// in development, and the production run checks that there are none. devtools.test.ts covers what a
+// production build draws when asked: its renders through console.timeStamp in `primary`, and every entry
+// a measure before Chrome 134.
 
 test("the click gets its own track beside React's, and its render is drawn only where React draws none", async ({ browser, page }) => {
-  const file = traceFile(`context-storm-${prod ? 'prod' : 'dev'}.json`);
+  test.skip(prod, 'a production build draws no track unless devtoolsTrack is true');
+  const file = traceFile('context-storm-dev.json');
   const { entries, measuresLeft } = await traceSlowClick(browser, page, file);
   await test.info().attach('track entries', { body: ours(entries).map((e) => `${e.via} ${e.group} / ${e.track}: ${e.color} ${e.name}`).join('\n'), contentType: 'text/plain' });
 
@@ -90,22 +104,32 @@ test("the click gets its own track beside React's, and its render is drawn only 
 
   const renders = ours(entries).filter((e) => e.track === 'React renders');
   const reactsOwn = entries.filter((e) => e.track === 'Components ⚛');
-  if (prod) {
-    // A production build measures nothing and draws no track of its own, so the render goes in ours, through console.timeStamp.
-    expect(reactsOwn).toHaveLength(0);
-    expect(renders.length).toBeGreaterThanOrEqual(1);
-    expect(renders[0]).toMatchObject({ via: 'timeStamp', color: 'primary' });
-    expect(renders[0].name).toContain('OrderSummary');
-  } else {
-    // React 19.3 in development draws every component render it measured; a render track of ours would repeat it.
-    expect(reactsOwn.length).toBeGreaterThan(0);
-    expect(renders).toHaveLength(0);
-    expect(clicks[0].tooltip).toContain('Components ⚛');
-  }
+  // React 19.3 in development draws every component render it measured; a render track of ours would repeat it.
+  expect(reactsOwn.length).toBeGreaterThan(0);
+  expect(renders).toHaveLength(0);
+  expect(clicks[0].tooltip).toContain('Components ⚛');
   expect(measuresLeft.filter((name) => clicks.some((e) => e.name === name))).toEqual([]);
 });
 
+test('a production build puts nothing of its own in the trace, and hands a PerformanceObserver on the page no measure', async ({ browser, page }) => {
+  test.skip(!prod, 'a development build draws the track, which the test above reads');
+  // There before the app's first script, as an analytics tag would be.
+  await page.addInitScript(() => {
+    window.measuresObserved = [];
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if ((entry as PerformanceMeasure).detail?.devtools?.trackGroup === 'react-inp-blame') window.measuresObserved!.push(entry.name);
+      }
+    }).observe({ type: 'measure' });
+  });
+  // The click is reported: traceSlowClick waits for the report and then for the idle callback it would be drawn in.
+  const { entries } = await traceSlowClick(browser, page);
+  expect(ours(entries)).toEqual([]);
+  expect(await page.evaluate(() => window.measuresObserved)).toEqual([]);
+});
+
 test.describe('in Chrome before 134', () => {
+  test.skip(prod, 'a production build draws no track unless devtoolsTrack is true');
   // console.timeStamp draws no tracks there, React's or anyone's, so every entry has to be a measure.
   test.use({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36' });
 
