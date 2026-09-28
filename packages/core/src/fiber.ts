@@ -564,8 +564,7 @@ function rendersNothing(f: Fiber): boolean {
  */
 function roleHandedDown(f: Fiber): boolean {
   const role = f.memoizedProps?.role;
-  const parent = f.return;
-  return typeof role === 'string' && typeof f.type === 'string' && !CONTROL_TAGS.includes(f.type) && !!parent && isComponent(parent) && parent.memoizedProps?.role === role;
+  return typeof role === 'string' && !CONTROL_TAGS.includes(f.type as string) && f.return?.memoizedProps?.role === role;
 }
 
 function handlesInput(f: Fiber): boolean {
