@@ -6,6 +6,121 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Fixed
+
+- **A component's handler prop is no longer named for an event React never ran it for.** A `<Card
+  onClick={openCard}>` that hands onClick to its Open button alone gave a click on the card's photo
+  `target.handler: 'openCard'` and a sentence naming openCard. Now nothing is named, and inside an `<li
+  onClick={selectRow}>` the report names selectRow. Typing in a field with no handlers inside `<Tabs
+  onChange={setTab}>` named setTab, and now names nothing. Only the DOM elements on the chain are read, as React
+  itself does. In React 18 and 19, since 0.1.0.
+- **A handler that changes with each render is named by the one React ran.** With `onClick={editing ? save :
+  startEdit}`, every click on Save said `handler: 'startEdit'`, read from the fiber cached on the element, a render
+  behind after every other render, and read again after the click's own render. Now it is read from the props React
+  keeps on the element as the event is dispatched, or on server HTML as React hydrates the element to run it. Two
+  taps on two buttons in the same millisecond each keep their own. In React 18 and 19, since 0.1.0.
+- **Enter in a form's field is named by the onSubmit it reached, not by the field's onChange.** In a controlled
+  field, `<input value={email} onChange={setEmail}>`, Enter's keydown, keypress and keyup named setEmail, which
+  React never runs for Enter. With `onSubmit={step < 2 ? goNext : finish}`, the first step's Enter named finish,
+  read after the submit's own render, on server HTML too. Now both name goNext, read from what the keypress reaches
+  as it is dispatched. The onSubmit is still named where the submit button has its own onClick, and in Chromium
+  where the field has its own onKeyPress. A form with none names the button's onClick in Chromium and Firefox. An
+  Enter that commits an input method's text submits nothing and still names the field's onChange. In React 18 and
+  19, since 0.2.0.
+- **Where the frame most likely waited on the next key press, a short script no longer names the painting blame,
+  and `blame.name` is null there.** The longest script after a keyup's handlers named it however short, so a 20 ms
+  timer in a 300 ms screen update came out as `{ kind: 'painting', name: 'TimerHandler:setTimeout', ms: 300 }`, and
+  so did the next key's own 80 ms handler as `DIV#root.onkeydown`. Now, as for any painting blame, a script names
+  it only where it ran for half of the screen update or more. The sentence still reads "The longest script the
+  browser recorded in that time was TimerHandler:setTimeout (app.js), 20 ms." In React 18 and 19, since 0.13.0.
+- **walkBudget no longer runs out on rows React only cloned.** In a list of over 5000 row components where ticking
+  one row's checkbox set state, the commit said `rendered: 0`, `truncated: true` and an empty `hotPath`, so the
+  blame named no component. Now it says `rendered: 1`, `truncated: false` and `hotPath: ['Checkbox']`: a component
+  React cloned and bailed out of costs the walk nothing and isn't counted. In React 18 and 19, since 0.1.0.
+- **An error of the library's own no longer reaches the page's error handlers.** An error while a report was built
+  went from the Event Timing callback to `window.onerror`, where Sentry or Datadog counted it as the app's, and the
+  report was lost anyway. The same was true of the long animation frame observer, the window listeners, the timers
+  that deliver and draw reports, and the App Router's navigation announcement. Now each skips only the step it
+  threw in: one report, one frame, one revision, or one batch's count toward INP. The rest of the batch still comes
+  through, and the reports waiting at the hide are heard whatever the hide throws. The console says once "an error
+  inside the library (TypeError: ...) was kept from the page. Only the step it threw in was skipped, ...", logs the
+  error after it and links to a new `library-error` troubleshooting entry. A dropped report still counts toward
+  INP, so `inp().report` and `attributeINP`'s `react` are null for it. Since 0.1.0.
+- **A report whose explanation cannot be built is kept, and blames nothing.** `explanation` and `verdict` are built
+  the first time the page's own code reads them (`JSON.stringify(report)`, `report.verdict`), and an error there
+  went out of that code to the page's error handlers. Now the report has `blame.kind` `'none'`, confidence
+  `'inferred'`, its usual headline, place and phases, and the cause "Where the time went is unknown: this library
+  hit an error of its own while it worked that out for this click, so nothing is blamed. See the library-error
+  warning in the console." Its panel row says "nothing is blamed: the library hit an error of its own", and
+  `attributeINP` gives `react: null` for it. Since 0.1.0.
+- **The Vite plugin decides each page from the environment being built.** Under `builder: { sharedConfigBuild: true
+  }`, as RSC setups use, it read the top-level build. A page `pages` took got the install's own script and an
+  import of it in its entry, which split the install into an extra chunk, and a client environment built as one
+  file (`output: { format: 'iife' }`) got no install at all. On Vite 7 and later, a `buildApp` that builds
+  environments in parallel had it decide from whichever build started last, which could leave a one-file
+  environment's page with no install, or give the `client` page the inline import beside its own script. Vite 6
+  does not say which environment builds a page, so Known limits now reads "On Vite 6, a `buildApp`, your own or a
+  framework's, that builds environments at the same time can leave a page with no install". The sharedConfigBuild
+  case since 0.2.0.
+- **A page that `pages` takes gets the install's own script where it sits in a folder, or is named only in Vite
+  8.2's `input`.** With `input: { main: 'index.html', admin: 'admin/index.html' }` and `pages: (path) =>
+  path.startsWith('/admin/')`, the plugin asked `pages` about `/index.html` for the admin page, so the install was
+  folded into that page's entry script, where the bundler decides whether react-dom runs first. It now asks about
+  `/admin/index.html`, the path Vite hands it. On Vite 8.2 and later, a page named only in `input` was missed too,
+  since the plugin read only the bundler's options, and it now reads `input` where those name none, as Vite does.
+  The folder case since 0.2.0.
+- **The Vite plugin's scripts-only warning reads the inputs the client environment builds from.** Where the browser
+  inputs are named for the client environment alone, as RSC setups do, or in Vite 8.2's `input`, a build whose
+  inputs were all scripts installed nothing and said nothing. It now gets "this build has no HTML page, only
+  scripts, so this plugin's install script has nowhere to go and nothing installs. Add entry: '<the script every
+  page loads first>' to inpBlame() ...". Vite 5 builds from the top level, so only that is read there, as before.
+  Since 0.5.0.
+- **A DevTools hook global that throws when read no longer breaks `install()`.** Where a script made
+  `__REACT_DEVTOOLS_GLOBAL_HOOK__` throw when read, or put a hook there whose `isDisabled` or `supportsFiber`
+  throws, `install()` threw out of the app's entry module. A global made to throw after `install()` threw into
+  `window.onerror` at every Event Timing batch, and that batch's reports were lost. Now these, and a global made to
+  throw after `install()` but before React registers, leave the page `'unsupported'` with kind `'hook-disabled'`
+  and the warning "the page's __REACT_DEVTOOLS_GLOBAL_HOOK__ cannot be read or replaced (Error: ...), so React's
+  commits cannot be read." Once React has registered, nothing changes. A hook whose renderers cannot be read is put
+  back as it was, not left wrapped. Since 0.1.0.
+- **An input whose target cannot be read no longer stops components being read for the rest of the page.** A click
+  or key in a form with a field named `tagName` (a form's fields shadow its own properties) threw as the input was
+  recorded, and again inside the commit its handler rendered, so that react-dom was stopped for good as
+  `'walk-threw'`. Now the input is recorded naming nothing, only its own report is dropped, and the others keep
+  their components. In React 17 to 19.
+- **An error while a later render revises a report no longer passes for a walk that threw.** It was reported as
+  "reading a commit of react-dom 19.3.0 threw (...)" with kind `'walk-threw'`, and no components came after that.
+  Now it goes to the `library-error` warning, at most that revision is lost, and that react-dom is still read. In
+  React 17 to 19, since 0.1.0.
+- **Drawing on the Performance panel that keeps failing no longer holds on to every report the page publishes.** A
+  page whose `requestIdleCallback` throws lost every report, and held each one for a drawing that never came. Where
+  the drawing itself threw, as on a page whose `performance.measure` getter throws, each report was kept for the
+  next chance, and all were drawn at once if drawing worked again. Now a refused idle callback costs the waiting
+  reports only their drawing. Drawing that throws keeps at most the 50 reports `reports()` returns, the page's INP
+  report and the slowest among them however old. Since 0.1.0.
+
+### Security
+
+- **A script's URL loses its password, query and fragment.** Where a script is named by its URL, or an inline
+  script by the page's, `blame.name`, the sentences and `frames[].scripts[].invoker` carried the whole URL, and
+  `attributeINP` hands `blame.name` to analytics. A click that waited on a reset link had `blame.name`
+  `'https://shop.example/reset-password?token=s3cr3t-reset-token&email=ada%40example.com'`, and now has
+  `'https://shop.example/reset-password'`. The same goes for a `file:` URL or an app's own scheme in Electron, a
+  `user:password@` in the page's URL, and a listener named by its element's src
+  (`IMG[src="/avatar.png?sig=abc"].onload` is now `IMG[src="/avatar.png"].onload`). `navigationURL` and
+  `startedNavigation.url` keep their query, as web-vitals' own field does. In any React version, since 0.3.0 for
+  `blame.name`.
+- **Text a person typed into an editor no longer names the element.** A key press or click in a `contenteditable`
+  editor, as Lexical, Slate, ProseMirror and TipTap build, or in an element with the role `textbox`, `searchbox`,
+  `combobox` or `spinbutton`, was labelled by what had been typed: under `labels: 'text'`, and by default in a
+  development build, `target.label` read `div "Hi Ada, the password is hunter2"`, and so did the sentences and the
+  overlay. Such an element now counts as a form field, and so does one an `EditContext` is attached to, or one up
+  to five elements inside it. It is named by its `aria-label`, `placeholder`, `aria-placeholder`, `name` or test id
+  (`div "Write a comment"`), otherwise by its tag alone, and the first run of text never reads inside one or inside
+  a `textarea`. A select trigger with the role `combobox` no longer shows the value picked in it. An editor that
+  draws its text in ordinary elements and takes key presses in a hidden one, as Monaco does, still cannot be told
+  from the rest of the page.
+
 ## [0.16.0] - 2026-09-27
 
 ### Added
