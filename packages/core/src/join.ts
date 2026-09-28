@@ -2466,7 +2466,7 @@ function explain(r: InteractionReport): Explanation {
     notes.push(`${landed}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
 
-  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length || (heldByNext && lateScript) || ((blame.kind === 'script' || blame.kind === 'none') && lateScript && lateScript.ms > (ranScript?.ms ?? 0))) && blame.kind !== 'painting') {
+  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length || (heldByNext && lateScript) || ((blame.kind === 'script' || (blame.kind === 'none' && !unseen)) && lateScript && lateScript.ms > (ranScript?.ms ?? 0))) && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${heldByNext ? nextClause : lateScriptClause}`);
   }
   if (betweenMatters && !betweenWins) notes.push(`${cap(ms(between))} of the working time also went by ${whereBetween}, with no handler running.`);
