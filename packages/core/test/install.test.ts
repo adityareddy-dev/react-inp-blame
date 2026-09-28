@@ -235,7 +235,7 @@ test('a browser without Event Timing interactionId gets nothing installed, one w
 });
 
 /** Runs `body` in a build whose bundler wrote `mode` in place of `process.env.NODE_ENV`, as every bundler that can bundle React does. */
-async function inBuild(mode: 'development' | 'production', body: () => void | Promise<void>): Promise<void> {
+async function inBuild(mode: string, body: () => void | Promise<void>): Promise<void> {
   const saved = process.env.NODE_ENV;
   process.env.NODE_ENV = mode;
   try {
@@ -283,30 +283,47 @@ test('in a production build, a browser without interactionId is warned about onl
 test('in a development build, a browser without interactionId is warned about whatever sampleRate says', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   const roll = t.mock.method(Math, 'random', () => 0.99);
-  await inBuild('development', () =>
-    inBrowser(() => assert.equal(install({ sampleRate: 0 }).stats().mode, 'unsupported'), { interactionId: false }),
-  );
-  assert.equal(warn.mock.callCount(), 1);
-  assert.match(warn.mock.calls[0].arguments[0], /no Event Timing interactionId/);
+  // Anything but 'production' counts, the 'test' a test runner sets too. Each mode is a page of its own.
+  for (const mode of ['development', 'test']) {
+    session?.slots.warnings?.clear();
+    await inBuild(mode, () =>
+      inBrowser(() => assert.equal(install({ sampleRate: 0 }).stats().mode, 'unsupported'), { interactionId: false }),
+    );
+  }
+  assert.equal(warn.mock.callCount(), 2);
+  for (const call of warn.mock.calls) assert.match(call.arguments[0], /no Event Timing interactionId/);
   assert.equal(roll.mock.callCount(), 0);
 });
+
+/** Runs `body` with `standIn` as the page's `process`, or with no `process` at all where it is undefined. */
+function withProcess(standIn: { env: Record<string, string> } | undefined, body: () => void): void {
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'process')!;
+  if (standIn) Object.defineProperty(globalThis, 'process', { value: standIn, configurable: true, writable: true });
+  else delete (globalThis as { process?: unknown }).process;
+  try {
+    body();
+  } finally {
+    Object.defineProperty(globalThis, 'process', saved);
+  }
+}
 
 test('a page loaded with no bundler, where process is not defined, counts as a production build', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   t.mock.method(Math, 'random', () => 0.5);
   await inBrowser(
-    () => {
-      const saved = Object.getOwnPropertyDescriptor(globalThis, 'process')!;
-      delete (globalThis as { process?: unknown }).process;
-      try {
-        assert.equal(install({ sampleRate: 0.4 }).stats().unsupportedReason?.kind, 'browser');
-      } finally {
-        Object.defineProperty(globalThis, 'process', saved);
-      }
-    },
+    () => withProcess(undefined, () => assert.equal(install({ sampleRate: 0.4 }).stats().unsupportedReason?.kind, 'browser')),
     { interactionId: false },
   );
   assert.equal(warn.mock.callCount(), 0);
+});
+
+test('a page whose process is a stand-in with no NODE_ENV in it counts as a development build', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const roll = t.mock.method(Math, 'random', () => 0.99);
+  await inBrowser(() => withProcess({ env: {} }, () => install({ sampleRate: 0 })), { interactionId: false });
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments[0], /no Event Timing interactionId/);
+  assert.equal(roll.mock.callCount(), 0);
 });
 
 /**
