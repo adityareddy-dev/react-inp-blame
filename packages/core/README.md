@@ -125,12 +125,12 @@ Measured on seven exports with two imported, Rollup drops the unused ones and es
 terser and SWC keep whatever the bundler handed them. Leave `enabled` at `'development'` to keep the names out of the production build entirely. `enabled` decides which runs get both:
 `'development'` (`next dev`, the default), `'production'` (`next build`), `true` for both, `false`
 for neither; a run it leaves out gets the config back with one addition, `env.REACT_INP_BLAME_NEXT`
-set to `''`, which `runtime: false` sets too. `runtime` defaults to `true`, which
-is `install()` with its default options; it also takes those options, such as `{ overlay: 'query' }`.
-They reach the browser inlined through `env`, so they are plain data. `runtime: false` leaves the
-client module out, for an app that calls `install()` itself in its own `instrumentation-client.ts`,
-without the `next-client` line; the navigation join below goes with it, since the client module is
-what hears navigations.
+set to `''`, which `runtime: false` sets too. `runtime` defaults to `true`, which is `install()`
+with its default options; it also takes those options, such as `{ overlay: 'query' }`. They reach
+the browser inlined through `env`, so they are plain data. `runtime: false` leaves the client module
+out, for an app that calls `install()` itself in its own `instrumentation-client.ts`, without the
+`next-client` line; the navigation join below goes with it, since the client module is what hears
+navigations.
 
 Next.js added `instrumentationClientInject` in 16.3. From 15.3 to 16.2 the line in
 `instrumentation-client.ts` (beside `next.config` or in `src/`) does the install, with the options
