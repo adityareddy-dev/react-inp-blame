@@ -1387,7 +1387,9 @@ started once the next press came, which is counted as that press's work: until 2
 handler, under half of a 90 ms screen update, was named the same way. Where the frame waited on the next
 press, a script from half the screen update that started before the press came is still taken, as this
 interaction's own: until 2026-09-27 a 60 ms timer between a keydown's handlers and the next key went to
-waiting and painting. A script after the handlers is said as
+waiting and painting. Where a `script` verdict passed over a longer script after the handlers, the note
+names that one at any length: until 2026-09-27 an idle click's 22 ms handler took the verdict from a 49 ms
+timer after it under a 100 ms screen update, and that timer went unsaid. A script after the handlers is said as
 after the handler finished wherever a verdict names it. The browser's own work is the frame's style, layout and
 paint where the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does
 after a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a

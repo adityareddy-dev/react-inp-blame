@@ -2298,6 +2298,19 @@ test('a click whose only render ran after the handlers is weighed as one React r
   assert.deepEqual(first.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 25, confidence: 'measured' });
   assert.equal(first.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 25 ms before the handler started.");
   assert.deepEqual([waitedTimed(104).blame, waitedTimed(104).cause], [first.blame, first.cause]);
+  // The 30 ms timer the verdict passed over is still said, in the screen update's note, under 99 ms as under 104.
+  for (const paint of [99, 104]) {
+    assert.match(waitedTimed(paint).notes[0]!, /^After the handler finished, the screen took another \d+ ms to update: .* The longest script the browser recorded in that time was TimerHandler:setTimeout \(app\.js\), 30 ms\.$/, `${paint} ms`);
+  }
+  // So is a 49 ms timer after an idle click's handlers, where their 22 ms script takes the verdict under a 100 ms
+  // screen update: the timer was said nowhere.
+  const saving = [script('BUTTON.onclick', 2, 22), ...Array.from({ length: 6 }, (_, i) => script('BUTTON.onclick', 26 + i * 13, 12)), script('TimerHandler:setTimeout', 104, 49)];
+  const passedOver = report([entry('click', 0, 202, 2, 102)], [], [frame(0, 202, saving)], save).explanation;
+  assert.deepEqual(passedOver.blame, { ...handler, kind: 'script', ms: 22 });
+  assert.equal(passedOver.cause, "React didn't render anything; the click handler handleSave ran for 22 ms.");
+  assert.deepEqual(passedOver.notes, [
+    "After the handler finished, the screen took another 100 ms to update: 50 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 49 ms.",
+  ]);
 });
 
 test('a script the input waited behind is not its handler, and counts only for its part inside the interaction', () => {
