@@ -1709,7 +1709,8 @@ function explain(r: InteractionReport): Explanation {
     const usual = { said: USUAL_READ, inTheSubtree: true, commit: null };
     if (unseen || unjoined) return usual;
     const handlerOrListener = `code outside React, such as ${handler ?? `the ${kind} handler`} or a library's listener`;
-    if (r.commits.length === 0) return { ...usual, said: `${READS_SIZE}. React did not render, so it was ${handlerOrListener}.`, inTheSubtree: false };
+    // "In the working time" where a press's render before the release is the later render's note after it.
+    if (r.commits.length === 0) return { ...usual, said: `${READS_SIZE}. React did not render${workingOnly ? ' in the working time' : ''}, so it was ${handlerOrListener}.`, inTheSubtree: false };
     const forced = forcedLayoutOf(parts);
     const forcing = parts.filter((p) => p.forcedLayout > 0);
     const outside = outsideReact(parts);

@@ -1007,10 +1007,26 @@ test("a verdict that names no render says so of the working time where a press r
   const listener = [entry('keydown', 0, 24, 1, 10), entry('keyup', 300, 72, 303, 323)];
   const frames = [frame(290, 90, [script('BUTTON.onkeyup', 303, 15), script('DIV.onscroll', 325, 20)], 350)];
   assert.match(report(listener, [render], frames, ring).explanation.cause, /^React didn't render anything in the working time; a script \(DIV\.onscroll, app\.js\) ran for 20 ms after the handler finished\.$/);
+  // Where the keyup's handler forced layout, the sentence that puts it outside React says so of the working time
+  // too, in the layout verdict and in the note a script verdict leaves for a smaller one.
+  const forcing = [entry('keydown', 0, 24, 1, 10), entry('keyup', 300, 80, 301, 360)];
+  const forced = (layout: number) => [frame(290, 100, [script('BUTTON.onkeyup', 301, 58, layout)], 362)];
+  const outside = / React did not render in the working time, so it was code outside React, such as the key press handler or a library's listener\.$/;
+  const bare = / React did not render, so it was code outside React, such as the key press handler or a library's listener\.$/;
+  const layoutNote = (r: InteractionReport) => r.explanation.notes.find((n) => n.startsWith('The browser also spent')) ?? '';
+  const layout = report(forcing, [render], forced(40), ring);
+  assert.equal(layout.explanation.blame.kind, 'layout');
+  assert.match(layout.explanation.cause, outside);
+  assert.match(report(forcing, [], forced(40), ring).explanation.cause, bare);
+  const scripted = report(forcing, [render], forced(8), ring);
+  assert.equal(scripted.explanation.blame.kind, 'script');
+  assert.match(layoutNote(scripted), outside);
+  assert.match(layoutNote(report(forcing, [], forced(8), ring)), bare);
   // A render after the paint the report is about leaves the cause as it was: its note puts it after that paint.
   const late = commit(600, 0, { inputType: 'keydown', rendered: 400, total: 60 });
   assert.deepEqual(report(keys, [late], [], ring).followUps.map((c) => c.at), [600]);
   assert.equal(cause([late], []), "React didn't render anything and no long task was recorded, so the time went to waiting and painting.");
+  assert.match(report(forcing, [late], forced(40), ring).explanation.cause, bare);
   // Where the working time did render, a little, the long task clause keeps its own "in the working time":
   // "in it" follows only the clause that says React didn't render anything there. A Space held from -300 and
   // let go at 0, where the click it made took 360 ms.
