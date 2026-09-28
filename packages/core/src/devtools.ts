@@ -1,5 +1,5 @@
 import { heaviest, leafName } from './commits.js';
-import { ms } from './join.js';
+import { carriesWork, ms } from './join.js';
 import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 import { parseReactVersion } from './version.js';
@@ -93,7 +93,7 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
     ['Updating the screen', ms(r.presentation)],
     ['Where', x.where || 'n/a'],
     ['Handler', r.target?.handler || 'n/a'],
-    ['React renders before the paint', String(r.commits.length)],
+    ['React renders before the paint', rendersBefore(r)],
     // Not "after the paint": a press's render before a slower release is one, and it came before this paint.
     ['Later React renders', String(r.followUps.length)],
   ];
@@ -105,6 +105,16 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
     tooltipText: reactDrawsRenders ? `${r.verdict} Each component's render is in React's own Components ⚛ track.` : r.verdict,
     properties,
   });
+}
+
+/**
+ * The renders before the paint as the verdict's "React rendered 3 times" counts them: "3", or "3, and 3 too small
+ * to count" where commits with too little work in them are drawn beside them, so the Summary and the tooltip agree.
+ */
+function rendersBefore(r: InteractionReport): string {
+  const counted = r.commits.filter(carriesWork).length;
+  const small = r.commits.length - counted;
+  return small ? `${counted}, and ${small} too small to count` : String(counted);
 }
 
 /** One entry for one React commit joined to the report. */
