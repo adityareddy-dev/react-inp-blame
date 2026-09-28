@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { warnOnce } from '../src/warn.js';
 
 // Every warning ends with a link to the README on GitHub, by anchor. These tests read the anchors out of
-// the source and check that each one is in README.md, where a line links on to the answer in docs/, and that
-// the answer is there, so a renamed heading or a new warning cannot leave a link pointing nowhere.
+// the source and check that each one is in README.md, on a line that links on to the same anchor in docs/, and
+// that the answer is there, so a renamed heading or a new warning cannot leave a link pointing nowhere.
 
 const core = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file: string) => fs.readFileSync(path.join(core, file), 'utf8');
@@ -34,6 +34,26 @@ function anchorsOf(file: string): Set<string> {
     anchors.add(count ? `${slug}-${count}` : slug);
   }
   return anchors;
+}
+
+/** Each run of `<a id>`s in a markdown file, by each id in it: anchors stacked with nothing between land on one spot. */
+function stackedIds(file: string): Map<string, string[]> {
+  const stacks = new Map<string, string[]>();
+  for (const run of read(file).matchAll(/(?:<a\s+id="[^"]+"><\/a>\s*)+/g)) {
+    const ids = [...run[0].matchAll(/id="([^"]+)"/g)].map((m) => m[1]!);
+    for (const id of ids) stacks.set(id, ids);
+  }
+  return stacks;
+}
+
+/** Where README.md's line for each anchor links on to: the link right after its `<a id>` and any stacked with it. */
+function readmeLinks(): Map<string, { ids: string[]; to: string }> {
+  const links = new Map<string, { ids: string[]; to: string }>();
+  for (const match of read('../../README.md').matchAll(/((?:<a\s+id="[^"]+"><\/a>)+)\[[^\]]*\]\(([^)\s]+)\)/g)) {
+    const ids = [...match[1]!.matchAll(/id="([^"]+)"/g)].map((m) => m[1]!);
+    for (const id of ids) links.set(id, { ids, to: match[2]! });
+  }
+  return links;
 }
 
 /** Each call of `warnOnce(` in `source`, not counting its definition. */
@@ -90,11 +110,23 @@ test('a warning in the browser ends with a link to its anchor in the README', (t
 
 const readmeAnchors = () => anchorsOf('../../README.md');
 /** Where the answers are: troubleshooting, and the setups a build-time warning sends people to. */
-const docsAnchors = () => new Set([...anchorsOf('../../docs/troubleshooting.md'), ...anchorsOf('../../docs/install.md')]);
+const answerPages = Object.fromEntries(
+  ['docs/troubleshooting.md', 'docs/install.md'].map((page) => [page, { anchors: anchorsOf(`../../${page}`), stacks: stackedIds(`../../${page}`) }]),
+);
 
-test('every anchor a warning links to is in README.md, and its answer in docs/', () => {
+/** Whether README.md's line for `anchor` links on to the same anchor in docs/troubleshooting.md or docs/install.md. */
+function linksOn(anchor: string, link: { ids: string[]; to: string } | undefined): boolean {
+  const to = link && /^(docs\/(?:troubleshooting|install)\.md)#(.+)$/.exec(link.to);
+  if (!to) return false;
+  const page = answerPages[to[1]!]!;
+  if (!page.anchors.has(to[2]!)) return false;
+  // Anchors stacked on one line of README.md share its link, which has to land where the page stacks them too.
+  return to[2] === anchor || (link.ids.includes(to[2]!) && (page.stacks.get(to[2]!) ?? []).includes(anchor));
+}
+
+test('every anchor a warning links to is in README.md, on a line that links on to the same anchor in docs/', () => {
   const readme = readmeAnchors();
-  const docs = docsAnchors();
+  const links = readmeLinks();
   const linked = { runtime: runtimeAnchors(), next: nextAnchors(), vite: viteAnchors(), astro: astroAnchors() };
   // Enough found that a regex gone stale would show.
   assert.ok(linked.runtime.length >= 14, linked.runtime.join(', '));
@@ -104,14 +136,16 @@ test('every anchor a warning links to is in README.md, and its answer in docs/',
   for (const [where, anchors] of Object.entries(linked)) {
     const missing = anchors.filter((anchor) => !readme.has(anchor));
     assert.deepEqual(missing, [], `${where} warnings link to anchors README.md does not have`);
-    const unanswered = anchors.filter((anchor) => !docs.has(anchor));
-    assert.deepEqual(unanswered, [], `${where} warnings link to anchors docs/troubleshooting.md and docs/install.md do not have`);
+    const unanswered = anchors.filter((anchor) => !linksOn(anchor, links.get(anchor))).map((anchor) => `${anchor} -> ${links.get(anchor)?.to ?? 'no link'}`);
+    assert.deepEqual(unanswered, [], `${where} warnings link to lines of README.md that do not link on to the same anchor in docs/troubleshooting.md or docs/install.md`);
   }
 });
 
-test('the README slugs headings the way GitHub does', () => {
+test('headings are slugged the way GitHub does', () => {
   const readme = readmeAnchors();
   for (const anchor of ['start-with-vite', 'start-with-nextjs-142-or-later', 'when-the-blame-is-wrong', 'troubleshooting', 'late-install']) {
     assert.ok(readme.has(anchor), anchor);
   }
+  // A heading with brackets. README.md has an <a id> of this name, so the heading is read where it is, in docs/api.md.
+  assert.ok(anchorsOf('../../docs/api.md').has('installoptions'), 'installoptions');
 });

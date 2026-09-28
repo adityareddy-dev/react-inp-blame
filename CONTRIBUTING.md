@@ -17,7 +17,7 @@ we can agree on the approach before you spend time on it.
 - `fixtures/vite-react-ts`: the app `npm create vite` makes, with the Vite config from docs/install.md and one slow
   component. `scripts/vite-app.mjs` installs the packed tarball into a copy of it and runs its specs.
 - `fixtures/react-router` and `fixtures/tanstack-start`: the apps `npx create-react-router@8.4.0` and
-  `npx @tanstack/cli@0.71.0 create --framework React --blank` make, each with its README setup and the
+  `npx @tanstack/cli@0.71.0 create --framework React --blank` make, each with its docs/install.md setup and the
   same slow component, run by the same script with `--fixture`. `fixtures/react-router-7` is
   `npx create-react-router@7.18.4` moved to React 18.3, with a route that imports react-dom.
   `fixtures/remix` is `npx create-remix@2.17.5`'s template, on its React 18.3 and without its ESLint
@@ -187,8 +187,9 @@ Two things the demo's suite leaves out of a normal run:
   phases, the commits), never on the wording of `verdict`, `cause` or `notes`: those are display text
   and may change in any version.
 - Documentation that stays true. When a change makes a sentence in `README.md`,
-  `packages/core/README.md` or `docs/interaction-attribution-design.md` untrue, change the sentence
-  in the same pull request. The design doc records how each number was measured; keep it that way.
+  `packages/core/README.md` or `docs/*.md` untrue, change the sentence in the same pull request. The
+  design doc, `docs/interaction-attribution-design.md`, records how each number was measured; keep it
+  that way.
 - No new dependencies in `packages/core`. The library has no runtime dependencies and runs before
   hydration on every page it is installed on, so it stays that way. Elsewhere, add a development
   dependency only when the change needs one and say why; otherwise `package-lock.json` does not

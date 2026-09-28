@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.0.1",
   "private": true,
-  "description": "What `npm create astro@5.2.4 -- --template minimal` makes (Astro's examples/minimal at astro@7.3.5) after `npx astro add react`, with the README's Astro setup and two React islands, one of them slow. Run by scripts/vite-app.mjs --fixture astro from a temp copy.",
+  "description": "What `npm create astro@5.2.4 -- --template minimal` makes (Astro's examples/minimal at astro@7.3.5) after `npx astro add react`, with the Astro setup from docs/install.md and two React islands, one of them slow. Run by scripts/vite-app.mjs --fixture astro from a temp copy.",
   "engines": {
     "node": ">=22.12.0"
   },

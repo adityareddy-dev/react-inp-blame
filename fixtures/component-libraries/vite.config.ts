@@ -1,4 +1,4 @@
-// vite.config.ts, the README's with debugGlobal on, so the specs can read the reports.
+// vite.config.ts, the one in docs/install.md with debugGlobal on, so the specs can read the reports.
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { inpBlame } from 'react-inp-blame/vite';

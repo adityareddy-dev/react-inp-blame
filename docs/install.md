@@ -1,6 +1,9 @@
 # Install
 
-The [README](../README.md) has the short version for Next.js and Vite. This page has every setup in full: what each option does, the frameworks that write their own HTML, and what to check when a build leaves the library out.
+The [README](../README.md) has the short version for Next.js and Vite. This page has every setup in full: the
+wrapper's and the plugins' own options, the frameworks that write their own HTML, webpack and Rspack, a build
+with no HTML page, and what to check when a build leaves the library out. `runtime` takes the options of
+`install()`, and what each of those does is in [API](api.md#installoptions).
 
 ## Install with Next.js 14.2 or later
 
@@ -135,6 +138,7 @@ library's portal in the same vendor chunk, or on Vite 5, whose bundler leaves re
 the chunk that holds react-dom. On Vite 6 and later a chunk that only holds react-dom is fine, since
 react-dom runs where it is first imported.
 
+<a id="no-html-page-in-the-build"></a>
 **No HTML page in the build** (Laravel, Rails, Django, or any backend that writes the page from
 `manifest.json`). The plugin has no page to put its script in, so it installs nothing, on the dev server or
 in a build; when every input the build lists is a script, it warns that it will not. `entry`, naming the
@@ -150,6 +154,7 @@ a second entry shares react-dom with it. Keep react-inp-blame out of a `node_mod
 because that entry imports the vendor chunk as the plugin's script would. None of this has been tried on a
 real backend yet.
 
+<a id="webpack-or-rspack"></a>
 **webpack or Rspack.** Make `import 'react-inp-blame/auto'` the first import of your entry module. That holds
 even with a `splitChunks` vendor chunk, because these bundlers run a module when it is first required, not
 when its chunk loads: CI builds a webpack 5 app with react-dom and the library in one vendor chunk

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "A React 18.3 app built by webpack 5 and babel-loader, set up the way the README's webpack section says: react-inp-blame/auto as the entry's first import and the names loader rule, with a splitChunks rule that puts every dependency in one vendor chunk. Run by scripts/vite-app.mjs --fixture webpack from a temp copy.",
+  "description": "A React 18.3 app built by webpack 5 and babel-loader, set up the way the webpack section of docs/install.md says: react-inp-blame/auto as the entry's first import and the names loader rule, with a splitChunks rule that puts every dependency in one vendor chunk. Run by scripts/vite-app.mjs --fixture webpack from a temp copy.",
   "scripts": {
     "dev": "webpack serve --mode development",
     "build": "webpack --mode production",

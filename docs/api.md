@@ -1,4 +1,5 @@
 # API
+
 ```ts
 import { onInteraction } from 'react-inp-blame';
 // explanation.blame and explanation.rating are data; verdict is display text.

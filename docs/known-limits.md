@@ -1,10 +1,13 @@
 # Known limits
-- **Frameworks that render their own HTML need a setup of their own**, and only React Router's, Remix's,
-  TanStack Start's and Astro's above have been tried. The Vite plugin adds its install script only to the
-  HTML pages Vite itself serves and builds, so without `entry` it installs nothing on another framework's
-  pages. For those four, and for a build whose inputs are all scripts, the plugin warns when that happens and
-  names the fix; any other framework gets no warning. On a Vite-based one, `entry` naming the first of the
-  app's modules the browser runs may be enough. React Native is out of scope: only react-dom commits are walked.
+
+- **Frameworks that render their own HTML need a setup of their own**, and only the setups Install gives
+  for [React Router](install.md#install-with-react-router), [Remix](install.md#install-with-remix),
+  [TanStack Start](install.md#install-with-tanstack-start) and [Astro](install.md#install-with-astro) have
+  been tried. The Vite plugin adds its install script only to the HTML pages Vite itself serves and builds,
+  so without `entry` it installs nothing on another framework's pages. For those four, and for a build
+  whose inputs are all scripts, the plugin warns when that happens and names the fix; any other framework
+  gets no warning. On a Vite-based one, `entry` naming the first of the app's modules the browser runs may
+  be enough. React Native is out of scope: only react-dom commits are walked.
 - On Vite 6, a `buildApp`, your own or a framework's, that builds environments at the same time can leave a
   page with no install, since Vite 6 does not tell the plugin which environment a page is built in. Vite's own
   builder builds them one at a time.

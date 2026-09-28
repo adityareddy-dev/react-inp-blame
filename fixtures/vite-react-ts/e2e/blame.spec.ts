@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { blamedRows, counter, hookState, open, showPanel } from './page';
 
-// The app as a user has it: create-vite's react-ts template with the README's vite.config.ts, and
-// react-inp-blame installed from the packed tarball. The counter re-renders SlowList's 400 rows, so a
-// click on it is slow and the time is in rendering.
+// The app as a user has it: create-vite's react-ts template with the vite.config.ts from docs/install.md, and
+// react-inp-blame installed from the packed tarball. The counter re-renders SlowList's 400 rows, so a click
+// on it is slow and the time is in rendering.
 test('a click is blamed on SlowList', async ({ page }) => {
   const dev = test.info().project.name === 'dev';
   const { problems, loads } = await open(page);
