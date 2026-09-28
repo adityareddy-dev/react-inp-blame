@@ -6,6 +6,70 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Changed
+
+- **The Performance panel track is drawn only under a development build of React unless you ask for it.** Each
+  report went out as a User Timing measure in production too, so any script on the page with a PerformanceObserver
+  (an analytics tag, a chat widget) received its verdict and target label, even though the entry is cleared
+  straight away. `devtoolsTrack` now defaults to `'auto'`: on under a development build of react-dom, off under a
+  production or profiling one, so profiling a production build needs `devtoolsTrack: true`. As with `labels`, a
+  page where no react-dom has registered with the library draws nothing until one does.
+- **`followUps` can hold a render from before the paint the report is about.** Every entry used to land after
+  `end`, so `at - end` was how long after the paint it came. A key's render before its slower keyup now lands
+  before `end`, after the keydown painted, and that difference is negative for it, in the web-vitals
+  `react.followUps` too. The DevTools interaction entry's property "React renders after the paint" is now "Later
+  React renders", since it counts these.
+- **A production page the sample leaves out no longer warns about a browser without Event Timing.** In Safari
+  before 26.2 and Firefox before 144 every page view printed "[react-inp-blame] this browser has no Event Timing
+  interactionId (Chrome 96, Firefox 144, Safari 26.2), so nothing was installed." whatever `sampleRate` said, and a
+  tool that forwards console warnings, such as Sentry or Datadog, sent it as one event per view. Now a production
+  build prints it only on the pages `sampleRate` takes, rolled once per page, and a development build always does:
+  one whose bundler wrote anything but `'production'` for `process.env.NODE_ENV`. A page loaded with no bundler
+  counts as production. `stats()` is unchanged, and with `sampleRate` at its default of 1 nothing changes. Since
+  0.1.0.
+- **The README is now what a newcomer reads first.** It went from 1,477 lines to 329: setup for Next.js and Vite,
+  what you will see, when the blame is wrong, how it compares, versions and what it costs. The full setup, the API,
+  how it works, the known limits, troubleshooting and the web-vitals page are in `docs/`. Every link a warning
+  prints still lands on its entry, through the README line that keeps its anchor and links on to `docs/`. The Vite
+  plugin's advice for TanStack Start now says to create `src/client.tsx` "as the setup shows", not "as the README
+  shows".
+
+### Fixed
+
+- **On Next.js 15.3 to 16.2, a production build that `enabled` leaves out no longer ships the library.** The
+  next-client line in instrumentation-client.ts brought it into every build, about 30 KB gzipped on a minimal page,
+  where it never ran. `withInpBlame` now sets `env.REACT_INP_BLAME_NEXT` to `''` in a run it leaves out and with
+  `runtime: false`, so the config comes back with that one entry, and next-client compiles to an empty
+  `onRouterTransitionStart` there under webpack and Turbopack, on a 16.3 app that kept the line too. Since 0.3.0.
+- **A Next.js config exported as a Promise keeps its settings.** `withInpBlame(new Promise(...))`, or an async
+  function called in place, came back under `next dev` holding only the wrapper's own keys, so the app lost its
+  `basePath`, rewrites and env in silence. `withInpBlame` now wraps what the Promise resolves to, as it does for a
+  config written as a function, and its types take a Promise. Since 0.1.0.
+- **A key's render before its slower keyup stays in the report as a later render.** A key press whose keydown
+  painted in 24 ms and then rendered 400 components at 150 ms was published for that render. Once the keyup's 48 ms
+  entry headed the next revision, `commits` and `followUps` were both empty and the verdict said React didn't
+  render anything. Now the render stays in `followUps` and the verdict reads "... React didn't render anything in
+  the working time. A React render landed 126 ms after the press updated the screen, before the release: 60 ms
+  re-rendering 400 components inside List. INP doesn't count it, but people still wait for it." The same goes for a
+  Space held down before the slow click it makes. The panel says it rendered "after the press painted", and the
+  Performance panel draws it as a "Later render" from where it began. This covers key presses only. A pointer's
+  render before its release is still left out, since the hook stamps a drag's move renders with its pointerdown in
+  React 18 and 19.0, in production builds and on touch, and keeping them would publish a quiet drop. So is a key's
+  render where the keydown sent no entry of its own, one inside another of the interaction's entries, and one after
+  a newer input. Since 0.1.0.
+- **A render stamped with a key's release no longer goes to that key when another key went down in between.**
+  Typing fast, keys roll over: B goes down before A comes up, and the results list B's keystroke asked for renders
+  outside any event handler, stamped with A's keyup. A's report took it as "A second React render landed 70 ms
+  after the screen updated: 60 ms re-rendering 400 components inside List." That could get A's quiet key press
+  published, while B's report held nothing. A Shift let go after a click put the click's render on Shift the same
+  way. Now, if a keydown, pointerdown or click from another interaction came between a release and its own press, a
+  render made outside a dispatch and stamped with that keyup or pointerup is attached to nothing. One stamped with
+  a click, or made inside the release's own handlers, is kept as before.
+- **The Performance panel draws a render the report counts before the paint as the interaction's own.** A render
+  that committed after the paint as the rounded duration puts it, but while the handlers still ran, is in
+  `commits`, and it was still drawn as a "Later render", as if it came after the paint. A 200 ms click whose
+  handlers ran to 205 ms, with a commit at 203 ms, now draws "React render · OrderSummary (801 components)".
+
 ## [0.17.0] - 2026-09-27
 
 ### Fixed
