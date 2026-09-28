@@ -252,16 +252,23 @@ function installOptions(runtime) {
 }
 
 /**
+ * Whether a config is a Promise, which Next.js awaits: an async function called in place gives one. A copy
+ * made by spreading it would come out empty, so the wrapper goes around what it resolves to.
+ */
+const isPromise = (nextConfig) => nextConfig != null && typeof nextConfig.then === 'function';
+
+/**
  * The config for a run that gets no runtime, because `enabled` leaves it out or `runtime` is false, with
  * one entry added: REACT_INP_BLAME_NEXT set to ''. Next.js inlines an empty value and leaves an unset one
  * for the browser to read, so only the empty one lets next-client compile to nothing. On Next.js 15.3 to
  * 16.2 the line in instrumentation-client brings that module into every build, which otherwise carried
- * the library unused. A function config gets the same around what it returns. Anything else goes back
- * as it came: null, or a Promise, which Next.js awaits and a copy made by spreading would empty.
+ * the library unused. A function config gets the same around what it returns, and a Promise around what
+ * it resolves to. Anything else, such as null, goes back as it came.
  */
 function leftOut(nextConfig) {
   if (typeof nextConfig === 'function') return async (phase, context) => leftOut(await nextConfig(phase, context));
-  if (!nextConfig || typeof nextConfig !== 'object' || typeof nextConfig.then === 'function') return nextConfig;
+  if (isPromise(nextConfig)) return nextConfig.then(leftOut);
+  if (!nextConfig || typeof nextConfig !== 'object') return nextConfig;
   return { ...nextConfig, env: { ...nextConfig.env, [CLIENT_SETTINGS]: '' } };
 }
 
@@ -315,8 +322,10 @@ function wrap(nextConfig, options, dirs) {
     );
   }
   // A config written as a function of the phase, the other form Next.js documents. It is called at
-  // config time, so the wrapper goes around what it returns rather than around the function.
+  // config time, so the wrapper goes around what it returns rather than around the function. A config
+  // exported as a Promise gets the same around what it resolves to.
   if (typeof nextConfig === 'function') return async (phase, context) => wrap(await nextConfig(phase, context), options, dirs);
+  if (isPromise(nextConfig)) return nextConfig.then((config) => wrap(config, options, dirs));
 
   const legacy = !atLeast(found, NEXT_RULE_CONDITION) && nextConfig.experimental && nextConfig.experimental.turbo;
   // Next.js 15 reads rules from `experimental.turbo` too, under the ones in `turbopack`, which replace
