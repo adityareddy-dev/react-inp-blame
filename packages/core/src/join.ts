@@ -2297,10 +2297,13 @@ function explain(r: InteractionReport): Explanation {
     // The subtree is the one the commit in the forcing scripts rendered, where the sentence found one.
     const own = read.commit ? (!unjoined && namesThisInteraction(read.commit) ? read.commit : null) : named;
     const inTheSubtree = !!own && read.inTheSubtree;
+    // The hot path says where the render went, not where the read was, so where it started at a component
+    // that holds the whole commit (`startName`) that is the subtree named, with the whole count.
+    const whole = own && insideCount(own) != null ? startName(own) : null;
     blame = {
       kind: 'layout',
-      name: inTheSubtree ? leafOf(own) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null,
-      detail: inTheSubtree ? mostlyOf(own) : null,
+      name: inTheSubtree ? (whole ?? leafOf(own)) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null,
+      detail: inTheSubtree ? mostlyOf(own, !whole) : null,
       ms: forcedWhileHandling,
       confidence,
     };

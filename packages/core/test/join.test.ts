@@ -4882,6 +4882,68 @@ test('a render is counted inside the component it is named after, from the one i
   assert.deepEqual([cut.blame.name, cut.blame.detail], ['Heavy', 'at least 800 of at least 5000 components']);
 });
 
+test('a layout blame is named after the component the render started at where that holds the whole commit, and after the one the render is named after where none does', () => {
+  // Closing a Sheet on the shadcn/ui docs, production build, as the 0.13.0 retake read it on every run: 87 ms
+  // of layout forced in BODY.onclick, and 56 components re-rendered from Dialog, the one root, 15 of them
+  // inside DismissableLayer. The read is Radix's Presence reading animationName in a layout effect, in each of
+  // the four Presences the close re-renders, and none of them is inside DismissableLayer: the content's own
+  // sits above it on the path and the overlay's beside it. 0.13.0 named DismissableLayer and "15 of 56
+  // components", a part of the commit that held none of the read. Nothing records which component read a
+  // size, so the one named is the one that holds all of what React rendered, as "from Dialog down" does.
+  const close = [entry('click', 0, 160, 3.2, 105)];
+  const sheet = commit(60, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 56,
+    mounted: 0,
+    roots: ['Dialog'],
+    hotPath: ['Dialog', 'DialogProvider', 'SheetContent', 'SheetPortal', 'DialogPortal', 'DialogPortalProvider', 'Presence', 'Portal', 'Primitive.div', 'DialogContent', 'Presence', 'DialogContentModal', 'DialogContentImpl', 'FocusScope', 'Primitive.div', 'DismissableLayer'],
+    startRendered: 56,
+    pathRendered: 15,
+    components: [{ name: 'Presence', count: 4, self: null, total: null }],
+  });
+  const forced = [frame(0, 160, [script('BODY.onclick', 3.2, 101.8, 87)])];
+  const layout = report(close, [sheet], forced, [input(0, 'click')]).explanation;
+  assert.deepEqual(layout.blame, { kind: 'layout', name: 'Dialog', detail: '56 components', ms: 87, confidence: 'measured' });
+  assert.match(layout.cause, /56 components from Dialog down, 15 of them inside DismissableLayer\./);
+  // A render blame on the same commit is still named after where the render went.
+  const render = report(close, [sheet], [], [input(0, 'click')]).explanation;
+  assert.deepEqual([render.blame.kind, render.blame.name, render.blame.detail], ['render', 'DismissableLayer', '15 of 56 components']);
+  // Where the path starts at one root of several, as on the Sheet's opening, no start holds the whole commit,
+  // and the component the render is named after is all there is to name.
+  const part = report(close, [commit(60, 0, { ...sheet, roots: ['Dialog', 'Portal'], startRendered: 42 })], forced, [input(0, 'click')]).explanation;
+  assert.deepEqual([part.blame.name, part.blame.detail], ['DismissableLayer', '15 of 56 components']);
+  // Where that component holds the whole commit itself, it is the nearer of the two that do, and stays named.
+  const inside = report(close, [commit(60, 0, { ...sheet, pathRendered: 56 })], forced, [input(0, 'click')]).explanation;
+  assert.deepEqual([inside.blame.name, inside.blame.detail], ['DismissableLayer', '56 components']);
+  // A report an earlier release stored counted neither, and reads as it did.
+  const stored = { ...sheet } as { startRendered?: number; pathRendered?: number };
+  delete stored.startRendered;
+  delete stored.pathRendered;
+  const old = report(close, [stored as CommitSummary], forced, [input(0, 'click')]).explanation;
+  assert.deepEqual([old.blame.name, old.blame.detail], ['DismissableLayer', '56 components']);
+
+  // The same in a development build, on a page whose render started at its one root: layout forced in the
+  // click that switched a cal.com event type to its advanced tab is named after EventTypeWeb, which holds the
+  // 1216 components, not after the tab's wrapper, which holds 812 of them.
+  const advanced = commit(200, 0, {
+    rendered: 1216,
+    mounted: 40,
+    total: 180,
+    roots: ['EventTypeWeb'],
+    hotPath: ['EventTypeWeb', 'EventType', 'EventTypeSingleLayout', 'Shell', 'KBarWrapper', 'KBarRoot', 'KBarProvider', 'Layout', 'MainContainer', 'ErrorBoundary', 'ShellMain', 'Form', 'Ct', 'LoadableComponent', 'EventAdvancedWebWrapper'],
+    startRendered: 1216,
+    pathRendered: 812,
+    components: [
+      { name: 'Controller', count: 60, self: 30, total: 2 },
+      { name: 'EventTypeWeb', count: 1, self: 12, total: 180 },
+    ],
+  });
+  const tab = report([entry('click', 0, 520, 3, 500)], [advanced], [frame(0, 520, [script('BUTTON.onclick', 3, 497, 400)])]).explanation;
+  assert.deepEqual(tab.blame, { kind: 'layout', name: 'EventTypeWeb', detail: '1216 components', ms: 400, confidence: 'measured' });
+  assert.match(tab.cause, /1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper\./);
+});
+
 test('a render known only by its counts is not blamed under a long task of working time, and where no frame covered the click the styles and layout it forced are said to be unmeasured', () => {
   // Finishing a rectangle in excalidraw, production build: 2.6 ms of waiting, 2.8 of working time and 34.4
   // updating the screen. Releasing the pointer re-rendered the chrome, 149 components inside
