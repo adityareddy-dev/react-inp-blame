@@ -1556,15 +1556,17 @@ function explain(r: InteractionReport): Explanation {
    * `none`. Where the frame waited on the next press, the note says so and the verdict does not take the script
    * at all: it is usually that press's handler, whose work waitedOnNext leaves to the next report. Taken, a
    * keyup's verdict named the next key's 50 ms handler, and under a 90 ms screen update, with no note, a
-   * keydown's named the next key's 70 ms handler as having run after its own. The rest is ranked by length, not
-   * by where it ran, against every script up to the end of the handlers: ranked by where, a 20 ms click handler
-   * took the verdict from the 150 ms listener, and a 25 ms pointerdown listener from a 120 ms timer the click
-   * waited behind, which was then said nowhere. `ledScript` is that ranking whether or not the note names the
-   * script after the handlers, for the idle handler's rung below, where `ranScript` is settled.
+   * keydown's named the next key's 70 ms handler as having run after its own. One that started before the press
+   * came is this interaction's own, though, and still taken: left out, a 60 ms timer between a keydown's handlers
+   * and the next key went to waiting and painting, and the note named it as the longest script. The rest is
+   * ranked by length, not by where it ran, against every script up to the end of the handlers: ranked by where, a
+   * 20 ms click handler took the verdict from the 150 ms listener, and a 25 ms pointerdown listener from a 120 ms
+   * timer the click waited behind, which was then said nowhere. `ledScript` is that ranking whether or not the note
+   * names the script after the handlers, for the idle handler's rung below, where `ranScript` is settled.
    */
   const lateOnly = insideLate.length > 0 && !c;
   const lateNoted = insideLate.length > 0 || (!!lateScript && (r.presentation > PRESENTATION_NOTE_MS || !!heldByNext));
-  const lateTaken = heldByNext ? null : lateLeads;
+  const lateTaken = lateLeads && (!heldByNext || lateLeads.script.start < nextFrom - STAMP_TOLERANCE) ? lateLeads : null;
   const earlyScript = longestPart(scriptParts(frames, r.start, processingEnd));
   const ledScript = lateTaken && (!earlyScript || lateTaken.ms > earlyScript.ms) ? lateTaken : earlyScript;
   const ownScript = longestPart(scriptParts(frames, r.start, r.end).filter((p) => !next || p.script.start < nextFrom - STAMP_TOLERANCE));

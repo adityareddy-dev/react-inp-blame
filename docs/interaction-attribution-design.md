@@ -1384,7 +1384,10 @@ it is usually that press's handler, and the screen update's note says so at any 
 named the next key's 50 ms handler, and a keydown's under a 90 ms screen update named the next key's 70 ms
 one, with no note at all. Nor, where no note names the script after the handlers, does a verdict take one that
 started once the next press came, which is counted as that press's work: until 2026-09-27 the next key's 44 ms
-handler, under half of a 90 ms screen update, was named the same way. A script after the handlers is said as
+handler, under half of a 90 ms screen update, was named the same way. Where the frame waited on the next
+press, a script from half the screen update that started before the press came is still taken, as this
+interaction's own: until 2026-09-27 a 60 ms timer between a keydown's handlers and the next key went to
+waiting and painting. A script after the handlers is said as
 after the handler finished wherever a verdict names it. The browser's own work is the frame's style, layout and
 paint where the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does
 after a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a

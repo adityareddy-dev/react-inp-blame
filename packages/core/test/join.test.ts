@@ -798,6 +798,24 @@ test("where the working time was longer, the screen update's note says the frame
     assert.deepEqual([waitedOn.blame, waitedOn.cause], [held.blame, held.cause], `${paint} ms`);
     assert.match(waitedOn.notes[0]!, /: the frame waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 55 ms\.$/);
   }
+  // A timer from half of the screen update that started before the next key came is this key's own, though, and
+  // keeps the verdict where the frame most likely waited on that key too: dropped with the next key's handler, its
+  // 50 ms went to waiting and painting in the cause, and was said only in the note, as the longest script.
+  const timerLeads = (paint: number) =>
+    report(
+      [entry('keydown', 1000, 182 + paint, 1001, 1180), entry('keyup', 1060, 122 + paint, 1181, 1182)],
+      [three],
+      [frame(1000, 182 + paint, [...keys, script('TimerHandler:setTimeout', 1183, 50), script('DIV#root.onkeydown', 1234, paint - 53)])],
+      [...ring.slice(0, 2), input(1185, 'keydown', worked(1181 + paint))],
+    ).explanation;
+  for (const paint of [90, 100]) {
+    const own = timerLeads(paint);
+    assert.deepEqual(own.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 50, confidence: 'measured' }, `${paint} ms`);
+    assert.equal(own.cause, "React's render was small (re-rendering 3 components inside Editor, mostly Row (3 of them)); a script (TimerHandler:setTimeout, app.js) ran for 50 ms after the handler finished.");
+    assert.deepEqual(own.notes, [
+      `After the handler finished, the screen took another ${paint} ms to update: the frame most likely waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 50 ms.`,
+    ]);
+  }
 });
 
 test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {
