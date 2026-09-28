@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { blamedRows, counter, hookState, open, recordVerdicts, showPanel, verdicts } from "./page";
+import { blamedRows, counter, hookState, lastVerdict, open, showPanel } from "./page";
 
 // React Router 7's template moved to React 18, with react-inp-blame installed from the packed tarball and a
 // route that imports react-dom. React Router writes the page itself, so nothing goes through the Vite
@@ -40,13 +40,12 @@ test("a click is blamed on SlowList", async ({ page }) => {
 // the nearest component above it with one. The Vite plugin keeps the route component's name, so the
 // click is in Home in the build as on the dev server.
 test("a slow click handler in a route component is put down to that component", async ({ page }) => {
-  await recordVerdicts(page);
   const { problems } = await open(page);
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await showPanel(page);
   await expect(page.locator("#react-inp-blame .panel .row")).toHaveCount(1);
-  await expect.poll(() => verdicts(page)).toHaveLength(1);
-  const [verdict] = await verdicts(page);
-  expect(verdict).toMatch(/^\d+ ms click on button( "Save")? in Home\./);
+  // Read from the report, not the panel: the handler burns its time and sets no state, so its row puts the
+  // time down to onClick and names no component. Only the verdict says the click was in Home.
+  await expect.poll(() => lastVerdict(page)).toMatch(/^\d+ ms click on button( "Save")? in Home\./);
   expect(problems).toEqual([]);
 });
