@@ -3538,6 +3538,38 @@ test('what an icon belongs to is read from the fiber tree: a card\'s photo is th
   children(buttonRow.fiber, asButton.writer, host('span').fiber);
   children(component('Rows'), buttonRow.fiber);
   assert.deepEqual(ownersFor(asButton.svg.el), ['RemoveRow', 'Rows']);
+  // The same where a script drew the icon, with no fiber, in an element its component hands the role to along
+  // with the onClick: react-svg's `<ReactSVG src={trash} role="button" tabIndex={0} onClick={remove} />` renders
+  // an empty `<div>` with them and SVGInjector draws the svg into it, and an app's Icon spreads them onto a
+  // `<span>` whose svg it sets through dangerouslySetInnerHTML. A role handed down is the writer's, as the
+  // onClick is, so the click is RemoveRow's with the role or without. An element whose component gives it the
+  // role itself is a control of its own, and so is a `<button>`, whatever role it was handed: each is named by
+  // the component that renders it, as IconButton's button is.
+  const drawnIn = (wrapper: Record<string, unknown>, tag: string, given: Record<string, unknown>, rendered: Record<string, unknown>) => {
+    const remove = () => {};
+    const stroke = element('path', []);
+    const holder = host(tag, {}, [{ el: element('svg', [stroke]) }]);
+    const props: Record<string, unknown> = { ...given, ...rendered, onClick: remove };
+    holder.fiber.memoizedProps = props;
+    holder.el.getAttribute = (name: string) => (name === 'role' ? (props.role ?? null) : null);
+    wrapper.memoizedProps = { ...given, onClick: remove };
+    children(wrapper, holder.fiber);
+    const label = host('span');
+    const drawnRow = host('div', {}, [holder, label]);
+    children(drawnRow.fiber, wrapper, label.fiber);
+    const writer = component('RemoveRow');
+    children(writer, drawnRow.fiber);
+    children(component('Rows'), writer);
+    return stroke;
+  };
+  const reactSvg = () => fiberOf(1, class ReactSVG {});
+  const empty = { children: [false, false] };
+  assert.deepEqual(ownersFor(drawnIn(reactSvg(), 'div', {}, empty)), ['RemoveRow', 'Rows']);
+  assert.deepEqual(ownersFor(drawnIn(reactSvg(), 'div', { role: 'button', tabIndex: 0 }, empty)), ['RemoveRow', 'Rows']);
+  const markup = { dangerouslySetInnerHTML: { __html: '<svg></svg>' } };
+  assert.deepEqual(ownersFor(drawnIn(component('Icon'), 'span', { role: 'button' }, markup)), ['RemoveRow', 'Rows']);
+  assert.deepEqual(ownersFor(drawnIn(component('Icon'), 'span', {}, { ...markup, role: 'button' })), ['Icon', 'RemoveRow', 'Rows']);
+  assert.deepEqual(ownersFor(drawnIn(component('IconButton'), 'button', { role: 'menuitem' }, { 'aria-label': 'Close' })), ['IconButton', 'RemoveRow', 'Rows']);
 });
 
 test("an icon a script drew outside React is placed by the element holding it, whose handler is that element's own", () => {
