@@ -4638,7 +4638,7 @@ test('a render known only by its counts is not blamed under a long task of worki
   assert.equal(alsoInside(task).cause, 'In 30 ms of working time, short of a long task, React was re-rendering 150 components inside List, mostly Row (150 of them); the rest went to waiting and painting.');
   assert.deepEqual(alsoInside(task).notes, ['React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.']);
   assert.equal(alsoInside(null).cause, 'In 30 ms of working time, short of a long task, React was re-rendering 150 components inside List, mostly Row (150 of them); this browser does not report long tasks, so what else ran is unknown.');
-  // Without a frame, the entries' handler window holds the 800 rows committed at 43 ms, as the handler's script did.
+  // The click's own handler time holds the 800 rows committed at 43 ms, whether or not a frame recorded its script.
   const heldInside = (frames: FrameSummary[] | null) => report([entry('click', 0, 40, 5, 43.5)], [counted(43, 800)], frames, loginClick('handleSave')).explanation;
   const inHandler = heldInside([frame(0, 50, [script('BUTTON.onclick', 6, 37.5)])]);
   assert.equal(inHandler.blame.kind, 'none');

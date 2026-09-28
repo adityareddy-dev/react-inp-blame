@@ -1895,15 +1895,13 @@ function explain(r: InteractionReport): Explanation {
   // handlers did not sit in the working time, and is said to come after it, as the render verdict places it: 800 rows
   // committed after 30 ms of handlers read "In 30 ms of working time, short of a long task, React was
   // re-rendering 800 components", and the same rows after 55 ms "after the handlers, before the next frame". One
-  // committed inside an event's own handlers, or that the handler's own script held, sat in the working time, whatever
-  // its stamp: 800 rows committed at 43 ms in a handler that ran to 43.5, past the paint the duration's rounding put at
-  // 40, read as "After the 35 ms of working time", and without a long animation frame, the commonest recording of a
-  // 40 ms click, still did. A count that sat there is the one said, beside a larger one after the handlers: with 150
-  // rows committed in the handler and 800 after it, the sentence gave the 800 and said nothing of what the 30 ms held.
-  const cameAfter = (x: CommitSummary) => {
-    const s = holderOf(x);
-    return x.at > processingEnd + STAMP_TOLERANCE && !(s && ranAsHandler(s)) && !inOneHandler(x.at, x.at);
-  };
+  // committed inside an event's own handlers sat in the working time, whatever its stamp: 800 rows committed at 43 ms
+  // in a handler that ran to 43.5, past the paint the duration's rounding put at 40, read as "After the 35 ms of
+  // working time", and where no long animation frame showed the handler's script holding them, the commonest
+  // recording of a 40 ms click, still did. A count that sat there is the one said, beside a larger one after the
+  // handlers: with 150 rows committed in the handler and 800 after it, the sentence gave the 800 and said nothing of
+  // what the 30 ms held.
+  const cameAfter = (x: CommitSummary) => x.at > processingEnd + STAMP_TOLERANCE && !inOneHandler(x.at, x.at);
   const countedIn = inWorkingTime.filter((x) => countSays(x) && !cameAfter(x));
   const sc = countedIn.length ? heaviest(countedIn) : c;
   const countAfter = !!sc && cameAfter(sc);
