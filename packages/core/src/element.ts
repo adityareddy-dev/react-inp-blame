@@ -7,7 +7,7 @@ const ELEMENT_NODE = 1;
 // The attributes tests select elements by. A selector names the one an element has.
 const TEST_ATTRIBUTES = ['data-test', 'data-testid'];
 // What a click on something inside it activates, by tag and by ARIA role.
-const CONTROL_TAGS = ['button', 'a', 'summary', 'label', 'input', 'select', 'textarea'];
+export const CONTROL_TAGS = ['button', 'a', 'summary', 'label', 'input', 'select', 'textarea'];
 const CONTROL_ROLES = ['button', 'link', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'option', 'checkbox', 'radio', 'switch'];
 // How far above the element that control is looked for: an icon is a few levels deep (a path in a
 // group in an svg in a span), and a control further away than that is a card, not a button.

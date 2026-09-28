@@ -164,6 +164,26 @@ test('an icon a script drew outside React is placed by the button holding it, un
   assert.equal(generateTarget(asNode(setInto(inCard, () => cardFiber.stateNode))), 'Page > Card (svg)');
 });
 
+test('an icon a script drew in an element handed its role with its onClick is placed under the component that wrote them', () => {
+  // `<ReactSVG src={trash} role="button" tabIndex={0} onClick={remove} />` beside a label in RemoveRow: react-svg
+  // renders an empty `<div>` with the props it was given and SVGInjector draws the svg into it, with no fiber.
+  const remove = () => {};
+  const reactSvg = (given: Record<string, unknown>) => {
+    const rowFiber: Record<string, unknown> = { tag: 5, elementType: 'div', type: 'div', memoizedProps: {}, return: owners('Rows', 'RemoveRow'), sibling: null };
+    // A class component.
+    const reactSvgFiber = Object.assign(component('ReactSVG', rowFiber), { tag: 1, memoizedProps: { src: 'trash.svg', ...given, onClick: remove } });
+    reactSvgFiber.sibling = { tag: 5, elementType: 'span', type: 'span', memoizedProps: {}, return: rowFiber, child: null, sibling: null };
+    rowFiber.child = reactSvgFiber;
+    const divFiber: Record<string, unknown> = { tag: 5, elementType: 'div', type: 'div', memoizedProps: { ...given, onClick: remove, children: [false, false] }, return: reactSvgFiber, child: null, sibling: null };
+    reactSvgFiber.child = divFiber;
+    rowFiber.stateNode = element('div', { fiber: rowFiber });
+    divFiber.stateNode = element('div', { attributes: typeof given.role === 'string' ? { role: given.role } : {}, fiber: divFiber, parentNode: rowFiber.stateNode });
+    return element('path', { parentNode: element('svg', { parentNode: divFiber.stateNode }) });
+  };
+  assert.equal(generateTarget(asNode(reactSvg({ role: 'button', tabIndex: 0 }))), 'Rows > RemoveRow (path)');
+  assert.equal(generateTarget(asNode(reactSvg({}))), 'Rows > RemoveRow (path)');
+});
+
 test('text a component returned adds that component to the path of the element holding it', () => {
   const button = { tag: 5, elementType: 'button', type: 'button', memoizedProps: {}, return: owners('ProfilePage', 'PhotoTile') };
   const tile = element('button', { classes: ['tile'], fiber: button });
