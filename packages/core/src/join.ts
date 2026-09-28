@@ -245,11 +245,11 @@ interface Stamp {
 const PRESSES: readonly string[] = ['pointerdown', 'keydown'];
 
 /**
- * A listener, as Long Animation Frames names it (`DIV#root.onkeydown`), for a press, or (the second group) for an
- * event the press dispatches in the same task, right after its own handlers: a key's `input` is where React's
- * onChange runs.
+ * A listener, as Long Animation Frames names it (`DIV#root.onkeydown`), for a press, or for an event the press
+ * dispatches in the same task, right after its own handlers: a key's (the second group), whose `input` is where
+ * React's onChange runs, or a pointer's (the third).
  */
-const PRESS_LISTENER = /\.on(keydown|pointerdown|(keypress|beforeinput|input|mousedown|touchstart))$/;
+const PRESS_LISTENER = /\.on(keydown|pointerdown|(keypress|beforeinput|input)|(mousedown|touchstart))$/;
 
 /** Whether `a` comes after `b`, compared element by element. */
 function isAfter(a: readonly number[], b: readonly number[]): boolean {
@@ -1455,26 +1455,27 @@ function explain(r: InteractionReport): Explanation {
    * after the handlers is then usually the next press's handler, whose work is the next report's.
    *
    * The press's handlers began where the browser recorded a listener of its (`DIV#root.onkeydown`, or the `oninput`
-   * a key dispatches right after), and nothing that started before that ran for it. One of the second kind is the
-   * press's only where this interaction's release is in the report: a keydown with no keyup runs its own `oninput`
-   * in its task, right after its handlers, and taken for the next key's, a keydown's 60 ms `oninput` went to
-   * waiting and painting. Where no listener was recorded, as for one under 5 ms, a script that started on the tick
-   * this interaction's handlers ended on ran ahead of them too, and only the note counts what came after it
-   * (`ownScript` says why). Nor is a script that holds a render of this report's the press's work, wherever it
-   * started. Taken for the next key's, React's own task that committed a key's render, and a timer as its handlers
-   * ended or before the next key's listener, went to waiting and painting, and from half of the screen update the
-   * note said the frame waited on that key. The next key's handler on the tick after this key's was named as this
-   * key's script. A render joined by overlap alone says too little to keep a script: in the next key's handler, one
-   * kept that handler as this key's verdict.
+   * a key dispatches right after, or a pointer's `onmousedown`), and nothing that started before that ran for it.
+   * One of those two kinds is the press's only for a press of its kind, and where the last event this frame handled
+   * was this interaction's release: a keydown with no keyup, or whose keyup was handled in a later frame, runs its
+   * own `oninput` in its task, right after its handlers, as a checkbox's click does, and taken for the next
+   * press's, a keydown's 60 ms `oninput` went to waiting and painting. Where no listener was recorded, as for one
+   * under 5 ms, a script that started on the tick this interaction's handlers ended on ran ahead of them too, and
+   * only the note counts what came after it (`ownScript` says why). Nor is a script that holds a render of this
+   * report's the press's work, wherever it started. Taken for the next key's, React's own task that committed a
+   * key's render, and a timer as its handlers ended or before the next key's listener, went to waiting and
+   * painting, and from half of the screen update the note said the frame waited on that key. The next key's handler
+   * on the tick after this key's was named as this key's script. A render joined by overlap alone says too little
+   * to keep a script: in the next key's handler, one kept that handler as this key's verdict.
    */
   const next = r.nextInput;
   const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
-  const released = r.entries.some((e) => /^(keyup|pointerup|mouseup|click)$/.test(e.name));
+  const last = r.entries.reduce((a: EventEntrySummary | null, e) => (e.processingStart <= processingEnd && (!a || e.processingStart >= a.processingStart) ? e : a), null)?.name ?? '';
   const nextListener =
     next &&
     scriptsRun.find((s) => {
       const on = s.start >= nextFrom - STAMP_TOLERANCE && PRESS_LISTENER.exec(s.invoker);
-      return on && (released || !on[2]);
+      return on && (on[2] ? next.type === 'keydown' && last === 'keyup' : !on[3] || (next.type === 'pointerdown' && /^(keyup|pointerup|mouseup|click)$/.test(last)));
     });
   const nextsWork = (s: ScriptSummary) =>
     !!next &&

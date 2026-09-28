@@ -976,6 +976,60 @@ test("where the working time was longer, the screen update's note says the frame
     assert.deepEqual(own.blame, { kind: 'script', name: 'DIV#root.oninput', detail: null, ms, confidence: 'measured' }, `${ms} ms`);
     assert.deepEqual(pressOnly(ms, paint, [input(1100, 'keydown')]), own, `${ms} ms`);
   }
+  // So is one whose keyup the report has but the browser handled in a later frame: the release that counts is the
+  // last event this frame handled. Taken for the next key's, the keydown's own `oninput` went to waiting and painting,
+  // with a note that the frame waited on that key.
+  const keyupLater = (ms: number, nexts: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 270, 1001, 1180), entry('keyup', 1300, 16, 1301, 1302)],
+      [three],
+      [frame(1000, 270, [...keys, script('DIV#root.oninput', 1180.1, ms)], 1260)],
+      [input(1000, 'keydown'), input(1300, 'keyup', { gestureTs: 1000 }), ...nexts],
+    ).explanation;
+  for (const ms of [30, 44, 60]) {
+    const own = keyupLater(ms, []);
+    assert.deepEqual(own.blame, { kind: 'script', name: 'DIV#root.oninput', detail: null, ms, confidence: 'measured' }, `${ms} ms`);
+    assert.deepEqual(own.notes, [], `${ms} ms`);
+    assert.deepEqual(keyupLater(ms, [input(1100, 'keydown')]), own, `${ms} ms`);
+  }
+  // And a listener of what a key dispatches after its handlers is only ever a key's, and a pointer's a pointer's: a
+  // checkbox's click runs its own `oninput` in its task, right after its handlers, a pointer runs no `onbeforeinput`,
+  // and a key no `onmousedown`. Taken for the next press's, each went to waiting and painting in the same way.
+  const clicks = Array.from({ length: 6 }, (_, i) => script('DIV#root.onclick', 13 + i * 15, 15));
+  const checkbox = (ms: number, nexts: InputRecord[]) =>
+    report(
+      [entry('pointerdown', 0, 24, 1, 2), entry('pointerup', 10, 184, 11, 12), entry('click', 10, 184, 12, 104)],
+      [commit(102, 10, { ...counted(3), inputType: 'click', roots: ['List'], hotPath: ['List'] })],
+      [frame(0, 194, [...clicks, script('INPUT#agree.oninput', 104.5, ms)], 184)],
+      [input(0, 'pointerdown', { pointerType: 'mouse' }), input(10, 'pointerup', { gestureTs: 0, pointerType: 'mouse' }), input(10, 'click', { gestureTs: 0, pointerType: 'mouse' }), ...nexts],
+    ).explanation;
+  for (const ms of [44, 60]) {
+    const own = checkbox(ms, []);
+    assert.deepEqual(own.blame, { kind: 'script', name: 'INPUT#agree.oninput', detail: null, ms, confidence: 'measured' }, `${ms} ms`);
+    for (const next of [input(60, 'pointerdown', { pointerType: 'mouse' }), input(60, 'keydown')]) assert.deepEqual(checkbox(ms, [next]), own, `${ms} ms, ${next.type}`);
+  }
+  const dispatched = (invoker: string, nexts: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
+      [three],
+      [frame(1000, 272, [...keys, script(invoker, 1183, 56)], 1262)],
+      [...ring.slice(0, 2), ...nexts],
+    ).explanation;
+  const mouse = input(1121, 'pointerdown', { pointerType: 'mouse' });
+  for (const [invoker, other, own] of [
+    ['DIV#root.onbeforeinput', mouse, input(1121, 'keydown')],
+    ['DIV#root.onmousedown', input(1121, 'keydown'), mouse],
+  ] as const) {
+    const unpressed = dispatched(invoker, []);
+    assert.deepEqual(unpressed.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' });
+    assert.deepEqual(dispatched(invoker, [other]), unpressed, invoker);
+    // After a released key, the next press of its own kind it is.
+    const next = dispatched(invoker, [own]);
+    assert.deepEqual([next.blame, next.cause], [held.blame, held.cause], invoker);
+    assert.deepEqual(next.notes, [
+      `After the handler finished, the screen took another 90 ms to update: the frame waited on the next ${own.type === 'keydown' ? 'key press' : 'click'}, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), 56 ms.`,
+    ], invoker);
+  }
 });
 
 test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {
