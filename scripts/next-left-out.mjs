@@ -102,7 +102,7 @@ const problems = [];
 if (withLine.marked.length > 0 && withoutLine.marked.length === 0) {
   problems.push(`The line brings the library into the build: ${MARKER} is in ${withLine.marked.join(', ')}, and in no file without the line.`);
 }
-if (added > ALLOWED) problems.push(`That is over the ${ALLOWED} B the empty module may cost.`);
+if (added > ALLOWED) problems.push(`The line adds ${added} B gzipped, over the ${ALLOWED} B the empty module may cost.`);
 if (problems.length > 0) {
   console.error(problems.join('\n'));
   process.exit(1);
