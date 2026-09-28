@@ -11,7 +11,7 @@ export default (_env, argv) => ({
   resolve: { extensions: ['.tsx', '.ts', '.js'] },
   module: {
     rules: [
-      // The names loader, as the README gives it.
+      // The names loader, as docs/install.md gives it.
       { test: /\.[jt]sx$/, exclude: /node_modules/, enforce: 'pre', use: ['react-inp-blame/display-names-loader'] },
       {
         test: /\.[jt]sx?$/,

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "What `npm create vite@9.2.1 -- --template react-ts` makes, with the README's Vite config and one slow component. Run by scripts/vite-app.mjs from a temp copy.",
+  "description": "What `npm create vite@9.2.1 -- --template react-ts` makes, with the Vite config from docs/install.md and one slow component. Run by scripts/vite-app.mjs from a temp copy.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

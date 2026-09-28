@@ -81,7 +81,7 @@ export function blamedRows(page: Page, name: string): Locator {
 }
 
 /**
- * Who owns React's DevTools hook, read from the hook itself: the README's config has no debugGlobal,
+ * Who owns React's DevTools hook, read from the hook itself: docs/install.md's config has no debugGlobal,
  * so the library's own view of it is not on the page.
  */
 export function hookState(page: Page) {

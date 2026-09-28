@@ -33,10 +33,11 @@ import { parseArgs } from 'node:util';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGE = 'react-inp-blame';
 /**
- * What differs between the apps. `readme` is the heading whose code blocks the fixture's `files` must
- * match, each block found by its first line, a comment that starts with the file's path. `reported` is
- * printed after the install, so a failure says which releases it happened with. `typecheck` checks what
- * the build leaves out: the specs and playwright.config.ts, which Playwright runs without checking.
+ * What differs between the apps. `readme` is the heading in docs/install.md whose code blocks the
+ * fixture's `files` must match, each block found by its first line, a comment that starts with the file's
+ * path. `reported` is printed after the install, so a failure says which releases it happened with.
+ * `typecheck` checks what the build leaves out: the specs and playwright.config.ts, which Playwright runs
+ * without checking.
  */
 const FIXTURES = {
   'vite-react-ts': {
@@ -53,7 +54,7 @@ const FIXTURES = {
     typecheck: (app) => npm('run typecheck', app),
   },
   // React Router 7 on React 18, where the main react-dom module connects to the DevTools hook as it loads
-  // and a route module can load it before the client entry does. The README's config holds there too.
+  // and a route module can load it before the client entry does. docs/install.md's config holds there too.
   'react-router-7': {
     readme: '## Install with React Router',
     files: ['vite.config.ts'],
@@ -69,7 +70,8 @@ const FIXTURES = {
     typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
   },
   // The create-vite app on Vite 7 (Rollup) and React 18 with a manualChunks rule sending node_modules to one
-  // vendor chunk: the build where the page's install used to run after react-dom. No README block of its own.
+  // vendor chunk: the build where the page's install used to run after react-dom. docs/install.md has no
+  // block of its own for it.
   'vite-vendor-chunk': {
     readme: '## Install with Vite',
     files: [],
@@ -78,7 +80,8 @@ const FIXTURES = {
   },
   // The same app on Vite 8 (Rolldown) with a codeSplitting group sending node_modules to one vendor chunk,
   // and Radix's Portal, which imports react-dom, in the page: the vendor chunk runs react-dom as it loads.
-  // The library used to sit there too, so on React 18 the install ran after react-dom. No README block.
+  // The library used to sit there too, so on React 18 the install ran after react-dom. docs/install.md has
+  // no block for it.
   'vite-vendor-groups': {
     readme: '## Install with Vite',
     files: [],
@@ -86,7 +89,7 @@ const FIXTURES = {
     typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
   },
   // The Vite app with styled-components, @emotion/styled, lucide-react and Radix's DropdownMenu, whose own
-  // components used to be what a report named. Its config adds debugGlobal to the README's, so no block.
+  // components used to be what a report named. Its config adds debugGlobal to docs/install.md's, so no block.
   'component-libraries': {
     readme: '## Install with Vite',
     files: [],
@@ -100,8 +103,9 @@ const FIXTURES = {
     reported: ['next', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
   },
-  // webpack 5 and babel-loader on React 18.3, set up as the README's webpack paragraph says, with a vendor chunk
-  // holding react-dom and the library. The README has no block for it: the setup is one import and one rule.
+  // webpack 5 and babel-loader on React 18.3, set up as the webpack paragraph in docs/install.md says, with a
+  // vendor chunk holding react-dom and the library. That page has no block for it: the setup is one import
+  // and one rule.
   webpack: {
     readme: '## Install with Vite',
     files: [],
@@ -140,8 +144,9 @@ const normalized = (text) =>
     .trimEnd();
 
 /**
- * The README's block as the README says to keep it in production: `enabled: true`, with the overlay only on
- * request. CI builds the framework apps for production too, so their config is this form of the block.
+ * The block from docs/install.md as that page says to keep it in production: `enabled: true`, with the
+ * overlay only on request. CI builds the framework apps for production too, so their config is this form of
+ * the block.
  */
 function forProduction(block) {
   return block.replace(/^(\s*)runtime: \{ overlay: true \},.*$/m, (_, indent) => {
@@ -325,7 +330,7 @@ function main() {
     const versions = FIXTURES[name].reported.map((name) => `${name} ${readJson(path.join(app, 'node_modules', name, 'package.json')).version}`);
     console.log(`\nInstalled: ${versions.join(', ')}`);
 
-    // A step of its own, so a type error in the README's config reads as one.
+    // A step of its own, so a type error in docs/install.md's config reads as one.
     (values.pnpm ? pnpm : npm)('run build', app);
     FIXTURES[name].typecheck(app);
     const cli = path.join(app, 'node_modules/@playwright/test', readJson(path.join(app, 'node_modules/@playwright/test/package.json')).bin.playwright);
