@@ -586,8 +586,8 @@ export interface InteractionReport {
    * `submit` a script dispatched after the paint. One made outside any dispatch and stamped with a keyup or a
    * pointerup is left out where another press came between that release and its own, as when keys roll over
    * while typing fast. One that landed before the headline's input, after another of the interaction's entries
-   * painted (or 16 ms after a press too quick for an entry) and inside none of them, is one too, from that paint:
-   * a key press's render before its slower keyup.
+   * painted and inside none of them, is one too, from that paint: a key press's render before its slower keyup,
+   * but not a drag's move render after a press with no entry of its own, which painted nothing.
    * INP does not count them, except one that ran inside another of the interaction's own entries
    * (`CommitSummary.inDispatch`), such as that release's render; the user still waits for them.
    */
