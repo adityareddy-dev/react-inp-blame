@@ -1043,6 +1043,11 @@ commit is not in the report. The note about forced layout under another verdict 
 outside the handlers comes to under half a millisecond, and says the usual line where there was more, since a
 sentence about the part inside would be read as about all of it.
 
+What React rendered comes last, after the size read and the script the layout was charged to. Up to 0.18.0 it
+came before the size read, and on the shadcn/ui Sheet "That happens when code reads an element's size" came
+straight after "React was re-rendering 59 components inside DismissableLayer", where it read as about the
+re-render rather than the layout two sentences back.
+
 Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are
 nowhere in it, and the working time outside the render was all the handler's: on Linux WebKit in CI

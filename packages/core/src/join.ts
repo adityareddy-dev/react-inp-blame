@@ -2297,7 +2297,9 @@ function explain(r: InteractionReport): Explanation {
     const maybe = reactSure ? '' : `${HEDGE} `;
     const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(c, underOr(renderSpent(c)))}` : `React was ${maybe}${renderPhrase(c)}`}.` : '';
     const read = whereRead(whileHandling);
-    cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo}${rendered} ${read.said}`;
+    // What forces a layout is said straight after the layout, and React's clause after that: put after the
+    // clause, its "That happens" read as about the re-render.
+    cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo} ${read.said}${rendered}`;
     // Nothing names the read that forced the layout. What is held is where it happened: the subtree
     // of the commit this interaction joined, or, failing that, the script the browser charged it to
     // — and that only while one script holds nearly all of it, since `ms` is the whole total and a
