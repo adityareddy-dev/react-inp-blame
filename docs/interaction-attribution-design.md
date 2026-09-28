@@ -964,6 +964,20 @@ to, whenever the commit only overlapped the interaction in time, was walked shor
 beside commits that could not be tied to the interaction at all. Render durations play no part in
 that: a production build times nothing and its subtree names are no worse for it.
 
+Which subtree it names matters, since the commit's hot path says where the render went and the read
+can be anywhere in what React rendered. Where the render started from a component that holds the
+whole commit (`startName`, the one the sentence says it went "from ... down"), that is the one named,
+with the whole count as `detail`. Closing a Sheet on the shadcn/ui docs re-renders 56 components from
+Dialog down, 15 of them inside DismissableLayer, and until 2026-09-28 the layout was named after
+DismissableLayer with "15 of 56 components". The read was Radix's `Presence` reading `animationName`
+in a layout effect, in four Presences, and none of them is inside DismissableLayer: the content's
+own sits above it and the overlay's beside it. It is named after Dialog now, with "56 components".
+Where the path starts at one that does not hold the whole commit (the Sheet's opening, whose path
+starts at one of two Portals) or at a name a reader could not search for, the component the render
+is named after is kept, and so it is where that one holds all of it itself. So a render blame and a
+layout blame on the same commit can name different components: on a commit shaped like cal.com's
+advanced tab, EventAdvancedWebWrapper for the render and EventTypeWeb for the layout.
+
 The invoker is only a name for the whole layout while one script holds nine tenths of it. The
 browser charges forced layout per script, so a window holding three of them holds three totals, and
 `blame.ms` is their sum: printing one invoker beside that sum says that script cost the lot. Below
