@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-27
+
 ### Changed
 
 - **The Performance panel track is drawn only under a development build of React unless you ask for it.** Each
@@ -1516,7 +1518,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.14.0...v0.15.0
