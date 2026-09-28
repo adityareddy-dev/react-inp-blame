@@ -126,8 +126,8 @@ function installNow(opts: InstallOptions): Api {
   if (page.sampledOut) return page.sampledOut;
   if (!supportsInteractions()) {
     const message = 'this browser has no Event Timing interactionId (Chrome 96, Firefox 144, Safari 26.2), so nothing was installed.';
-    // Said where the library would have run: in a development build, or on a page the sample takes. The roll
-    // is made once per page, the first time, so later calls cannot raise the share of pages that print it.
+    // Said always in a development build, and in production only on a page the sample takes. The roll is
+    // made once per page, the first time, so later calls cannot raise the share of pages that print it.
     warnOnce('unsupported-browser', message, 'unsupported-browser', () => developmentBuild() || Math.random() < (opts.sampleRate ?? 1));
     // Exposed anyway, so stats() on the page says why nothing is reported. A badge that was asked for says
     // it too, rather than leaving someone looking for one that never comes.

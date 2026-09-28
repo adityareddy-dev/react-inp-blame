@@ -415,17 +415,16 @@ its durations is `'inferred'`, with a note saying why. Components that average 4
 their times, since a millisecond of rounding moves them by a quarter at most.
 
 **Failing closed.** `install()` checks the browser first. Without `event` in
-`PerformanceObserver.supportedEntryTypes` and `interactionId` on `PerformanceEventTiming` (Chrome
-96, Firefox 144, Safari 26.2) it installs nothing, returns an API whose `stats().mode` is
-`'unsupported'`, and warns once where the library would have run: always in a development build,
-and in production on a page `sampleRate` takes, rolled once per page the first time the warning
-comes up, so a later install() cannot raise the share. A development build is one whose bundler
-wrote anything but `'production'` for `process.env.NODE_ENV`, as every bundler that can bundle
-React does; a page with no bundler, where `process` is not defined, counts as production.
-react-dom's `bundleType` cannot tell, since on this path nothing is installed for react-dom to
-register with. What each renderer hands `inject()` (version, bundleType,
-rendererPackageName) is kept in `api.debug.hook().renderers`, and only `react-dom` commits are
-walked, so a react-three-fiber canvas is never read as a DOM tree. A renderer that registered before
+`PerformanceObserver.supportedEntryTypes` and `interactionId` on `PerformanceEventTiming` (Chrome 96,
+Firefox 144, Safari 26.2) it installs nothing, returns an API whose `stats().mode` is `'unsupported'`,
+and warns once: always in a development build, and in production on a page `sampleRate` takes, rolled
+once per page the first time the warning comes up, so a later install() cannot raise the share. A
+development build is one whose bundler wrote anything but `'production'` for `process.env.NODE_ENV`,
+as every bundler that can bundle React does; a page with no bundler, where `process` is not defined,
+counts as production. react-dom's `bundleType` cannot tell, since on this path nothing is installed
+for react-dom to register with. What each renderer hands `inject()` (version, bundleType,
+rendererPackageName) is kept in `api.debug.hook().renderers`, and only `react-dom` commits are walked,
+so a react-three-fiber canvas is never read as a DOM tree. A renderer that registered before
 `install()` is not walked either when the hook kept nothing about it (Fast Refresh's stub keeps
 nothing; React DevTools' hook keeps everything). A react-dom outside React 17 to 19, a root that fails
 the shape check at its first commit (numeric `pendingLanes`, and a `current` with tag 3, numeric
