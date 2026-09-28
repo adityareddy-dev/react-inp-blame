@@ -191,6 +191,15 @@ test('a render a key press set off before its slower keyup is drawn as a later r
   assert.ok(after);
   const { drawn: late } = recording(CHROME_133, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(sealReport(after)));
   assert.equal(late.find((d) => d.label.startsWith('Later render'))?.tooltip, '801 components rendered after the screen updated; heaviest path OrderSummary');
+  // One the report put before the paint is the interaction's own render, drawn so, though it committed after
+  // the paint as the rounded duration has it: the handlers ran to 205, past a 200 ms duration.
+  const rounded = sealReport(buildReport([{ ...click, processingEnd: 205 }], [commit(203)], null));
+  assert.deepEqual(rounded.commits.map((c) => c.at), [203]);
+  const { drawn: own } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(rounded));
+  assert.deepEqual(
+    own.filter((d) => d.track === 'React renders').map(({ label, start, end, color }) => ({ label, start, end, color })),
+    [{ label: 'React render · OrderSummary (801 components)', start: 202.5, end: 203, color: 'primary' }],
+  );
 });
 
 test('the interaction entry is named after the heaviest render before the paint, the one its tooltip blames', () => {
