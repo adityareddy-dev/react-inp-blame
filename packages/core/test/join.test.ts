@@ -3596,15 +3596,16 @@ test("an icon a script drew outside React is placed by the element holding it, w
   /**
    * `<IconButton onClick={close} />` beside a title in Page, IconButton rendering `<tag onClick={onClick}>` around
    * `rendered`: a fiber, text React writes into the element itself with no fiber for it, or nothing. `props` are
-   * the element's others.
+   * the element's others. `layer` is a component IconButton renders the element through, given its props.
    */
-  const inIconButton = (tag: string, drawn: Record<string, unknown>, rendered: Record<string, unknown> | string | number | bigint | null, props: Record<string, unknown> = {}) => {
+  const inIconButton = (tag: string, drawn: Record<string, unknown>, rendered: Record<string, unknown> | string | number | bigint | null, props: Record<string, unknown> = {}, layer?: Record<string, unknown>) => {
     const close = () => {};
     const written = rendered !== null && typeof rendered !== 'object';
     const holder = host(tag, written ? { ...props, onClick: close, children: rendered } : { ...props, onClick: close }, written ? [drawn, text(String(rendered))] : [drawn]);
     if (rendered !== null && typeof rendered === 'object') children(holder.fiber, rendered);
     const iconButton = component('IconButton', { onClick: close });
-    children(iconButton, holder.fiber);
+    if (layer) children(Object.assign(layer, { memoizedProps: holder.fiber.memoizedProps }), holder.fiber);
+    children(iconButton, layer ?? holder.fiber);
     const title = host('h1');
     const header = host('header', {}, [holder.el, title.el]);
     children(header.fiber, iconButton, title.fiber);
@@ -3646,6 +3647,18 @@ test("an icon a script drew outside React is placed by the element holding it, w
   const inRoleButton = element('svg', []);
   inIconButton('div', inRoleButton, null, { role: 'button', 'aria-label': 'Close' });
   assert.deepEqual(ownersFor(inRoleButton), ['IconButton', 'Page']);
+  // So does one IconButton renders through a styling layer, `<Clickable role="button" aria-label="Close"
+  // onClick={onClick} />` with `const Clickable = styled.div`: Clickable was handed the role, but IconButton
+  // wrote it, so the div is a control of IconButton's all the same.
+  const inStyled = element('svg', []);
+  const clickable = fiberOf(11, { $$typeof: Symbol.for('react.forward_ref'), render: () => null, styledComponentId: 'sc-a1b2', target: 'div' });
+  inIconButton('div', inStyled, null, { role: 'button', 'aria-label': 'Close' }, clickable);
+  assert.deepEqual(ownersFor(inStyled), ['styled.div', 'IconButton', 'Page']);
+  // A role a script set on the div, which React never saw, was not handed down either.
+  const inScriptRole = element('svg', []);
+  inIconButton('div', inScriptRole, null, { 'aria-label': 'Close' });
+  (inScriptRole.parentNode as Record<string, unknown>).getAttribute = (name: string) => (name === 'role' ? 'button' : null);
+  assert.deepEqual(ownersFor(inScriptRole), ['IconButton', 'Page']);
   // A count of likes that `{count > 0 && count}` leaves out at 0 is a `false` React writes nothing for, and
   // `{count > 0 ? count : null}` a `null`: the count is written there at any other count, so an icon drawn
   // before it is placed as it is beside the count, in a button or a `<div onClick>`.

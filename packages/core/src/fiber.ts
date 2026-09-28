@@ -595,13 +595,19 @@ function holds(parent: Fiber, f: Fiber): boolean {
 }
 
 /**
- * Whether a host element is a control only by a role the component that renders it was given and passed on,
- * as `<ReactSVG role="button">` passes its role to the `<div>` it renders. That role is the writer's, not the
- * element's. A control's tag is the element's own, whatever it was handed.
+ * Whether a host element is a control only by a role handed down to it with its handler, as
+ * `<ReactSVG role="button" onClick>` hands both to the `<div>` it renders. That role is the writer's, not the
+ * element's: the outermost of the components that handed the handler down was given it too. Where that one
+ * was not, a component below it wrote the role, as IconButton does with `<Clickable role="button"
+ * onClick={onClick}>`, where Clickable is a styled `div`. A control's tag is the element's own, whatever it
+ * was handed.
  */
 function roleHandedDown(f: Fiber): boolean {
   const role = f.memoizedProps?.role;
-  return typeof role === 'string' && !CONTROL_TAGS.includes(f.type as string) && f.return?.memoizedProps?.role === role;
+  if (typeof role !== 'string' || CONTROL_TAGS.includes(f.type as string)) return false;
+  let top: Fiber | null = null;
+  for (let p = f.return, i = 0; p && i < ICON_CLIMB && isComponent(p) && handsDown(p, f); p = p.return, i++) top = p;
+  return top?.memoizedProps?.role === role;
 }
 
 function handlesInput(f: Fiber): boolean {
