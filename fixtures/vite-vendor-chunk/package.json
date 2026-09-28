@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "fixtures/vite-react-ts moved to Vite 7 (Rollup), @vitejs/plugin-react 5 and React 18.3, with a manualChunks rule that sends node_modules to one vendor chunk, the setup the README said put react-dom ahead of the install. Run by scripts/vite-app.mjs --fixture vite-vendor-chunk from a temp copy.",
+  "description": "fixtures/vite-react-ts moved to Vite 7 (Rollup), @vitejs/plugin-react 5 and React 18.3, with a manualChunks rule that sends node_modules to one vendor chunk, the setup docs/install.md says used to put react-dom ahead of the install. Run by scripts/vite-app.mjs --fixture vite-vendor-chunk from a temp copy.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

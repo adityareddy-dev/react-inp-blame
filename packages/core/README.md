@@ -202,8 +202,8 @@ That shows the badge on the dev server. To keep the library in production builds
 in the URL.
 
 CI runs this on React Router 8.4, on React Router 7.18 with React 18.3, on Remix 2.17 and on
-TanStack Start 1.168, each under its dev server and a production build. The
-[repository README](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router)
+TanStack Start 1.168, each under its dev server and a production build. The repository's
+[install page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router)
 has each app's whole config.
 
 A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put this library

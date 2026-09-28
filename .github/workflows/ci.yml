@@ -65,7 +65,7 @@ jobs:
           node-version: '20.19'
       - run: node scripts/pack-smoke.mjs --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
-  # A Vite app as `npm create vite -- --template react-ts` makes it, with the README's vite.config.ts,
+  # A Vite app as `npm create vite -- --template react-ts` makes it, with docs/install.md's vite.config.ts,
   # given the packed tarball the way npm installs it. On the dev server @vitejs/plugin-react's Fast
   # Refresh preamble creates React's DevTools hook and the library chains onto it. A production build has
   # no preamble, so there the install script runs first. A job of its own, beside e2e rather than in it,
@@ -116,8 +116,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node scripts/vite-app.mjs --fresh --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
-  # The frameworks that write their own HTML, each an app from its own template with the README's setup
-  # for it, installed and tested the same way. The Vite plugin's script never runs there, so the install is
+  # The frameworks that write their own HTML, each an app from its own template with the setup docs/install.md
+  # gives it, installed and tested the same way. The Vite plugin's script never runs there, so the install is
   # the first import of the module the plugin's `entry` names, or in Astro the script every island imports
   # before it hydrates.
   # On the dev server a Fast Refresh preamble makes the hook, as plugin-react's does in the Vite app; a build

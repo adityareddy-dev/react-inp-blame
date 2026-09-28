@@ -1,4 +1,5 @@
 # With web-vitals
+
 `react-inp-blame/web-vitals` gives the [web-vitals](https://github.com/GoogleChrome/web-vitals) package
 React component names, in one option. It imports nothing from web-vitals, and `generateTarget` works with
 no `install()` at all: it only reads the fiber React leaves on the node. `generateTarget` needs
@@ -48,8 +49,10 @@ read gives `react: null` rather than an exception inside your analytics callback
 everything else it owns: which interaction is
 the page's INP, at what percentile, over the back/forward cache and soft navigations.
 
-Component names in production need the `displayName` transform (the Next.js wrapper, the Vite plugin or
-the loader, all above). Without it the minifier has renamed them and the path reads `a > b (button.tile)`.
+Component names in production need the `displayName` transform (the
+[Next.js wrapper](install.md#install-with-nextjs-142-or-later), the [Vite plugin](install.md#install-with-vite)
+or the [loader](install.md#webpack-or-rspack)). Without it the minifier has renamed them and the path reads
+`a > b (button.tile)`.
 
 ## Sending it to Sentry
 

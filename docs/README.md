@@ -3,7 +3,9 @@
 The [README](../README.md) is the five-minute version: setup for Next.js and Vite, what you will see, how it
 compares and what it costs. These pages have the rest.
 
-- [Install](install.md): every setup in full. Next.js, Vite, React Router, Remix, TanStack Start and Astro.
+- [Install](install.md): every setup in full. Next.js, Vite, React Router, Remix, TanStack Start, Astro,
+  [webpack or Rspack](install.md#webpack-or-rspack), and a Vite build with
+  [no HTML page](install.md#no-html-page-in-the-build) (Laravel, Rails, Django).
 - [With web-vitals](web-vitals.md): the React side added to web-vitals' INP attribution, and sending it to
   Sentry or GA4.
 - [API](api.md): `onInteraction`, `install()` and its options, every field of a report, what a label may hold,
@@ -17,7 +19,7 @@ compares and what it costs. These pages have the rest.
 
 ## Terms
 
-Terms this page uses: **INP** (Interaction to Next Paint) is the Core Web Vital for responsiveness: how
+Terms these pages use: **INP** (Interaction to Next Paint) is the Core Web Vital for responsiveness: how
 long a click, tap or key press took to reach the next frame drawn, at the page's slowest, with the worst
 few left out once a page has had many. **Event
 Timing** is the browser API INP is built on. **Long Animation Frames** is a second, Chromium-only API that

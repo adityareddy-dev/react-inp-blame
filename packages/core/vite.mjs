@@ -180,7 +180,7 @@ function setupAdvice(config) {
   }
   if (framework) {
     // TanStack Start's client entry is virtual until the app writes one, so the file is part of the fix.
-    const add = framework.create ? `Create ${framework.entry} as the README shows and add entry: '${framework.entry}'` : `Add entry: '${framework.entry}'`;
+    const add = framework.create ? `Create ${framework.entry} as the setup shows and add entry: '${framework.entry}'` : `Add entry: '${framework.entry}'`;
     return `${framework.name} writes its own HTML, so this plugin's install script never reaches a page and nothing installs. ${add} to inpBlame(): ${README}${framework.section}`;
   }
   // An app or a framework can name its inputs for the client environment alone, as RSC setups do. Its `input`

@@ -115,12 +115,14 @@ packed for npm into apps with no peers, with Next.js 15, with Next.js 16.3.5 and
 oldest its `engines` allows, and imports and requires every subpath there; the canary job installs it beside
 `next@canary` as well. No job runs `react@canary` alone. One more
 job puts the packed package into an app made the way `npm create vite` makes one, on Vite 8.3 with
-@vitejs/plugin-react 6.1 and the Vite setup above, and checks that a click there is blamed on the component
-that rendered slowly, on the dev server with a Fast Refresh edit included and in a production build. Three
-more check the same click, with no Fast Refresh edit, in the apps `npx create-react-router`, TanStack
-Start's CLI and `npm create astro` make, each with its setup above, and a fifth in React Router 7's app
-moved to React 18. The create-vite app, and a Next.js 14.2 app with both routers, are installed with pnpm
-as well, into the isolated `node_modules` pnpm makes by default, and checked the same way.
+@vitejs/plugin-react 6.1 and the [Vite setup](install.md#install-with-vite), and checks that a click there is
+blamed on the component that rendered slowly, on the dev server with a Fast Refresh edit included and in a
+production build. Three more check the same click, with no Fast Refresh edit, in the apps
+`npx create-react-router`, TanStack Start's CLI and `npm create astro` make, each with its setup
+([React Router](install.md#install-with-react-router), [TanStack Start](install.md#install-with-tanstack-start),
+[Astro](install.md#install-with-astro)), and a fifth in React Router 7's app moved to React 18. The
+create-vite app, and a Next.js 14.2 app with both routers, are installed with pnpm as well, into the isolated
+`node_modules` pnpm makes by default, and checked the same way.
 
 For component libraries, CI builds the Vite app with styled-components, @emotion/styled, lucide-react and
 Radix's DropdownMenu, on the dev server and in production. That covers the Radix primitives shadcn/ui's Radix

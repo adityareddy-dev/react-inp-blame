@@ -1,9 +1,10 @@
 # Troubleshooting
-Each warning the library prints ends with a link to its entry below. In the browser a warning starts with
-`[react-inp-blame]` and prints once per page. At build time it starts with `withInpBlame:` or `inpBlame:`,
-except the Vite plugin's setup advice, which starts with `[react-inp-blame]` and links its setup section, and
-the line a production build prints when it leaves the library out, which starts with `[react-inp-blame]` too
-under Vite and Astro.
+
+Each warning the library prints ends with a link to its line in the README, which links on to its entry
+below. In the browser a warning starts with `[react-inp-blame]` and prints once per page. At build time it
+starts with `withInpBlame:` or `inpBlame:`, except the Vite plugin's setup advice, which starts with
+`[react-inp-blame]` and links on to its setup in [Install](install.md) instead, and the line a production
+build prints when it leaves the library out, which starts with `[react-inp-blame]` too under Vite and Astro.
 To see whether the library installed at all, and why not, add `debugGlobal: true` and read
 `__REACT_INP_BLAME__.stats()`. If your problem is not here, open a
 [setup problem](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=setup-problem.yml) issue

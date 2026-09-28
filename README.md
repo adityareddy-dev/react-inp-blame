@@ -137,7 +137,7 @@ its entry under [Troubleshooting](#troubleshooting).
 
 1. It fails closed on a browser or React it does not know, and `sampleRate` limits the page loads it runs on. The plugins leave it out of production builds unless `enabled` says otherwise.
 2. It does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended".
-3. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
+3. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK, with span streaming (its default), names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
 4. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
 5. It keeps every fiber render from the pointerup or keydown as one set, until the interaction's Event Timing entry arrives or a second after the frame that follows the input.
 6. `totalStyleAndLayoutDuration`, and `longestScript.entry`, which carries `forcedStyleAndLayoutDuration`.
@@ -171,7 +171,7 @@ leaves their times out and blame built on render times is `'inferred'`.
 | Vite | 6.4, 7.3 and 8.3; a build on Vite 5 | Not tried below 5 |
 | React Router, Remix, TanStack Start | React Router 7.18 and 8.4, Remix 2.17 on Vite, TanStack Start 1.168 | Not tried |
 | Astro | 7.3 | Not tried |
-| webpack | 5.111 | Not tried |
+| [webpack](docs/install.md#webpack-or-rspack) | 5.111 | Not tried |
 | Node, for the build plugins | Installs and loads on 20.19, tests on 22 and 24 | `engines` asks for 20.19 |
 
 The peer dependencies are all `*` and optional, on purpose. npm refuses to install beside a prerelease that a
@@ -221,11 +221,11 @@ npm only ([SECURITY.md](SECURITY.md)).
 
 ## What it costs
 
-On the demo's two heaviest scenarios the library's own time was 1.3 to 3.4 ms per interaction at the median and
-3.8 ms at worst at p95, in production and development builds ([how that was
-measured](docs/how-it-works.md#time-per-interaction)). With `enabled` at its default, neither plugin adds
-anything to a production build (on Next.js 15.3 to 16.2 the line's module is the exception, shipped unused);
-where it loads:
+On two of the demo's scenarios, a click that re-renders 801 components and a keystroke that re-renders 1441,
+the library's own time was 1.3 to 3.4 ms per interaction at the median and 3.8 ms at worst at p95, in
+production and development builds ([how that was measured](docs/how-it-works.md#time-per-interaction)). With
+`enabled` at its default, neither plugin adds anything to a production build (on Next.js 15.3 to 16.2 the
+line's module is the exception, shipped unused); where it loads:
 
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
@@ -264,8 +264,9 @@ The [docs](docs/README.md) have the rest.
 
 - **Install**, every setup in full: <a id="install-with-nextjs-142-or-later"></a>[Next.js](docs/install.md#install-with-nextjs-142-or-later),
   <a id="install-with-vite"></a>[Vite](docs/install.md#install-with-vite), <a id="install-with-react-router"></a>[React Router](docs/install.md#install-with-react-router),
-  <a id="install-with-remix"></a>[Remix](docs/install.md#install-with-remix), <a id="install-with-tanstack-start"></a>[TanStack Start](docs/install.md#install-with-tanstack-start)
-  and <a id="install-with-astro"></a>[Astro](docs/install.md#install-with-astro).
+  <a id="install-with-remix"></a>[Remix](docs/install.md#install-with-remix), <a id="install-with-tanstack-start"></a>[TanStack Start](docs/install.md#install-with-tanstack-start),
+  <a id="install-with-astro"></a>[Astro](docs/install.md#install-with-astro), [webpack or Rspack](docs/install.md#webpack-or-rspack),
+  and a Vite build with [no HTML page](docs/install.md#no-html-page-in-the-build) (Laravel, Rails, Django).
 - <a id="with-web-vitals"></a>**[With web-vitals](docs/web-vitals.md)**: the React side added to web-vitals' INP attribution,
   <a id="sending-it-to-sentry"></a>[sent to Sentry](docs/web-vitals.md#sending-it-to-sentry) or <a id="sending-it-to-google-analytics-4"></a>[to GA4](docs/web-vitals.md#sending-it-to-google-analytics-4).
 - <a id="api"></a>**[API](docs/api.md)**: `onInteraction`, <a id="installoptions"></a>[`install(options)`](docs/api.md#installoptions),
@@ -279,8 +280,9 @@ The [docs](docs/README.md) have the rest.
 
 ## Troubleshooting
 
-Each warning the library prints ends with a link to its line below, which opens the answer in
-[docs/troubleshooting.md](docs/troubleshooting.md). To see whether the library installed at all, and why not,
+Each warning the library prints ends with a link into this README. Most land on their line below, which
+opens the answer in [docs/troubleshooting.md](docs/troubleshooting.md); the Vite plugin's setup advice lands
+on its setup under [Documentation](#documentation). To see whether the library installed at all, and why not,
 add `debugGlobal: true` and read `__REACT_INP_BLAME__.stats()`. If your problem is not listed, open a
 [setup problem](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=setup-problem.yml) issue
 with the warning text.

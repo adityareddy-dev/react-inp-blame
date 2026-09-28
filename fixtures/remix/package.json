@@ -3,7 +3,7 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
-  "description": "What `npx create-remix@2.17.5` makes (templates/remix at the remix@2.17.5 tag, without its ESLint setup), with the README's Remix setup and one slow component. Run by scripts/vite-app.mjs --fixture remix from a temp copy.",
+  "description": "What `npx create-remix@2.17.5` makes (templates/remix at the remix@2.17.5 tag, without its ESLint setup), with the Remix setup from docs/install.md and one slow component. Run by scripts/vite-app.mjs --fixture remix from a temp copy.",
   "scripts": {
     "build": "remix vite:build",
     "dev": "remix vite:dev",

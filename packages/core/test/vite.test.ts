@@ -712,7 +712,7 @@ test('without entry, a framework that writes its own HTML and a build of scripts
   assert.equal(warnings.length, 5);
   assert.match(warnings[0]!, /^\[react-inp-blame\] React Router writes its own HTML.*Add entry: 'app\/root\.tsx' to inpBlame\(\).*#install-with-react-router$/);
   assert.match(warnings[1]!, /Remix writes its own HTML.*entry: 'app\/root\.tsx'.*#install-with-remix$/);
-  assert.match(warnings[2]!, /TanStack Start writes its own HTML.*Create src\/client\.tsx as the README shows and add entry: 'src\/client\.tsx'.*#install-with-tanstack-start$/);
+  assert.match(warnings[2]!, /TanStack Start writes its own HTML.*Create src\/client\.tsx as the setup shows and add entry: 'src\/client\.tsx'.*#install-with-tanstack-start$/);
   assert.match(warnings[3]!, /Astro writes its own pages.*'react-inp-blame\/astro'.*#install-with-astro$/);
   assert.match(warnings[4]!, /no HTML page, only scripts.*entry: '<the script every page loads first>'/);
   // Once per process: a framework that resolves a second config through the same plugins says nothing new.

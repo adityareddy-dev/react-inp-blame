@@ -83,7 +83,7 @@ export function hookState(page: Page) {
 
 /**
  * Collects the verdict of every interaction as the page draws it in the Performance panel: the tooltip
- * of its `performance.measure` entry on the library's "Interaction blame" track. The README's config has no `debugGlobal`, so this is how a spec
+ * of its `performance.measure` entry on the library's "Interaction blame" track. docs/install.md's config has no `debugGlobal`, so this is how a spec
  * reads what a report said, and the library clears each measure from the buffer once it is drawn, so
  * the observer has to be there from the start. Call before `open`.
  */

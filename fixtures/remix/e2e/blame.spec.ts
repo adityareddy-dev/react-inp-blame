@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { blamedRows, counter, hookState, open, showPanel } from "./page";
 
-// The app as a user has it: create-remix's template, on the React 18 it brings, with the README's Remix
-// setup and react-inp-blame installed from the packed tarball. Remix writes the page itself, so nothing goes
-// through the Vite plugin's script: its `entry` puts the install first in app/root.tsx. The root route
-// imports @remix-run/react, which imports react-router-dom and so react-dom, and on React 18 react-dom
+// The app as a user has it: create-remix's template, on the React 18 it brings, with the Remix setup from
+// docs/install.md and react-inp-blame installed from the packed tarball. Remix writes the page itself, so
+// nothing goes through the Vite plugin's script: its `entry` puts the install first in app/root.tsx. The root
+// route imports @remix-run/react, which imports react-router-dom and so react-dom, and on React 18 react-dom
 // connects to the DevTools hook as it loads. The install has to run before that, and in a build it can only
 // do so from a chunk of its own, which the template's `"sideEffects": false` must not shake out. The blame
 // below is the check on that.
