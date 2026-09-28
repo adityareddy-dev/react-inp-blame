@@ -1022,6 +1022,14 @@ test("a verdict that names no render says so of the working time where a press r
   const small = report([entry('keydown', -300, 24, -299, -290), entry('click', 0, 360, 3, 203)], [held, three, listed(commit(270, 0))], [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, 70)], 280)], space);
   assert.deepEqual(small.followUps.map((c) => c.at), [-150]);
   assert.match(small.explanation.cause, /^React's render was small \(.*\) and no long task was recorded in the working time, so the rest went to waiting and painting\.$/);
+  // Where it rendered nothing and the screen update's note names a script after the handlers, the long task
+  // clause says "in it", not "in the working time" twice over. The click Space made came 100 ms after its
+  // keyup, in the same frame, with the thread idle in between, and a 40 ms listener ran after its handlers.
+  const spaced = [input(0, 'keydown', { press: 'Space' }), input(300, 'keyup', { press: 'Space', gestureTs: 0 }), input(400, 'click', { gestureTs: 0 })];
+  const idle = [entry('keydown', 0, 24, 1, 10), entry('keyup', 300, 240, 301, 305), entry('click', 400, 136, 401, 421)];
+  const after = [frame(420, 120, [script('DIV.onscroll', 430, 40)])];
+  assert.equal(report(idle, [render], after, spaced).explanation.cause, "React didn't render anything in the working time and no long task was recorded in it, so the time went to waiting and painting.");
+  assert.equal(report(idle, [], after, spaced).explanation.cause, "React didn't render anything and no long task was recorded in the working time, so the time went to waiting and painting.");
 });
 
 test("a press's render before a slower release is looked at from the press's paint for anything that came between", () => {
