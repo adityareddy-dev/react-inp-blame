@@ -1764,11 +1764,15 @@ name a render by its count gives the working time the count is read against. A c
 after the handlers is said to come after the working time instead, before the next frame, as the
 render verdict places it, and the handler's script, which does not hold it, keeps its verdict:
 until 2026-09-27 a 28 ms handleSave in 30 ms of working time was said nowhere beside 800 rows React
-rendered after it. Where LoAF is supported and no frame covered the interaction, the frame was under
-50 ms and whatever style recalculation and layout it forced went unmeasured (the Sheet opening on a
-phone forces four whole-document recalculations inside 31 ms of working time), and the sentence says
-so. Hydration is the exception: a boundary the interaction waited for is named by its count at any
-working time, as it was.
+rendered after it. It does not beside another count that sat in the working time and would have named
+a render too, as 150 rows committed in the handler do. A commit the handler's own script held sat
+there whatever its stamp, and a render is placed the same way: 800 rows committed at 43 ms in a
+handler that ran to 43.5, past the paint the duration's rounding put at 40, read as after the working
+time and made the handler's script the verdict. Where LoAF is supported and no frame covered the
+interaction, the frame was under 50 ms and whatever style recalculation and layout it forced went
+unmeasured (the Sheet opening on a phone forces four whole-document recalculations inside 31 ms of
+working time), and the sentence says so. Hydration is the exception: a boundary the interaction
+waited for is named by its count at any working time, as it was.
 
 ## The demo
 

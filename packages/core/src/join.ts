@@ -1858,8 +1858,14 @@ function explain(r: InteractionReport): Explanation {
   // ("31 of them inside DismissableLayer") do not read as what took it. A count that committed after the
   // handlers did not sit in the working time, and is said to come after it, as the render verdict places it: 800 rows
   // committed after 30 ms of handlers read "In 30 ms of working time, short of a long task, React was
-  // re-rendering 800 components", and the same rows after 55 ms "after the handlers, before the next frame".
-  const countAfter = !!c && c.at > processingEnd + STAMP_TOLERANCE;
+  // re-rendering 800 components", and the same rows after 55 ms "after the handlers, before the next frame". One the
+  // handler's own script held sat in the working time, whatever its stamp: 800 rows committed at 43 ms in a handler
+  // that ran to 43.5, past the paint the duration's rounding put at 40, read as "After the 35 ms of working time".
+  const cameAfter = (x: CommitSummary) => {
+    const s = holderOf(x);
+    return x.at > processingEnd + STAMP_TOLERANCE && !(s && ranAsHandler(s));
+  };
+  const countAfter = !!c && cameAfter(c);
   const shortOf =
     c && !hasDurations && !longTaskOfWork && countSays(c)
       ? countAfter
@@ -1971,16 +1977,17 @@ function explain(r: InteractionReport): Explanation {
   /**
    * Where the render a sentence gives a figure for ran, set against the working time. One committed after the
    * handlers ran after them, and is said to have: a 43 ms render in the task after 15 ms of handlers read "43 ms
-   * ... in the 15 ms of working time after the wait". One that began before the handlers, or ran longer than they
-   * did and still committed with them, was not all in the working time either, and where it ran is left unsaid: a
-   * 43 ms render in the task the click waited behind, committed as its handlers began, was said as that wait and
-   * then as 43 ms in the 15 ms of working time after it. Only a render in the working time is said against it.
+   * ... in the 15 ms of working time after the wait". One the handler's own script held did not, whatever its
+   * stamp (`cameAfter` says why). One that began before the handlers, or ran longer than they did and still
+   * committed with them, was not all in the working time either, and where it ran is left unsaid: a 43 ms render
+   * in the task the click waited behind, committed as its handlers began, was said as that wait and then as 43 ms
+   * in the 15 ms of working time after it. Only a render in the working time is said against it.
    */
   const renderRan = !rc
     ? 'in'
     : rc.startedAt !== null && rc.startedAt < processingStart - STAMP_TOLERANCE
       ? 'unplaced'
-      : rc.at > processingEnd + STAMP_TOLERANCE
+      : cameAfter(rc)
         ? 'after'
         : hasDurations && rc.total > r.processing + STAMP_TOLERANCE
           ? 'unplaced'
@@ -2308,13 +2315,15 @@ function explain(r: InteractionReport): Explanation {
     const unknown = partway ? 'What React did after it stopped being read is unknown,' : `What React did is unknown: ${why}, so whatever it rendered for this ${kind} was not seen,`;
     cause = `${unknown} and the ${ms(r.processing)} of working time cannot be put on ${handler ?? `the ${kind} handler`} or on a render.${held}`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
-  } else if (ranScript && !(shortOf && !countAfter && ranAsHandler(ranScript.script))) {
+  } else if (ranScript && !(shortOf && ranAsHandler(ranScript.script) && inWorkingTime.some((x) => countSays(x) && !cameAfter(x)))) {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the
     // interaction is exactly what stops this from being a finding. A script that ran as the handler holds
     // React's render as well (the blind rung above says why), so where the count would have named that
     // render but for the bar, the script is not measured in its place: nothing under the bar is blamed.
     // A count that committed after the handlers is not in that script, and leaves it the verdict: kept from
     // it, a 28 ms handleSave in 30 ms of working time was said nowhere, where beside no render it was named.
+    // A count after the handlers does not leave it the verdict beside one that sat in the working time, though:
+    // with 150 rows committed in the handler and 800 after it, a 28 ms handleSave was measured in the 150's place.
     const confidence = unsure ? 'inferred' : 'measured';
     const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
