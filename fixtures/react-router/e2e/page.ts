@@ -1,9 +1,8 @@
 import type { Locator, Page } from "@playwright/test";
+import type { Api } from "react-inp-blame";
 
 declare global {
   interface Window {
-    /** The tooltips of the library's Performance panel entries, collected by `recordVerdicts`. */
-    verdicts?: string[];
     /** Set by React Router's Fast Refresh runtime, which only the dev server adds. */
     $RefreshSig$?: unknown;
     __REACT_DEVTOOLS_GLOBAL_HOOK__?: {
@@ -82,25 +81,15 @@ export function hookState(page: Page) {
 }
 
 /**
- * Collects the verdict of every interaction as the page draws it in the Performance panel: the tooltip
- * of its `performance.measure` entry on the library's "Interaction blame" track. docs/install.md's config has no `debugGlobal`, so this is how a spec
- * reads what a report said, and the library clears each measure from the buffer once it is drawn, so
- * the observer has to be there from the start. Call before `open`.
+ * The verdict of the latest report, or null before the first. docs/install.md's config has no `debugGlobal`,
+ * and a production build draws no Performance panel entries, so this reads it from the library's own
+ * page state, as `hookState` reads the hook's: the installation is kept on `globalThis` under
+ * `Symbol.for("react-inp-blame")`.
  */
-export async function recordVerdicts(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    window.verdicts = [];
-    new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        // React's own entries in development are measures with tooltips too, on tracks of their own.
-        const devtools = (entry as PerformanceMeasure).detail?.devtools;
-        if (devtools?.track === "Interaction blame") window.verdicts!.push(devtools.tooltipText);
-      }
-    }).observe({ type: "measure" });
+export function lastVerdict(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    type Session = { slots: { install?: { installed: { api: Api } | null } } };
+    const session = (globalThis as unknown as Record<symbol, Session | undefined>)[Symbol.for("react-inp-blame")];
+    return session?.slots.install?.installed?.api.last()?.verdict ?? null;
   });
-}
-
-/** The verdicts `recordVerdicts` has collected so far. */
-export function verdicts(page: Page): Promise<string[]> {
-  return page.evaluate(() => window.verdicts ?? []);
 }
