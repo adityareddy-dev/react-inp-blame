@@ -501,14 +501,16 @@ export function namingFiber(node: Node | null): Fiber | null {
   const start = icon && fiberFromNode(icon);
   if (!start) return fiberFromNode(node);
   let f = start;
-  // An icon with no fiber is read from the element around it. That element's handler is the icon's only where
-  // the element is not a control of its own and React rendered nothing in it, as with a `<span onClick>` whose
-  // markup is set through dangerouslySetInnerHTML, or the empty `<div>` react-svg draws its svg in, which
-  // `<ReactSVG role="button" onClick>` hands its role with its onClick. A control holds what is drawn in it,
-  // and so does an element React rendered something in, an `<i>` that feather.replace() or Font Awesome's
-  // autoReplaceSvg swapped for an `<svg>` or the text of `<div onClick>Close</div>`: the handler is the
-  // element's own, and IconButton's `<button onClick>` names IconButton.
-  const handled = handlesInput(start) && (fiberOn(icon) === start || (rendersNothing(start) && (!isControlHost(start) || roleHandedDown(start))));
+  // An icon with no fiber is read from the element around it. Where React set that element's markup through
+  // dangerouslySetInnerHTML and its tag is not a control's, the element is the icon, as the `<svg>` an icon
+  // library renders is, and its handler is the icon's whatever role it has. Otherwise the handler is the icon's
+  // only where the element is not a control of its own and React rendered nothing in it, as with the empty
+  // `<div>` react-svg draws its svg in, which `<ReactSVG role="button" onClick>` hands its role with its
+  // onClick. A control holds what is drawn in it, and so does an element React rendered something in, an `<i>`
+  // that feather.replace() or Font Awesome's autoReplaceSvg swapped for an `<svg>` or the text of
+  // `<div onClick>Close</div>`: the handler is the element's own, and IconButton's `<button onClick>` names
+  // IconButton.
+  const handled = handlesInput(start) && (fiberOn(icon) === start || isMarkupIcon(start) || (rendersNothing(start) && (!isControlHost(start) || roleHandedDown(start))));
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {
@@ -534,6 +536,14 @@ function onlyChild(parent: Fiber): Fiber | null {
 function isControlHost(f: Fiber): boolean {
   const el = f.stateNode as Element | null | undefined;
   return f.tag === HostComponent && !!el && typeof el.getAttribute === 'function' && isControl(el);
+}
+
+/**
+ * Whether a host element's markup is set through dangerouslySetInnerHTML on a tag that is not a control's.
+ * That markup is the element's own, as the svg an icon library renders is, so the element is the icon.
+ */
+function isMarkupIcon(f: Fiber): boolean {
+  return !!f.memoizedProps?.dangerouslySetInnerHTML && !CONTROL_TAGS.includes(f.type as string);
 }
 
 /**

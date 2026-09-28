@@ -184,6 +184,32 @@ test('an icon a script drew in an element handed its role with its onClick is pl
   assert.equal(generateTarget(asNode(reactSvg({}))), 'Rows > RemoveRow (path)');
 });
 
+test("an svg an app's Icon sets through dangerouslySetInnerHTML is placed as one it renders, whoever gave the element its role", () => {
+  // `<Icon svg={trash} onClick={remove} />` beside a label in RemoveRow, where Icon renders
+  // `<span role={onClick ? 'button' : 'img'} onClick={onClick} dangerouslySetInnerHTML={{ __html: svg }} />`. The
+  // span is the icon itself, as the `<svg role="button" onClick>` Trash2 renders is, and Icon renders nothing
+  // but it.
+  const remove = () => {};
+  const icon = (given: Record<string, unknown>, own: Record<string, unknown>) => {
+    const rowFiber: Record<string, unknown> = { tag: 5, elementType: 'div', type: 'div', memoizedProps: {}, return: owners('Rows', 'RemoveRow'), sibling: null };
+    const iconFiber = Object.assign(component('Icon', rowFiber), { memoizedProps: { svg: '<svg></svg>', ...given, onClick: remove } });
+    iconFiber.sibling = { tag: 5, elementType: 'span', type: 'span', memoizedProps: {}, return: rowFiber, child: null, sibling: null };
+    rowFiber.child = iconFiber;
+    const props = { ...given, ...own, onClick: remove };
+    const spanFiber: Record<string, unknown> = { tag: 5, elementType: 'span', type: 'span', memoizedProps: props, return: iconFiber, child: null, sibling: null };
+    iconFiber.child = spanFiber;
+    rowFiber.stateNode = element('div', { fiber: rowFiber });
+    spanFiber.stateNode = element('span', { attributes: { role: 'button' }, fiber: spanFiber, parentNode: rowFiber.stateNode });
+    return element('svg', { parentNode: spanFiber.stateNode });
+  };
+  const markup = { dangerouslySetInnerHTML: { __html: '<svg></svg>' } };
+  assert.equal(generateTarget(asNode(icon({}, { ...markup, role: 'button' }))), 'Rows > RemoveRow (svg)');
+  assert.equal(generateTarget(asNode(icon({ role: 'button' }, markup))), 'Rows > RemoveRow (svg)');
+  // Where a script draws the svg in an empty `<span role="button" aria-label="Delete">` that Icon renders, the
+  // span is a control of Icon's own, as IconButton's button is, and holds what is drawn in it.
+  assert.equal(generateTarget(asNode(icon({}, { role: 'button', 'aria-label': 'Delete' }))), 'Rows > RemoveRow > Icon (svg)');
+});
+
 test('text a component returned adds that component to the path of the element holding it', () => {
   const button = { tag: 5, elementType: 'button', type: 'button', memoizedProps: {}, return: owners('ProfilePage', 'PhotoTile') };
   const tile = element('button', { classes: ['tile'], fiber: button });
