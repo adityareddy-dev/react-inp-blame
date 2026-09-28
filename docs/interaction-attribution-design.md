@@ -1124,16 +1124,16 @@ release is left out as it always was, whether the pointerdown sent an entry or n
 drag's move renders with its pointerdown wherever it cannot tell them apart (React 18 and 19.0, a
 production build, touch), and nothing in the report tells them from a render the press set off, so
 once the press painted, every move read as a later render of the drop and published a quiet one. A
-render a held pointer's press did set off is lost with them. `holdMs` spans the entries alone: it keeps
-the time of a press that sent an entry, but where the press sent none it starts at the release's and
-holds none of it. Where the commit's own input
-is a later one of the same interaction whose work ended after the paint, the click that releases a
-pointer held down past it or a click whose pointerdown was the slow part and painted first, the window
-runs from the end of that input's work (`work.endedAt` in the ring), which is where the hook measured
-it from. So the hold is not counted against the render the release made, and a window set shorter than
-1.5 s does not drop a render the hook walked for that input. It runs from there only while the ring
-shows nothing else pressed between the interaction's first input and that one: a pointer held down
-through a key press, say, or a release whose press the hook could only guess at and took the newest one
+render a held pointer's press did set off is lost with them. `holdMs` spans the entries alone: it
+keeps the time of a press that sent an entry, but where the press sent none it starts at the
+release's and holds none of it. Where the commit's own input is a later one of the same interaction
+whose work ended after the paint, the click that releases a pointer held down past it or a click
+whose pointerdown was the slow part and painted first, the window runs from the end of that input's
+work (`work.endedAt` in the ring), which is where the hook measured it from. So the hold is not
+counted against the render the release made, and a window set shorter than 1.5 s does not drop a
+render the hook walked for that input. It runs from there only while the ring shows nothing else
+pressed between the interaction's first input and that one: a pointer held down through a key
+press, say, or a release whose press the hook could only guess at and took the newest one
 for. A click made from the keyboard is neither. It belongs to the key whose task made it, Enter's keydown
 or a Space's keyup, and a click with `pointerId` -1 and no input's task behind it is a gesture of its
 own. The hook paired a keyboard click with the newest pointerdown of the last 5 s until 2026-09-23, so
