@@ -278,6 +278,18 @@ jobs:
       - name: next dev --turbopack
         if: ${{ !cancelled() && startsWith(matrix.next, '15.') }}
         run: INP_BUNDLER=turbopack npm test -w apps/next-demo
+      # The line is in every build, and in one withInpBlame leaves out it has to compile to nothing: the app
+      # is built that way with it and without it, under each bundler, and the two compared. Before the
+      # production suites, which build .next again.
+      - name: The line in a build withInpBlame leaves out
+        if: ${{ !cancelled() }}
+        run: node scripts/next-left-out.mjs
+      - name: The line in a Turbopack build withInpBlame leaves out
+        if: ${{ !cancelled() && startsWith(matrix.next, '15.') }}
+        run: INP_BUNDLER=turbopack node scripts/next-left-out.mjs
+      - name: The line in a webpack build withInpBlame leaves out
+        if: ${{ !cancelled() && startsWith(matrix.next, '16.') }}
+        run: INP_BUNDLER=webpack node scripts/next-left-out.mjs
       - name: Production build
         if: ${{ !cancelled() }}
         run: npm run test:prod -w apps/next-demo
