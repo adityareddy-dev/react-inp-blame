@@ -509,8 +509,9 @@ export function namingFiber(node: Node | null): Fiber | null {
   // onClick. A control holds what is drawn in it, and so does an element React rendered something in, an `<i>`
   // that feather.replace() or Font Awesome's autoReplaceSvg swapped for an `<svg>` or the text of
   // `<div onClick>Close</div>`: the handler is the element's own, and IconButton's `<button onClick>` names
-  // IconButton.
-  const handled = handlesInput(start) && (fiberOn(icon) === start || isMarkupIcon(start) || (rendersNothing(start) && (!isControlHost(start) || roleHandedDown(start))));
+  // IconButton. What React rendered there is read from the element's fiber on the screen, not the one cached
+  // on it.
+  const handled = handlesInput(start) && (fiberOn(icon) === start || isMarkupIcon(start) || (rendersNothing(onScreen(start)) && (!isControlHost(start) || roleHandedDown(start))));
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {
@@ -555,6 +556,42 @@ function isMarkupIcon(f: Fiber): boolean {
 function rendersNothing(f: Fiber): boolean {
   const children = f.memoizedProps?.children;
   return f.child === null && children !== null && !['string', 'number', 'bigint', 'boolean'].includes(typeof children);
+}
+
+/**
+ * Of a fiber and its alternate, the one on the screen now. The fiber React caches on an element is the one it
+ * made the element with, and an element's two fibers take turns being current, so on every other render the
+ * cached one holds the render before: its children then, or none once React has cleared the child list it
+ * deleted one from. The element's props cannot tell the two apart, since React 17 and 18 write them back only
+ * when a render changed an attribute or a handler. Both fibers are climbed instead, as React's own
+ * findCurrentFiberUsingSlowPath does, up to a parent whose two fibers share one child list, which bailed out
+ * and holds the one on the screen, or to the root, whose `current` names its tree. Where neither is reached,
+ * the cached one.
+ */
+function onScreen(fiber: Fiber): Fiber {
+  const other = fiber.alternate;
+  if (!other) return fiber;
+  let a = fiber;
+  let b = other;
+  for (let hops = 0; hops < MAX_DEPTH; hops++) {
+    const pa = a.return;
+    if (!pa) return a.tag === HostRoot && (a.stateNode as FiberRoot | null | undefined)?.current === b ? other : fiber;
+    const pb = pa.alternate;
+    if (!pb) break;
+    if (pa.child === pb.child) return holds(pa, b) ? other : fiber;
+    // Each fiber's parent is the one in its own tree, save where both point at the same one, as a bailout can
+    // leave them: then the one that parent's child list does not hold is in the other tree.
+    const crossed = a.return === b.return && !holds(pa, a);
+    a = crossed ? pb : pa;
+    b = crossed ? pa : pb;
+  }
+  return fiber;
+}
+
+/** Whether a fiber is one of a parent's children. */
+function holds(parent: Fiber, f: Fiber): boolean {
+  for (let c = parent.child; c; c = c.sibling) if (c === f) return true;
+  return false;
 }
 
 /**

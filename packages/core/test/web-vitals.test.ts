@@ -184,6 +184,69 @@ test('an icon a script drew in an element handed its role with its onClick is pl
   assert.equal(generateTarget(asNode(reactSvg({}))), 'Rows > RemoveRow (path)');
 });
 
+test('an icon a script drew is placed by what React renders in the element now, not by the fiber cached on it', () => {
+  // `<LikeButton onClick={like} />` beside a title in Page, where LikeButton renders `<div className="like"
+  // onClick={onClick}>{count > 0 && <Count />}{liked && <Liked />}</div>` and a script drew an svg in the div. The
+  // fiber cached on the div is the one React made it with, and the div's two fibers take turns being on the
+  // screen, so on every other render the cached one holds the render before: no Count before the first like,
+  // and no child at all once React has cleared the child list it deleted one from.
+  const like = () => {};
+  const link = (parent: Record<string, unknown>, ...kids: Record<string, unknown>[]) => {
+    parent.child = kids[0] ?? null;
+    kids.forEach((kid, i) => Object.assign(kid, { return: parent, sibling: kids[i + 1] ?? null }));
+    return parent;
+  };
+  const hostFiber = (tag: string, props: Record<string, unknown> = {}): Record<string, unknown> => ({ tag: 5, elementType: tag, type: tag, memoizedProps: props, child: null, sibling: null });
+  /** One of the two trees React keeps, whose div holds `inside`, the fiber React rendered there, or nothing. */
+  const tree = (children: unknown[], inside: Record<string, unknown> | null) => {
+    const div = hostFiber('div', { className: 'like', onClick: like, children });
+    if (inside) link(div, inside);
+    const likeButton = link(Object.assign(component('LikeButton'), { memoizedProps: { onClick: like } }), div);
+    const header = link(hostFiber('header'), likeButton, hostFiber('h1'));
+    const page = link(component('Page'), header);
+    const root = link({ tag: 3, memoizedProps: null, child: null, sibling: null }, page);
+    return { root, page, header, likeButton, div };
+  };
+  const count = { type: 'Count' };
+  const liked = { type: 'Liked' };
+  /**
+   * The svg drawn in the div, when `now` is the tree on the screen and `before` the one from the render before,
+   * each fiber paired with its other, and `cached` which of the div's fibers the div holds. `shape` is how
+   * React left the two trees: each fiber pointing at its own tree's parent; a commit elsewhere since, which
+   * bailed out at the header, leaving both its fibers one child list, and made the other root current; the
+   * div's two fibers both pointing at LikeButton's current one, as a bailout can leave them; or the header's
+   * child list from the render before cleared, as React clears it once it deleted a child from it.
+   */
+  const drawnIn = (now: ReturnType<typeof tree>, before: ReturnType<typeof tree>, cached: 'now' | 'before', shape: 'apart' | 'bailed out' | 'one parent' | 'cleared') => {
+    for (const key of Object.keys(now) as (keyof typeof now)[]) {
+      now[key].alternate = before[key];
+      before[key].alternate = now[key];
+    }
+    now.root.stateNode = before.root.stateNode = { current: shape === 'bailed out' ? before.root : now.root };
+    if (shape === 'bailed out') before.header.child = now.header.child;
+    if (shape === 'one parent') before.div.return = now.likeButton;
+    if (shape === 'cleared') before.header.child = null;
+    const div = element('div', { classes: ['like'], fiber: cached === 'now' ? now.div : before.div });
+    now.div.stateNode = before.div.stateNode = div;
+    return element('svg', { parentNode: div });
+  };
+  const readings: [string, () => ReturnType<typeof tree>, () => ReturnType<typeof tree>, string][] = [
+    // The first like: a Count where there was nothing.
+    ['a count that appeared', () => tree([count, false], { tag: 0 }), () => tree([false, false], null), 'Page > LikeButton (svg)'],
+    // Liked in place of the count: React deleted the Count, and cleared the child list that held it.
+    ['a count that made way', () => tree([false, liked], { tag: 0 }), () => tree([count, false], null), 'Page > LikeButton (svg)'],
+    // The last unlike: nothing where the Count was, whether React has cleared the old list yet or not.
+    ['a count that went', () => tree([false, false], null), () => tree([count, false], { tag: 0 }), 'Page (svg)'],
+  ];
+  for (const [what, now, before, target] of readings) {
+    for (const cached of ['now', 'before'] as const) {
+      for (const shape of ['apart', 'bailed out', 'one parent', 'cleared'] as const) {
+        assert.equal(generateTarget(asNode(drawnIn(now(), before(), cached, shape))), target, `${what}, the ${cached} fiber cached, ${shape}`);
+      }
+    }
+  }
+});
+
 test("an svg an app's Icon sets through dangerouslySetInnerHTML is placed as one it renders, whoever gave the element its role", () => {
   // `<Icon svg={trash} onClick={remove} />` beside a label in RemoveRow, where Icon renders
   // `<span role={onClick ? 'button' : 'img'} onClick={onClick} dangerouslySetInnerHTML={{ __html: svg }} />`. The
