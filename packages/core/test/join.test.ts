@@ -784,6 +784,16 @@ test("where the working time was longer, the screen update's note says the frame
     assert.deepEqual([unheld.blame, unheld.cause], [held.blame, held.cause]);
     assert.deepEqual(unheld.notes, []);
   }
+  // Where this key's own 25 ms script takes the verdict instead, the note names the next key's longer one as the
+  // longest script before the paint, as it does over 100 ms, and does not leave it said nowhere.
+  const ownFirst = report(
+    [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
+    [three],
+    [frame(1000, 272, [script('DIV#root.onkeydown', 1001, 25), ...keys.slice(2), script('DIV#root.onkeydown', 1190, 44)], 1262)],
+    [...ring.slice(0, 2), input(1100, 'keydown')],
+  ).explanation;
+  assert.deepEqual(ownFirst.blame, { kind: 'script', name: 'DIV#root.onkeydown', detail: null, ms: 25, confidence: 'measured' });
+  assert.match(ownFirst.notes[0]!, /^After the handler finished, the screen took another 90 ms to update: .* The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 44 ms\.$/);
   // And where the frame did wait on it, a 30 ms timer that ran after this key's handlers, before the next key came, is
   // no more the verdict under a 90 ms screen update than under a 104 ms one: under 90 it was.
   const timerFirst = (paint: number) =>
