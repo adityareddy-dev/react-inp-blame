@@ -78,6 +78,24 @@ interface InteractionCounting {
 const globals = () => window as unknown as Record<string, unknown>;
 const installTime = () => page.installMs;
 
+// Bundlers write the build's mode in place of this expression, as React's own code needs them to. Declared
+// here rather than taken from Node's types, because in the browser nothing else of `process` is read.
+declare const process: { readonly env: { readonly NODE_ENV?: string } };
+
+/**
+ * Whether the app is a development build: one whose bundler wrote anything but 'production' for
+ * `process.env.NODE_ENV`. A page loaded with no bundler, where `process` is not defined, counts as production.
+ * The expression is written out whole, with no `?.` and no `typeof` guard, or a bundler would not find it to
+ * replace, so the try is what keeps a page with no `process` from throwing.
+ */
+function developmentBuild(): boolean {
+  try {
+    return process.env.NODE_ENV !== 'production';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Must run before react-dom evaluates. `react-inp-blame/vite` and `react-inp-blame/next` call it in
  * a module that runs ahead of the app; without either, make `import 'react-inp-blame/auto'` the
@@ -108,7 +126,9 @@ function installNow(opts: InstallOptions): Api {
   if (page.sampledOut) return page.sampledOut;
   if (!supportsInteractions()) {
     const message = 'this browser has no Event Timing interactionId (Chrome 96, Firefox 144, Safari 26.2), so nothing was installed.';
-    warnOnce('unsupported-browser', message);
+    // Said where the library would have run: in a development build, or on a page the sample takes. The roll
+    // is made once per page, the first time, so later calls cannot raise the share of pages that print it.
+    warnOnce('unsupported-browser', message, 'unsupported-browser', () => developmentBuild() || Math.random() < (opts.sampleRate ?? 1));
     // Exposed anyway, so stats() on the page says why nothing is reported. A badge that was asked for says
     // it too, rather than leaving someone looking for one that never comes.
     const api = inertApi('unsupported', { unsupportedReason: { kind: 'browser', message }, installMs: installTime, dispose: hideOverlay });
