@@ -148,9 +148,39 @@ test("where React draws no renders itself, they go to console.timeStamp in Chrom
   const { drawn: fromProduction, left } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(sealReport(later)));
   assert.deepEqual(
     fromProduction.map((d) => `${d.via} ${d.track}: ${d.color} ${d.label}`),
-    ['measure Interaction blame: warning 200 ms click · OrderSummary', 'timeStamp React renders: primary React render · OrderSummary (801 components)', 'timeStamp React renders: tertiary Later render · OrderSummary (801 components)'],
+    [
+      'measure Interaction blame: warning 200 ms click · OrderSummary',
+      'timeStamp React renders: primary React render · OrderSummary (801 components, time not measured)',
+      'timeStamp React renders: tertiary Later render · OrderSummary (801 components, time not measured)',
+    ],
   );
   assert.deepEqual(left, []);
+});
+
+test('a render the build did not time is drawn with no length where it committed, and its name says the time was not measured', () => {
+  // Drawn half a millisecond long, it hovered in the Performance panel as "0.50 ms React render · OrderSummary (801
+  // components)" beside a tooltip that put about 170 ms on the render. An entry with no length is hovered by its name alone.
+  const data = buildReport([click], [commit(150)], null);
+  const later = attachLaterRender(data, commit(400), null);
+  assert.ok(later);
+  const r = sealReport(later);
+  for (const userAgent of [CHROME_147, CHROME_133]) {
+    const { drawn } = recording(userAgent, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+    assert.deepEqual(
+      drawn.filter((d) => d.track === 'React renders').map(({ label, start, end }) => ({ label, start, end })),
+      [
+        { label: 'React render · OrderSummary (801 components, time not measured)', start: 150, end: 150 },
+        { label: 'Later render · OrderSummary (801 components, time not measured)', start: 400, end: 400 },
+      ],
+      userAgent,
+    );
+  }
+  // One React timed is drawn across the time it took.
+  const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 0)]).draw(report([measured(150, { priority: 1 })])));
+  assert.deepEqual(
+    drawn.filter((d) => d.track === 'React renders').map(({ label, start, end }) => ({ label, start, end })),
+    [{ label: 'React render · OrderSummary (801 components)', start: 30, end: 150 }],
+  );
 });
 
 test('beside React 17, which passes the same priority with every commit, a render is coloured by where it landed', () => {
@@ -178,7 +208,7 @@ test('a render a key press set off before its slower keyup is drawn as a later r
   const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
   assert.deepEqual(
     drawn.filter((d) => d.track === 'React renders').map(({ label, start, end, color }) => ({ label, start, end, color })),
-    [{ label: 'Later render · OrderSummary (801 components)', start: 149.5, end: 150, color: 'tertiary' }],
+    [{ label: 'Later render · OrderSummary (801 components, time not measured)', start: 150, end: 150, color: 'tertiary' }],
   );
   // Drawn as a measure, its tooltip said it rendered after the screen updated, and the interaction's count
   // said it was one of the renders after the paint, which read as after the keyup's.
@@ -198,7 +228,7 @@ test('a render a key press set off before its slower keyup is drawn as a later r
   const { drawn: own } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(rounded));
   assert.deepEqual(
     own.filter((d) => d.track === 'React renders').map(({ label, start, end, color }) => ({ label, start, end, color })),
-    [{ label: 'React render · OrderSummary (801 components)', start: 202.5, end: 203, color: 'primary' }],
+    [{ label: 'React render · OrderSummary (801 components, time not measured)', start: 203, end: 203, color: 'primary' }],
   );
 });
 
@@ -259,6 +289,6 @@ test('drawing a report again, or its next revision, adds only what is new about 
   });
   assert.deepEqual(
     drawn.map((d) => d.label),
-    ['200 ms click · OrderSummary', 'React render · OrderSummary (801 components)', 'Later render · OrderSummary (801 components)'],
+    ['200 ms click · OrderSummary', 'React render · OrderSummary (801 components, time not measured)', 'Later render · OrderSummary (801 components, time not measured)'],
   );
 });

@@ -1685,7 +1685,13 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   `tertiary` for a deferred one (normal priority or lower, which covers transitions, deferred
   values and updates from effects or timers alike, since the priority cannot tell them apart),
   `error` when React passed `didError`. Production builds pass no priority, so there a commit
-  before the paint is `primary` and one after it `tertiary`.
+  before the paint is `primary` and one after it `tertiary`. A commit React did not time
+  (every one in a production build, one outside ProfileMode in a profiling build) is drawn
+  with no length where it committed, and its name says "time not measured". Drawn half a
+  millisecond long, it hovered as "0.50 ms React render · OrderSummary (801 components)" beside
+  a tooltip that put about 170 ms on that render, since DevTools puts an entry's length before
+  its name. An entry with no length is hovered by its name alone, as a `console.timeStamp` and
+  as a measure, in the panel of Chrome 153.
 - Chrome 134 and later take the renders through `console.timeStamp(label, start, end, track,
   group, color)`, as react-dom does. Earlier Chrome, and every other browser, has the
   one-argument `console.timeStamp` and silently drops the rest, which no feature test can see, so
@@ -1703,8 +1709,9 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
 `apps/demo/e2e/devtools-track.spec.ts` reads the trace JSON for all of this in a development
 build, also with a Chrome 133 user agent, and checks that a production build draws none of it, in
 the trace or to a `PerformanceObserver` on the page. What one draws with `devtoolsTrack: true` is
-left to `devtools.test.ts`. Older Chrome shows the measures in the Timings track. Nobody has yet
-opened the trace in the Performance panel and looked.
+left to `devtools.test.ts`. Older Chrome shows the measures in the Timings track. Traces from
+0.12.0 and 0.16.0 were opened in the Performance panel of Chrome 153 on 2026-09-27 and looked
+at, which is where the count of renders and the render with no length above come from.
 
 **The badge and panel** (`overlay: true`, or `'query'` for production pages, 2026-09-14).
 A corner badge with the page's INP so far, coloured by the INP thresholds, and a panel that
