@@ -1101,11 +1101,16 @@ the total can hold renders that ran after the handlers or began before them, mor
 time. The renders counted are the ones the note "React rendered 3 times before the screen updated"
 counts, so the two never disagree; the note also counts a render the screen update's clause says ran
 inside a script after the handlers, which the sentences about the working time leave to that clause.
-Until 2026-09-27 the note counted only renders of 5 ms or more, and counted one the working time held
-none of (below). The note that a component count is partial follows the commit the sentence names, not
-the longest one. Until 2026-09-27 the handler and layout sentences put the total beside the one commit's
-phrase, which gave List a 500-component Sidebar's 25 ms, and the render verdict said only the commit it
-named, so three 3 ms renders that earned it together read as 3 ms, under the 5 ms a render needs.
+A hydration is not a re-render, so the note leaves it out, except where a sentence gave React's render
+time across commits with the hydration among them: there it counts what that sentence counted, and
+"React rendered 2 times" never sits beside "rendering across 3 commits". In a production build no
+sentence gives a count, and the note leaves the hydration out there too. Until 2026-09-27 the note
+counted only renders of 5 ms or more, and counted one the working time held none of (below). The note
+that a component count is partial follows the commit the sentence names, not the longest one, and that
+holds where a verdict below the render's calls it small too. Until 2026-09-27 the handler and layout
+sentences put the total beside the one commit's phrase, which gave List a 500-component Sidebar's 25
+ms, and the render verdict said only the commit it named, so three 3 ms renders that earned it together
+read as 3 ms, under the 5 ms a render needs.
 
 React commits some updates once a commit's effects are done and before it says they ran: one an
 effect made with `flushSync`, and one a layout effect made, the measure-then-`setState` a tooltip
@@ -1298,35 +1303,41 @@ screen update that closed the layout's branch, said a production build's handleS
 ms of working time after the wait" of which the layout took 160, or that 800 rows were "still
 re-rendering" in it. A render that committed after the handlers ran after them, and the note says so,
 "after the handlers, before the next frame", here and under a screen update that closed the render's
-branch: until 2026-09-26 a 43 ms render in the task after 15 ms of handlers was said to be "in the 15 ms
-of working time after the wait", a part larger than the whole. The note says it with that place alone,
-without another commit's effects, which ran inside the handlers but read as though they had run after
-them. The render verdict places its render the same way, alone, in a production build too: kept from
-React's task after the handlers, a 43 ms render read "about 43 ms of the 15 ms of working time", and
-until 2026-09-27 a production build's 800 rows committed after the handlers "then ran useEffect
-callbacks" that had run inside them. One that began before the handlers, or ran longer than they did and
-committed with them, was not all in the working time either. React does not yield inside the handlers,
-so it is weighed and blamed on what the working time could hold of it: from their start to its commit,
-and no more than the working time, where it committed with them, whether it began before them or the
-build kept no start. One committed after them held none of the handlers' time. It ran in React's task
-after them, and is weighed on no more than the time from their end to its commit: a transition React
-picked up again 20 ms after 27 ms of handlers, begun 100 ms before the click, is weighed on 20 ms, not
-on the 27 ms of handlers or its 120 ms. The sentence gives the render whole and then that part: "The
-render began before the handlers, so at most 17 ms of it was in the 27 ms of working time", or for one
-after them, "The render began before the handlers and committed after them, so at most 20 ms of it was
-after them." Where it gave several commits' total, the part is of that total: "Some of that rendering
-began before the handlers, so at most 35 ms of it was in the 38 ms of working time", and where the total
-holds renders after the handlers as well, the part after them is said too, so the figures are never
-short of the render blamed: "... so at most 1 ms of it was in the 27 ms of working time, and at most 24
-ms after them." A part that is all the working time says nothing, and is left out: "at most 64 ms of it
-was in the 64 ms of working time". A render is placed, in the working time or after it, only where all
-of it can have run there. Below the render verdict, a render the working time held too little of for it
-is said the same way, not called small: "At most 3 ms of the 5 ms of working time went to React's
-render, which began before the handlers (120 ms re-rendering 3 components inside ProductPage, ...)". The
-handler's figure is still the working time less the renders' parts, the part after the handlers
-included, as it was with the whole render. Where committing and effects choose no commit, the render a
-render verdict names is the one the working time held most of, not the longest, and so is the render the
-handler's and the layout's sentences name. Until 2026-09-27 a 120 ms render that began 100 ms before a
+branch: until 2026-09-26 a 43 ms render in the task after 15 ms of handlers was said to be "in the 15
+ms of working time after the wait", a part larger than the whole. The note says it with that place
+alone, without another commit's effects, which ran inside the handlers but read as though they had run
+after them. The render verdict places its render the same way, alone, in a production build too: kept
+from React's task after the handlers, a 43 ms render read "about 43 ms of the 15 ms of working time",
+and until 2026-09-27 a production build's 800 rows committed after the handlers "then ran useEffect
+callbacks" that had run inside them. One that began before the handlers, or ran longer than they did
+and committed with them, was not all in the working time either. React does not yield inside the
+handlers, so it is weighed and blamed on what the working time could hold of it: from their start to
+its commit, and no more than the working time, where it committed with them, whether it began before
+them or the build kept no start. Their end, for this, is where the handlers themselves ended, the
+latest end of the entries painted in that frame, not where the working time ends: that comes from the
+durations' 8 ms rounding and can fall before the handlers' end (746.3 + 64 against 810.9, measured on
+Space). So a 40 ms render committed as 64 ms of handlers ended, 1.5 ms past that rounded end, is theirs
+and is weighed on its 40 ms, a hydration too; until 2026-09-27 a production build said it ran "after
+the handlers, before the next frame". One committed after them held none of the handlers' time. It ran
+in React's task after them, and is weighed on no more than the time from their end to its commit: a
+transition React picked up again 20 ms after 27 ms of handlers, begun 100 ms before the click, is
+weighed on 20 ms, not on the 27 ms of handlers or its 120 ms. The sentence gives the render whole and
+then that part: "The render began before the handlers, so at most 17 ms of it was in the 27 ms of
+working time", or for one after them, "The render began before the handlers and committed after them,
+so at most 20 ms of it was after them." Where it gave several commits' total, the part is of that
+total: "Some of that rendering began before the handlers, so at most 35 ms of it was in the 38 ms of
+working time", and where the total holds renders after the handlers as well, the part after them is
+said too, so the figures are never short of the render blamed: "... so at most 1 ms of it was in the 27
+ms of working time, and at most 24 ms after them." A part that is all the working time says nothing,
+and is left out: "at most 64 ms of it was in the 64 ms of working time". A render is placed, in the
+working time or after it, only where all of it can have run there. Below the render verdict, a render
+the working time held too little of for it is said the same way, not called small: "At most 3 ms of the
+5 ms of working time went to React's render, which began before the handlers (120 ms re-rendering 3
+components inside ProductPage, ...)". The handler's figure is still the working time less the renders'
+parts, the part after the handlers included, as it was with the whole render. Where committing and
+effects choose no commit, the render a render verdict names is the one the working time held most of,
+not the longest, and so is the render the handler's and the layout's sentences name, and the one a
+verdict below them weighs or calls small. Until 2026-09-27 a 120 ms render that began 100 ms before a
 click's 27 ms of handlers was weighed whole and blamed for 120 ms of the 64 ms click, whether it
 committed in them or 20 ms after them, a 150 ms render kept with no start and committed 10 ms after 97
 ms of handlers was blamed for 150 ms of a 120 ms click, and a 100 ms render that held 7 ms of the
