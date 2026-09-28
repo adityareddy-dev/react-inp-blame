@@ -1541,6 +1541,35 @@ test('a label names an element by its attributes under a production React, and b
   assert.equal(await labelUnder(1, 'attributes'), 'button "save"');
 });
 
+test('the Performance panel entries are drawn under a development React, and under a production one only when asked, since every PerformanceObserver on the page reads them', async (t) => {
+  const groups: unknown[] = [];
+  t.mock.method(performance, 'measure', (_name: string, opts?: { detail?: { devtools?: { trackGroup?: string } } }) => {
+    groups.push(opts?.detail?.devtools?.trackGroup);
+  });
+  // How many entries of the library's a slow click drew, with react-dom of `bundleType` registered after install(), or none.
+  const drawnUnder = async (bundleType: number | null, devtoolsTrack?: InstallOptions['devtoolsTrack']) => {
+    groups.length = 0;
+    await inBrowser(async (page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', devtoolsTrack });
+      if (bundleType !== null) existing.inject(reactDom('19.3.0', bundleType));
+      page.paint([slowClick(120)]);
+      // Entries are drawn once the page is idle, which without requestIdleCallback is a task later.
+      await nextTask();
+      await nextTask();
+      api.dispose();
+    });
+    return groups.filter((group) => group === 'react-inp-blame').length;
+  };
+  assert.equal(await drawnUnder(0), 0, 'a production react-dom drew entries by default');
+  assert.equal(await drawnUnder(0, 'auto'), 0, "a production react-dom drew entries under 'auto'");
+  assert.ok((await drawnUnder(1)) >= 1, 'a development react-dom drew nothing by default');
+  assert.ok((await drawnUnder(0, true)) >= 1, 'a production react-dom drew nothing when asked to');
+  assert.equal(await drawnUnder(1, false), 0, 'a development react-dom drew entries when told not to');
+  assert.equal(await drawnUnder(null), 0, 'a page no react-dom registered on drew entries by default');
+});
+
 test('a key press in an editor inside a label is labelled at dispatch as the report would label it, like a form field', async () => {
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false, labels: 'text' });
@@ -1587,6 +1616,16 @@ test('install() while installed returns the same API, and warns once about the o
     install({ threshold: 16 });
     assert.equal(warn.mock.callCount(), 1);
     assert.match(warn.mock.calls[0].arguments[0], /threshold, walkBudget kept the first call's value/);
+    api.dispose();
+  });
+});
+
+test("install({ devtoolsTrack: 'auto' }) after an install() that left it out asks for what is already set, so nothing is warned about", async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  await inBrowser(() => {
+    const api = install();
+    install({ devtoolsTrack: 'auto' });
+    assert.equal(warn.mock.callCount(), 0);
     api.dispose();
   });
 });
@@ -2660,7 +2699,7 @@ test("an error while reports are drawn on the Performance panel never reaches th
   });
   t.after(() => delete (performance as any).measure);
   await inBrowser((page) => {
-    const api = install();
+    const api = install({ devtoolsTrack: true });
     try {
       page.paint([click(7, 1000, 120)]);
       assert.doesNotThrow(() => t.mock.timers.tick(0));
@@ -2691,7 +2730,7 @@ test("drawing on the Performance panel that goes on throwing holds only the repo
   });
   t.after(() => delete (performance as any).measure);
   await inBrowser((page) => {
-    const api = install();
+    const api = install({ devtoolsTrack: true });
     try {
       // The page's INP first, then quicker clicks enough to push it out were the oldest let go first.
       page.paint([click(1, 1000, 900)]);
@@ -2740,7 +2779,7 @@ test('a page that refuses the idle callback the Performance panel is drawn in ke
     delete (performance as any).measure;
   });
   await inBrowser((page) => {
-    const api = install();
+    const api = install({ devtoolsTrack: true });
     try {
       const heard: number[] = [];
       onInteraction((r) => heard.push(r.interactionId));

@@ -152,7 +152,7 @@ function installNow(opts: InstallOptions): Api {
 
   const settings: Settings = {
     threshold: opts.threshold ?? DEFAULT_THRESHOLD,
-    devtoolsTrack: opts.devtoolsTrack ?? true,
+    devtoolsTrack: opts.devtoolsTrack ?? 'auto',
     walkBudget: opts.walkBudget ?? DEFAULT_WALK_BUDGET,
     inputWindow: opts.inputWindow ?? DEFAULT_INPUT_WINDOW,
     debugGlobal: opts.debugGlobal ?? false,
@@ -162,12 +162,15 @@ function installNow(opts: InstallOptions): Api {
   };
   // Asked at each report, because react-dom registers with the hook after install() has run.
   const labels = (): LabelSource => (settings.labels === 'auto' ? (knownRenderers().some(isDevelopmentReactDom) ? 'text' : 'attributes') : settings.labels);
+  // Asked at each report like labels. Off by default under a production build, since every
+  // PerformanceObserver on the page receives the entries, verdict and label included.
+  const tracking = (): boolean => (settings.devtoolsTrack === 'auto' ? knownRenderers().some(isDevelopmentReactDom) : settings.devtoolsTrack);
   // Null where the browser has no Long Animation Frames: reports then say so rather than showing none.
   const frames: FrameSummary[] | null = supportsLongAnimationFrames() ? [] : null;
 
   // Performance panel entries are drawn once the page is idle: their tooltip is the verdict, and
   // building it does not belong in the callbacks that can delay the next input.
-  const timeline = settings.devtoolsTrack ? createTimeline(knownRenderers) : null;
+  const timeline = settings.devtoolsTrack === false ? null : createTimeline(knownRenderers);
   // The newest revision of each report not drawn yet, kept for the next chance where drawing throws. Only as many
   // as the lifecycle can still revise are kept. Past that a report the lifecycle has let go goes first, the oldest
   // of them, so drawing that goes on throwing still holds the ones it keeps, INP's however old, and draws no more
@@ -176,7 +179,7 @@ function installNow(opts: InstallOptions): Api {
   let cancelDraw: (() => void) | null = null;
   let drawMs = 0;
   const drawWhenIdle = (r: InteractionReport) => {
-    if (!timeline) return;
+    if (!timeline || !tracking()) return;
     undrawn.set(r.interactionId, r);
     if (undrawn.size > MAX_REPORTS) {
       const held = new Set(lifecycle.reports().map((report) => report.interactionId));
