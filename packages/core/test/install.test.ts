@@ -1519,25 +1519,28 @@ test('sampleRate rolls once per page, and a page that loses gets nothing install
   });
 });
 
+/** REACT_INP_BLAME_NEXT as the tests found it, which each test that sets it puts back as it ends. */
+const outsideNextClient = process.env.REACT_INP_BLAME_NEXT;
+
 /**
  * next-client as Next.js bundles it: `process.env.REACT_INP_BLAME_NEXT` holds what withInpBlame put in
- * `env`, or nothing in a build the wrapper left out. Each tag imports a copy of its own.
+ * `env`, '' in a build the wrapper left out, or nothing where no wrapper set it. Each tag imports a copy
+ * of its own. The value stays until the test ends, as in a bundle, where it never changes after import:
+ * each gate in the module reads it again, onRouterTransitionStart's when it is called.
  */
-async function nextClient(tag: string, settings?: object): Promise<typeof import('../src/next-client.ts')> {
-  const saved = process.env.REACT_INP_BLAME_NEXT;
-  if (settings) process.env.REACT_INP_BLAME_NEXT = JSON.stringify(settings);
-  else delete process.env.REACT_INP_BLAME_NEXT;
-  try {
-    return await import(`../src/next-client.ts?${tag}`);
-  } finally {
-    if (saved === undefined) delete process.env.REACT_INP_BLAME_NEXT;
-    else process.env.REACT_INP_BLAME_NEXT = saved;
-  }
+async function nextClient(t: TestContext, tag: string, settings?: object | ''): Promise<typeof import('../src/next-client.ts')> {
+  t.after(() => {
+    if (outsideNextClient === undefined) delete process.env.REACT_INP_BLAME_NEXT;
+    else process.env.REACT_INP_BLAME_NEXT = outsideNextClient;
+  });
+  if (settings === undefined) delete process.env.REACT_INP_BLAME_NEXT;
+  else process.env.REACT_INP_BLAME_NEXT = settings === '' ? '' : JSON.stringify(settings);
+  return await import(`../src/next-client.ts?${tag}`);
 }
 
-test('a click that starts an App Router navigation is named with it, and the reports after it carry the new URL', async () => {
+test('a click that starts an App Router navigation is named with it, and the reports after it carry the new URL', async (t) => {
   // Imported outside the stand-in browser, so its own install() finds no window and does nothing.
-  const { onRouterTransitionStart } = await nextClient('wrapped', { install: {}, basePath: '' });
+  const { onRouterTransitionStart } = await nextClient(t, 'wrapped', { install: {}, basePath: '' });
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false });
     // Next.js calls the injected module's hook from inside the click handler that starts the navigation.
@@ -1557,13 +1560,26 @@ test('a click that starts an App Router navigation is named with it, and the rep
   });
 });
 
-test('next-client installs nothing and names no navigation in a build withInpBlame left out, where the line in instrumentation-client still brings it', async () => {
+test('next-client installs nothing and names no navigation where no withInpBlame set its value, as an older one did in a build it left out', async (t) => {
   await inBrowser(async (page) => {
-    const { onRouterTransitionStart } = await nextClient('left-out');
+    const { onRouterTransitionStart } = await nextClient(t, 'unset');
     assert.equal(Observer.live.size, 0);
-    // The same module in a build the wrapper covers installs as it is imported.
-    await nextClient('covered', { install: { devtoolsTrack: false }, basePath: '' });
+    // The same module in a build the wrapper covers installs as it is imported. Its value, set from here
+    // on, does not wake the copy imported without one.
+    await nextClient(t, 'covered', { install: { devtoolsTrack: false }, basePath: '' });
     assert.ok(Observer.live.size > 0);
+    const api = install({ devtoolsTrack: false });
+    const clickedAt = page.duringClick(() => onRouterTransitionStart('/cart', 'push', null));
+    page.paint([click(7, clickedAt, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: null });
+    api.dispose();
+  });
+});
+
+test("next-client installs nothing and names no navigation in a build withInpBlame left out, whose value is '', where the line in instrumentation-client still brings it", async (t) => {
+  await inBrowser(async (page) => {
+    const { onRouterTransitionStart } = await nextClient(t, 'left-out', '');
+    assert.equal(Observer.live.size, 0);
     const api = install({ devtoolsTrack: false });
     const clickedAt = page.duringClick(() => onRouterTransitionStart('/cart', 'push', null));
     page.paint([click(7, clickedAt, 64)]);
