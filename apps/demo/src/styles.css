@@ -102,3 +102,27 @@ pre { font-size: 10px; white-space: pre-wrap; max-height: 260px; overflow: auto;
 .hosted-header span { white-space: nowrap; margin-left: 10px; }
 .hosted-header a { color: #9ccdff; margin-right: 10px; }
 .hosted-header code { padding: 1px 6px; border-radius: 4px; background: #232836; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; user-select: all; }
+
+/* A phone: one column, with the lab's links in rows above the scenario and "What took time" under it. A page
+   wider than the screen is widened by the phone's browser to fit, and the badge then starts off the screen. */
+@media (max-width: 720px) {
+  .topbar { gap: 4px 12px; padding: 10px 16px; }
+  .topbar a { white-space: nowrap; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .stage { padding: 16px; }
+  .login { flex-direction: column; align-items: stretch; gap: 20px; width: 100%; max-width: 400px; }
+  .signin { order: -1; width: auto; }
+  .phone { width: 100%; max-width: 340px; height: 480px; align-self: center; }
+  .profile { width: 100%; }
+  .profile-head { gap: 20px; }
+  .avatar { width: 88px; height: 88px; }
+  .stats { flex-wrap: wrap; gap: 4px 16px; }
+  .labwrap { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .labnav { display: flex; flex-wrap: wrap; gap: 4px; }
+  .labnav a { padding: 5px 10px; border-color: var(--line2); }
+  .labnav a small { display: none; }
+  .card { padding: 18px 16px; }
+  .pf, .two-col { grid-template-columns: minmax(0, 1fr); }
+  input.text { width: 100%; }
+  .journey { position: static; height: auto; overflow: visible; border-left: 0; border-top: 1px solid var(--line); padding: 20px 16px; }
+}
