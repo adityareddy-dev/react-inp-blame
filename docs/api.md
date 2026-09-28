@@ -145,7 +145,10 @@ cannot be told from the rest of the page, so a click on that text can be named b
 text by default. Whatever `labels` says, `target.selector` has the tag, the `id` if there is one, and
 `data-test` or `data-testid` or else two classes, and `navigationURL` and `startedNavigation.url` are full
 URLs, query string included. A script the browser names by its URL, or by the page's for an inline script,
-loses any password, query or fragment in a blame's `name`, the sentences and `frames`.
+loses any password, query or fragment in a blame's `name`, the sentences and `frames`. What your code wrote
+goes out as written, though: an `aria-label`, `data-testid` or `id` built from user data, such as
+`` aria-label={`Message ${user.name}`} ``, lands in `target.label` or `target.selector`, and the label in the
+verdict.
 
 ## The badge and panel
 
