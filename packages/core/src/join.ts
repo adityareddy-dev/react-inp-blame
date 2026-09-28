@@ -1293,20 +1293,21 @@ function explain(r: InteractionReport): Explanation {
   const processingStart = r.start + r.inputDelay;
   const processingEnd = processingStart + r.processing + r.walkMs;
   /**
-   * How much of a commit's render the working time could have held, which is what the verdict weighs it on.
-   * React does not yield inside one event's handlers, so a render that began before them had at most the time
-   * from their start to its commit, and no render committed with them had more than the working time: a 120 ms
-   * render that began 100 ms before a click's 27 ms of handlers and committed in them was blamed for 120 ms of
-   * a 64 ms click. One committed after the handlers is React's own task after them, the render they set off,
-   * and is weighed whole, up to the time from their start to its commit: kept with no start, a 150 ms render
-   * committed 107 ms after the handlers began was blamed for 150 ms of a 120 ms click.
+   * How much of a commit's render the interaction could have held from the start of its handlers, which is what
+   * the verdict weighs it on. React does not yield inside one event's handlers, so a render committed with them
+   * had at most the time from their start to its commit, and no more than the working time, whether it began
+   * before them or the build kept no start: a 120 ms render that began 100 ms before a click's 27 ms of handlers
+   * and committed in them was blamed for 120 ms of a 64 ms click, and one kept with no start, committed 0.2 ms
+   * into 64 ms of handlers, for all 64. One committed after the handlers held none of their time. It ran in
+   * React's task after them, and had at most the time from their end to its commit: a transition React picked up
+   * again after a click that did not interrupt it, begun 100 ms before the click and committed 20 ms after its
+   * 27 ms of handlers, was weighed as all 27, and a 150 ms render kept with no start, committed 10 ms after 97 ms
+   * of handlers, was blamed for 107 ms of a 120 ms click.
    */
   const held = (x: CommitSummary) =>
-    x.startedAt !== null && x.startedAt < processingStart - STAMP_TOLERANCE
-      ? Math.min(x.total, r.processing, Math.max(0, Math.min(x.at, processingEnd) - processingStart))
-      : x.at > processingEnd + STAMP_TOLERANCE
-        ? Math.min(x.total, x.at - processingStart)
-        : Math.min(x.total, r.processing);
+    x.at > processingEnd + STAMP_TOLERANCE
+      ? Math.min(x.total, x.at - processingEnd)
+      : Math.min(x.total, r.processing, Math.max(0, Math.min(x.at, processingEnd) - processingStart));
   /**
    * Working time no entry's handlers ran in. The entries painted in one frame are one working window, as
    * web-vitals counts them, so an event of the interaction that waited behind the one before it has that
@@ -1608,11 +1609,31 @@ function explain(r: InteractionReport): Explanation {
   const c = inWorkingTime.length ? heaviest(inWorkingTime) : null;
   // React's render time in the working time as the verdict weighs it.
   const renderTotal = inWorkingTime.reduce((a, x) => a + held(x), 0);
-  // A render that began before the handlers and committed as they began, in the task the click waited behind.
-  // The working time held none of it, so no total counts it: a note on a render after the handlers added its
-  // 43 ms, "and 143 ms of rendering in all across 2 commits". Only a sentence that names it says it.
-  const ranBefore = (x: CommitSummary) => x.startedAt !== null && x.startedAt < processingStart - STAMP_TOLERANCE && held(x) < 0.5;
-  const rendering = inWorkingTime.filter((x) => x.total > 0 && !ranBefore(x));
+  // A render committed with the handlers that the working time held none of: one in the task the click waited
+  // behind, committed as they began, whether the build kept its start or not. No total counts it: a note on a
+  // render after the handlers added its 43 ms, "and 143 ms of rendering in all across 2 commits". Only a sentence
+  // that names it says it.
+  const ranBefore = (x: CommitSummary) => x.at <= processingEnd + STAMP_TOLERANCE && held(x) < 0.5 && x.total > held(x);
+  /**
+   * Renders the screen update's clause says a script after the handlers forced: synchronous ones (Scheduler
+   * priority 1, React 17's 99, or a build that does not say) in a script that is not React's own task, which Long
+   * Animation Frames names `MessagePort.onmessage`. An update an effect made renders there, and on React 17 at 99
+   * as well. The script set them off, not an effect.
+   */
+  const forcedByScript =
+    lateScript && lateScript.script.invoker !== REACT_TASK ? insideLate.filter((x) => x.priority === undefined || x.priority === 1 || x.priority === 99) : [];
+  /**
+   * React's renders, one set for every sentence that counts them and for the "React rendered N times" note: every
+   * commit that rendered at all but a render a script forced and one the working time held none of. Counted apart,
+   * a cause read "rendering across 3 commits" beside a note saying React "rendered 2 times": the note left out a 3
+   * ms render the total had, and counted one that ran before the handlers. A build that records no durations
+   * counts only a render with real work in it, as the note did. A hydration is rendering and is counted, though
+   * the note is not said for one. The sentences about the working time leave out a render the screen update's
+   * clause says was inside a script after it, which the note still counts.
+   */
+  const rendersAll = r.commits.filter((x) => !forcedByScript.includes(x) && !ranBefore(x) && (x.hasDurations ? x.total > 0 || x.rendered > 0 : carriesWork(x)));
+  const renders = rendersAll.filter((x) => !insideLate.includes(x));
+  const rendersMs = renders.reduce((a, x) => a + x.total, 0);
   /**
    * React's render time where several commits hold it, said as their total with the named commit's share:
    * "React spent 55 ms rendering across 2 commits, 30 ms of it re-rendering 30 components inside List". Said
@@ -1620,43 +1641,58 @@ function explain(r: InteractionReport): Explanation {
    * three 3 ms commits earned together said 3 ms. The share is not called the heaviest, since the commit a
    * blame names can be a lighter render chosen for its committing and effects. `alone` is the figure a
    * sentence gives where one commit holds all of it. Every commit that rendered at all is counted, or six
-   * renders of under 1 ms each beside List's 30 ms put their 2 ms on List.
+   * renders of under 1 ms each beside List's 30 ms put their 2 ms on List. A commit named that is none of the
+   * renders counted, one that ran before the handlers, is said alone.
    */
-  const rendersWith = (named: CommitSummary) => [...new Set([...rendering, named])];
-  const renderSpent = (named: CommitSummary) => rendersWith(named).reduce((a, x) => a + x.total, 0);
-  const renderCount = (named: CommitSummary) => rendersWith(named).length;
-  const severalRenders = (named: CommitSummary) => renderCount(named) > 1 && Math.round(renderSpent(named)) - Math.round(named.total) >= 1;
+  const severalRenders = (named: CommitSummary) => renders.length > 1 && renders.includes(named) && Math.round(rendersMs) - Math.round(named.total) >= 1;
+  const renderSpent = (named: CommitSummary) => (renders.includes(named) ? rendersMs : named.total);
   const renderAcross = (named: CommitSummary, alone: string) =>
     severalRenders(named)
-      ? `${underOr(renderSpent(named))} rendering across ${plural(renderCount(named), 'commit')}, ${underOr(named.total)} of it ${renderPhrase(named)}`
+      ? `${underOr(rendersMs)} rendering across ${plural(renders.length, 'commit')}, ${underOr(named.total)} of it ${renderPhrase(named)}`
       : `${alone} ${renderPhrase(named)}`;
   // The same total, for a sentence that leads with the named commit's figure and keeps its word order. It goes
   // after the working time, so only the named render is set against it: led with the total, a note put 35 ms of
   // rendering, some of it after the handlers, in 25 ms of working time. It says what it totals, or after "30 ms
   // re-rendering ... and 60 ms committing it" it read as the sum of the two.
-  const inAll = (named: CommitSummary) => (severalRenders(named) ? `, and ${ms(renderSpent(named))} of rendering in all across ${plural(renderCount(named), 'commit')}` : '');
+  const inAll = (named: CommitSummary) => (severalRenders(named) ? `, and ${ms(rendersMs)} of rendering in all across ${plural(renders.length, 'commit')}` : '');
   /**
-   * Where the render a sentence says began before the handlers, how much of it the working time held, which is
-   * what it was weighed on: "The render began before the handlers, so at most 17 ms of it was in the 27 ms of
-   * working time." The figure said is all of it, since the render's own components were timed whole: said as
-   * the part held, a render of 17 ms held a component of 20. Where the sentence gave the total of several
-   * commits, the clause is about that total. Only the renders that committed with the handlers are weighed
-   * here. One after them ran after the working time, not before it, so where the total holds one, only the part
-   * held is said: from rendering longer than the working time, a note on a 100 ms render after 27 ms of handlers
-   * inferred that some of it "began before the handlers".
+   * Where the render a sentence says began before the handlers, how much of it the interaction held from their
+   * start, which is what it was weighed on: "The render began before the handlers, so at most 17 ms of it was in
+   * the 27 ms of working time." The figure said is all of it, since the render's own components were timed whole:
+   * said as the part held, a render of 17 ms held a component of 20. Where the sentence gave the total of several
+   * commits, the clause is about that total. A render committed after the handlers ran in none of their time,
+   * and what it held is said after them, so the figures said are never short of what a render blame names: of 43
+   * ms that began inside 27 ms of handlers and committed 24 ms after them, the clause said "at most 1 ms of it was
+   * in the 27 ms of working time" of the render beside it, and nothing of the 43 ms blamed. A part that is all the
+   * working time says nothing, so it is left out.
    */
   const heldSaid = (named: CommitSummary, when = '') => {
     const several = severalRenders(named);
-    const said = several ? rendersWith(named) : [named];
+    const said = several ? renders : [named];
     const withThem = said.filter((x) => x.at <= processingEnd + STAMP_TOLERANCE);
-    const weighed = Math.min(r.processing, withThem.reduce((a, x) => a + held(x), 0));
-    if (Math.round(weighed) >= Math.round(withThem.reduce((a, x) => a + x.total, 0))) return '';
-    const after = withThem.length < said.length;
+    const inWork = Math.min(r.processing, withThem.reduce((a, x) => a + held(x), 0));
+    const afterThem = said.reduce((a, x) => (withThem.includes(x) ? a : a + held(x)), 0);
+    if (Math.round(inWork + afterThem) >= Math.round(said.reduce((a, x) => a + x.total, 0))) return '';
     const within = `the ${ms(r.processing)} of working time${when ? ` ${when}` : ''}`;
     const it = several ? 'That rendering' : 'The render';
-    if (!after && weighed < 0.5) return ` ${it} ran before the handlers, not in ${within}.`;
-    if (!after && Math.round(weighed) >= Math.round(r.processing)) return ` ${it} was longer than ${within}, so ${several ? 'some of it' : 'it'} began before the handlers.`;
-    return ` ${several ? 'Some of that rendering' : 'The render'} began before the handlers, so at most ${ms(weighed)} of it was in ${within}.`;
+    const some = several ? 'Some of that rendering' : 'The render';
+    if (withThem.length === said.length) {
+      if (inWork < 0.5) return ` ${it} ran before the handlers, not in ${within}.`;
+      if (Math.round(inWork) >= Math.round(r.processing)) return ` ${it} was longer than ${within}, so ${several ? 'some of it' : 'it'} began before the handlers.`;
+      return ` ${some} began before the handlers, so at most ${ms(inWork)} of it was in ${within}.`;
+    }
+    if (!withThem.length) {
+      const began = named.startedAt !== null && named.startedAt < processingStart - STAMP_TOLERANCE ? 'began before the handlers' : 'began before the handlers ended';
+      const lead = several ? 'That rendering committed after the handlers, and some of it began before they ended' : `The render ${began} and committed after them`;
+      return ` ${lead}, so at most ${ms(afterThem)} of it was after them.`;
+    }
+    // A render after the handlers that did not fit the time after them began before they ended, not before they began.
+    const unfit = said.some((x) => !withThem.includes(x) && held(x) < x.total - STAMP_TOLERANCE);
+    const began = unfit ? 'began before the handlers ended' : 'began before the handlers';
+    const afterSaid = `${unfit ? 'at most ' : ''}${ms(afterThem)}`;
+    if (Math.round(inWork) >= Math.round(r.processing)) return ` ${some} ${began}, and ${afterSaid} of it was after them.`;
+    const inIt = inWork < 0.5 ? `under 1 ms of it was in ${within}` : `at most ${ms(inWork)} of it was in ${within}`;
+    return ` ${some} ${began}, so ${inIt}, and ${afterSaid} after them.`;
   };
   // The render the handler's and the layout's sentences name: the one the working time held most of, and the
   // heaviest of those it held as much of. Named by its whole time, a 43 ms render in the task the click waited
@@ -2003,6 +2039,19 @@ function explain(r: InteractionReport): Explanation {
         ? `After the ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}, before the next frame`
         : `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}`
       : null;
+  /**
+   * The render a rung under the render blame says was too small for it. Small is what the working time held of
+   * it, so a render it held only part of says that part, where it ran and its whole figure: a 120 ms render that
+   * began before 5 ms of handlers, 72 ms of it in one component, read "React's render was small".
+   */
+  const smallRender = (x: CommitSummary) => {
+    const kept = held(x);
+    if (!x.hasDurations || x.total <= kept + STAMP_TOLERANCE) return `React's render was small (${renderPhrase(x)})`;
+    const whole = `${ms(x.total)} ${renderPhrase(x)}`;
+    return x.at > processingEnd + STAMP_TOLERANCE
+      ? `React's render began before the handlers ended, with ${kept < 0.5 ? 'under 1 ms' : `at most ${ms(kept)}`} of it after them (${whole})`
+      : `${kept < 0.5 ? 'Under 1 ms' : `At most ${ms(kept)}`} of the ${ms(r.processing)} of working time went to React's render, which began before the handlers (${whole})`;
+  };
   // The commit a render blame names is the one React spent longest on, committing and effects included,
   // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
   // no commit has a span this is the heaviest render, as everywhere else. Committing and effects only
@@ -2113,20 +2162,20 @@ function explain(r: InteractionReport): Explanation {
    * Where the render a sentence gives a figure for ran, set against the working time. One committed after the
    * handlers ran after them, and is said to have: a 43 ms render in the task after 15 ms of handlers read "43 ms
    * ... in the 15 ms of working time after the wait". One the handler's own script held did not, whatever its
-   * stamp (`cameAfter` says why). One that began before the handlers, or ran longer than they did and still
-   * committed with them, was not all in the working time either, and where it ran is left unsaid: a 43 ms render
-   * in the task the click waited behind, committed as its handlers began, was said as that wait and then as 43 ms
-   * in the 15 ms of working time after it. Only a render in the working time is said against it.
+   * stamp (`cameAfter` says why). One that began before the handlers, or ran longer than the time it can have had,
+   * from their start to its commit or from their end to it, was not all where it committed, and where it ran is
+   * left unsaid: a 43 ms render in the task the click waited behind, committed as its handlers began, was said as
+   * that wait and then as 43 ms in the 15 ms of working time after it, and a 57 ms render begun inside 7 ms of
+   * handlers and committed 50 ms after them was said to have run "after the handlers". Only a render in the working
+   * time is said against it.
    */
   const renderRan = !rc
     ? 'in'
-    : rc.startedAt !== null && rc.startedAt < processingStart - STAMP_TOLERANCE
+    : (rc.startedAt !== null && rc.startedAt < processingStart - STAMP_TOLERANCE) || (hasDurations && rc.total > held(rc) + STAMP_TOLERANCE)
       ? 'unplaced'
       : cameAfter(rc)
         ? 'after'
-        : hasDurations && rc.total > r.processing + STAMP_TOLERANCE
-          ? 'unplaced'
-          : 'in';
+        : 'in';
   // The render's place, said after `lead`: `within` where that is the working time, and nothing where it is unknown.
   const placed = (lead: string, within: string) =>
     renderRan === 'after' ? `${lead}after the handlers, before the next frame` : renderRan === 'in' ? `${lead}${within}` : '';
@@ -2199,8 +2248,13 @@ function explain(r: InteractionReport): Explanation {
   const hydrating = r.commits.find((x) => x.hydratedTarget != null) ?? null;
   const waited = r.hydration?.kind === 'waited' && hydrating && carriesWork(hydrating) ? { boundary: r.hydration, commit: hydrating } : null;
   // What of the hydration the working time held, which is all the phases can show of it: a hydration longer
-  // than the working time was said as "90 ms of the 20 ms of working time" beside a phase part of 20.
-  const hydrated = waited && waited.boundary.ms != null ? Math.min(waited.boundary.ms, r.processing) : null;
+  // than the working time was said as "90 ms of the 20 ms of working time" beside a phase part of 20. It is
+  // the part between the handlers' start, or its own where that was later, and its commit or their end, on
+  // the bound a render is weighed on, and with no start kept it began no later than the handlers: taken as
+  // the working time, one that committed 5 ms before 20 ms of handlers ended read "all 20 ms", and one that
+  // began after they ended read "all 17 ms" where it held none of them.
+  const hydratedIn = (x: CommitSummary) => Math.max(0, Math.min(x.at, processingEnd) - Math.max(x.startedAt ?? processingStart, processingStart));
+  const hydrated = waited && waited.boundary.ms != null ? Math.min(waited.boundary.ms, r.processing, hydratedIn(waited.commit)) : null;
   // It takes the blame only when it is what the working time went on. A boundary that hydrated in
   // 2 ms ahead of a 400 ms handler is worth the note below, not the verdict. Where the build records
   // no durations there is no figure to weigh, and the commit carrying real work is the whole test.
@@ -2213,15 +2267,16 @@ function explain(r: InteractionReport): Explanation {
   // A script verdict said as before the handler started, where it held half of the wait, is the wait before the
   // handlers, so the note on the wait does not say it again.
   let saidBehind = false;
+  // The commit the cause names, whose component count a note on a partial walk is about.
+  let saidCommit: CommitSummary | null = c;
   if (hydrationTook) {
     const { boundary, commit } = hydrationTook;
     const confidence = measuredFrom(commit);
     const first = `The ${kind} landed on server-rendered HTML that had not been hydrated yet, so React hydrated ${boundaryPhrase(boundary)} first`;
-    // A hydration longer than the working time took all of it, as the phases have it, and is said whole beside that.
-    const took =
-      boundary.ms != null && Math.round(boundary.ms) > Math.round(r.processing)
-        ? `all ${ms(r.processing)} of working time, in a hydration that took ${ms(boundary.ms)} in all`
-        : `${ms(hydrated ?? 0)} of the ${ms(r.processing)} of working time`;
+    // A hydration the working time held only part of is said whole beside that part, which is what the phases
+    // show: all of it, where it was longer than the working time.
+    const part = Math.round(hydrated ?? 0) >= Math.round(r.processing) ? `all ${ms(r.processing)} of working time` : `${ms(hydrated ?? 0)} of the ${ms(r.processing)} of working time`;
+    const took = boundary.ms != null && Math.round(boundary.ms) > Math.round(hydrated ?? 0) ? `${part}, in a hydration that took ${ms(boundary.ms)} in all` : part;
     cause =
       boundary.ms == null
         ? `${first}, ${renderedCount(commit)}: ${HEDGE} what the ${ms(r.processing)} of working time went on. This React build records no render durations, so that is read from the component count.${profiling}`
@@ -2274,6 +2329,7 @@ function explain(r: InteractionReport): Explanation {
     const named = longest && longest.ms >= WAITED_BEHIND_MIN_SHARE * waitedBetween ? scriptName(longest.script) : null;
     blame = { kind: 'waiting', name: named, detail: onlyGap ? `between ${onlyGap.after} and ${onlyGap.before}` : 'between handlers', ms: heldGap ? waitedBetween : between, confidence: 'measured' };
   } else if (layoutMatters) {
+    saidCommit = heldMost;
     // The number is the browser's and nothing React did changes it, so the confidence is about the
     // measurement alone: whether any of the total had to be apportioned across the edge of the window.
     const confidence = forcedLayoutMeasured(whileHandling) ? 'measured' : 'inferred';
@@ -2347,6 +2403,7 @@ function explain(r: InteractionReport): Explanation {
       confidence,
     };
   } else if ((c || idleHandler) && handlerWins && !screenOutranks && !waitingWins) {
+    saidCommit = heldMost;
     const confidence = measuredFrom(...inWorkingTime);
     const renderMs = heldMost ? renderSpent(heldMost) : 0;
     const rest = !heldMost
@@ -2377,6 +2434,7 @@ function explain(r: InteractionReport): Explanation {
     // lives nowhere in the tree, so a name that came from the browser goes without one.
     blame = { kind: 'handler', name: handlerName ?? blamedListener, detail: blamedListener && !handlerName ? null : component, ms: outside, confidence };
   } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
+    saidCommit = rc;
     const confidence = measuredFrom(rc);
     // Without durations the blame rests on the component count alone, which is why it is a reading:
     // 600 cheap components can outrank the one expensive component that actually took the time. The
@@ -2480,7 +2538,7 @@ function explain(r: InteractionReport): Explanation {
     // A count after the handlers does not leave it the verdict beside one that sat in the working time, though:
     // with 150 rows committed in the handler and 800 after it, a 28 ms handleSave was measured in the 150's place.
     const confidence = unsure ? 'inferred' : 'measured';
-    const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
+    const small = shortOf ?? (c ? smallRender(c) : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(ranScript.ms) < Math.round(ranScript.script.duration) ? ' of it' : '';
     // A script that started after the handlers says so wherever it is named: said bare, a 22 ms timer after a
@@ -2517,7 +2575,7 @@ function explain(r: InteractionReport): Explanation {
     cause = shortOf
       ? `${shortOf}; the rest went to waiting and painting.${unmeasured}`
       : c
-        ? `React's render was small (${renderPhrase(c)}) and ${noLongTask}, so the rest went to waiting and painting.`
+        ? `${smallRender(c)} and ${noLongTask}, so the rest went to waiting and painting.`
         : `${noneWorking} and ${noLongTask}, so the time went to waiting and painting.`;
     // Nothing is named, so there is nothing to hedge; the confidence says whether the absence of a
     // long task was itself observed or merely assumed.
@@ -2525,7 +2583,7 @@ function explain(r: InteractionReport): Explanation {
   } else {
     // Without Long Animation Frames there is no record to say no long task ran.
     cause = c
-      ? `${shortOf ?? `React's render was small (${renderPhrase(c)})`}; this browser does not report long tasks, so what else ran is unknown.`
+      ? `${shortOf ?? smallRender(c)}; this browser does not report long tasks, so what else ran is unknown.`
       : `${noneWorking}; this browser does not report long tasks, so what ran instead is unknown.`;
     blame = { kind: 'none', name: null, detail: null, ms: null, confidence: 'inferred' };
   }
@@ -2569,17 +2627,10 @@ function explain(r: InteractionReport): Explanation {
   if (ownBlamed) {
     notes.push(`Time in ${ownBlamed.name}'s own render is usually work it does as it renders, like a sort or a filter, which memoising the components under it does not speed up.`);
   }
-  // A hydration is not a re-render: it is the first render of that HTML on the client, and counting it
-  // here would tell every click that waited for one to go looking for an effect that updates state. Nor
-  // are the renders the screen update's clause says a script forced: the script set them off, not an effect.
-  // Forced means rendered synchronously (Scheduler priority 1, React 17's 99, or a build that does not say)
-  // in a script that is not React's own task, which Long Animation Frames names `MessagePort.onmessage`: an
-  // update an effect made renders there, and on React 17 at 99 as well.
-  const forcedByScript = lateScript && lateScript.script.invoker !== REACT_TASK
-    ? insideLate.filter((x) => x.priority === undefined || x.priority === 1 || x.priority === 99)
-    : [];
-  const real = r.commits.filter((x) => carriesWork(x) && x.hydratedTarget == null && !forcedByScript.includes(x)).length;
-  if (real > 1) notes.push(`React rendered ${real} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
+  // It counts the renders the causes count, said where two of them carried real work and were not a hydration. A
+  // hydration is not a re-render: it is the first render of that HTML on the client, and firing on it would tell
+  // every click that waited for one to go looking for an effect that updates state.
+  if (rendersAll.filter((x) => carriesWork(x) && x.hydratedTarget == null).length > 1) notes.push(`React rendered ${rendersAll.length} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
   // A wait between the handlers is `waiting` too, with where it came as its detail, and the wait before them is
   // not in its sentence.
   const waitIsTheVerdict = blame.kind === 'waiting' && blame.detail === null;
@@ -2593,7 +2644,9 @@ function explain(r: InteractionReport): Explanation {
   // unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. Under a verdict that is the wait, it
   // is already said, and so it is under a script said to have run before the handler started.
   if (r.inputDelay > LONG_TASK_MS && !waitIsTheVerdict && !saidBehind) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
-  if (c?.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
+  // A note standing in for a closed render rung names the render that rung would have.
+  if ((closedByTheScreen && blame.kind === 'painting') || (closedByTheWait && waitIsTheVerdict)) saidCommit = !handlerWins && c && rc && renderMatters ? rc : saidCommit;
+  if (saidCommit?.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   const walked = [...r.commits, ...r.followUps];
   if (namesLookMinified(walked)) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {
