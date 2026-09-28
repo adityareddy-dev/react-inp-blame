@@ -1396,9 +1396,12 @@ held a key's render, or a timer 1 ms after its handlers, is the verdict with the
 holds a render from its start on, not from a moment before it, since the next key is in the ring by the time that
 key's listener runs. With no listener recorded, as for one under 5 ms, nothing shows where that press's work
 began: the verdict ranks every script as it does without the next press, and only the note counts a script from
-the tick after the handlers on as that press's. Where the frame waited on the next press, a script from half the
-screen update that is not that press's work is still taken, as this interaction's own: until 2026-09-27 a 60 ms
-timer between a keydown's handlers and the next key went to waiting and painting.
+the tick after the handlers on as that press's, over 100 ms. Under that, the note says the frame most likely
+waited on that press only where its render ended by the paint, half the screen update or more after the handlers:
+counted from the tick, it said so beside a verdict naming a keydown's own 38 ms timer, and named the same timer.
+Where the frame waited on the next press, a script from half the screen update that is not that press's work is
+still taken, as this interaction's own: until 2026-09-27 a 60 ms timer between a keydown's handlers and the next
+key went to waiting and painting.
 Where a `script` verdict, or a `none`, passed over a longer script after the handlers, the note names that one
 at any length: until 2026-09-27 an idle click's 22 ms handler took the verdict from a 49 ms timer after it
 under a 100 ms screen update, and that timer went unsaid. A script after the handlers is said as

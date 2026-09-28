@@ -864,8 +864,9 @@ test("where the working time was longer, the screen update's note says the frame
   // and the timer are the verdict with the next key as they are without it, and as 0.16.0 had them, React's task with
   // this key's render stamped inside it or half a millisecond past its end. A timer after that listener can be the
   // next key's, though, and is left to the note with it. With no listener of that key's on record, as for one under
-  // 5 ms, nothing shows where its work began: the timer is the verdict as without it, and from the tick after this
-  // key's handlers on, the note says the frame waited on that key.
+  // 5 ms, nothing shows where its work began: the timer is the verdict as without it, and the note says the frame most
+  // likely waited on that key only where that key's render, ending by the paint, shows it did. Counted from the tick
+  // after this key's handlers, the note said the frame waited on that key, naming the timer the verdict named.
   const quicker = (scripts: ScriptSummary[], commits: CommitSummary[], next: InputRecord[]) =>
     report(
       [entry('keydown', 1000, 257, 1001, 1180), entry('keyup', 1060, 197, 1181, 1182)],
@@ -897,9 +898,16 @@ test("where the working time was longer, the screen update's note says the frame
       `After the handler finished, the screen took another 75 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), ${ms} ms.`,
     ]);
     for (const start of [1184, 1191]) {
-      const unheard = quicker([script('TimerHandler:setTimeout', start, ms)], [], [input(1100, 'keydown')]);
-      assert.deepEqual([unheard.blame, unheard.cause], [quicker(timerAfter, [], []).blame, quicker(timerAfter, [], []).cause], `at ${start}`);
-      assert.deepEqual(unheard.notes, nextKeys.notes, `at ${start}`);
+      const timer = [script('TimerHandler:setTimeout', start, ms)];
+      const alone = quicker(timer, [], []);
+      assert.deepEqual(alone.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms, confidence: 'measured' }, `at ${start}`);
+      assert.deepEqual(alone.notes, [], `at ${start}`);
+      for (const next of [input(1100, 'keydown'), input(1100, 'keydown', worked(1190))]) assert.deepEqual(quicker(timer, [], [next]), alone, `at ${start}`);
+      const rendered = quicker(timer, [], [input(1100, 'keydown', worked(1247))]);
+      assert.deepEqual([rendered.blame, rendered.cause], [alone.blame, alone.cause], `at ${start}`);
+      assert.deepEqual(rendered.notes, [
+        `After the handler finished, the screen took another 75 ms to update: the frame most likely waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), ${ms} ms.`,
+      ], `at ${start}`);
     }
   }
   // And where the frame did wait on it, a 30 ms timer that ran after this key's handlers, before the next key came, is
