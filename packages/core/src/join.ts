@@ -1460,16 +1460,17 @@ function explain(r: InteractionReport): Explanation {
    * was this interaction's release: a keydown with no keyup, or whose keyup was handled in a later frame, runs its
    * own `oninput` in its task, right after its handlers, as a checkbox's click does, and taken for the next
    * press's, a keydown's 60 ms `oninput` went to waiting and painting. Where no listener was recorded, as for one
-   * under 5 ms, a script that started on the tick this interaction's handlers ended on ran ahead of them too, what
-   * came after it is ranked with the rest, and under PRESENTATION_NOTE_MS the note goes on the press's render alone
-   * (`ownScript` says why). Nor is a script that holds a render of this report's the press's work, wherever it
-   * started, though it holds one only from its start: the next key's capture listener puts that key in the ring
-   * before its handler runs, so a render stamped with this key a moment before that handler began came before it.
-   * Held by it, the next key's 44 ms handler was this key's script. Taken for the next key's, React's own task that
-   * committed a key's render, and a timer as its handlers ended or before the next key's listener, went to waiting
-   * and painting, and from half of the screen update the note said the frame waited on that key. The next key's
-   * handler on the tick after this key's was named as this key's script. A render joined by overlap alone says too
-   * little to keep a script: in the next key's handler, one kept that handler as this key's verdict.
+   * under 5 ms, a script that started on the tick this interaction's handlers ended on ran ahead of them too, and
+   * what came after it is ranked with the rest under PRESENTATION_NOTE_MS, where the note goes on the press's
+   * render alone, and is the press's work over it (`ownScript` says why). Nor is a script that holds a render of
+   * this report's the press's work, wherever it started, though it holds one only from its start: the next key's
+   * capture listener puts that key in the ring before its handler runs, so a render stamped with this key a moment
+   * before that handler began came before it. Held by it, the next key's 44 ms handler was this key's script. Taken
+   * for the next key's, React's own task that committed a key's render, and a timer as its handlers ended or before
+   * the next key's listener, went to waiting and painting, and from half of the screen update the note said the
+   * frame waited on that key. The next key's handler on the tick after this key's was named as this key's script. A
+   * render joined by overlap alone says too little to keep a script: in the next key's handler, one kept that
+   * handler as this key's verdict.
    */
   const next = r.nextInput;
   const nextFrom = next ? Math.max(next.start, processingEnd) : 0;

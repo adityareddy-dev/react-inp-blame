@@ -950,11 +950,11 @@ test("where the working time was longer, the screen update's note says the frame
   // So is one on the tick the handlers ended on, where the next key came during them, ahead of that key's listener:
   // the verdict from half of a screen update over 100 ms, as without the next key. Left out as coming after that key
   // came, it went to waiting and painting.
-  const tickTimer = (paint: number, ms: number, next: InputRecord[]) =>
+  const tickTimer = (paint: number, ms: number, next: InputRecord[], at = 1183, heard = true) =>
     report(
       [entry('keydown', 1000, 182 + paint, 1001, 1180), entry('keyup', 1060, 122 + paint, 1181, 1182)],
       [three],
-      [frame(1000, 182 + paint, [...keys, script('TimerHandler:setTimeout', 1183, ms), script('DIV#root.onkeydown', 1184 + ms, paint - ms - 6)], 1172 + paint)],
+      [frame(1000, 182 + paint, [...keys, script('TimerHandler:setTimeout', at, ms), ...(heard ? [script('DIV#root.onkeydown', 1184 + ms, paint - ms - 6)] : [])], 1172 + paint)],
       [...ring.slice(0, 2), ...next],
     ).explanation;
   for (const [paint, ms] of [[104, 54], [110, 57]]) {
@@ -965,6 +965,15 @@ test("where the working time was longer, the screen update's note says the frame
     assert.deepEqual(own.notes, [
       `After the handler finished, the screen took another ${paint} ms to update: the frame most likely waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), ${ms} ms.`,
     ]);
+    // With no listener of that key's on record, as for one under 5 ms, only the tick shows the timer was this key's:
+    // on it, the timer is the verdict as without the next key, and from a millisecond past it, that key's work, as in
+    // 0.16.0, where the note says the frame waited on that key.
+    assert.deepEqual(tickTimer(paint, ms, [input(1100, 'keydown')], 1183, false), tickTimer(paint, ms, [], 1183, false), `${paint} ms`);
+    const past = tickTimer(paint, ms, [input(1100, 'keydown')], 1184, false);
+    assert.deepEqual([past.blame, past.cause], [held.blame, held.cause], `${paint} ms`);
+    assert.deepEqual(past.notes, [
+      `After the handler finished, the screen took another ${paint} ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), ${ms} ms.`,
+    ], `${paint} ms`);
   }
   // Nor is a script that holds this key's render the next key's, though it started after that key came: React's task
   // at 83 held the 150-row render of this key's handlers, and with the next key down at 30 the note said the frame
