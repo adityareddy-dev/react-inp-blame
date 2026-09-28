@@ -633,8 +633,13 @@ export interface InstallOptions {
   overlay?: boolean | 'query' | OverlayOptions;
   /** Report interactions at or above this duration (ms), plus shorter ones that trigger a later render INP does not count. Default 40. */
   threshold?: number;
-  /** Draw each report in the Chrome Performance panel, in a "react-inp-blame" track group, once the page is idle. Default true. */
-  devtoolsTrack?: boolean;
+  /**
+   * Draw each report in the Chrome Performance panel, in a "react-inp-blame" track group, once the
+   * page is idle. The interaction's entry is a User Timing measure, which every `PerformanceObserver`
+   * on the page receives, verdict and label included, so `'auto'` draws only under a development build
+   * of react-dom and `true` under any build. Default 'auto'.
+   */
+  devtoolsTrack?: boolean | 'auto';
   /**
    * Maximum component fibers (function, class, memo and forwardRef components) React rendered or passed
    * through per commit walk; DOM and text fibers do not count, nor does a component React only cloned and

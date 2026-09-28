@@ -1577,6 +1577,11 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   drawn, so the buffer does not grow with each interaction.
 - Entries are drawn when the page is idle (`requestIdleCallback`, within a second), so building
   the verdict for the tooltip stays out of the callbacks that can delay the next input.
+- By default the entries are drawn only under a development build of react-dom, asked at each
+  report as `labels` is, so a page where no react-dom has registered draws nothing. A measure
+  reaches every `PerformanceObserver` on the page, verdict and label included, however soon it is
+  cleared, and in production that hands them to any analytics tag or third-party script there.
+  `devtoolsTrack: true` draws them under production and profiling builds too.
 
 `apps/demo/e2e/devtools-track.spec.ts` reads the trace JSON for all of this, in development and
 production builds and with a Chrome 133 user agent. Older Chrome shows the measures in the
@@ -1986,8 +1991,9 @@ are gone: a React DevTools Profiler "Interactions" view, a framework hook on Chr
 track, and `react.*` OpenTelemetry attributes.
 
 **Chrome DevTools.** The Performance panel extensibility API is the zero-install path: any
-page that includes the library gets a React attribution track next to Chrome's own Interactions
-track, with no extension to install.
+page that includes the library and runs a development build of React, or passes
+`devtoolsTrack: true`, gets a React attribution track next to Chrome's own Interactions track,
+with no extension to install.
 
 **Next.js.** Tested on Next 16.3.5 (`apps/next-demo`). Setup is one line on 16.3 and two before it:
 `withInpBlame()` around the config in `next.config.ts` (`react-inp-blame/next`). It appends

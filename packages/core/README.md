@@ -392,8 +392,10 @@ or fragment.
   Options: `overlay` (false), `threshold` (40 ms), `labels` (`'auto'`), `hook` (`'auto'`),
   `sampleRate` (1), `walkBudget` (5000 component fibers React rendered or passed through per
   commit), `inputWindow` (1500 ms, how long after an interaction a render can still join it),
-  `devtoolsTrack` (true), `debugGlobal` (false; set it to `true` to put the API on
-  `window.__REACT_INP_BLAME__`, or to a string to name the property).
+  `devtoolsTrack` (`'auto'`: only under a development build of React, since any script on the
+  page can read the entries through a `PerformanceObserver`; `true` draws them in production
+  too), `debugGlobal` (false; set it to `true` to put the API on `window.__REACT_INP_BLAME__`,
+  or to a string to name the property).
 - `onInteraction(fn)` hears each report, and each later revision of it, in a task after the one that
   published it, and returns the unsubscribe. What is still waiting when the page is hidden is heard
   inside that `visibilitychange` instead, so a page that sends what it heard on `visibilitychange`

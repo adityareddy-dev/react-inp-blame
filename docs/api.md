@@ -31,7 +31,7 @@ their first value, with a warning, until `dispose()`.
 | `sampleRate` | `1` | Share of page loads that install anything; in a production build, also of the pages that [warn about a browser without Event Timing](troubleshooting.md#unsupported-browser) |
 | `walkBudget` | `5000` | Component fibers React rendered or passed through, per commit; one it only cloned and skipped does not count. A commit past it is reported as partial: its counts say "at least", and in a production build, which has only counts to go on, the blame names the one subtree the walk was in where nothing it did not reach rendered beside it, and otherwise the component the subtrees all sit under, or the app where they sit under none, rather than the subtree the walk reached first |
 | `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside an input's own dispatch are always walked. It also bounds `followUps`, whose window runs from the paint as a rule |
-| `devtoolsTrack` | `true` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track |
+| `devtoolsTrack` | `'auto'` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track. `'auto'` draws it only under a development build of React, since any script on the page can read each entry, verdict and label included, through a `PerformanceObserver`; `true` draws it under production and profiling builds too |
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
 
 The API has `reports()` (up to 50 published, oldest first, at their latest revision; past 50 the oldest
