@@ -85,6 +85,8 @@ production build, show no badge by default, and the build prints a line saying i
 out. The line on Next.js 15.3 to 16.2 stays in every build, but compiles to nothing in the ones
 `enabled` leaves out.
 
+
+
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
 
