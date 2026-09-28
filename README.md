@@ -85,9 +85,8 @@ spreads over its header and body:
 production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
 defaults to `'development'`, so a production build carries nothing from either plugin until you say
 `enabled: true` or `enabled: 'production'`. So `vite preview` and `next start`, which serve a production
-build, show no badge by default, and the build prints a line saying it left the library out. The one
-exception is the line on Next.js 15.3 to 16.2: its code is in every build, and in the ones `enabled` leaves
-out it ships unused and installs nothing.
+build, show no badge by default, and the build prints a line saying it left the library out. The line on
+Next.js 15.3 to 16.2 stays in every build, but compiles to nothing in the ones `enabled` leaves out.
 
 If you would rather read reports than look at a badge, drop `overlay` and subscribe:
 
@@ -225,7 +224,7 @@ On two of the demo's scenarios, a click that re-renders 801 components and a key
 the library's own time was 1.3 to 3.4 ms per interaction at the median and 3.8 ms at worst at p95, in
 production and development builds ([how that was measured](docs/how-it-works.md#time-per-interaction)). With
 `enabled` at its default, neither plugin adds anything to a production build (on Next.js 15.3 to 16.2 the
-line's module is the exception, shipped unused); where it loads:
+line's module stays, as an empty function); where it loads:
 
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |

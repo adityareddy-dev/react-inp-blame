@@ -1992,9 +1992,14 @@ the load-order, hydration and web-vitals suites pass that way on 16.2.12, 15.5.2
 both bundlers (2026-09-22), on 15.5 under Turbopack without the `commits.ms` check until the dev
 overlay's commits were left out (2026-09-23, below). That module
 installs the library with the wrapper's `runtime` options, which reach it through `env` because
-Next.js inlines those at build time. Where the wrapper put nothing in `env`, a build `enabled` leaves
-out, it installs nothing, though the line in instrumentation-client still brings its code into that
-build. The wrapper
+Next.js inlines those at build time. In a build `enabled` leaves out, and with `runtime: false`, the
+wrapper sets that entry to `''`, and the module the line brings into every build installs nothing and
+compiles to an empty function. Until 2026-09-27 the wrapper set nothing there, which Next.js leaves for
+the browser to read, so no bundler could fold it and the library shipped unused. The empty string alone
+was not enough under webpack, which does not fold a test through a const holding the value, so every
+gate in next-client tests `process.env.REACT_INP_BLAME_NEXT` itself. On `apps/next-demo` with 16.3.5 the
+line cost a left-out build 67,675 B gzipped under webpack and 69,136 B under Turbopack before, and 74 B
+and 214 B after; `scripts/next-left-out.mjs` checks it in the next-older job. The wrapper
 also adds the displayName loader as a Turbopack rule and as a webpack `enforce: 'pre'` rule, merging
 with whatever rules the app already has (before 16.0 a glob takes one rule, so an app's own rule on
 the same files is left alone, with a warning). Both are added only under `next dev` unless `enabled`

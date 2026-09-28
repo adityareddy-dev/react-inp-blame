@@ -82,8 +82,8 @@ production page) or `{ position, open, max }`. Both snippets above are developme
 defaults to `'development'`, so a production build carries nothing from either plugin until you say
 `enabled: true` or `enabled: 'production'`. So `vite preview` and `next start`, which serve a
 production build, show no badge by default, and the build prints a line saying it left the library
-out. The one exception is the line on Next.js 15.3 to 16.2: its code is in every build, and in the
-ones `enabled` leaves out it ships unused and installs nothing.
+out. The line on Next.js 15.3 to 16.2 stays in every build, but compiles to nothing in the ones
+`enabled` leaves out.
 
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
@@ -124,7 +124,8 @@ because the assignment names it and a bundler cannot always prove a property sto
 Measured on seven exports with two imported, Rollup drops the unused ones and esbuild keeps them;
 terser and SWC keep whatever the bundler handed them. Leave `enabled` at `'development'` to keep the names out of the production build entirely. `enabled` decides which runs get both:
 `'development'` (`next dev`, the default), `'production'` (`next build`), `true` for both, `false`
-for neither; a run it leaves out gets the config back untouched. `runtime` defaults to `true`, which
+for neither; a run it leaves out gets the config back with one addition, `env.REACT_INP_BLAME_NEXT`
+set to `''`, which `runtime: false` sets too. `runtime` defaults to `true`, which
 is `install()` with its default options; it also takes those options, such as `{ overlay: 'query' }`.
 They reach the browser inlined through `env`, so they are plain data. `runtime: false` leaves the
 client module out, for an app that calls `install()` itself in its own `instrumentation-client.ts`,
@@ -135,10 +136,10 @@ Next.js added `instrumentationClientInject` in 16.3. From 15.3 to 16.2 the line 
 `instrumentation-client.ts` (beside `next.config` or in `src/`) does the install, with the options
 given to the wrapper, and the wrapper prints it in the runs `enabled` covers (`next dev` by default)
 until the file has it. Next.js imports that file before hydration, which is early enough. In a build
-`enabled` leaves out, or with `runtime: false`, the module the line loads installs nothing, though
-its code still ships there. After an upgrade to 16.3, delete the line: kept, it goes on doing the
-install and no second copy is injected, but production builds keep carrying its code. If the file
-already exports an `onRouterTransitionStart`, as Sentry's setup has it do, call this one from yours:
+`enabled` leaves out, or with `runtime: false`, the module the line loads finds that empty entry, so
+it installs nothing and compiles to an empty function. After an upgrade to 16.3, delete the line:
+kept, it goes on doing the install and no second copy is injected. If the file already exports an
+`onRouterTransitionStart`, as Sentry's setup has it do, call this one from yours:
 
     import { onRouterTransitionStart as inpBlame } from 'react-inp-blame/next-client';
 

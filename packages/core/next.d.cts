@@ -6,9 +6,10 @@ export interface WithInpBlameOptions {
   /**
    * Which runs of Next get anything from this wrapper: 'development' (`next dev`), 'production'
    * (`next build` and `next start`), true for both, false for neither. Default 'development', so a
-   * production build carries nothing from it, except on Next.js 15.3 to 16.2, where the line in
-   * instrumentation-client brings the client module into every build, unused where it is left out. Next
-   * sets NODE_ENV before it reads the config, which is how the two are told apart.
+   * production build carries nothing from it. A run it leaves out gets the config back with one
+   * addition, `env.REACT_INP_BLAME_NEXT` set to '', so that on Next.js 15.3 to 16.2 the line in
+   * instrumentation-client, which is in every build, compiles to nothing. Next sets NODE_ENV before it
+   * reads the config, which is how the two are told apart.
    * Left at the default, `next build` says in one line that it left the library out; write
    * 'development' yourself to keep it out without the line.
    */
@@ -22,7 +23,8 @@ export interface WithInpBlameOptions {
    * that module instead, and the wrapper prints the line until it does. false leaves the runtime out
    * and keeps only the displayName loader, for a project that calls install() itself in its
    * instrumentation-client, without the next-client line; the App Router navigation join goes with it,
-   * since that is what the client module hears. Default true.
+   * since that is what the client module hears. It sets the same empty `env` entry as a run `enabled`
+   * leaves out. Default true.
    */
   runtime?: boolean | InstallOptions;
 }

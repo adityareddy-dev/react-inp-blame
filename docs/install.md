@@ -29,10 +29,10 @@ options, and the install is one line in your own `instrumentation-client.ts`, be
 `src/`: `export { onRouterTransitionStart } from 'react-inp-blame/next-client';`. Next.js imports that file
 before hydration, which is early enough, and the wrapper prints the line in the runs `enabled` covers
 (`next dev` by default) until the file has it. The module the line loads installs with the options given to
-the wrapper, and installs nothing in a build `enabled` leaves out or with `runtime: false`, though its code
-still ships there. After an upgrade to 16.3, delete the line: kept, it goes on doing the install and the wrapper
-injects no second copy, but production builds keep carrying its code. If the file already exports an
-`onRouterTransitionStart`, as Sentry's setup has it do, call this library's from yours instead:
+the wrapper, and in a build `enabled` leaves out, or with `runtime: false`, it installs nothing and compiles to
+an empty function. After an upgrade to 16.3, delete the line: kept, it goes on doing the install and the
+wrapper injects no second copy. If the file already exports an `onRouterTransitionStart`, as Sentry's setup
+has it do, call this library's from yours instead:
 
 ```ts
 // instrumentation-client.ts
@@ -79,7 +79,11 @@ names unless you pass `enabled: true` or `enabled: 'production'`.**
 
 | `enabled` | `'development'` (default) | `'production'` | `true` | `false` |
 | --- | --- | --- | --- | --- |
-| Runs that get the runtime and the loader | `next dev` | `next build` and `next start` | both | none: the config comes back untouched |
+| Runs that get the runtime and the loader | `next dev` | `next build` and `next start` | both | none: the config comes back with one addition, `env.REACT_INP_BLAME_NEXT` set to `''` |
+
+That empty entry, which `runtime: false` sets too, makes the line's module compile to an empty
+`onRouterTransitionStart`, so a build `enabled` leaves out carries a few hundred bytes of it at most instead of
+the library.
 
 `runtime` defaults to `true`, which is [`install()`](api.md#installoptions) with its defaults. It also takes the
 options for `install()`, inlined through `env` and so plain data, or `false` for the loader alone. On the
