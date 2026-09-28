@@ -92,17 +92,18 @@ its own React does not switch off the app's own. Reports carry on without compon
   `flags` (the `PerformedWork` bit, 1; on the root `ForceClientRender`, 256, which says React threw its server
   HTML away; and `Hydrating`, 4096, on the child of a boundary whose hydration has rendered but not
   committed), `mode` (the `ProfileMode` bit: 8 on React 17, 2 on 18 and 19), `child`, `sibling`, `return`,
-  `alternate` (the same `child` there means the fiber bailed out), `deletions` (only on a Suspense or Activity
+  `alternate` (the same `child` there means the fiber bailed out, and, for an icon with no fiber of its own,
+  which fiber of the element holding it is on the screen), `deletions` (only on a Suspense or Activity
   boundary, to tell one React hydrated from one it rendered on the client), `actualDuration`, `elementType`
   and `type` (for names: `displayName` or `name`, through `render` for forwardRef and `type` for memo; on a
   DOM element's fiber, its tag name), `memoizedProps` (a form control's `type`, the event's handler prop,
   such as `onClick`, on an element with no `__reactProps$` and on one read once the event is over, the
   handlers a clicked icon was handed, to name what it belongs to, and, for an icon with no fiber of its own,
   `dangerouslySetInnerHTML`, whether the element holding it had its markup set that way, `children`, whether
-  React wrote the element's text straight into it, and `role`, on the element and on the component rendering
-  it, whether the role was handed down), `memoizedState` (whether a root or a boundary was still
-  server-rendered HTML: `isDehydrated` and `dehydrated`), and `stateNode` (the root fiber's, the FiberRoot,
-  to reach its `current`, and a DOM element's fiber's, the element).
+  React wrote the element's text straight into it, and `role`, on the element and on the components that
+  handed it its handler, whether the role was handed down), `memoizedState` (whether a root or a boundary was
+  still server-rendered HTML: `isDehydrated` and `dehydrated`), and `stateNode` (the root fiber's, the
+  FiberRoot, to reach its `current`, and a DOM element's fiber's, the element).
 - On DOM nodes: React's `__reactFiber$` key, `__reactProps$` (the props React runs the element's handlers
   from, where the event's handler prop is read), and `__reactContainer$` on the element `createRoot` or
   `hydrateRoot` was given. In server-rendered HTML: the comments React puts around a boundary, `$`, `$?`,
