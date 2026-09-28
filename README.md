@@ -126,7 +126,7 @@ its entry under [Troubleshooting](#troubleshooting).
 
 | | react-inp-blame | Sentry `reactComponentAnnotation` | react-scan | web-vitals attribution | React 19.2 Performance tracks |
 | --- | --- | --- | --- | --- | --- |
-| Production-safe | yes¹ | yes | no² | yes | no: development and profiling builds |
+| Production-safe | yes¹ | yes | not its main entry² | yes | no: development and profiling builds |
 | Names the rendered subtree, not just the target's owner | yes | no³ | yes | no: a CSS selector | yes, in development⁴ |
 | Follow-up renders after the paint | yes | no | not told apart⁵ | no | drawn, not joined to the interaction |
 | Forced-layout split | yes, from Long Animation Frames, and it can be the verdict rather than a footnote | no | no: reads no Long Animation Frames | partly⁶ | no |
@@ -135,7 +135,7 @@ its entry under [Troubleshooting](#troubleshooting).
 | Needs a build step for names | in production builds: the plugins add it | yes | not in development⁷ | no names | not in development |
 
 1. It fails closed on a browser or React it does not know, and `sampleRate` limits the page loads it runs on. The plugins leave it out of production builds unless `enabled` says otherwise.
-2. It does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended".
+2. Its main entry does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended". Two other entries in 0.5.7 run there anyway: `react-scan/all-environments` skips that check, and `react-scan/lite`, a headless one, attaches to every renderer whatever its build.
 3. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK, with span streaming (its default), names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
 4. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
 5. It keeps every fiber render from the pointerup or keydown as one set, until the interaction's Event Timing entry arrives or a second after the frame that follows the input.
