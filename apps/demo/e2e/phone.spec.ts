@@ -187,9 +187,33 @@ test(`a finger held down ${HOLD_MS} ms is kept out of the headline, in holdMs`, 
   expect(r.explanation.blame).toMatchObject({ kind: 'script', name: r.target?.handler, confidence: 'measured' });
 });
 
+// The lab was laid out for a desktop, its links in a 230 px column beside the scenario and the report in a
+// 440 px one, so a phone's browser widened every lab page to about 1,000 px to fit it. The screen then showed
+// the top-left corner of that, and the badge, fixed to the bottom-left of the widened page, started a
+// thousand pixels below what the screen showed. On a phone the columns stack.
+test('the sign-in page and every lab page fit the phone, with the badge on the screen at load', async ({ page }) => {
+  const screen = page.viewportSize()!;
+  await page.goto('/#lab/context-storm');
+  await page.waitForSelector('.labnav a');
+  const labPages = await page.locator('.labnav a').evaluateAll((links) => links.map((a) => a.getAttribute('href')!));
+  expect(labPages.length).toBeGreaterThanOrEqual(9);
+  for (const path of ['/', ...labPages.map((hash) => `/${hash}`)]) {
+    // A new page each time, as a person opens a link, rather than the scroll a hash change keeps.
+    await page.goto('about:blank');
+    await page.goto(path);
+    const badge = page.locator('#react-inp-blame .badge');
+    await expect(badge).toBeVisible();
+    const fit = await page.evaluate(() => ({ innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+    expect(fit, `${path} is as wide as the screen`).toEqual({ innerWidth: screen.width, scrollWidth: screen.width });
+    const box = (await badge.boundingBox())!;
+    expect(box.x, `the badge on ${path} starts on the screen`).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height, `the badge on ${path} ends on the screen, ${screen.height} px high`).toBeLessThanOrEqual(screen.height);
+  }
+});
+
 test('the panel fits the phone screen, with its close button and the first row in reach', async ({ page }) => {
-  // #budget is a page that fits a phone. The lab's pages are wider than one, so the phone's browser widens the
-  // page to fit them and a fixed badge sits outside what the screen shows; an app built for phones does not.
+  // #budget is a page that fits a phone, as the lab's pages do: a page wider than the phone is widened by its
+  // browser to fit, and a fixed badge sits outside what the screen shows.
   await interact(page, 'budget', () => tap(page, '[data-test=trigger]'));
   expect(await page.evaluate(() => innerWidth)).toBe(page.viewportSize()!.width);
   await page.locator('#react-inp-blame .badge').tap();
