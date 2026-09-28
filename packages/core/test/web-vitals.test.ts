@@ -182,6 +182,36 @@ test('an icon a script drew in an element handed its role with its onClick is pl
   };
   assert.equal(generateTarget(asNode(reactSvg({ role: 'button', tabIndex: 0 }))), 'Rows > RemoveRow (path)');
   assert.equal(generateTarget(asNode(reactSvg({}))), 'Rows > RemoveRow (path)');
+  // The same where the component that wrote them renders nothing but the ReactSVG, from an onRemove it was
+  // given: `<ReactSVG src={trash} role="button" onClick={onRemove} />` in RemoveButton.
+  const removeButton = Object.assign(component('RemoveButton', owners('Rows')), { memoizedProps: { onRemove: remove } });
+  const alone = Object.assign(component('ReactSVG', removeButton), { tag: 1, memoizedProps: { src: 'trash.svg', role: 'button', onClick: remove } });
+  removeButton.child = alone;
+  const aloneDiv: Record<string, unknown> = { tag: 5, elementType: 'div', type: 'div', memoizedProps: { role: 'button', onClick: remove, children: [false, false] }, return: alone, child: null, sibling: null };
+  alone.child = aloneDiv;
+  aloneDiv.stateNode = element('div', { attributes: { role: 'button' }, fiber: aloneDiv });
+  assert.equal(generateTarget(asNode(element('path', { parentNode: element('svg', { parentNode: aloneDiv.stateNode }) }))), 'Rows > RemoveButton (path)');
+});
+
+test('an icon a script drew in an element handed its role through a styled component stays under the component that gave it the role', () => {
+  // IconButton renders `<Clickable role="button" aria-label="Close" onClick={onClick} />`, where
+  // `const Clickable = styled.div`, and Font Awesome's searchPseudoElements draws an svg in the empty div. The
+  // role came from IconButton, not from what IconButton was given, so the div is a control of IconButton's.
+  const close = () => {};
+  const headerFiber: Record<string, unknown> = { tag: 5, elementType: 'header', type: 'header', memoizedProps: {}, return: component('Page'), sibling: null };
+  const iconButtonFiber = Object.assign(component('IconButton', headerFiber), { memoizedProps: { onClick: close } });
+  iconButtonFiber.sibling = { tag: 5, elementType: 'h1', type: 'h1', memoizedProps: {}, return: headerFiber, child: null, sibling: null };
+  headerFiber.child = iconButtonFiber;
+  const props = { role: 'button', 'aria-label': 'Close', onClick: close };
+  const clickable = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, styledComponentId: 'sc-a1b2', target: 'div' };
+  const clickableFiber = Object.assign(component('Clickable', iconButtonFiber), { tag: 11, elementType: clickable, type: clickable, memoizedProps: props });
+  iconButtonFiber.child = clickableFiber;
+  const divFiber: Record<string, unknown> = { tag: 5, elementType: 'div', type: 'div', memoizedProps: props, return: clickableFiber, child: null, sibling: null };
+  clickableFiber.child = divFiber;
+  headerFiber.stateNode = element('header', { fiber: headerFiber });
+  divFiber.stateNode = element('div', { attributes: { role: 'button', 'aria-label': 'Close' }, fiber: divFiber, parentNode: headerFiber.stateNode });
+  const drawn = element('svg', { classes: ['svg-inline--fa'], parentNode: divFiber.stateNode });
+  assert.equal(generateTarget(asNode(drawn)), 'Page > IconButton (svg.svg-inline--fa)');
 });
 
 test('an icon a script drew is placed by what React renders in the element now, not by the fiber cached on it', () => {
