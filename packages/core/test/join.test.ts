@@ -3669,6 +3669,18 @@ test("an icon a script drew outside React is placed by the element holding it, w
       assert.deepEqual(ownersFor(drawn), ['IconButton', 'Page']);
     }
   }
+  // Only a lone one, though. Two, as `{count > 0 && count}{liked && ' (you)'}` leaves at 0, or the empty list a
+  // `.map()` returns, are nothing: the fiber holds them as it holds the `[false, false]` in the empty div
+  // ReactSVG draws in, and cannot tell them apart. An icon drawn in a `<div onClick>` holding them is the
+  // writer's until React renders something there. A button holds what is drawn in it either way.
+  for (const nothing of [[false, false], []]) {
+    const drawnInButton = element('svg', []);
+    inIconButton('button', drawnInButton, null, { children: nothing });
+    assert.deepEqual(ownersFor(drawnInButton), ['IconButton', 'Page']);
+    const drawnInDiv = element('svg', []);
+    inIconButton('div', drawnInDiv, null, { children: nothing });
+    assert.deepEqual(ownersFor(drawnInDiv), ['Page']);
+  }
 
   // Markup set through dangerouslySetInnerHTML is the element's own, as the svg an icon library renders is:
   // an onClick the app's Icon handed its `<span>` names the component that wrote `<Icon onClick>`. So is the
