@@ -238,11 +238,11 @@ test('a quiet key press is not published for a render stamped with its keyup whe
 });
 
 test('a quiet drop is not published for the renders a drag made while the pointer was held, and a slow drop does not list them', () => {
-  // A sortable list dragged from 7000 and dropped at 7800. The pointerdown was too quick for an entry, and the
-  // hook stamped each move's render with it, as it does wherever it cannot tell a move from its press: React 18
-  // and 19.0, a production build, touch. Nothing of the interaction had painted before them, so they are the
-  // drag itself, and the drop's report was published as "A React render landed 84 ms after the press updated
-  // the screen, before the release".
+  // A sortable list dragged from 7000 and dropped at 7800. The hook stamped each move's render with the
+  // pointerdown, as it does wherever it cannot tell a move from its press: React 18 and 19.0, a production
+  // build, touch. Once the pointerdown's entry had painted, the moves were taken for later renders of the drop,
+  // and its report was published as "A React render landed 84 ms after the press updated the screen, before the
+  // release". They are left out whether the press sent an entry or was too quick for one.
   const input = (ts: number, type: string) => ({ ts, type, gestureTs: 7000, press: 1, pointerType: 'mouse', target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
   const ring = [input(7000, 'pointerdown'), input(7800, 'pointerup'), input(7800.3, 'click')];
   const moves = [7100, 7300, 7500, 7700].map((at): CommitSummary => ({
@@ -257,18 +257,25 @@ test('a quiet drop is not published for the renders a drag made while the pointe
     hotPath: ['SortableList'],
     components: [{ name: 'SortableItem', count: 60, self: null, total: null }],
   }));
-  const quick = lifecycle({ inputs: () => ring });
-  for (const c of moves) quick.render(c);
-  quick.life.onEntries([entry(7, 'click', 24, { startTime: 7800.3, processingStart: 7801, processingEnd: 7810 })]);
-  assert.deepEqual(quick.published, []);
+  const click = entry(7, 'click', 32, { startTime: 7800.3, processingStart: 7801, processingEnd: 7810 });
+  // With no entry for the press, and with one of 16 or 24 ms that arrives with the drop's.
+  const presses = [[], [entry(7, 'pointerdown', 16, { startTime: 7000, processingStart: 7001, processingEnd: 7004 })], [entry(7, 'pointerdown', 24, { startTime: 7000, processingStart: 7001, processingEnd: 7010 })]];
+  for (const pressed of presses) {
+    const quick = lifecycle({ inputs: () => ring });
+    for (const c of moves) quick.render(c);
+    quick.life.onEntries([...pressed, click]);
+    assert.deepEqual(quick.published, [], `with ${pressed.length ? `a ${pressed[0].duration} ms` : 'no'} pointerdown entry`);
+  }
   // A slow drop is published for the reorder its pointerup rendered, and the drag is not a later render of it.
-  const slow = lifecycle({ inputs: () => ring });
-  for (const c of moves) slow.render(c);
-  slow.render({ ...commit(7850, 7800), gestureTs: 7000, inputType: 'pointerup', inDispatch: true });
-  slow.life.onEntries([entry(7, 'pointerup', 88, { startTime: 7800, processingStart: 7802, processingEnd: 7870 })]);
-  assert.equal(slow.published.length, 1);
-  assert.deepEqual(slow.published[0]?.commits.map((c) => c.at), [7850]);
-  assert.deepEqual(slow.published[0]?.followUps, []);
+  for (const pressed of presses) {
+    const slow = lifecycle({ inputs: () => ring });
+    for (const c of moves) slow.render(c);
+    slow.render({ ...commit(7850, 7800), gestureTs: 7000, inputType: 'pointerup', inDispatch: true });
+    slow.life.onEntries([...pressed, entry(7, 'pointerup', 88, { startTime: 7800, processingStart: 7802, processingEnd: 7870 })]);
+    assert.equal(slow.published.length, 1);
+    assert.deepEqual(slow.published[0]?.commits.map((c) => c.at), [7850]);
+    assert.deepEqual(slow.published[0]?.followUps, []);
+  }
 });
 
 test("the page's first input, heard as its first-input entry and then as its event entry, is one entry in its report", () => {

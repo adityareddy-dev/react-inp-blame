@@ -62,7 +62,7 @@ interface InteractionReport {
                owner: string | null; ms: number | null } | null;            // landed on before React hydrated it
   navigationURL: string; navigationType: NavigationType; // web-vitals' names and values
   startedNavigation: { url: string; type: 'push' | 'replace' | 'traverse' } | null;
-  commits: CommitSummary[]; followUps: CommitSummary[];   // before the paint; after it (or the press's), within inputWindow
+  commits: CommitSummary[]; followUps: CommitSummary[];   // before the paint; after it (or a key press's), within inputWindow
   unjoinedCommits: number;                               // commits in its handlers that could not be tied to it
   frames: FrameSummary[] | null; laterFrames: FrameSummary[] | null; // null without Long Animation Frames
   overheadMs: number;                                    // this library's own time on the interaction

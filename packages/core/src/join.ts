@@ -471,6 +471,10 @@ function paintBefore(entries: readonly Pick<EventEntrySummary, 'startTime' | 'du
   return p;
 }
 
+/** Whether a key set this commit off: it is stamped with a keydown, or with a keyup or the click a key made, whose press is that key's keydown. */
+const byKey = (c: Pick<CommitSummary, 'inputType' | 'gestureTs'>, inputs: readonly InputRecord[]) =>
+  c.inputType === 'keydown' || inputs.some((i) => i.type === 'keydown' && near(i.ts, c.gestureTs));
+
 /**
  * One report's data from every Event Timing entry seen for an interactionId. The headline is the
  * longest single entry, which is the number web-vitals reports as INP for the interaction;
@@ -570,16 +574,18 @@ export function buildReport(
   for (const c of commits) {
     if (stampMatches(c, ownStamps)) {
       if (c.at < start - STAMP_TOLERANCE) {
-        // Work before the headline entry's own input is not part of what INP measured for it. Inside
-        // another of the interaction's entries (a press held before a click), or before any of them
-        // painted, it is left out of the report: a press too quick for an entry of its own paints none,
-        // so a drag's moves, which the hook stamps with its pointerdown, stay out of the drop's. `holdMs`
-        // spans the entries alone, so it keeps the time of the first, and none of the second where the
-        // press sent no entry. After one of them painted it is a later render of that paint, as one after
-        // the headline's is: a keydown's render before its slower keyup, or a pointerdown's while the
-        // pointer was held. Anything newer is looked for from that paint. An entry runs to its paint as
-        // `timed` has it, or a render INP timed would be kept as one it left out.
-        const from = paintBefore(entries, c.at);
+        // Work before the headline entry's own input is not part of what INP measured for it. A key's,
+        // after one of the interaction's entries painted and inside none of them, is a later render of
+        // that paint, as one after the headline's is: a keydown's render before its slower keyup, or before
+        // the click the key made. Anything newer is looked for from that paint. An entry runs to its paint
+        // as `timed` has it, or a render INP timed would be kept as one it left out. The rest is left out of
+        // the report: work inside another of the entries (a press held before its release), or before any
+        // of them painted (a press too quick for an entry of its own paints none), and a pointer's before
+        // its release, with an entry for the press or without. The hook stamps a drag's move renders with
+        // its pointerdown, and nothing tells them from a render the press set off: kept, they were later
+        // renders of the drop and published a quiet one. `holdMs` spans the entries alone, so it keeps the
+        // time of a press that sent one, and none where the press sent no entry.
+        const from = byKey(c, inputs) ? paintBefore(entries, c.at) : -Infinity;
         const inEntry = entries.some((e) => c.at >= e.startTime - STAMP_TOLERANCE && c.at <= paintOf(e) + STAMP_TOLERANCE);
         if (from > -Infinity && !inEntry && isFollowUp(c, from, inputs, stamps, inputWindow, from)) followUps.push(joined(c, 'exact'));
         continue;

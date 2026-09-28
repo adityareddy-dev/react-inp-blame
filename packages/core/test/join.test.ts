@@ -1012,13 +1012,14 @@ test("a verdict that names no render says so of the working time where a press r
   assert.deepEqual(report(keys, [late], [], ring).followUps.map((c) => c.at), [600]);
   assert.equal(cause([late], []), "React didn't render anything and no long task was recorded, so the time went to waiting and painting.");
   // Where the working time did render, a little, the long task clause keeps its own "in the working time":
-  // "in it" follows only the clause that says React didn't render anything there.
-  const pointer = [input(-300, 'pointerdown'), input(0, 'pointerup', { gestureTs: -300 }), input(0, 'click', { gestureTs: -300 })];
+  // "in it" follows only the clause that says React didn't render anything there. A Space held from -300 and
+  // let go at 0, where the click it made took 360 ms.
+  const space = [input(-300, 'keydown', { press: 'Space' }), input(0, 'keyup', { press: 'Space', gestureTs: -300 }), input(0, 'click', { gestureTs: -300 })];
   const listed = (x: CommitSummary) => ({ ...x, gestureTs: -300, rendered: 721, roots: ['TableBody'], hotPath: ['TableBody'], hasDurations: false, total: 0 });
   const three = commit(195, 0, { gestureTs: -300, hasDurations: false, total: 0, rendered: 3, components: [{ name: 'Row', count: 3, self: null, total: null }] });
-  const held = commit(-150, -300, { inputType: 'pointerdown', rendered: 400, total: 60 });
+  const held = commit(-150, -300, { inputType: 'keydown', rendered: 400, total: 60 });
   const tenClicks = Array.from({ length: 10 }, (_, i) => script('BUTTON.onclick', 3 + i * 20, 15));
-  const small = report([entry('pointerdown', -300, 24, -299, -290), entry('click', 0, 360, 3, 203)], [held, three, listed(commit(270, 0))], [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, 70)], 280)], pointer);
+  const small = report([entry('keydown', -300, 24, -299, -290), entry('click', 0, 360, 3, 203)], [held, three, listed(commit(270, 0))], [frame(0, 360, [...tenClicks, script('DIV.onscroll', 205, 70)], 280)], space);
   assert.deepEqual(small.followUps.map((c) => c.at), [-150]);
   assert.match(small.explanation.cause, /^React's render was small \(.*\) and no long task was recorded in the working time, so the rest went to waiting and painting\.$/);
 });
@@ -1055,44 +1056,89 @@ test("a render a press too quick for an entry set off before the release is left
   assert.equal(held.holdMs, 0);
   assert.match(held.explanation.cause, /; React didn't render anything\.$/);
   assert.ok(!held.verdict.includes('Infinity'), held.verdict);
-  // A quick keydown's, before its slower keyup, the same way.
+  // A quick keydown's, before its slower keyup, the same way. Taken to have painted 16 ms after it went down, one
+  // at 16.3 was said to have "landed 0 ms after the press updated the screen", a bound stated as a measurement.
   const keys = [input(0, 'keydown', { press: 'KeyA' }), input(300, 'keyup', { press: 'KeyA', gestureTs: 0 })];
-  const typed = report([entry('keyup', 300, 48, 301, 340)], [commit(150, 0, { inputType: 'keydown', rendered: 400, total: 60 })], [], keys);
+  const typed = report([entry('keyup', 300, 48, 301, 340)], [16.3, 150].map((at) => commit(at, 0, { inputType: 'keydown', rendered: 400, total: 60 })), [], keys);
   assert.deepEqual(typed.followUps, []);
-  // A press with an entry is measured from that entry's paint, however short: the page's first input comes at any duration.
-  const first = report([entry('pointerdown', 0, 8, 1, 4, { entryType: 'first-input' }), ...click], [commit(100, 0, { inputType: 'pointerdown', rendered: 400, total: 60 })], [], ring);
-  assert.deepEqual(first.followUps.map((c) => c.at), [100]);
-  assert.match(note(first), /^A React render landed 92 ms after the press updated the screen/);
+  assert.equal(note(typed), '');
+  // A key press with an entry is measured from that entry's paint, however short: the page's first input comes at any duration.
+  const first = report([entry('keydown', 0, 8, 1, 4, { entryType: 'first-input' }), entry('keyup', 300, 48, 301, 340)], [commit(150, 0, { inputType: 'keydown', rendered: 400, total: 60 })], [], keys);
+  assert.deepEqual(first.followUps.map((c) => c.at), [150]);
+  assert.match(note(first), /^A React render landed 142 ms after the press updated the screen/);
 });
 
-test("a render a held pointer's press set off after it painted is a later render of the click that heads the report, and one in another entry's handlers is not", () => {
+test("a render a key's press set off after it painted is a later render of the release that heads the report, and one in another entry's handlers is not", () => {
+  // Space held down from 0 and let go at 200, where the click it made took 120 ms.
   const note = (r: InteractionReport) => r.explanation.notes.find((n) => /^A (second )?React render/.test(n)) ?? '';
-  const ring = [input(0, 'pointerdown'), input(200, 'pointerup', { gestureTs: 0 }), input(200.5, 'click', { gestureTs: 0 })];
-  const held = commit(100, 0, { inputType: 'pointerdown', rendered: 400, total: 60 });
-  // One the pointerdown's handlers made is inside its entry, before any paint.
-  const handlers = commit(5, 0, { inputType: 'pointerdown', total: 40 });
-  const clicked = report([entry('pointerdown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [handlers, held], [], ring);
+  const ring = [input(0, 'keydown', { press: 'Space' }), input(200, 'keyup', { press: 'Space', gestureTs: 0 }), input(200.5, 'click', { gestureTs: 0 })];
+  const held = commit(100, 0, { inputType: 'keydown', rendered: 400, total: 60 });
+  // One the keydown's handlers made is inside its entry, before any paint.
+  const handlers = commit(5, 0, { inputType: 'keydown', total: 40 });
+  const clicked = report([entry('keydown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [handlers, held], [], ring);
   assert.deepEqual(clicked.commits, []);
   assert.deepEqual(clicked.followUps.map((c) => c.at), [100]);
   assert.match(note(clicked), /^A React render landed 76 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it/);
   // Where the click rendered too, the press's render still reads as the one before it, not a second after it.
   const own = commit(290, 200.5, { gestureTs: 0, rendered: 900, total: 80 });
-  const both = report([entry('pointerdown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [held, own], [], ring);
+  const both = report([entry('keydown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [held, own], [], ring);
   assert.deepEqual(both.commits.map((c) => c.at), [290]);
   assert.match(note(both), /^A React render landed 76 ms after the press updated the screen, before the release: 60 ms /);
-  // Past the pointerdown's paint as its duration rounds it, but still in its handlers, which ended at 26.
-  const rounded = commit(25.5, 0, { inputType: 'pointerdown', total: 40 });
-  assert.deepEqual(buildReport([entry('pointerdown', 0, 24, 1, 26), entry('click', 200, 120, 201, 300)], [rounded], [], ring).followUps, []);
-  // Within a millisecond of that paint INP timed it as the pointerdown's, so it is not a later render INP left
+  // Past the keydown's paint as its duration rounds it, but still in its handlers, which ended at 26.
+  const rounded = commit(25.5, 0, { inputType: 'keydown', total: 40 });
+  assert.deepEqual(buildReport([entry('keydown', 0, 24, 1, 26), entry('click', 200, 120, 201, 300)], [rounded], [], ring).followUps, []);
+  // Within a millisecond of that paint INP timed it as the keydown's, so it is not a later render INP left
   // out: kept, its note dropped "INP doesn't count it", as though it had.
-  const atPaint = commit(24.5, 0, { inputType: 'pointerdown', rendered: 400, total: 60 });
-  assert.deepEqual(buildReport([entry('pointerdown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [atPaint], [], ring).followUps, []);
-  // The pointerup's handlers made one after the pointerdown painted, and it is inside the pointerup's entry:
-  // it is left out of the report, as the pointerdown's own is.
-  const slowUp = [input(0, 'pointerdown'), input(200, 'pointerup', { gestureTs: 0 }), input(230, 'click', { gestureTs: 0 })];
-  const released = commit(210, 200, { inputType: 'pointerup', gestureTs: 0, total: 40 });
-  const entries = [entry('pointerdown', 0, 24, 1, 10), entry('pointerup', 200, 40, 201, 230), entry('click', 230, 120, 231, 330)];
+  const atPaint = commit(24.5, 0, { inputType: 'keydown', rendered: 400, total: 60 });
+  assert.deepEqual(buildReport([entry('keydown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [atPaint], [], ring).followUps, []);
+  // The keyup's handlers made one after the keydown painted, and it is inside the keyup's entry: it is left
+  // out of the report, as the keydown's own is.
+  const slowUp = [input(0, 'keydown', { press: 'Space' }), input(200, 'keyup', { press: 'Space', gestureTs: 0 }), input(230, 'click', { gestureTs: 0 })];
+  const released = commit(210, 200, { inputType: 'keyup', gestureTs: 0, total: 40 });
+  const entries = [entry('keydown', 0, 24, 1, 10), entry('keyup', 200, 40, 201, 230), entry('click', 230, 120, 231, 330)];
   assert.deepEqual(buildReport(entries, [released], [], slowUp).followUps, []);
+  // The click Enter made comes in its keydown's task, and a render stamped with it is the key's as well.
+  const enter = [input(0, 'keydown', { press: 'Enter' }), input(1, 'click', { gestureTs: 0 }), input(300, 'keyup', { press: 'Enter', gestureTs: 0 })];
+  const keyed = [entry('keydown', 0, 24, 1, 10), entry('keyup', 300, 48, 301, 340)];
+  const fromClick = commit(150, 1, { gestureTs: 0, rendered: 400, total: 60 });
+  assert.deepEqual(buildReport(keyed, [fromClick], [], enter).followUps.map((c) => c.at), [150]);
+  // The ring holds the last eight inputs. Where the keydown has left it, a render stamped with the keydown is
+  // still a key's.
+  const gone = [input(300, 'keyup', { press: 'KeyA', gestureTs: 0 })];
+  assert.deepEqual(buildReport(keyed, [commit(150, 0, { inputType: 'keydown', rendered: 400, total: 60 })], [], gone).followUps.map((c) => c.at), [150]);
+});
+
+test("a render a held pointer's press set off before the click is left out of the report, whether the press sent an entry or not", () => {
+  // A sortable list dragged from 0 and dropped at 800. The hook stamps each move's render with the pointerdown
+  // wherever it cannot tell a move from its press (React 18 and 19.0, a production build, touch), and nothing
+  // tells those renders from one the press set off. Kept as later renders once the pointerdown's entry had
+  // painted, they read "A React render landed 84 ms after the press updated the screen, before the release"
+  // and published a quiet drop. They are left out, as 0.16.0 had them, with the press's entry or without.
+  const note = (r: InteractionReport) => r.explanation.notes.find((n) => /^A (second )?React render/.test(n)) ?? '';
+  const mouse = { pointerType: 'mouse', press: 1 };
+  const ring = [input(0, 'pointerdown', mouse), input(800, 'pointerup', { ...mouse, gestureTs: 0 }), input(800.3, 'click', { ...mouse, gestureTs: 0 })];
+  const moved = { inputType: 'pointerdown', inDispatch: false, hasDurations: false, total: 0, rendered: 60, roots: ['SortableList'], hotPath: ['SortableList'] };
+  const moves = [100, 300, 500, 700].map((at) => commit(at, 0, { ...moved, components: [{ name: 'SortableItem', count: 60, self: null, total: null }] }));
+  const drop = entry('click', 800.3, 32, 801, 810);
+  for (const pressed of [[], [entry('pointerdown', 0, 16, 1, 4)], [entry('pointerdown', 0, 24, 1, 10)]]) {
+    const r = report([...pressed, drop], moves, [], ring);
+    assert.equal(r.type, 'click');
+    assert.deepEqual(r.commits, []);
+    assert.deepEqual(r.followUps, []);
+    assert.equal(note(r), '');
+  }
+  // A render the press did set off while the pointer was held goes with them, and the click's own render is
+  // the report's.
+  const held = [input(0, 'pointerdown', mouse), input(200, 'pointerup', { ...mouse, gestureTs: 0 }), input(200.5, 'click', { ...mouse, gestureTs: 0 })];
+  const pressed = commit(100, 0, { inputType: 'pointerdown', rendered: 400, total: 60 });
+  const own = commit(290, 200.5, { gestureTs: 0, rendered: 900, total: 80 });
+  const slow = report([entry('pointerdown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [pressed, own], [], held);
+  assert.deepEqual(slow.commits.map((c) => c.at), [290]);
+  assert.deepEqual(slow.followUps, []);
+  assert.equal(note(slow), '');
+  const alone = report([entry('pointerdown', 0, 24, 1, 10), entry('click', 200, 120, 201, 300)], [pressed], [], held);
+  assert.deepEqual(alone.followUps, []);
+  assert.match(alone.explanation.cause, /; React didn't render anything\.$/);
 });
 
 test('a click made from the keyboard is not a later render of the mouse click before it', () => {
