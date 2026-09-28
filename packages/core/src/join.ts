@@ -1439,8 +1439,8 @@ function explain(r: InteractionReport): Explanation {
       return x.at <= end && (x.at > s.start || (x.at === s.start && x.effectsEndedAt !== null && x.effectsEndedAt > s.start && x.effectsEndedAt <= end));
     }) ?? null;
   // A stamp up to a millisecond either side of a script is its own where no other script the browser recorded
-  // holds it, by the rule above (`ranInside` says why).
-  const holds = (s: ScriptSummary, x: CommitSummary) => x.at >= s.start - STAMP_TOLERANCE && x.at <= s.start + s.duration + STAMP_TOLERANCE && (holderOf(x) ?? s) === s;
+  // holds it, by the rule above (`ranInside` says why). `from` moves the start side (`next` says why).
+  const holds = (s: ScriptSummary, x: CommitSummary, from = s.start - STAMP_TOLERANCE) => x.at >= from && x.at <= s.start + s.duration + STAMP_TOLERANCE && (holderOf(x) ?? s) === s;
   /**
    * The next interaction's press, where the frame this one painted in waited on it: typing fast, the next
    * key's keydown and its render come before the frame the last keyup paints in. A press coming before
@@ -1462,11 +1462,14 @@ function explain(r: InteractionReport): Explanation {
    * press's, a keydown's 60 ms `oninput` went to waiting and painting. Where no listener was recorded, as for one
    * under 5 ms, a script that started on the tick this interaction's handlers ended on ran ahead of them too, and
    * only the note counts what came after it (`ownScript` says why). Nor is a script that holds a render of this
-   * report's the press's work, wherever it started. Taken for the next key's, React's own task that committed a
-   * key's render, and a timer as its handlers ended or before the next key's listener, went to waiting and
-   * painting, and from half of the screen update the note said the frame waited on that key. The next key's handler
-   * on the tick after this key's was named as this key's script. A render joined by overlap alone says too little
-   * to keep a script: in the next key's handler, one kept that handler as this key's verdict.
+   * report's the press's work, wherever it started, though it holds one only from its start: the next key's capture
+   * listener puts that key in the ring before its handler runs, so a render stamped with this key a moment before
+   * that handler began came before it. Held by it, the next key's 44 ms handler was this key's script. Taken for
+   * the next key's, React's own task that committed a key's render, and a timer as its handlers ended or before the
+   * next key's listener, went to waiting and painting, and from half of the screen update the note said the frame
+   * waited on that key. The next key's handler on the tick after this key's was named as this key's script. A
+   * render joined by overlap alone says too little to keep a script: in the next key's handler, one kept that
+   * handler as this key's verdict.
    */
   const next = r.nextInput;
   const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
@@ -1480,7 +1483,7 @@ function explain(r: InteractionReport): Explanation {
   const nextsWork = (s: ScriptSummary) =>
     !!next &&
     (nextListener ? s.start >= nextListener.start : s.start >= nextFrom - STAMP_TOLERANCE && s.start > processingEnd + STAMP_TOLERANCE) &&
-    !r.commits.some((x) => x.joinedBy === 'exact' && holds(s, x));
+    !r.commits.some((x) => x.joinedBy === 'exact' && holds(s, x, s.start));
   const nextScriptMs = scriptParts(frames, nextFrom, r.end).reduce((a, p) => (nextsWork(p.script) ? Math.max(a, p.ms) : a), 0);
   // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
   const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;

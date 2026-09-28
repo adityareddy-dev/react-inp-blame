@@ -1392,12 +1392,13 @@ next pointer press. A key with no keyup, or whose keyup waited for a later frame
 in its task, right after its handlers, and so does a checkbox's click. Until 2026-09-27 the next key's 44 ms
 handler, under half of a 90 ms screen update, was named the same way. A script that started before that listener,
 or that holds a render joined to this report by its input stamp, is this interaction's own: React's own task that
-held a key's render, or a timer 1 ms after its handlers, is the verdict with the next key as without it. With no
-listener recorded, as for one under 5 ms, nothing shows where that press's work began: the verdict ranks every
-script as it does without the next press, and only the note counts a script from the tick after the handlers on
-as that press's. Where the frame waited on the next press, a script from half the screen update that is not that
-press's work is still taken, as this interaction's own: until 2026-09-27 a 60 ms timer between a keydown's
-handlers and the next key went to waiting and painting.
+held a key's render, or a timer 1 ms after its handlers, is the verdict with the next key as without it. A script
+holds a render from its start on, not from a moment before it, since the next key is in the ring by the time that
+key's listener runs. With no listener recorded, as for one under 5 ms, nothing shows where that press's work
+began: the verdict ranks every script as it does without the next press, and only the note counts a script from
+the tick after the handlers on as that press's. Where the frame waited on the next press, a script from half the
+screen update that is not that press's work is still taken, as this interaction's own: until 2026-09-27 a 60 ms
+timer between a keydown's handlers and the next key went to waiting and painting.
 Where a `script` verdict, or a `none`, passed over a longer script after the handlers, the note names that one
 at any length: until 2026-09-27 an idle click's 22 ms handler took the verdict from a 49 ms timer after it
 under a 100 ms screen update, and that timer went unsaid. A script after the handlers is said as

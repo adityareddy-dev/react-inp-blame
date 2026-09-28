@@ -792,6 +792,23 @@ test("where the working time was longer, the screen update's note says the frame
       ], `at ${at}`);
     }
   }
+  // Nor does a render of this key's, stamped a moment before that handler began, hold it: the next key's capture
+  // listener puts that key in the ring before its handler runs, so a render stamped with this key came before the
+  // handler. Held by a stamp 0.3 ms ahead of it, from the keydown or the keyup, the next key's 44 or 60 ms handler was
+  // this key's script.
+  const two = { inputType: 'keydown', hasDurations: false, total: 0, rendered: 2, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 2, self: null, total: null }] };
+  for (const [ms, said] of [
+    [44, "46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed."],
+    [60, 'the frame waited on the next key press, which the page handled first.'],
+  ] as const) {
+    for (const [at, stamp] of [[1186.2, commit(1185.9, 1000, two)], [1182.3, commit(1181.9, 1060, { ...two, inputType: 'keyup' })]] as const) {
+      const early = quickKeys(ms, input(1100, 'keydown'), at, [stamp]);
+      assert.deepEqual([early.blame, early.cause], [held.blame, held.cause], `${ms} ms at ${at}`);
+      assert.deepEqual(early.notes, [
+        `After the handler finished, the screen took another 90 ms to update: ${said} The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), ${ms} ms.`,
+      ], `${ms} ms at ${at}`);
+    }
+  }
   // React's task behind that handler, holding this key's render, is this key's, though: in its place the next key's
   // 30 ms handler was named.
   const eight = (at = 1215) =>
