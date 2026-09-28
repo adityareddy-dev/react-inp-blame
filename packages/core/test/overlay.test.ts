@@ -143,7 +143,7 @@ test('a badge and panel that cannot be drawn, for an error with no string form, 
 });
 
 test("the panel's line for a press's render before a slower release says it came after the press painted", () => {
-  // A 120 ms click that painted at 320, whose pointerdown set off a render at 100 while the pointer was held.
+  // A keyup that painted at 320, slower than its keydown, which set off a render at 100 while the key was held.
   const r = { end: 320 } as unknown as InteractionReport;
   const at = (at: number) => ({ at }) as unknown as CommitSummary;
   assert.equal(laterWhen(r, at(100)), 'after the press painted');
@@ -151,4 +151,151 @@ test("the panel's line for a press's render before a slower release says it came
   // The line opens "earlier," for it, where one after the paint opens "then".
   assert.equal(laterLead(r, at(100)), 'earlier, ');
   assert.equal(laterLead(r, at(700)), 'then ');
+});
+
+/** An element of the stand-in document, or the document itself. */
+type Drawn = Record<string, any>;
+
+/**
+ * Gives the test a document to draw the panel in: elements that keep their class, their `data-` attributes,
+ * their children and one listener of each type, and read out their text. `closest` takes the one class a
+ * selector names, which is all the panel's click listener asks it. `restore` puts the global back.
+ */
+function panelDocument(): { body: Drawn; restore(): void } {
+  const element = (tagName: string): Drawn => {
+    const adopt = (nodes: unknown[]) => {
+      for (const node of nodes) if (typeof node !== 'string') (node as Drawn).parentNode = el;
+      return nodes;
+    };
+    const el: Drawn = {
+      tagName,
+      className: '',
+      dataset: {},
+      style: {},
+      hidden: false,
+      parentNode: null,
+      childNodes: [],
+      listeners: {},
+      get isConnected() {
+        return el.parentNode !== null;
+      },
+      get textContent(): string {
+        return el.childNodes.map((node: string | Drawn) => (typeof node === 'string' ? node : node.textContent)).join('');
+      },
+      set textContent(value: string) {
+        el.childNodes = [value];
+      },
+      setAttribute(name: string, value: string) {
+        if (name === 'class') el.className = value;
+        else if (name.startsWith('data-')) el.dataset[name.slice(5)] = value;
+      },
+      addEventListener(type: string, listener: (e: unknown) => void) {
+        el.listeners[type] = listener;
+      },
+      removeEventListener() {},
+      attachShadow: () => (el.shadowRoot = element('#shadow-root')),
+      append: (...nodes: unknown[]) => el.childNodes.push(...adopt(nodes)),
+      prepend: (...nodes: unknown[]) => el.childNodes.unshift(...adopt(nodes)),
+      replaceChildren: (...nodes: unknown[]) => (el.childNodes = adopt(nodes)),
+      appendChild: (node: Drawn) => el.append(node),
+      remove: () => {
+        el.parentNode?.childNodes.splice(el.parentNode.childNodes.indexOf(el), 1);
+        el.parentNode = null;
+      },
+      closest: (selector: string): Drawn | null => {
+        for (let x: Drawn | null = el; x; x = x.parentNode) if (x.className?.split(' ').includes(selector.slice(1))) return x;
+        return null;
+      },
+    };
+    return el;
+  };
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const body = element('BODY');
+  const document = { body, createElement: element, addEventListener() {}, removeEventListener() {} };
+  Object.defineProperty(globalThis, 'document', { value: document, configurable: true, writable: true });
+  return {
+    body,
+    restore: () => {
+      if (saved) Object.defineProperty(globalThis, 'document', saved);
+      else delete (globalThis as Record<string, unknown>).document;
+    },
+  };
+}
+
+/** The first element inside `el` with this class, depth first. */
+function byClass(el: Drawn, name: string): Drawn | null {
+  for (const node of el.childNodes) {
+    if (typeof node === 'string') continue;
+    if (node.className?.split(' ').includes(name)) return node;
+    const inside = byClass(node, name);
+    if (inside) return inside;
+  }
+  return null;
+}
+
+/** The panel, open, as it draws this one report, with the report's row opened by a click. */
+function panelFor(r: InteractionReport): Drawn {
+  const { body, restore } = panelDocument();
+  try {
+    const source = {
+      reports: () => [r],
+      inp: () => null,
+      onInteraction: () => () => {},
+      clear() {},
+      stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
+      debug: { hook: () => ({ devtoolsLockedOut: false }) },
+    };
+    const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true });
+    const panel = byClass(body.childNodes[0].shadowRoot, 'panel')!;
+    panel.listeners.click({ target: byClass(panel, 'row') });
+    overlay.dispose();
+    return panel;
+  } finally {
+    restore();
+  }
+}
+
+test("the panel's row and its open section say a key press's render before the slower keyup came after the press painted", () => {
+  // The keydown painted at 24 and set off a render of 400 components at 150, before the key came up at 300.
+  // The keyup's entry was the slower one and painted at 348.
+  const entry = (name: string, startTime: number, duration: number, processingStart: number, processingEnd: number) => ({ name, interactionId: 7, startTime, duration, processingStart, processingEnd, target: null });
+  const key = (ts: number, type: string) => ({ ts, type, gestureTs: 0, press: 'KeyA', target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const render = (at: number): CommitSummary => ({
+    at,
+    sinceInput: at,
+    inputTs: 0,
+    gestureTs: 0,
+    inputType: 'keydown',
+    rendered: 400,
+    hydrated: false,
+    hydratedTarget: null,
+    truncated: false,
+    roots: ['List'],
+    hotPath: ['List'],
+    components: [{ name: 'Row', count: 400, self: 50, total: 50 }],
+    hasDurations: true,
+    coarseClock: false,
+    total: 60,
+    startedAt: null,
+    effectsStartedAt: null,
+    effectsEndedAt: null,
+    walkMs: 0,
+    priority: 1,
+    didError: false,
+  });
+  const keys = [entry('keydown', 0, 24, 1, 10), entry('keyup', 300, 48, 301, 340)];
+  const drawn = (at: number) => {
+    const r = sealReport(buildReport(keys, [render(at)], [], [key(0, 'keydown'), key(300, 'keyup')]));
+    assert.deepEqual(r.followUps.map((c) => c.at), [at]);
+    const panel = panelFor(r);
+    const more = byClass(panel, 'more');
+    return { line: byClass(panel, 'later')?.textContent, heading: more && byClass(more, 'h')?.textContent };
+  };
+  const earlier = drawn(150);
+  assert.equal(earlier.line, 'earlier, List re-rendered after the press painted · Row ×400 · 60 ms');
+  assert.equal(earlier.heading, 'Rendered after the press painted · 400 components');
+  // One after the keyup painted is said as before.
+  const after = drawn(600);
+  assert.equal(after.line, 'then List re-rendered after the paint · Row ×400 · 60 ms');
+  assert.equal(after.heading, 'Rendered after the paint · 400 components');
 });
