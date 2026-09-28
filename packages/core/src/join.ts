@@ -5,7 +5,7 @@ import { DEFAULT_INPUT_WINDOW, INPUT_TYPES, joinWindow, type InputRecord } from 
 import { rateInp } from './inp.js';
 import { unexplainedReports } from './install-state.js';
 import type { PageNavigation } from './navigation.js';
-import { EVENT_TIMING_FLOOR_MS, type InteractionTiming } from './observe.js';
+import type { InteractionTiming } from './observe.js';
 import type { Blame, CommitSummary, EventEntrySummary, Explanation, FrameSummary, Hydration, InteractionReport, Phase, ReactStatus, ScriptSummary, StartedNavigation, TargetInfo } from './types.js';
 import { dropped } from './warn.js';
 
@@ -464,15 +464,10 @@ export function interactionTarget(entries: readonly InteractionTiming[], inputs:
 /** When an entry's frame painted, bounded like `paintBound`: its duration is rounded to 8 ms, its `processingEnd` is exact. */
 const paintOf = (e: Pick<EventEntrySummary, 'startTime' | 'duration' | 'processingEnd'>) => Math.max(e.startTime + e.duration, e.processingEnd);
 
-/**
- * The latest paint of the interaction before this commit; -Infinity where nothing had painted by then. The
- * press the commit is stamped with counts where it has no entry: a quick keydown or pointerdown sends none,
- * the usual press, as it painted inside EVENT_TIMING_FLOOR_MS of its input, and the latest it can have is taken.
- */
-function paintBefore(entries: readonly Pick<EventEntrySummary, 'name' | 'startTime' | 'duration' | 'processingEnd'>[], c: Pick<CommitSummary, 'at' | 'gestureTs'>): number {
-  const pressed = c.gestureTs + EVENT_TIMING_FLOOR_MS;
-  let p = pressed < c.at && !entries.some((e) => isPress(stampOf(e), c.gestureTs)) ? pressed : -Infinity;
-  for (const e of entries) if (paintOf(e) < c.at) p = Math.max(p, paintOf(e));
+/** The latest paint of these entries before `at`; -Infinity where none had painted by then. A press with no entry of its own gives none. */
+function paintBefore(entries: readonly Pick<EventEntrySummary, 'startTime' | 'duration' | 'processingEnd'>[], at: number): number {
+  let p = -Infinity;
+  for (const e of entries) if (paintOf(e) < at) p = Math.max(p, paintOf(e));
   return p;
 }
 
@@ -576,14 +571,15 @@ export function buildReport(
     if (stampMatches(c, ownStamps)) {
       if (c.at < start - STAMP_TOLERANCE) {
         // Work before the headline entry's own input is not part of what INP measured for it. Inside
-        // another of the interaction's entries (a press held before a click), or before its press can
-        // have painted, it is left out of the report. `holdMs` spans the entries alone, so it keeps the
-        // time of the first, and none of the second where the press was too quick for an entry. After
-        // one of them painted it is a later render of that paint, as one after the headline's is: a
-        // keydown's render before its slower keyup, or a pointerdown's while the pointer was held.
-        // Anything newer is looked for from that paint. An entry runs to its paint as `timed` has it, or
-        // a render INP timed would be kept as one it left out.
-        const from = paintBefore(entries, c);
+        // another of the interaction's entries (a press held before a click), or before any of them
+        // painted, it is left out of the report: a press too quick for an entry of its own paints none,
+        // so a drag's moves, which the hook stamps with its pointerdown, stay out of the drop's. `holdMs`
+        // spans the entries alone, so it keeps the time of the first, and none of the second where the
+        // press sent no entry. After one of them painted it is a later render of that paint, as one after
+        // the headline's is: a keydown's render before its slower keyup, or a pointerdown's while the
+        // pointer was held. Anything newer is looked for from that paint. An entry runs to its paint as
+        // `timed` has it, or a render INP timed would be kept as one it left out.
+        const from = paintBefore(entries, c.at);
         const inEntry = entries.some((e) => c.at >= e.startTime - STAMP_TOLERANCE && c.at <= paintOf(e) + STAMP_TOLERANCE);
         if (from > -Infinity && !inEntry && isFollowUp(c, from, inputs, stamps, inputWindow, from)) followUps.push(joined(c, 'exact'));
         continue;
@@ -2397,7 +2393,7 @@ function explain(r: InteractionReport): Explanation {
     // put after "the screen updated", it read as coming after the paint the report is about.
     const landed =
       f.at < r.end
-        ? `A React render landed ${ms(f.at - paintBefore(r.entries, f))} after the press updated the screen, before the release`
+        ? `A React render landed ${ms(f.at - paintBefore(r.entries, f.at))} after the press updated the screen, before the release`
         : `A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}`;
     notes.push(`${landed}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
