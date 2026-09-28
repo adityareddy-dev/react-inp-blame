@@ -154,11 +154,13 @@ better source of per-component durations; what this library adds there is the jo
 | Long Animation Frames: scripts and forced layout | 123 | no | no |
 | Performance panel tracks | 128 | no | no |
 
-Without `interactionId` nothing installs, one warning says why, and `stats().mode` is `'unsupported'`. Without
-Long Animation Frames, `frames` and `laterFrames` are `null` and the explanation leaves out the forced-layout and
-script sentences. On a page without cross-origin isolation, Playwright's Firefox 148 and WebKit 26.4 step
-`performance.now()` in whole milliseconds, too coarse to time a quick component: when eight or more of a
-commit's components are timed, every one reads a whole millisecond and they average under 4 ms, the report
+Without `interactionId` nothing installs and `stats().mode` is `'unsupported'`. One warning says why wherever the
+library would have run: always in a development build, and in a production build on the pages `sampleRate` takes.
+A production page the sample leaves out prints nothing, so a tool that forwards console warnings gets no event
+from it. Without Long Animation Frames, `frames` and `laterFrames` are `null` and the explanation leaves out the
+forced-layout and script sentences. On a page without cross-origin isolation, Playwright's Firefox 148 and WebKit
+26.4 step `performance.now()` in whole milliseconds, too coarse to time a quick component: when eight or more of
+a commit's components are timed, every one reads a whole millisecond and they average under 4 ms, the report
 leaves their times out and blame built on render times is `'inferred'`.
 
 ## Versions

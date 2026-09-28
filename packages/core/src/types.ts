@@ -191,7 +191,10 @@ export interface Stats {
  */
 export type ReactStatus = 'reading' | 'waiting' | 'installed-late' | 'unreadable';
 
-/** What made a page 'unsupported': the kind, as data, and the sentence the console warning gave. */
+/**
+ * What made a page 'unsupported': the kind, as data, and the sentence of its console warning. For 'browser'
+ * that warning is printed only in a development build or on a page `sampleRate` takes.
+ */
 export interface UnsupportedReason {
   /**
    * 'browser': no Event Timing `interactionId` (Chrome 96, Firefox 144, Safari 26.2), so nothing was
@@ -679,7 +682,10 @@ export interface InstallOptions {
   /**
    * Share of page loads that install anything, from 0 to 1. The first install() on a page rolls
    * once; a page that loses gets an API with nothing behind it (`stats().mode === 'sampled-out'`):
-   * no hook, no listeners, no observers. Later calls return that API until dispose(). Default 1.
+   * no hook, no listeners, no observers. Later calls return that API until dispose(). In a browser
+   * without Event Timing `interactionId`, where nothing installs, the same share, rolled once per page,
+   * decides whether a production build prints the warning about it; a development build always does.
+   * Default 1.
    */
   sampleRate?: number;
 }

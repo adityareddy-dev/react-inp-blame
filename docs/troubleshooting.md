@@ -1,7 +1,7 @@
 # Troubleshooting
 
 Each warning the library prints ends with a link to its line in the README, which links on to its entry
-below. In the browser a warning starts with `[react-inp-blame]` and prints once per page. At build time it
+below. In the browser a warning starts with `[react-inp-blame]` and prints at most once per page. At build time it
 starts with `withInpBlame:` or `inpBlame:`, except the Vite plugin's setup advice, which starts with
 `[react-inp-blame]` and links on to its setup in [Install](install.md) instead, and the line a production
 build prints when it leaves the library out, which starts with `[react-inp-blame]` too under Vite and Astro.
@@ -73,7 +73,9 @@ Two versions of react-inp-blame were loaded, and the second one installed nothin
 ### This browser has no Event Timing interactionId
 
 The browser cannot say which events belong to one interaction, so nothing was installed. It needs Chrome 96,
-Firefox 144 or Safari 26.2 or later. See [Browser support](../README.md#browser-support).
+Firefox 144 or Safari 26.2 or later. See [Browser support](../README.md#browser-support). A production build prints this
+only on the pages `sampleRate` takes, and a development build always does. `stats().unsupportedReason` says it
+on every page.
 
 <a id="reinstall"></a>
 ### install() had already run
