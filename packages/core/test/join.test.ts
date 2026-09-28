@@ -761,11 +761,11 @@ test("where the working time was longer, the screen update's note says the frame
   assert.match(under.notes[0], /: the frame most likely waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 50 ms\.$/);
   // Nor where the screen update is 100 ms or under, which gets no note of its own: the next key's handler read as this
   // key's script, "after the handler finished", and nothing said the frame waited on it.
-  const quickKeys = (ms: number, next = input(1100, 'keydown', worked(1265))) =>
+  const quickKeys = (ms: number, next = input(1100, 'keydown', worked(1265)), at = 1200, late: CommitSummary[] = []) =>
     report(
       [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
-      [three],
-      [frame(1000, 272, [...keys, script('DIV#root.onkeydown', 1200, ms)], 1262)],
+      [three, ...late],
+      [frame(1000, 272, [...keys, script('DIV#root.onkeydown', at, ms)], 1262)],
       [...ring.slice(0, 2), next],
     ).explanation;
   const quick = quickKeys(70);
@@ -779,14 +779,31 @@ test("where the working time was longer, the screen update's note says the frame
   // Nor where nothing shows the frame waited on it: the next key's 44 ms handler, under half of the 90 ms, with that
   // key's render not on record or ending after the paint, read as this key's script too. It is the next key's work
   // all the same, and the working time had no long task in it. The screen update's note names it, though, or it is
-  // said nowhere.
+  // said nowhere. So it is on the tick after this key's handlers, where the next key's dispatch, queued behind them,
+  // most likely ran: there it was this key's script again. A render no stamp explains, joined by overlap alone, says
+  // too little to keep it as this key's either.
+  const stray = commit(1230, 950, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 2, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 2, self: null, total: null }] });
   for (const next of [input(1100, 'keydown'), input(1100, 'keydown', worked(1400))]) {
-    const unheld = quickKeys(44, next);
-    assert.deepEqual([unheld.blame, unheld.cause], [held.blame, held.cause]);
-    assert.deepEqual(unheld.notes, [
-      "After the handler finished, the screen took another 90 ms to update: 46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 44 ms.",
-    ]);
+    for (const [at, late] of [[1200, []], [1182, []], [1182.5, []], [1183, []], [1200, [stray]]] as const) {
+      const unheld = quickKeys(44, next, at, [...late]);
+      assert.deepEqual([unheld.blame, unheld.cause], [held.blame, held.cause], `at ${at}`);
+      assert.deepEqual(unheld.notes, [
+        "After the handler finished, the screen took another 90 ms to update: 46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 44 ms.",
+      ], `at ${at}`);
+    }
   }
+  // React's task behind that handler, holding this key's render, is this key's, though: in its place the next key's
+  // 30 ms handler was named.
+  const eight = (at = 1215) =>
+    commit(at, 1000, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 8, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 8, self: null, total: null }] });
+  const behind = report(
+    [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
+    [three, eight(1240)],
+    [frame(1000, 272, [...keys, script('DIV#root.onkeydown', 1182.3, 30), script('MessagePort.onmessage', 1214, 30)], 1262)],
+    [...ring.slice(0, 2), input(1100, 'keydown')],
+  ).explanation;
+  assert.deepEqual(behind.blame, { kind: 'script', name: 'MessagePort.onmessage', detail: null, ms: 30, confidence: 'measured' });
+  assert.deepEqual(behind.notes, []);
   // Where this key's own 25 ms script takes the verdict instead, the note names the next key's longer one as the
   // longest script before the paint, as it does over 100 ms, and does not leave it said nowhere.
   const ownFirst = report(
@@ -798,34 +815,77 @@ test("where the working time was longer, the screen update's note says the frame
   assert.deepEqual(ownFirst.blame, { kind: 'script', name: 'DIV#root.onkeydown', detail: null, ms: 25, confidence: 'measured' });
   assert.match(ownFirst.notes[0]!, /^After the handler finished, the screen took another 90 ms to update: .* The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 44 ms\.$/);
   // A script after the handlers that the next key cannot have run is this key's, though the next key came during
-  // them: React's own task that held this key's render, and a timer on the tick the handlers ended, ahead of the next
-  // key's own listener. Left out as that key's, either went to waiting and painting, with no note, where without the
-  // next key it was the verdict.
-  const eight = commit(1215, 1000, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 8, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 8, self: null, total: null }] });
+  // them: React's own task that held this key's render, with the render's stamp up to a millisecond past either end of
+  // it, and a timer ahead of the next key's own listener, on the tick the handlers ended or two milliseconds after it.
+  // Left out as that key's, either went to waiting and painting, with no note, where without the next key it was the
+  // verdict, and from half of the screen update the note said the frame waited on the next key, which had no script
+  // or render on record before the paint.
   const lateOwn = (late: ScriptSummary, commits: CommitSummary[], next: InputRecord[]) =>
     report(
       [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
       [three, ...commits],
-      [frame(1000, 272, [...keys, late, script('DIV#root.onkeydown', 1222, 8)], 1262)],
+      [frame(1000, 272, [...keys, late, script('DIV#root.onkeydown', 1245, 8)], 1262)],
       [...ring.slice(0, 2), ...next],
     ).explanation;
   for (const next of [[input(1100, 'keydown')], []]) {
     const said = next.length ? 'with the next key' : 'without it';
-    const task = lateOwn(script('MessagePort.onmessage', 1184, 35), [eight], next);
-    assert.deepEqual(task.blame, { kind: 'script', name: 'MessagePort.onmessage', detail: null, ms: 35, confidence: 'measured' }, said);
-    assert.equal(task.cause, "React's render was small (re-rendering 8 components inside Editor, mostly Row (8 of them)); a script (MessagePort.onmessage, app.js) ran for 35 ms after the handler finished.", said);
-    assert.deepEqual(task.notes, [], said);
-    const timer = lateOwn(script('TimerHandler:setTimeout', 1183, 40), [], next);
-    assert.deepEqual(timer.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 40, confidence: 'measured' }, said);
-    assert.equal(timer.cause, "React's render was small (re-rendering 3 components inside Editor, mostly Row (3 of them)); a script (TimerHandler:setTimeout, app.js) ran for 40 ms after the handler finished.", said);
-    assert.deepEqual(timer.notes, [], said);
+    for (const [ms, at] of [[35, 1215], [35, 1184], [35, 1219.5], [35, 1220], [46, 1225], [60, 1241]]) {
+      const task = lateOwn(script('MessagePort.onmessage', 1184, ms), [eight(at)], next);
+      assert.deepEqual(task.blame, { kind: 'script', name: 'MessagePort.onmessage', detail: null, ms, confidence: 'measured' }, `${said}, ${ms} ms, ${at}`);
+      assert.equal(task.cause, `React's render was small (re-rendering 8 components inside Editor, mostly Row (8 of them)); a script (MessagePort.onmessage, app.js) ran for ${ms} ms after the handler finished.`, said);
+      assert.deepEqual(task.notes, [], `${said}, ${ms} ms, ${at}`);
+    }
+    for (const [ms, at] of [[40, 1183], [46, 1183], [60, 1183], [40, 1184]]) {
+      const timer = lateOwn(script('TimerHandler:setTimeout', at, ms), [], next);
+      assert.deepEqual(timer.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms, confidence: 'measured' }, `${said}, ${ms} ms at ${at}`);
+      assert.equal(timer.cause, `React's render was small (re-rendering 3 components inside Editor, mostly Row (3 of them)); a script (TimerHandler:setTimeout, app.js) ran for ${ms} ms after the handler finished.`, said);
+      assert.deepEqual(timer.notes, [], `${said}, ${ms} ms at ${at}`);
+    }
   }
-  // A timer two milliseconds after them is taken for the next key's, and the screen update's note says it.
-  const later = lateOwn(script('TimerHandler:setTimeout', 1184, 40), [], [input(1100, 'keydown')]);
-  assert.deepEqual([later.blame, later.cause], [held.blame, held.cause]);
-  assert.deepEqual(later.notes, ['After the handler finished, the screen took another 90 ms to update. Scripts ran for 48 ms of it, the longest a script (TimerHandler:setTimeout, app.js) for 40 ms.']);
+  // So under a 75 ms screen update, at 38, 40 and 50 ms of it: with the next key's listener after them, or on the
+  // tick after this key's handlers, where the next key's dispatch, queued behind them, most likely ran, React's task
+  // and the timer are the verdict with the next key as they are without it, and as 0.16.0 had them, React's task with
+  // this key's render stamped inside it or half a millisecond past its end. A timer after that listener can be the
+  // next key's, though, and is left to the note with it. With no listener of that key's on record, as for one under
+  // 5 ms, nothing shows where its work began, and the timer is the verdict as without it, beside the note.
+  const quicker = (scripts: ScriptSummary[], commits: CommitSummary[], next: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 257, 1001, 1180), entry('keyup', 1060, 197, 1181, 1182)],
+      [three, ...commits],
+      [frame(1000, 257, [...keys, ...scripts], 1247)],
+      [...ring.slice(0, 2), ...next],
+    ).explanation;
+  const listener = (at: number) => script('DIV#root.onkeydown', at, 8);
+  for (const ms of [38, 40, 50]) {
+    const task = script('MessagePort.onmessage', 1184, ms);
+    for (const [scripts, commits, name, rendered] of [
+      [[task, listener(1236)], [eight()], 'MessagePort.onmessage', 8],
+      [[script('TimerHandler:setTimeout', 1183, ms), listener(1236)], [], 'TimerHandler:setTimeout', 3],
+      [[listener(1182.5), { ...task, start: 1191 }], [eight()], 'MessagePort.onmessage', 8],
+      [[listener(1182.5), { ...task, start: 1191 }], [eight(1191 + ms + 0.5)], 'MessagePort.onmessage', 8],
+    ] as const) {
+      const alone = quicker([...scripts], [...commits], []);
+      assert.deepEqual(alone.blame, { kind: 'script', name, detail: null, ms, confidence: 'measured' });
+      assert.equal(alone.cause, `React's render was small (re-rendering ${rendered} components inside Editor, mostly Row (${rendered} of them)); a script (${name}, app.js) ran for ${ms} ms after the handler finished.`);
+      assert.deepEqual(alone.notes, []);
+      assert.deepEqual(quicker([...scripts], [...commits], [input(1100, 'keydown')]), alone, `${name}, ${ms} ms`);
+    }
+    const timerAfter = [listener(1182.5), script('TimerHandler:setTimeout', 1191, ms)];
+    assert.deepEqual(quicker(timerAfter, [], []).blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms, confidence: 'measured' });
+    const nextKeys = quicker(timerAfter, [], [input(1100, 'keydown')]);
+    assert.deepEqual([nextKeys.blame, nextKeys.cause], [held.blame, held.cause]);
+    assert.deepEqual(nextKeys.notes, [
+      `After the handler finished, the screen took another 75 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), ${ms} ms.`,
+    ]);
+    const unheard = quicker([script('TimerHandler:setTimeout', 1191, ms)], [], [input(1100, 'keydown')]);
+    assert.deepEqual([unheard.blame, unheard.cause], [quicker(timerAfter, [], []).blame, quicker(timerAfter, [], []).cause]);
+    assert.deepEqual(unheard.notes, nextKeys.notes);
+  }
   // And where the frame did wait on it, a 30 ms timer that ran after this key's handlers, before the next key came, is
-  // no more the verdict under a 90 ms screen update than under a 104 ms one: under 90 it was.
+  // the verdict under a 90 ms screen update, as the longest script of this key's own, and not under a 104 ms one,
+  // where a script after the handlers takes it only from half of the screen update, with the next key or without.
+  // Held to that under 90 as well where the frame waited on the next key, a script of this key's own under half, a
+  // timer on the tick its handlers ended too, went to waiting and painting where 0.16.0 named it.
   const timerFirst = (paint: number) =>
     report(
       [entry('keydown', 1000, 182 + paint, 1001, 1180), entry('keyup', 1060, 122 + paint, 1181, 1182)],
@@ -833,9 +893,11 @@ test("where the working time was longer, the screen update's note says the frame
       [frame(1000, 182 + paint, [...keys, script('TimerHandler:setTimeout', 1183, 30), script('DIV#root.onkeydown', 1216, 55)])],
       [...ring.slice(0, 2), input(1215, 'keydown')],
     ).explanation;
-  for (const paint of [90, 104]) {
-    const waitedOn = timerFirst(paint);
-    assert.deepEqual([waitedOn.blame, waitedOn.cause], [held.blame, held.cause], `${paint} ms`);
+  const first = timerFirst(90);
+  assert.deepEqual(first.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 30, confidence: 'measured' });
+  const over = timerFirst(104);
+  assert.deepEqual([over.blame, over.cause], [held.blame, held.cause]);
+  for (const waitedOn of [first, over]) {
     assert.match(waitedOn.notes[0]!, /: the frame waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 55 ms\.$/);
   }
   // A timer from half of the screen update that started before the next key came is this key's own, though, and
@@ -855,6 +917,60 @@ test("where the working time was longer, the screen update's note says the frame
     assert.deepEqual(own.notes, [
       `After the handler finished, the screen took another ${paint} ms to update: the frame most likely waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 50 ms.`,
     ]);
+  }
+  // So is one on the tick the handlers ended on, where the next key came during them, ahead of that key's listener:
+  // the verdict from half of a screen update over 100 ms, as without the next key. Left out as coming after that key
+  // came, it went to waiting and painting.
+  const tickTimer = (paint: number, ms: number, next: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 182 + paint, 1001, 1180), entry('keyup', 1060, 122 + paint, 1181, 1182)],
+      [three],
+      [frame(1000, 182 + paint, [...keys, script('TimerHandler:setTimeout', 1183, ms), script('DIV#root.onkeydown', 1184 + ms, paint - ms - 6)], 1172 + paint)],
+      [...ring.slice(0, 2), ...next],
+    ).explanation;
+  for (const [paint, ms] of [[104, 54], [110, 57]]) {
+    const own = tickTimer(paint, ms, [input(1100, 'keydown', worked(1181 + paint))]);
+    const alone = tickTimer(paint, ms, []);
+    assert.deepEqual(alone.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms, confidence: 'measured' });
+    assert.deepEqual([own.blame, own.cause], [alone.blame, alone.cause], `${paint} ms`);
+    assert.deepEqual(own.notes, [
+      `After the handler finished, the screen took another ${paint} ms to update: the frame most likely waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), ${ms} ms.`,
+    ]);
+  }
+  // Nor is a script that holds this key's render the next key's, though it started after that key came: React's task
+  // at 83 held the 150-row render of this key's handlers, and with the next key down at 30 the note said the frame
+  // waited on that key, naming the task as the longest script. With the next key at 30 or at 90, the verdict and the
+  // notes are what they are without it.
+  const counted = (n: number): Partial<CommitSummary> => ({ inputType: 'keydown', hasDurations: false, total: 0, rendered: n, components: [{ name: 'Row', count: n, self: null, total: null }] });
+  const renderedFirst = (nexts: InputRecord[]) =>
+    report(
+      [entry('keydown', 0, 152, 1, 81)],
+      [commit(75, 0, counted(3)), commit(128, 0, counted(150)), ...nexts.map((n) => commit(144, n.ts, counted(3)))],
+      [frame(0, 160, [script('DIV#root.onkeydown', 1.2, 79.6), script('MessagePort.onmessage', 83, 47), script('DIV#root.onkeydown', 132, 13)], 146)],
+      [input(0, 'keydown'), ...nexts],
+    ).explanation;
+  const renderedAlone = renderedFirst([]);
+  assert.equal(renderedAlone.blame.kind, 'render');
+  assert.equal(
+    renderedAlone.cause,
+    'React was most likely re-rendering 150 components inside List, mostly Row (150 of them), after the handlers, before the next frame. This React build records no render durations, so that is read from the component counts, not measured. A profiling build of React would give exact numbers.',
+  );
+  assert.deepEqual(renderedAlone.notes, []);
+  for (const at of [30, 90]) assert.deepEqual(renderedFirst([input(at, 'keydown')]), renderedAlone, `next key at ${at}`);
+  // A key with no keyup in the report runs its own input events in the task its handlers ran in, right after them:
+  // React's onChange on `input`. That listener is this key's, though the next key came during the handlers, and is the
+  // verdict with the next key as without it, as in 0.16.0. Only after a released key is one the next key's.
+  const pressOnly = (ms: number, paint: number, nexts: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 180 + paint, 1001, 1180)],
+      [three],
+      [frame(1000, 180 + paint, [...keys, script('DIV#root.oninput', 1180.1, ms)], 1170 + paint)],
+      [...ring.slice(0, 1), ...nexts],
+    ).explanation;
+  for (const [ms, paint] of [[30, 75], [44, 90], [60, 90]]) {
+    const own = pressOnly(ms, paint, []);
+    assert.deepEqual(own.blame, { kind: 'script', name: 'DIV#root.oninput', detail: null, ms, confidence: 'measured' }, `${ms} ms`);
+    assert.deepEqual(pressOnly(ms, paint, [input(1100, 'keydown')]), own, `${ms} ms`);
   }
 });
 

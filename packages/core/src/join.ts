@@ -244,6 +244,13 @@ interface Stamp {
 /** The inputs that begin a press. A release's `gestureTs` is one of these. */
 const PRESSES: readonly string[] = ['pointerdown', 'keydown'];
 
+/**
+ * A listener, as Long Animation Frames names it (`DIV#root.onkeydown`), for a press, or (the second group) for an
+ * event the press dispatches in the same task, right after its own handlers: a key's `input` is where React's
+ * onChange runs.
+ */
+const PRESS_LISTENER = /\.on(keydown|pointerdown|(keypress|beforeinput|input|mousedown|touchstart))$/;
+
 /** Whether `a` comes after `b`, compared element by element. */
 function isAfter(a: readonly number[], b: readonly number[]): boolean {
   for (let i = 0; i < a.length; i++) {
@@ -1417,32 +1424,6 @@ function explain(r: InteractionReport): Explanation {
    * to it there either.
    */
   const screenOutranks = r.presentation > LONG_TASK_MS && r.presentation > r.processing;
-  /**
-   * The next interaction's press, where the frame this one painted in waited on it: typing fast, the next
-   * key's keydown and its render come before the frame the last keyup paints in. A press coming before
-   * the paint is not enough (the second click of a double click delays nothing), so the page has to
-   * have worked on it before the paint for half the screen update or more, counted from the press or from
-   * the end of the handlers where it came during them. A script Long Animation Frames recorded from the
-   * press on shows that work, timed, and so does React's render in the press's own dispatch where it
-   * ended by the paint. That end says when the work finished and not when it began, so on it alone the
-   * sentence is hedged. It is the blame only where the screen update is the larger part of the interaction,
-   * as for `screenOutranks`, but without the long-task bar: what the next key keeps the last keyup's frame
-   * waiting for can be under one. Under that the screen update's note says it all the same: the script
-   * after the handlers is then usually the next press's handler, whose work is the next report's.
-   */
-  const next = r.nextInput;
-  const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
-  const nextScriptMs = next ? scriptParts(frames, nextFrom, r.end).reduce((a, p) => (p.script.start >= next.start - STAMP_TOLERANCE ? Math.max(a, p.ms) : a), 0) : 0;
-  // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
-  const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;
-  const nextShare = WAITED_BEHIND_MIN_SHARE * r.presentation;
-  const heldByNext = next && Math.max(nextScriptMs, nextRenderMs) >= nextShare ? next : null;
-  const waitedOnNext = heldByNext && r.presentation > r.processing && r.presentation >= r.inputDelay ? heldByNext : null;
-  // The screen update's clause where the frame waited on that press, as the blame or in the note. The
-  // clause about the press is hedged where only its render's end says so.
-  const nextClause = heldByNext
-    ? `: the frame ${nextScriptMs >= nextShare ? '' : `${HEDGE} `}waited on the next ${kindOf(heldByNext.type, heldByNext.pointerType)}, which the page handled first.${longestSaid(lateScript)}`
-    : '';
   // Each commit ran in the script whose span holds its stamp, after its start and up to its end, and in no other.
   // In Chromium a commit stamped at the end of a listener's microtask is that listener's end exactly, and the next
   // listener starts on the same tick or later. Long Animation Frames lists only scripts over 5 ms, so a short React
@@ -1457,6 +1438,59 @@ function explain(r: InteractionReport): Explanation {
       const end = s.start + s.duration + 1e-6;
       return x.at <= end && (x.at > s.start || (x.at === s.start && x.effectsEndedAt !== null && x.effectsEndedAt > s.start && x.effectsEndedAt <= end));
     }) ?? null;
+  // A stamp up to a millisecond either side of a script is its own where no other script the browser recorded
+  // holds it, by the rule above (`ranInside` says why).
+  const holds = (s: ScriptSummary, x: CommitSummary) => x.at >= s.start - STAMP_TOLERANCE && x.at <= s.start + s.duration + STAMP_TOLERANCE && (holderOf(x) ?? s) === s;
+  /**
+   * The next interaction's press, where the frame this one painted in waited on it: typing fast, the next
+   * key's keydown and its render come before the frame the last keyup paints in. A press coming before
+   * the paint is not enough (the second click of a double click delays nothing), so the page has to
+   * have worked on it before the paint for half the screen update or more, counted from the press or from
+   * the end of the handlers where it came during them. A script Long Animation Frames recorded once the
+   * press's own handlers began shows that work, timed, and so does React's render in the press's own dispatch
+   * where it ended by the paint. That end says when the work finished and not when it began, so on it alone
+   * the sentence is hedged. It is the blame only where the screen update is the larger part of the interaction,
+   * as for `screenOutranks`, but without the long-task bar: what the next key keeps the last keyup's frame
+   * waiting for can be under one. Under that the screen update's note says it all the same: the script
+   * after the handlers is then usually the next press's handler, whose work is the next report's.
+   *
+   * The press's handlers began where the browser recorded a listener of its (`DIV#root.onkeydown`, or the `oninput`
+   * a key dispatches right after), and nothing that started before that ran for it. One of the second kind is the
+   * press's only where this interaction's release is in the report: a keydown with no keyup runs its own `oninput`
+   * in its task, right after its handlers, and taken for the next key's, a keydown's 60 ms `oninput` went to
+   * waiting and painting. Where no listener was recorded, as for one under 5 ms, a script that started on the tick
+   * this interaction's handlers ended on ran ahead of them too, and only the note counts what came after it
+   * (`ownScript` says why). Nor is a script that holds a render of this report's the press's work, wherever it
+   * started. Taken for the next key's, React's own task that committed a key's render, and a timer as its handlers
+   * ended or before the next key's listener, went to waiting and painting, and from half of the screen update the
+   * note said the frame waited on that key. The next key's handler on the tick after this key's was named as this
+   * key's script. A render joined by overlap alone says too little to keep a script: in the next key's handler, one
+   * kept that handler as this key's verdict.
+   */
+  const next = r.nextInput;
+  const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
+  const released = r.entries.some((e) => /^(keyup|pointerup|mouseup|click)$/.test(e.name));
+  const nextListener =
+    next &&
+    scriptsRun.find((s) => {
+      const on = s.start >= nextFrom - STAMP_TOLERANCE && PRESS_LISTENER.exec(s.invoker);
+      return on && (released || !on[2]);
+    });
+  const nextsWork = (s: ScriptSummary) =>
+    !!next &&
+    (nextListener ? s.start >= nextListener.start : s.start >= nextFrom - STAMP_TOLERANCE && s.start > processingEnd + STAMP_TOLERANCE) &&
+    !r.commits.some((x) => x.joinedBy === 'exact' && holds(s, x));
+  const nextScriptMs = scriptParts(frames, nextFrom, r.end).reduce((a, p) => (nextsWork(p.script) ? Math.max(a, p.ms) : a), 0);
+  // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
+  const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;
+  const nextShare = WAITED_BEHIND_MIN_SHARE * r.presentation;
+  const heldByNext = next && Math.max(nextScriptMs, nextRenderMs) >= nextShare ? next : null;
+  const waitedOnNext = heldByNext && r.presentation > r.processing && r.presentation >= r.inputDelay ? heldByNext : null;
+  // The screen update's clause where the frame waited on that press, as the blame or in the note. The
+  // clause about the press is hedged where only its render's end says so.
+  const nextClause = heldByNext
+    ? `: the frame ${nextScriptMs >= nextShare ? '' : `${HEDGE} `}waited on the next ${kindOf(heldByNext.type, heldByNext.pointerType)}, which the page handled first.${longestSaid(lateScript)}`
+    : '';
   /**
    * React's renders that committed inside that script, after the handlers, however long the screen update
    * and whichever phase was the longer: the screen update's clause says them, as its blame or in the note
@@ -1482,9 +1516,7 @@ function explain(r: InteractionReport): Explanation {
     carriesWork(x) &&
     x.hydratedTarget == null &&
     x.at > processingEnd + STAMP_TOLERANCE &&
-    x.at >= s.start - STAMP_TOLERANCE &&
-    x.at <= s.start + s.duration + STAMP_TOLERANCE &&
-    (holderOf(x) ?? s) === s &&
+    holds(s, x) &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
   const ranInLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
@@ -1546,20 +1578,21 @@ function explain(r: InteractionReport): Explanation {
   /**
    * The script a verdict names once React is ruled out: the longest anywhere in the interaction but the next
    * press's, except where the screen update's note names the late script, which it does wherever a render ran in it
-   * or the frame waited on the next press and, with neither, over PRESENTATION_NOTE_MS. The next press's is a
-   * script that started once it came and the handlers had ended, which `nextScriptMs` counts as its work and no
-   * verdict takes: ranked with the rest, a keydown's verdict named the next key's 44 ms handler, under half of a
-   * 90 ms screen update, as having run after its own. One that started on the tick the handlers ended on is not,
-   * since it ran ahead of that press's own listener, and nor is one that holds a render of this report's: taken for
-   * the next key's, React's own task that held this key's render, and a timer 1 ms after its handlers, went to
-   * waiting and painting where the next key came during them. Where the note names the late script, the verdict
-   * takes it only where it held half of the screen update: a 40 ms listener in a 157 ms screen update that spent
-   * 110 ms on style and layout is under half of either phase, and is left to the note, with a render in it or
-   * without. Taken without, a 60 ms listener was a `script` verdict where the same listener with a render in it was
-   * `none`. Where the frame waited on the next press, the note says so and the verdict does not take the script at
-   * all: it is usually that press's handler, whose work waitedOnNext leaves to the next report. Taken, a keyup's
-   * verdict named the next key's 50 ms handler, and under a 90 ms screen update, with no note, a keydown's named
-   * the next key's 70 ms handler as having run after its own. One that started before the press came is this
+   * and, with none, over PRESENTATION_NOTE_MS. The next press's is what `nextsWork` counts as its work, where the
+   * browser recorded a listener of that press, and no verdict takes it: ranked with the rest, a keydown's verdict
+   * named the next key's 44 ms handler, under half of a 90 ms screen update, as having run after its own. With no
+   * such listener nothing shows where that press's work began, and every script is ranked: left out from the tick
+   * after the handlers on, a timer or React's task of a key's own went to waiting and painting, and the note named
+   * it as the longest script. Where the frame waited on the next press the note says so under PRESENTATION_NOTE_MS
+   * too, and names the late script, but that does not take the script out of the ranking: left to the note, a
+   * keydown's own 30 ms timer, under half of a 90 ms screen update, went to waiting and painting. Where the note
+   * names the late script, the verdict takes it only where it held half of the screen update: a 40 ms listener in a
+   * 157 ms screen update that spent 110 ms on style and layout is under half of either phase, and is left to the
+   * note, with a render in it or without. Taken without, a 60 ms listener was a `script` verdict where the same
+   * listener with a render in it was `none`. Where the frame waited on the next press, the note says so and the
+   * verdict does not take that press's work even from half: waitedOnNext leaves it to the next report. Taken, a
+   * keyup's verdict named the next key's 50 ms handler, and under a 90 ms screen update, with no note, a keydown's
+   * named the next key's 70 ms handler as having run after its own. A script that is not that press's work is this
    * interaction's own, though, and still taken: left out, a 60 ms timer between a keydown's handlers and the next
    * key went to waiting and painting, and the note named it as the longest script. The rest is ranked by length,
    * not by where it ran, against every script up to the end of the handlers: ranked by where, a 20 ms click handler
@@ -1568,13 +1601,11 @@ function explain(r: InteractionReport): Explanation {
    * script after the handlers, for the idle handler's rung below, where `ranScript` is settled.
    */
   const lateOnly = insideLate.length > 0 && !c;
-  const lateNoted = insideLate.length > 0 || (!!lateScript && (r.presentation > PRESENTATION_NOTE_MS || !!heldByNext));
-  const lateTaken = lateLeads && (!heldByNext || lateLeads.script.start < nextFrom - STAMP_TOLERANCE) ? lateLeads : null;
+  const lateNoted = insideLate.length > 0 || (!!lateScript && r.presentation > PRESENTATION_NOTE_MS);
+  const lateTaken = lateLeads && (!heldByNext || !nextsWork(lateLeads.script)) ? lateLeads : null;
   const earlyScript = longestPart(scriptParts(frames, r.start, processingEnd));
   const ledScript = lateTaken && (!earlyScript || lateTaken.ms > earlyScript.ms) ? lateTaken : earlyScript;
-  const nextsWork = (s: ScriptSummary) =>
-    !!next && s.start >= nextFrom - STAMP_TOLERANCE && s.start > processingEnd + STAMP_TOLERANCE && !r.commits.some((x) => holderOf(x) === s);
-  const ownScript = longestPart(scriptParts(frames, r.start, r.end).filter((p) => !nextsWork(p.script)));
+  const ownScript = longestPart(scriptParts(frames, r.start, r.end).filter((p) => !(nextListener && nextsWork(p.script))));
   // Where every render ran in the script after the handlers, the screen update's note says it: React did
   // render, just not in the working time, and a verdict that names no render says that much. So it does where
   // a press rendered after it painted, before a slower release: the later render's note, right after it, says
