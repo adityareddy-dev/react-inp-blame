@@ -126,7 +126,7 @@ its entry under [Troubleshooting](#troubleshooting).
 
 | | react-inp-blame | Sentry `reactComponentAnnotation` | react-scan | web-vitals attribution | React 19.2 Performance tracks |
 | --- | --- | --- | --- | --- | --- |
-| Production-safe | yes¹ | yes | not its main entry² | yes | no: development and profiling builds |
+| Runs in a production build | optional¹ | yes | not its main entry² | yes | no: development and profiling builds |
 | Names the rendered subtree, not just the target's owner | yes | no³ | yes | no: a CSS selector | yes, in development⁴ |
 | Follow-up renders after the paint | yes | no | not told apart⁵ | no | drawn, not joined to the interaction |
 | Forced-layout split | yes, from Long Animation Frames, and it can be the verdict rather than a footnote | no | no: reads no Long Animation Frames | partly⁶ | no |
@@ -134,7 +134,7 @@ its entry under [Troubleshooting](#troubleshooting).
 | Zero dependencies | yes | no | no (11 in 0.5.7) | yes | part of React |
 | Needs a build step for names | in production builds: the plugins add it | yes | not in development⁷ | no names | not in development |
 
-1. It fails closed on a browser or React it does not know, and `sampleRate` limits the page loads it runs on. The plugins leave it out of production builds unless `enabled` says otherwise.
+1. A development tool first: the plugins leave it out of production builds unless `enabled` says otherwise. Turned on there, it fails closed on a browser or React it does not know, and `sampleRate` limits the page loads it runs on. In 0.12.0 that cost about 209 ms of page load on the shadcn/ui docs site, and about 5 ms inside each interaction on the twenty CRM ([What it costs](#what-it-costs)).
 2. Its main entry does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended". Two other entries in 0.5.7 run there anyway: `react-scan/all-environments` skips that check, and `react-scan/lite`, a headless one, attaches to every renderer whatever its build.
 3. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK, with span streaming (its default), names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
 4. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
@@ -222,8 +222,9 @@ npm only ([SECURITY.md](SECURITY.md)).
 
 ## What it costs
 
-On two of the demo's scenarios, a click that re-renders 801 components and a keystroke that re-renders 1441,
-the library's own time was 1.3 to 3.4 ms per interaction at the median and 3.8 ms at worst at p95, in
+It is a development tool first, and running it in production is optional: this is what it costs where it
+runs. On two of the demo's scenarios, a click that re-renders 801 components and a keystroke that re-renders
+1441, the library's own time was 1.3 to 3.4 ms per interaction at the median and 3.8 ms at worst at p95, in
 production and development builds ([how that was measured](docs/how-it-works.md#time-per-interaction)). With
 `enabled` at its default, neither plugin adds anything to a production build (on Next.js 15.3 to 16.2 the
 line's module stays, as an empty function); where it loads:
