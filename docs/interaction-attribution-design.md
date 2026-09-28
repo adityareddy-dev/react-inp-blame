@@ -1376,7 +1376,7 @@ names the longest of the scripts up to the end of the handlers and, only where i
 the script after them, ranked by length and not by where they ran. A timer the input waited behind is said as
 before the handler started, then and wherever else a verdict names one. With none of those, the verdict says no
 long task was recorded in the working time, and not that none was recorded at all, since the note names that
-script, or it was the next press's. Ranked that way only where a render ran in it, a 70 ms listener with none
+script, the next press's too. Ranked that way only where a render ran in it, a 70 ms listener with none
 was a `script` verdict, and with one `none`. Where React rendered nothing in the working time, the handlers are
 weighed first, as where it rendered nothing at all, and take the verdict where they ran long enough. Where the
 frame waited on the next press, the verdict does not take the script after the handlers even from half, since
@@ -1384,12 +1384,15 @@ it is usually that press's handler, and the screen update's note says so at any 
 named the next key's 50 ms handler, and a keydown's under a 90 ms screen update named the next key's 70 ms
 one, with no note at all. Nor, where no note names the script after the handlers, does a verdict take one that
 started once the next press came, which is counted as that press's work: until 2026-09-27 the next key's 44 ms
-handler, under half of a 90 ms screen update, was named the same way. Where the frame waited on the next
-press, a script from half the screen update that started before the press came is still taken, as this
-interaction's own: until 2026-09-27 a 60 ms timer between a keydown's handlers and the next key went to
-waiting and painting. Where a `script` verdict passed over a longer script after the handlers, the note
-names that one at any length: until 2026-09-27 an idle click's 22 ms handler took the verdict from a 49 ms
-timer after it under a 100 ms screen update, and that timer went unsaid. A script after the handlers is said as
+handler, under half of a 90 ms screen update, was named the same way. One that started on the tick the
+handlers ended on, ahead of that press's own listener, or that holds a render of this report's, is this
+interaction's own all the same: React's own task that held a key's render, or a timer 1 ms after its handlers,
+is still the verdict where the next key came during them. Where the frame waited on the next press, a script
+from half the screen update that started before the press came is still taken, as this interaction's own:
+until 2026-09-27 a 60 ms timer between a keydown's handlers and the next key went to waiting and painting.
+Where a `script` verdict, or a `none`, passed over a longer script after the handlers, the note names that one
+at any length: until 2026-09-27 an idle click's 22 ms handler took the verdict from a 49 ms timer after it
+under a 100 ms screen update, and that timer went unsaid. A script after the handlers is said as
 after the handler finished wherever a verdict names it. The browser's own work is the frame's style, layout and
 paint where the frame timed them, from its `styleAndLayoutStart` less any ResizeObserver callbacks, as it does
 after a key press, and otherwise frame time no script ran in, said as "most likely" styles and layout: after a

@@ -778,11 +778,14 @@ test("where the working time was longer, the screen update's note says the frame
   assert.match(quickUnder.notes[0], /^After the handler finished, the screen took another 90 ms to update: the frame most likely waited on the next key press, which the page handled first\. The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 40 ms\.$/);
   // Nor where nothing shows the frame waited on it: the next key's 44 ms handler, under half of the 90 ms, with that
   // key's render not on record or ending after the paint, read as this key's script too. It is the next key's work
-  // all the same, and the working time had no long task in it.
+  // all the same, and the working time had no long task in it. The screen update's note names it, though, or it is
+  // said nowhere.
   for (const next of [input(1100, 'keydown'), input(1100, 'keydown', worked(1400))]) {
     const unheld = quickKeys(44, next);
     assert.deepEqual([unheld.blame, unheld.cause], [held.blame, held.cause]);
-    assert.deepEqual(unheld.notes, []);
+    assert.deepEqual(unheld.notes, [
+      "After the handler finished, the screen took another 90 ms to update: 46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 44 ms.",
+    ]);
   }
   // Where this key's own 25 ms script takes the verdict instead, the note names the next key's longer one as the
   // longest script before the paint, as it does over 100 ms, and does not leave it said nowhere.
@@ -794,6 +797,33 @@ test("where the working time was longer, the screen update's note says the frame
   ).explanation;
   assert.deepEqual(ownFirst.blame, { kind: 'script', name: 'DIV#root.onkeydown', detail: null, ms: 25, confidence: 'measured' });
   assert.match(ownFirst.notes[0]!, /^After the handler finished, the screen took another 90 ms to update: .* The longest script the browser recorded in that time was DIV#root\.onkeydown \(app\.js\), 44 ms\.$/);
+  // A script after the handlers that the next key cannot have run is this key's, though the next key came during
+  // them: React's own task that held this key's render, and a timer on the tick the handlers ended, ahead of the next
+  // key's own listener. Left out as that key's, either went to waiting and painting, with no note, where without the
+  // next key it was the verdict.
+  const eight = commit(1215, 1000, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 8, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 8, self: null, total: null }] });
+  const lateOwn = (late: ScriptSummary, commits: CommitSummary[], next: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
+      [three, ...commits],
+      [frame(1000, 272, [...keys, late, script('DIV#root.onkeydown', 1222, 8)], 1262)],
+      [...ring.slice(0, 2), ...next],
+    ).explanation;
+  for (const next of [[input(1100, 'keydown')], []]) {
+    const said = next.length ? 'with the next key' : 'without it';
+    const task = lateOwn(script('MessagePort.onmessage', 1184, 35), [eight], next);
+    assert.deepEqual(task.blame, { kind: 'script', name: 'MessagePort.onmessage', detail: null, ms: 35, confidence: 'measured' }, said);
+    assert.equal(task.cause, "React's render was small (re-rendering 8 components inside Editor, mostly Row (8 of them)); a script (MessagePort.onmessage, app.js) ran for 35 ms after the handler finished.", said);
+    assert.deepEqual(task.notes, [], said);
+    const timer = lateOwn(script('TimerHandler:setTimeout', 1183, 40), [], next);
+    assert.deepEqual(timer.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 40, confidence: 'measured' }, said);
+    assert.equal(timer.cause, "React's render was small (re-rendering 3 components inside Editor, mostly Row (3 of them)); a script (TimerHandler:setTimeout, app.js) ran for 40 ms after the handler finished.", said);
+    assert.deepEqual(timer.notes, [], said);
+  }
+  // A timer two milliseconds after them is taken for the next key's, and the screen update's note says it.
+  const later = lateOwn(script('TimerHandler:setTimeout', 1184, 40), [], [input(1100, 'keydown')]);
+  assert.deepEqual([later.blame, later.cause], [held.blame, held.cause]);
+  assert.deepEqual(later.notes, ['After the handler finished, the screen took another 90 ms to update. Scripts ran for 48 ms of it, the longest a script (TimerHandler:setTimeout, app.js) for 40 ms.']);
   // And where the frame did wait on it, a 30 ms timer that ran after this key's handlers, before the next key came, is
   // no more the verdict under a 90 ms screen update than under a 104 ms one: under 90 it was.
   const timerFirst = (paint: number) =>
