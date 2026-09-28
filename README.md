@@ -255,8 +255,10 @@ interaction, 10 at 4x.
 Reports are made to be forwarded to error trackers and analytics, so `target.label` never reads a form field's
 value, and under a production build of React it uses only what your code wrote on the element (`aria-label`,
 a form field's `placeholder`, `aria-placeholder` or `name`, an input's `type`, `data-testid` or `data-test`). An
-element's text is opt-in there, with `labels: 'text'`. The page's URLs are kept whole, query string included, but
-a script's URL in a blame loses any password, query or fragment. The details are under
+element's text is opt-in there, with `labels: 'text'`. What your code wrote goes out as written, though: an
+`aria-label`, `data-testid` or `id` built from user data, such as `` aria-label={`Message ${user.name}`} ``,
+lands in `target.label` or `target.selector`, and the label in the verdict. The page's URLs are kept whole, query
+string included, but a script's URL in a blame loses any password, query or fragment. The details are under
 [labels and personal data](docs/api.md#labels-and-personal-data) in the API page.
 
 ## Documentation

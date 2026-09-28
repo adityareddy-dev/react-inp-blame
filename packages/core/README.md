@@ -371,9 +371,10 @@ On Next.js the body of either `onINP` callback goes in the `useReportWebVitals` 
 `interactionTarget` and `navigationURL` are undefined there.
 Neither recipe sends a label or a sentence: a report's `target.label`, `verdict` and other sentences
 can hold text the page shows, under `labels: 'text'` and by default in a development build, so forward
-those only from an app installed with `labels: 'attributes'`. `page_location` keeps its query string.
-`blame.name` can be a script's URL, or the page's for an inline script, and never has a password, query
-or fragment.
+those only from an app installed with `labels: 'attributes'`. The label it then gives, and the id and
+test id in `generateTarget`'s string, go out as your code wrote them, so check none is built from user
+data. `page_location` keeps its query string. `blame.name` can be a script's URL, or the page's for an
+inline script, and never has a password, query or fragment.
 
 ## API
 
@@ -434,11 +435,14 @@ landed on. Under a production build of React the name comes only from what the p
 element it names: its aria-label, a form field's placeholder, aria-placeholder or name, an input's type,
 or its data-testid or data-test. The text an element shows can be someone's name or email, and reports
 are made to be forwarded, so reading it is opt-in there: `install({ labels: 'text' })`. Development
-builds read it by default. An element inside a contenteditable editor, or inside one with the role
-`textbox`, `searchbox`, `combobox` or `spinbutton`, is named like a form field, and so is an element an
-EditContext is attached to, or one up to five elements inside it, so the text someone typed there is not
-read. An editor that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco
-does, cannot be told from the rest of the page, so a click on that text can be named by it.
+builds read it by default. What the page's code wrote goes out as written, though: an aria-label,
+data-testid or id built from user data, such as `` aria-label={`Message ${user.name}`} ``, lands in
+`target.label` or `target.selector`, and the label in the verdict. An element inside a contenteditable
+editor, or inside one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`, is named like a
+form field, and so is an element an EditContext is attached to, or one up to five elements inside it, so
+the text someone typed there is not read. An editor that draws its text in ordinary elements and takes
+key presses in a hidden one, as Monaco does, cannot be told from the rest of the page, so a click on that
+text can be named by it.
 
 ## Clicks that land before hydration
 
