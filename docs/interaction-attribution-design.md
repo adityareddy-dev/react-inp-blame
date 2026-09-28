@@ -1673,7 +1673,10 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   Chrome's own track), from the input to the paint, in `warning` like React's event spans, with
   the verdict as its tooltip and the phases as properties. It is a `performance.measure` with a
   `devtools` detail, because `console.timeStamp` carries no tooltip: a seventh argument reaches
-  the trace as an empty field in Chromium 147.
+  the trace as an empty field in Chromium 147. Its count of renders before the paint leaves out
+  the commits too small to count, as the verdict's "React rendered 3 times" does, and says how
+  many it left out ("3, and 3 too small to count"): on the shadcn/ui Sheet the tooltip said 3 and
+  the Summary 6, for the six commits the renders track drew.
 - Each commit joined to the report gets an entry in a "React renders" track, but only where
   React draws none itself. Development builds of React 19.2 and later draw every component in
   Components ⚛, and there the interaction's tooltip points to it instead; production and
