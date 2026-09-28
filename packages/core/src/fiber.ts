@@ -548,10 +548,13 @@ function isMarkupIcon(f: Fiber): boolean {
 
 /**
  * Whether React rendered nothing in a host element. Text it rendered there has no fiber: React writes a
- * string or a number that is an element's only child (in React 19 a bigint too) straight into it.
+ * string or a number that is an element's only child (in React 19 a bigint too) straight into it. A lone
+ * `null` or boolean, which React renders as nothing, holds the place of what it renders there at other times,
+ * as the `false` that `{count > 0 && count}` leaves at 0 holds the count's, so it counts as rendered too.
  */
 function rendersNothing(f: Fiber): boolean {
-  return f.child === null && !['string', 'number', 'bigint'].includes(typeof f.memoizedProps?.children);
+  const children = f.memoizedProps?.children;
+  return f.child === null && children !== null && !['string', 'number', 'bigint', 'boolean'].includes(typeof children);
 }
 
 /**

@@ -3635,10 +3635,9 @@ test("an icon a script drew outside React is placed by the element holding it, w
     }
   }
   // And where React rendered nothing in the button: an svg imported as a string and set through
-  // dangerouslySetInnerHTML, the `<svg>` Font Awesome's searchPseudoElements draws in an empty
-  // `<button aria-label="Close">`, or one before a count of likes that `{count > 0 && count}` leaves out at 0.
-  // A button holds what is drawn in it, so the handler is its own.
-  for (const props of [{ dangerouslySetInnerHTML: { __html: '<svg></svg>' } }, { 'aria-label': 'Close' }, { children: false }]) {
+  // dangerouslySetInnerHTML, or the `<svg>` Font Awesome's searchPseudoElements draws in an empty
+  // `<button aria-label="Close">`. A button holds what is drawn in it, so the handler is its own.
+  for (const props of [{ dangerouslySetInnerHTML: { __html: '<svg></svg>' } }, { 'aria-label': 'Close' }]) {
     const drawn = element('svg', []);
     inIconButton('button', drawn, null, props);
     assert.deepEqual(ownersFor(drawn), ['IconButton', 'Page']);
@@ -3647,6 +3646,16 @@ test("an icon a script drew outside React is placed by the element holding it, w
   const inRoleButton = element('svg', []);
   inIconButton('div', inRoleButton, null, { role: 'button', 'aria-label': 'Close' });
   assert.deepEqual(ownersFor(inRoleButton), ['IconButton', 'Page']);
+  // A count of likes that `{count > 0 && count}` leaves out at 0 is a `false` React writes nothing for, and
+  // `{count > 0 ? count : null}` a `null`: the count is written there at any other count, so an icon drawn
+  // before it is placed as it is beside the count, in a button or a `<div onClick>`.
+  for (const tag of ['button', 'div']) {
+    for (const nothing of [false, null]) {
+      const drawn = element('svg', []);
+      inIconButton(tag, drawn, null, { children: nothing });
+      assert.deepEqual(ownersFor(drawn), ['IconButton', 'Page']);
+    }
+  }
 
   // Markup set through dangerouslySetInnerHTML is the element's own, as the svg an icon library renders is:
   // an onClick the app's Icon handed its `<span>` names the component that wrote `<Icon onClick>`. So is the
