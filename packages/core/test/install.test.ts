@@ -234,6 +234,81 @@ test('a browser without Event Timing interactionId gets nothing installed, one w
   assert.deepEqual(await Promise.all(overlays), [null, null]);
 });
 
+/** Runs `body` in a build whose bundler wrote `mode` in place of `process.env.NODE_ENV`, as every bundler that can bundle React does. */
+async function inBuild(mode: 'development' | 'production', body: () => void | Promise<void>): Promise<void> {
+  const saved = process.env.NODE_ENV;
+  process.env.NODE_ENV = mode;
+  try {
+    await body();
+  } finally {
+    if (saved === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = saved;
+  }
+}
+
+test('in a production build, a browser without interactionId is warned about only on a page the sample takes, and the roll is made once', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const roll = t.mock.method(Math, 'random', () => 0.5);
+  await inBuild('production', async () => {
+    await inBrowser(
+      (page) => {
+        const api = install({ sampleRate: 0.4, debugGlobal: true });
+        // Nothing printed, and stats() on the page still says why nothing is reported.
+        assert.equal(api.stats().mode, 'unsupported');
+        assert.equal(api.stats().unsupportedReason?.kind, 'browser');
+        assert.equal(page.window.__REACT_INP_BLAME__, api);
+        // Rolling again on a later call, such as the one mountOverlay() makes, would raise the share of pages that print it.
+        install({ sampleRate: 1 });
+        install();
+        assert.equal(warn.mock.callCount(), 0);
+        assert.equal(roll.mock.callCount(), 1);
+      },
+      { interactionId: false },
+    );
+
+    // Another page, which the sample takes.
+    session?.slots.warnings?.clear();
+    await inBrowser(
+      () => {
+        install({ sampleRate: 0.6 });
+        install({ sampleRate: 0.6 });
+      },
+      { interactionId: false },
+    );
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /no Event Timing interactionId/);
+  });
+});
+
+test('in a development build, a browser without interactionId is warned about whatever sampleRate says', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const roll = t.mock.method(Math, 'random', () => 0.99);
+  await inBuild('development', () =>
+    inBrowser(() => assert.equal(install({ sampleRate: 0 }).stats().mode, 'unsupported'), { interactionId: false }),
+  );
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments[0], /no Event Timing interactionId/);
+  assert.equal(roll.mock.callCount(), 0);
+});
+
+test('a page loaded with no bundler, where process is not defined, counts as a production build', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  t.mock.method(Math, 'random', () => 0.5);
+  await inBrowser(
+    () => {
+      const saved = Object.getOwnPropertyDescriptor(globalThis, 'process')!;
+      delete (globalThis as { process?: unknown }).process;
+      try {
+        assert.equal(install({ sampleRate: 0.4 }).stats().unsupportedReason?.kind, 'browser');
+      } finally {
+        Object.defineProperty(globalThis, 'process', saved);
+      }
+    },
+    { interactionId: false },
+  );
+  assert.equal(warn.mock.callCount(), 0);
+});
+
 /**
  * Gives the stand-in browser a document with what the badge and panel are drawn with: elements that keep
  * their children and their parent, and a body. `hosts()` counts the elements in the body that the badge

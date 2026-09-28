@@ -8,12 +8,14 @@ const HELP = 'https://github.com/adityareddy-dev/react-inp-blame#';
 
 /**
  * `console.warn` with the library's prefix and a link to the README, at most once per page for each key.
- * What `logged` holds goes to the console after the message, so an error there shows with its stack.
+ * `say` is asked the first time a key comes up, and only then: where it returns false the key is settled
+ * without a line, and later calls for it print nothing either. What `logged` holds goes to the console
+ * after the message, so an error there shows with its stack.
  */
-export function warnOnce(key: string, message: string, anchor = key, ...logged: unknown[]): void {
+export function warnOnce(key: string, message: string, anchor = key, say: () => boolean = () => true, ...logged: unknown[]): void {
   if (warned.has(key)) return;
   warned.add(key);
-  console.warn(`[react-inp-blame] ${message} See ${HELP}${anchor}`, ...logged);
+  if (say()) console.warn(`[react-inp-blame] ${message} See ${HELP}${anchor}`, ...logged);
 }
 
 /** `error` as a warning quotes it. A thrown value with no string form, such as an object with no prototype, still gives one. */
@@ -35,6 +37,7 @@ export function dropped(error: unknown): void {
     'library-error',
     `an error inside the library (${errorText(error)}) was kept from the page. Only the step it threw in was skipped, so a report may be missing or blame nothing, and later interactions are reported as usual. Please open an issue with this message and the error logged with it.`,
     'library-error',
+    () => true,
     error,
   );
 }
