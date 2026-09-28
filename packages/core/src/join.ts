@@ -2514,8 +2514,9 @@ function explain(r: InteractionReport): Explanation {
   // script after the handlers is the next key's handler, and not why this key's screen update was slow. It is
   // kept at any length too where a script verdict, or none, passed over a longer script after the handlers, or that
   // one went unsaid: an idle click's 22 ms handler took it from a 49 ms timer after it under a 100 ms screen update,
-  // and with the next key's 44 ms handler left out of a keydown's verdict, nothing said that handler ran.
-  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length || (heldByNext && lateScript) || ((blame.kind === 'script' || blame.kind === 'none') && lateScript && lateScript.ms > (ranScript?.ms ?? 0))) && blame.kind !== 'painting') {
+  // and with the next key's 44 ms handler left out of a keydown's verdict, nothing said that handler ran. Where what
+  // React did is unknown, the none weighed no script, and passed over none.
+  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length || (heldByNext && lateScript) || ((blame.kind === 'script' || (blame.kind === 'none' && !unseen)) && lateScript && lateScript.ms > (ranScript?.ms ?? 0))) && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${heldByNext ? nextClause : lateScriptClause}`);
   }
   if (betweenMatters && !betweenWins) notes.push(`${cap(ms(between))} of the working time also went by ${whereBetween}, with no handler running.`);

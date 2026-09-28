@@ -2252,6 +2252,25 @@ test('where React is not being read, the verdict says the setup is the cause rat
   assert.equal(report([entry('click', 0, 400, 3, 10)], [], [], ring, 'attributes', [], undefined, 'installed-late').explanation.blame.kind, 'painting');
   // With React read, the same click and record is the handler's script, as before.
   assert.deepEqual(report(click, [], listener, ring).explanation.blame, { kind: 'script', name: 'handleSave', detail: 'SignInPage', ms: 200, confidence: 'measured' });
+  // Nor does the screen update's note name the next key's handler beside it, as it does beside a verdict that script
+  // was kept from: the verdict is the setup's, and the notes are the same with the next key or without it.
+  const keys = Array.from({ length: 9 }, (_, i) => script('DIV#root.onkeydown', 1001 + i * 20, 19));
+  const typed = (status: 'installed-late' | 'unreadable', next: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
+      [],
+      [frame(1000, 272, [...keys, script('DIV#root.onkeydown', 1200, 44)], 1262)],
+      [input(1000, 'keydown'), input(1060, 'keyup', { gestureTs: 1000 }), ...next],
+      'attributes',
+      [],
+      undefined,
+      status,
+    ).explanation;
+  for (const status of ['installed-late', 'unreadable'] as const) {
+    const alone = typed(status, []);
+    assert.equal(alone.notes.length, 1, status);
+    assert.deepEqual(typed(status, [input(1100, 'keydown')]), alone, status);
+  }
 });
 
 test('where React stopped being read partway through an interaction, the note says only what came before is in the report', () => {
