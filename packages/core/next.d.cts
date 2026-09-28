@@ -40,7 +40,9 @@ export type NextConfigFunction = (phase: string, context: NextConfigPhase) => Ne
 /**
  * Wraps a Next.js config: installs react-inp-blame before hydration, and keeps component names
  * through the production minifier under Turbopack and webpack. A config written as a function is
- * wrapped around what it returns, so it comes back as a function too.
+ * wrapped around what it returns, so it comes back as a function too, and a Promise around what it
+ * resolves to.
  */
 export function withInpBlame(nextConfig: NextConfigFunction, options?: WithInpBlameOptions): NextConfigFunction;
+export function withInpBlame(nextConfig: Promise<NextConfig>, options?: WithInpBlameOptions): Promise<NextConfig>;
 export function withInpBlame(nextConfig?: NextConfig, options?: WithInpBlameOptions): NextConfig;

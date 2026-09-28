@@ -251,10 +251,36 @@ test('a function config in a run enabled leaves out comes back as a function, wh
   assert.deepEqual(added(config), NOTHING);
 });
 
-test('a Promise or null goes back as it came from a run enabled leaves out', () => {
-  // Next.js awaits a Promise export, and a copy made by spreading one would drop the whole config.
-  const pending = Promise.resolve({ reactStrictMode: true });
-  assert.equal(wrapped('production', pending as never), pending);
+/** What withInpBlame makes of a config exported as a Promise, with NODE_ENV set until it resolves, as it stays under Next. */
+async function wrappedPromise(nodeEnv: 'development' | 'production', config: Promise<Record<string, unknown>>, options?: { enabled?: unknown; runtime?: unknown }): Promise<Record<string, any>> {
+  const saved = process.env.NODE_ENV;
+  process.env.NODE_ENV = nodeEnv;
+  try {
+    const wrapper = withInpBlame(config, options);
+    assert.equal(typeof wrapper.then, 'function', 'a config exported as a Promise comes back as a Promise');
+    return await wrapper;
+  } finally {
+    if (saved === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = saved;
+  }
+}
+
+test('a config exported as a Promise is wrapped around what it resolves to, and keeps every setting', async () => {
+  // Next.js awaits a Promise export, which is what an async function called in place gives. A copy made
+  // by spreading one would come out empty, with no basePath, rewrites or env.
+  const project = () => Promise.resolve({ basePath: '/shop', reactStrictMode: true, env: { API: 'x' } });
+  const config = await wrappedPromise('development', project());
+  assert.deepEqual(added(config), EVERYTHING);
+  assert.equal(config.basePath, '/shop');
+  assert.equal(config.reactStrictMode, true);
+  assert.equal(config.env.API, 'x');
+  assert.deepEqual(clientSettings(config), { install: {}, basePath: '/shop' });
+  // A run enabled leaves out gets the empty entry on it, as on a plain object.
+  assert.deepEqual(await wrappedPromise('production', project()), { basePath: '/shop', reactStrictMode: true, env: { API: 'x', REACT_INP_BLAME_NEXT: '' } });
+  assert.deepEqual((await wrappedPromise('development', project(), { runtime: false })).env, { API: 'x', REACT_INP_BLAME_NEXT: '' });
+});
+
+test('null goes back as it came from a run enabled leaves out', () => {
   assert.equal(wrapped('production', null as never), null);
 });
 
