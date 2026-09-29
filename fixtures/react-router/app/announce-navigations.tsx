@@ -1,13 +1,17 @@
 // app/announce-navigations.tsx
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useLocation } from "react-router";
 import { announceNavigation } from "react-inp-blame";
+
+// A layout effect runs as the new route commits, before a click that waited behind that commit. On the server,
+// where React 18 warns about useLayoutEffect, it is useEffect, which never runs there either.
+const useCommitEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
 // Tells react-inp-blame each time React Router changes the route. Render it once, in the root route's App.
 export function AnnounceNavigations() {
   const { key } = useLocation();
   const last = useRef(key);
-  useEffect(() => {
+  useCommitEffect(() => {
     if (key === last.current) return; // the first page is the document's own navigation
     last.current = key;
     announceNavigation(window.location.href);

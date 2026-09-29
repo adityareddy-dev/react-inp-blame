@@ -1648,9 +1648,13 @@ the event before its first await), so the lines in docs/install.md name the clic
 `router.history.location.href`, the URL the address bar shows, because `toLocation.publicHref` writes
 the search string back in TanStack's own form (`?inp-blame` as `?inp-blame=`) and `window.location`
 is still the old URL then. React Router updates its state in `startTransition` (read in react-router
-7.18.4 and 8.4.0), and framework mode hands app code no router object, so its lines are an effect on
-`location.key`. The effect runs after the new route commits, with no input being dispatched: the
-reports after it are placed at the new URL, and the click that started it is named on none.
+7.18.4 and 8.4.0), and framework mode hands app code no router object, so its lines are a layout
+effect on `location.key`. It runs in the commit of the new route, with no input being dispatched: the
+reports after it are placed at the new URL, and the click that started it is named on none. A passive
+effect would not do. React runs a transition's passive effects in a later task, and runs them first
+when a discrete event sets state, so a click that waited behind a slow commit would run the effect
+inside its own dispatch, be placed on the page it left and be named as the one that started the
+navigation.
 At each soft navigation and back/forward cache restore the INP estimate starts over from the
 interactions that began after it, and quiet interactions held so far are let go, so renders of the
 new page stamped with an input from before it cannot publish them. The App Router announces a push
