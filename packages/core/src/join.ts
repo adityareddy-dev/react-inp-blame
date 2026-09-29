@@ -2686,10 +2686,11 @@ function explain(r: InteractionReport): Explanation {
   // React's render time as the cause gives it, the total across commits where it gives one. Only of a render
   // blame: a handler does not run twice, though its cause gives React's render time too. The render it names has to
   // be under StrictMode itself, and the total is given only where every render in it was. Nor is it said where the
-  // render is a sliver of the blame, as beside 300 ms of effects, where there is nothing worth halving.
+  // render is a sliver beside the commit's useEffect callbacks, where there is nothing worth halving. Committing
+  // is not weighed: a 40 ms render before 200 ms of layout effects still ran twice.
   if (r.strictMode && blame.kind === 'render' && rc?.hasDurations && rc.strictMode) {
     const rendering = severalRenders(rc) && renders.every((x) => x.strictMode) ? rendersMs : rc.total;
-    if (rendering >= 1 && rendering >= (blame.ms ?? 0) / 4) {
+    if (rendering >= 1 && rendering >= rcEffects / 4) {
       notes.push(`StrictMode renders each component twice in development, so about half of React's ${ms(rendering)} here is the second pass. A production build renders once.`);
     }
   }

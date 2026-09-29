@@ -4101,6 +4101,11 @@ test("under StrictMode in a development build, a render blame says about half of
     assert.equal(effectsLed.blame.kind, 'render');
     assert.deepEqual(strictNotes(effectsLed), [], `a ${total} ms render`);
   }
+  // Heavy committing is not effects: the cause still leads with the 40 ms render, and 40 ms of it ran twice.
+  const measured = explained([commit(1250, 1000, { startedAt: 1004, total: 40, rendered: 40, strictMode: true })], 'development', [entry('click', 1000, 272, 1003, 1260)], [input(1000, 'click')]);
+  assert.equal(measured.blame.kind, 'render');
+  assert.match(measured.cause, /^React spent 40 ms re-rendering .* Committing it took about 206 ms more/);
+  assert.deepEqual(strictNotes(measured), [note(40)]);
   // StrictMode does not run a handler twice, so a handler blame gets no note though its cause gives React's render time.
   const handled = explained([list, sidebar], 'development', [entry('click', 0, 216, 2, 200)], loginClick('handleSave'));
   assert.equal(handled.blame.kind, 'handler');
