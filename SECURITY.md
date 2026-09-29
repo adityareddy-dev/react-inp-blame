@@ -22,8 +22,9 @@ into the latest release only.
 ## What it touches
 
 What the library reads, changes and keeps on a page, and what can leave it. This covers `install()`,
-`react-inp-blame/auto` and the runtime the Next.js, Vite and Astro setups add. A production build
-those setups leave it out of, which is their default, gets none of it.
+`react-inp-blame/auto` and the runtime the Next.js, Vite and Astro setups add, and what
+`react-inp-blame/otel` reads and writes when the app's code calls it. A production build those
+setups leave it out of, which is their default, gets none of it.
 
 ### What it reads
 
@@ -111,6 +112,18 @@ written. An `aria-label`, a `data-testid`, an `id` or a component name built fro
 `target.label`, `target.selector` or a blame's name, and so does an element id in a script's invoker
 (`DIV#root.onclick`). Any script on the page can reach the reports, through `debugGlobal` or the
 shared state, as it can reach the page itself.
+
+`react-inp-blame/otel` does nothing on its own. It runs only where the app's telemetry code calls
+`inpBlameAttributes` or puts `InpBlameLogRecordProcessor` in its logger provider. From what it is
+handed it reads the web vital's name, value and time, or the `interactionId` of a metric's entries,
+to find the report for that interaction. `inpBlameAttributes` returns `react_inp_blame.*` attributes
+for the app's hook to add, and the processor sets them on the INP log record it was handed:
+`react_inp_blame.status`, and where a report matched, that report's blame, handler, the components
+around its target, its hot path, `reactStatus`, `reactBuild` and the counts and render times of its
+commits and follow-ups. The app's setup sends them. It never gives the target's label or selector,
+the headline, verdict or notes, or a URL's query, fragment or password, though a script's URL in the
+blame's name keeps its path, as in a report. It changes no other record, adds no listener and sends
+nothing itself.
 
 Two things reach other code on the page without the app asking:
 
