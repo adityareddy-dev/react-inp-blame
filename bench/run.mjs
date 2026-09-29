@@ -7,11 +7,12 @@
 // README.md has the commands for the published runs. An app asked for a configuration it doesn't
 // have (cal-diy has only A and B, tt-virtual-fix only B and F) is refused before anything builds.
 //
-// Installs app dependencies if they are missing, builds each app three times (A, B, C) from the
-// same source, runs bench.mjs, then writes report.md next to the results JSON.
+// Installs app dependencies if they are missing, builds each app once per configuration it has
+// from the same source, runs bench.mjs, then writes report.md next to the results JSON.
 //
-// It rebuilds every time. A build is ~0.5 s per configuration and a stale dist would silently
-// invalidate the whole comparison, which is a far worse trade than six seconds.
+// It rebuilds every time. A build takes from under a second per configuration for the TanStack
+// examples to minutes for the Next.js apps, and a stale dist would silently invalidate the whole
+// comparison, which is a far worse trade than the wait.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';

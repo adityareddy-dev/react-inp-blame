@@ -2,8 +2,8 @@
 // size with touch. This is the open a flame chart of it showed as four whole-document style recalcs
 // from four Radix pieces taking turns, and the one their issue #6879 names.
 //
-// Both entries serve the builds shadcn-v4 makes (.next-a, .next-b), so they build nothing of their
-// own: run them in the same `run.mjs` as shadcn-v4, or after it.
+// Both entries serve the builds shadcn-v4 makes (.next-a, .next-b-new, .next-c), so they build
+// nothing of their own: run them in the same `run.mjs` as shadcn-v4, or after it.
 
 import { spawn } from 'node:child_process';
 import path from 'node:path';
