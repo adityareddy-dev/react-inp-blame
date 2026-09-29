@@ -329,8 +329,8 @@ test('a page whose process is a stand-in with no NODE_ENV in it counts as a deve
 /**
  * Gives the stand-in browser a document with what the badge and panel are drawn with: elements that keep
  * their children and their parent, and a body. `hosts()` counts the elements in the body that the badge
- * and panel live in, `panelHidden()` says whether the panel of the first of them is hidden, and `badge()`
- * is its badge.
+ * and panel live in, `panelHidden()` says whether the panel of the first of them is hidden, `badge()`
+ * is its badge, and `press(button)` clicks the panel's button of that class.
  */
 function badgeDocument() {
   const element = (tagName: string): Record<string, any> => {
@@ -345,8 +345,11 @@ function badgeDocument() {
       get isConnected() {
         return el.parentNode !== null;
       },
+      listeners: {},
       setAttribute() {},
-      addEventListener() {},
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        el.listeners[type] = listener;
+      },
       attachShadow: () => (el.shadowRoot = element('#shadow-root')),
       append: (...nodes: unknown[]) => el.childNodes.push(...nodes),
       prepend: (...nodes: unknown[]) => el.childNodes.unshift(...nodes),
@@ -367,10 +370,12 @@ function badgeDocument() {
   Object.defineProperty(globalThis, 'document', { value: document, configurable: true, writable: true });
   const hosts = () => body.childNodes.filter((node: { id: string }) => node.id === 'react-inp-blame');
   const wrap = () => hosts()[0].shadowRoot.childNodes.find((node: { className?: string }) => node.className?.startsWith('wrap'));
+  const panel = () => wrap().childNodes.find((node: { className?: string }) => node.className === 'panel');
   return {
     hosts: () => hosts().length,
-    panelHidden: (): boolean => wrap().childNodes.find((node: { className?: string }) => node.className === 'panel').hidden,
+    panelHidden: (): boolean => panel().hidden,
     badge: () => wrap().childNodes.find((node: { tagName: string }) => node.tagName === 'button'),
+    press: (button: string) => panel().listeners.click({ target: { closest: (selector: string) => (selector === `.${button}` ? {} : null) } }),
   };
 }
 
@@ -582,6 +587,39 @@ test("a stored 'hidden' keeps the badge off for that person whatever overlay say
       api.dispose();
     });
   }
+});
+
+test('after Hide for me, mountOverlay() still shows the badge, and the overlay option asked again does not', async (t) => {
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
+    else delete (globalThis as Record<string, unknown>).localStorage;
+  });
+  const stored = new Map<string, string>();
+  const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value), removeItem: (key: string) => stored.delete(key) };
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true, writable: true });
+  await inBrowser(async () => {
+    const { search, hash } = new URL(PAGE_URL);
+    Object.defineProperty(globalThis, 'location', { value: { href: PAGE_URL, search, hash }, configurable: true, writable: true });
+    const { hosts, press } = badgeDocument();
+    const api = install({ overlay: true });
+    await installState.overlay;
+    assert.equal(hosts(), 1);
+    press('hide');
+    assert.equal(hosts(), 0);
+    assert.equal(stored.get('react-inp-blame'), 'hidden');
+    // The badge the page's own code asks for is shown regardless, and not the one Hide for me took down.
+    const shown = await mountOverlay();
+    assert.equal(hosts(), 1, 'mountOverlay() handed back the badge Hide for me took down');
+    shown?.dispose();
+    await nextTask();
+    assert.equal(hosts(), 0);
+    // install() again with overlay: true asks the option again, and 'hidden' keeps it off.
+    install({ overlay: true });
+    await installState.overlay;
+    assert.equal(hosts(), 0);
+    api.dispose();
+  });
 });
 
 test("a browser without Event Timing shows the badge that says so only where it was asked for, and install() or 'query' alone never loads it", async (t) => {
