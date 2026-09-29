@@ -438,8 +438,11 @@ export function getRouter() {
   })
 
   // Tells react-inp-blame each time the route changes, with the URL the address bar shows. Not on the first load, which is the document's own.
-  router.subscribe('onBeforeNavigate', ({ fromLocation, hrefChanged }) => {
-    if (fromLocation && hrefChanged) announceNavigation(router.history.location.href)
+  let last = router.history.location.href
+  router.subscribe('onBeforeNavigate', () => {
+    const href = router.history.location.href
+    if (href !== last) announceNavigation(href)
+    last = href
   })
 
   return router
@@ -457,10 +460,13 @@ navigation in `startedNavigation`. Not while a navigation blocker from `useBlock
 history waits for it first, and the click is then not named. `router.history.location.href` is the URL the
 address bar shows, base path included. `toLocation.publicHref` is not, since TanStack Router writes the search
 string back in its own form (a bare `?inp-blame` becomes `?inp-blame=`), and `window.location.href` still holds
-the old URL at that moment. A change of query string alone counts as a navigation here too. In a TanStack
-Router app without Start, put the same `router.subscribe` call after `createRouter`. As under React Router, a
-production build the plugin leaves the library out of still carries `announceNavigation`, about 0.3 KB
-gzipped, where it does nothing. CI's copy of this app runs these lines too.
+the old URL at that moment. It is checked against the URL last announced, not the event's `hrefChanged`, which
+TanStack Router takes from the last route that finished loading: going back before a slow loader finished, or a
+`beforeLoad` that redirects to the page it was on, would leave reports on a URL the page had left. A change of
+query string alone counts as a navigation here too. In a TanStack Router app without Start, put the same
+`router.subscribe` call after `createRouter`. As under React Router, a production build the plugin leaves the
+library out of still carries `announceNavigation`, about 0.3 KB gzipped, where it does nothing. CI's copy of
+this app runs these lines too.
 
 ## Install with Astro
 
