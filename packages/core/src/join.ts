@@ -1299,11 +1299,6 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
 
 /** "DIV.onscroll (app.js)": a script by its name and file, and one the browser gave no name as "one with no name (app.js)". */
 const namedWithFile = (s: ScriptSummary): string => `${scriptName(s) ?? 'one with no name'}${s.source ? ` (${s.source})` : ''}`;
-/**
- * "trackClick (src/analytics.ts, run as #document.onclick)": a listener by its function, where the browser gives one
- * and the build kept it (`named`), else as `namedWithFile`.
- */
-const listenerWithFile = (s: ScriptSummary, named: boolean): string => (named && s.name && s.invoker ? `${s.name} (${s.source ? `${s.source}, ` : ''}run as ${s.invoker})` : namedWithFile(s));
 
 /**
  * A sentence naming the longest script the browser recorded, where it has a name, and `also` what it did.
@@ -1483,18 +1478,6 @@ function explain(r: InteractionReport): Explanation {
   const frames = r.frames ?? [];
   // A script that started between one event's handlers and the next's is no handler's.
   const whileHandling = scriptParts(frames, processingStart, processingEnd).filter((p) => !startsInAGap(p.script.start));
-  // And a script known not to be React's: where a development build keeps React's listener named, or where
-  // React's own ran beside it while the input was handled, too short for the browser to list it as often as not.
-  // React 17 and later listen only on a root's container and a portal's, never on the window, and on the document
-  // only where it is a root's, so a listener there is not React's where the hook saw roots and none of them was
-  // the document. A minified build with its root on the document knows none of that.
-  const offRoots = (s: ScriptSummary) => targetOf(s) === 'Window' || (targetOf(s) === '#document' && page.roots.length > 0 && !page.roots.includes('#document'));
-  const notReacts = (s: ScriptSummary) => !reactsOwn(s) && (page.named || offRoots(s) || whileHandling.some((p) => reactsOwn(p.script)));
-  // Such a listener is named by its function only where the build kept names: a development build, or React's own
-  // listener beside it under its name. A minifier's "a" says nothing, so there it is named by what ran it, as the
-  // same listener is where the element has no React handler.
-  const namesKept = page.named || whileHandling.some((p) => REACT_LISTENER.test(p.script.name));
-  const listenerName = (s: ScriptSummary) => (namesKept && s.name) || scriptName(s);
   const forcedWhileHandling = forcedLayoutOf(whileHandling);
   const forcedAfterInput = forcedLayoutOf(scriptParts(frames, processingStart, r.end));
   const lateScript = longestPart(scriptParts(frames, processingEnd, r.end));
@@ -2147,22 +2130,6 @@ function explain(r: InteractionReport): Explanation {
   const noScripts = 'the browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.';
   const unaccounted = ` ${ms(outside)} outside React's render is not accounted for: ${noScripts}`;
   const handlerWins = outsideMatters && (outside > reactTime || !renderMatters) && !(unlisted && renderMatters);
-  // A listener React did not attach (a shortcut bound on the document, a tag manager's, a library's own) is what
-  // the handler's time went on where it holds most of it and is known not to be React's own listener, which runs
-  // the handler and renders: it names the blame, as a script, by its function where the browser gives one. A tag
-  // manager's trackClick on the document took 159 ms of a click whose onClick set one state, and the verdict
-  // said the onClick ran for 161.
-  const listener = longestPart(whileHandling);
-  const listenerHolds = !!listener && listener.ms >= WAITED_BEHIND_MIN_SHARE * outside;
-  const otherListener = listenerHolds && notReacts(listener.script) ? listener : null;
-  /** The sentence that blames `otherListener` beside a React handler, with what the handler and React took. */
-  const otherListenerCause = (p: ScriptPart, confidence: Blame['confidence'], rest: string): string => {
-    // React's listener ran the handler, so its time is the handler's with React's dispatch around it.
-    const dispatch = whileHandling.filter((x) => reactsOwn(x.script)).reduce<ScriptPart | null>((a, x) => (!a || x.ms > a.ms ? x : a), null);
-    const theirs = dispatch ? `React's listener, which ran ${handler}, took ${ms(dispatch.ms)}` : `${cap(handler ?? 'the handler')} and React's listener took the other ${ms(outside - p.ms)}`;
-    const ranFor = `ran for about ${ms(p.ms)}: ${listenerWithFile(p.script, namesKept)}`;
-    return say(confidence, `A listener React did not attach ${ranFor}. ${theirs}; ${rest}.`, `A listener React did not attach ${HEDGE} ${ranFor}. ${theirs}; ${rest}.`);
-  };
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
@@ -2200,8 +2167,7 @@ function explain(r: InteractionReport): Explanation {
   const untimedHandler = !!c && !hasDurations && !!handler && longTaskOfWork && r.processing >= r.presentation;
   // Where the count alone chose between the handler and the render, a build that times neither cannot say which
   // it was: StatsPanel's own render took 134 ms of a 135 ms click in development, and its count, 2 components,
-  // said the handler. So the sentence names both and the blame keeps the count's pick. A listener React did not
-  // attach that held the time is a verdict of its own, above.
+  // said the handler. So the sentence names both and the blame keeps the count's pick.
   const countOnly = !hasDurations && !!handler && !!c && c.rendered > 0;
   const tellApart = " A production build of React can't tell these apart, a profiling build can.";
   const untimedTook = effects >= 1 || between >= 1 ? `about ${ms(r.processing - between - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
@@ -2466,27 +2432,24 @@ function explain(r: InteractionReport): Explanation {
     // totals, since the render named here need not be the commit that spent them.
     const spent = figures(committing, effects, totalsSaid);
     const also = spent.length ? ` React also spent ${spent.join(' and ')}${whereOf(c, totalsSaid)}.` : '';
-    if (otherListener && handlerName) {
-      const scriptConfidence = unsure ? 'inferred' : 'measured';
-      cause = otherListenerCause(otherListener, scriptConfidence, rest) + also;
-      blame = { kind: 'script', name: listenerName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence };
-    } else {
-      // Beside a small render, the time is still the handler's likelier than not, but with no script listed it is
-      // not measured, and the sentence says why. Where React rendered nothing, no effect ran to force a layout.
-      const layoutUntold = unlisted && !!c;
-      const handlerConfidence = layoutUntold ? 'inferred' : confidence;
-      cause = say(handlerConfidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
-      if (layoutUntold) cause += ` ${cap(noScripts)}`;
-      // With no React name, "code outside React" sends nobody anywhere. The browser still says which listener
-      // it ran and from which file, so the sentence passes that on as what the browser recorded. It is not
-      // said to be the 190 ms: the script's time can hold React's render too.
-      if (!handlerName) cause += otherListener ? ` The longest script the browser recorded in that time was ${listenerWithFile(otherListener.script, namesKept)}, ${ms(otherListener.ms)}.` : longestSaid(listener);
-      // A listener names the blame only where it covers most of the time being blamed, and lives nowhere in the
-      // tree, so it goes without the target's component.
-      blame = otherListener
-        ? { kind: 'script', name: listenerName(otherListener.script), detail: null, ms: otherListener.ms, confidence }
-        : { kind: 'handler', name: handlerName ?? (listenerHolds ? scriptName(listener.script) : null), detail: listenerHolds && !handlerName ? null : component, ms: outside, confidence: handlerConfidence };
-    }
+    // Beside a small render, the time is still the handler's likelier than not, but with no script listed it is
+    // not measured, and the sentence says why. Where React rendered nothing, no effect ran to force a layout.
+    const layoutUntold = unlisted && !!c;
+    const handlerConfidence = layoutUntold ? 'inferred' : confidence;
+    cause = say(handlerConfidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
+    if (layoutUntold) cause += ` ${cap(noScripts)}`;
+    // A listener React did not attach (a shortcut bound on the document, a library's own listener) has
+    // no React name, and "code outside React" sends nobody anywhere. The browser still says which
+    // listener it ran and from which file, so the sentence passes that on as what the browser
+    // recorded. It is not said to be the 190 ms: the script's time can hold React's render too.
+    const listener = handlerName ? null : longestPart(whileHandling);
+    const listenerName = listener ? scriptName(listener.script) : null;
+    cause += longestSaid(listener);
+    // It names the blame only where it covers most of the time being blamed.
+    const blamedListener = listener && listener.ms >= WAITED_BEHIND_MIN_SHARE * outside ? listenerName : null;
+    // The component is the target's, which is where a React handler lives. A listener on the document
+    // lives nowhere in the tree, so a name that came from the browser goes without one.
+    blame = { kind: 'handler', name: handlerName ?? blamedListener, detail: blamedListener && !handlerName ? null : component, ms: outside, confidence: handlerConfidence };
   } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
     saidAcross = rc;
     const confidence = measuredFrom(rc);
@@ -2543,14 +2506,9 @@ function explain(r: InteractionReport): Explanation {
           ? `React ${renderedVerb(c)} only ${plural(c.rendered, 'component')}`
           : `React ${renderedVerb(c)} ${renderedWhere(c)}, none of them ${RENDER_MIN_COMPONENTS_BESIDE_HANDLER} times over, and ${ms(r.processing)} is more than ${RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER} ms for each of them`;
     const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';
-    // A listener React did not attach is timed by the browser, so the build's missing durations leave it measured.
-    const scriptConfidence = unsure ? 'inferred' : 'measured';
-    if (otherListener) cause = otherListenerCause(otherListener, scriptConfidence, `${howLittle}${ranEffects}`);
-    else if (countOnly) cause = `${cap(handler)} or React's render of ${leafOf(c)} (${plural(c.rendered, 'component')}) ${HEDGE} took ${untimedTook}, the handler the likelier: ${howLittle}${ranEffects}.${tellApart}`;
+    if (countOnly) cause = `${cap(handler)} or React's render of ${leafOf(c)} (${plural(c.rendered, 'component')}) ${HEDGE} took ${untimedTook}, the handler the likelier: ${howLittle}${ranEffects}.${tellApart}`;
     else cause = `${cap(handler)} ${HEDGE} took ${untimedTook}: ${howLittle}${ranEffects}.${profiling}`;
-    blame = otherListener
-      ? { kind: 'script', name: listenerName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence }
-      : { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
+    blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (waitingWins) {
     // What the input waited behind is usually on record: the long animation frame that was open when
     // it came lists its scripts, and the one that filled the wait is the thing to go and look at. It is

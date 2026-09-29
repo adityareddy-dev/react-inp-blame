@@ -420,15 +420,8 @@ export interface Blame {
    * 'painting' takes the invoker of the script after the handlers that ran for at least half of the
    * screen update ("DIV.onscroll"), or where that script is React's own task (`MessagePort.onmessage`)
    * or React's own listener, and React rendered inside it, the component that render is named after; null
-   * otherwise. A 'script' is named by what ran it ("TimerHandler:setTimeout"), except a listener React did
-   * not attach (a tag manager's, a shortcut bound on the document) that held at least half of the time
-   * outside React's render, handler or not: that takes its function's name where the browser gives one and
-   * the build kept names ("trackClick"), and what ran it in a minified build ("#document.onclick"). It has
-   * to be known not to be React's own listener: by a development build, which keeps React's listener
-   * named, by React's listener beside it, or by listening on the document of a page whose React roots are
-   * elsewhere (see docs/known-limits.md). Where nothing says whose it is (a minified build with the root
-   * on the document), a 'handler' React has no name for takes the invoker of the longest script in the
-   * working time on the same terms as a 'waiting': "#document.onkeydown".
+   * otherwise. A 'handler' React has no name for (a listener bound on the document, say) takes the invoker
+   * of the longest script in the working time on the same terms as a 'waiting': "#document.onkeydown".
    */
   readonly name: string | null;
   /**

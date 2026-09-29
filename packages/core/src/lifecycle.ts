@@ -53,7 +53,7 @@ export interface LifecycleOptions {
   labels(): LabelSource;
   /** Whether React can be seen as the next report is built (`Stats.react`); 'reading' where not given. */
   reactStatus?(): ReactStatus;
-  /** What tells React's own listener from another in the next report's scripts; none where not given. */
+  /** What tells React's own listener in the next report's scripts; none where not given. */
   reactPage?(): ReactPage;
   /** The clock Event Timing and the commits use: `performance.now()`. */
   now(): number;

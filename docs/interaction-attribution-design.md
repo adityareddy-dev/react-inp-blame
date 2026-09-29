@@ -1953,15 +1953,9 @@ count at any working time, as it was.
 
 ### Whose listener it is
 
-Tag managers, analytics and consent tools listen for clicks on the document, and they are among the commonest
-reasons a click is slow in a real app. Until 0.20.0 the browser's scripts were read in the handler branch only
-where the target had no React handler, so a tag manager's `trackClick` that ran for 159 ms of a click whose
-onClick set one state was blamed on the onClick, measured, and the developer opened the one piece of code that
-was fine. The browser's own record in the same report named the function and its file.
-
 React's own listener is known by the script before its invoker. Its file is a react-dom file
 (`deps/react-dom_client.js` under Vite's development server), or its function is `dispatchDiscreteEvent` or
-`dispatchContinuousEvent`, the listeners react-dom attaches. That settles it in a development build. A
+`dispatchContinuousEvent`, the listeners react-dom attaches. That is the only test in a development build. A
 minified production bundle says neither (`_h` in `assets/index.js`), so there a listener on the container of a
 root the hook has seen is React's, the hook reading each root's `containerInfo` as the report is built
 (`reactPage` in hook.ts, passed to `buildReport` and kept beside the report's entries, so nothing is read at
@@ -1971,24 +1965,13 @@ Under the Next.js App Router the root is the document (`hydrateRoot(document)`),
 tag manager's both read `#document.onclick` there, so on that page with minified names nothing tells them
 apart.
 
-A script is known not to be React's where it is not React's own and every react-dom read is a development
-build, whose listener keeps its name, or React's own listener is among the scripts that ran while the input
-was handled, or it listens on the window, or on the document where the hook saw roots and none of them was
-the document. React 17 and later listen on a root's container and a portal's, and nowhere else. React's
-listener is often too short for Long Animation Frames to list it (5 ms), which is why the build and the roots
-count. A portal's container is not recorded, which is why no other listener is ruled out as React's by the
-roots alone. Then, in the handler branch, the longest script in the handlers that holds half the
-time outside React's render and is known not to be React's is the verdict, a `script` blame named by its
-function where the browser gives one and the build kept names (a development build, or React's listener
-beside it under its own name), and by its invoker otherwise: a minifier's `a` from one bundle and `a` from
-another say nothing on a dashboard, and the same listener on an element with no React handler goes by its
-invoker there too. It carries its own milliseconds. The sentence
-names it with its file and what ran it, and gives the rest to React's listener, which ran the handler, with that
-listener's time where it is listed. Where React's listener took the time, or nothing says whose the script is,
-the handler keeps the verdict as before. With no React handler on the target the same listener was a `handler`
-blame named after it, and it is now the same `script` blame, so one cause has one kind; unknown, it stays as
-it was. The same rule names a render inside React's own listener after its component where the screen update
-is the verdict, and times one between the handlers as React's scheduler task is timed.
+The rule names a render inside React's own listener after its component where the screen update is the
+verdict, and times one between the handlers as React's scheduler task is timed. It does not go the other way:
+a listener it does not know as React's is not known to be anyone else's. A page that wraps every listener
+before React creates its root, as Sentry's default integration and New Relic's agent do, hides both marks in
+a development build, and React's root listener then reads as `sentryWrapped` or as no name at all. So a tag
+manager's click listener that took most of a click beside a React handler still leaves the verdict with the
+handler, and the browser's scripts are read in the handler branch only where the target has no React handler.
 
 ## The demo
 

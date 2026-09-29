@@ -2935,17 +2935,10 @@ test('a slow listener React did not attach is named by what the browser recorded
   const shortcut = { ...script('#document.onkeydown', 7475, 116), source: 'editor/shortcuts.ts' };
   const undo = [frame(7467, 270, [shortcut, script('FrameRequestCallback', 7680, 40)])];
   const pressed = [input(7467, 'keydown', { target: element('div', []) as unknown as Node, owners: ['App'] })];
-  // A development build, whose React listener keeps its name, so a listener by another name is not React's.
-  const dev = { roots: ['DIV#root'], named: true };
-  const r = report([entry('keydown', 7467, 312, 7467, 7672)], [commit(7600, 7467, { total: 15, rendered: 161 })], undo, pressed, 'attributes', [], undefined, undefined, dev);
+  const r = report([entry('keydown', 7467, 312, 7467, 7672)], [commit(7600, 7467, { total: 15, rendered: 161 })], undo, pressed);
   assert.match(r.explanation.cause, /^Code outside React \(the key press handler or other scripts\) ran for about 190 ms; /);
   assert.match(r.explanation.cause, / The longest script the browser recorded in that time was #document\.onkeydown \(editor\/shortcuts\.ts\), 116 ms\.$/);
-  // It is a script, the one the sentence names, with the figure the sentence gives it.
-  assert.deepEqual(r.explanation.blame, { kind: 'script', name: '#document.onkeydown', detail: null, ms: 116, confidence: 'measured' });
-  // Where nothing says whose listener it is (a production build, with no root to go by), it is named as before,
-  // as the handler, since React's own listener on a root reads the same.
-  const unknown = report([entry('keydown', 7467, 312, 7467, 7672)], [commit(7600, 7467, { total: 15, rendered: 161 })], undo, pressed);
-  assert.deepEqual(unknown.explanation.blame, { kind: 'handler', name: '#document.onkeydown', detail: null, ms: 190, confidence: 'measured' });
+  assert.deepEqual(r.explanation.blame, { kind: 'handler', name: '#document.onkeydown', detail: null, ms: 190, confidence: 'measured' });
 
   // A handler React does name keeps its name, and the sentence says nothing about the listener it
   // was dispatched from: that one is React's own, on the root.
@@ -2957,75 +2950,8 @@ test('a slow listener React did not attach is named by what the browser recorded
   const minor = [frame(7467, 270, [{ ...shortcut, duration: 60 }])];
   const partly = report([entry('keydown', 7467, 312, 7467, 7672)], [commit(7600, 7467, { total: 15, rendered: 161 })], minor, pressed);
   assert.match(partly.explanation.cause, /#document\.onkeydown \(editor\/shortcuts\.ts\), 60 ms\.$/);
-  assert.equal(partly.explanation.blame.kind, 'handler');
   assert.equal(partly.explanation.blame.name, null);
   assert.equal(partly.explanation.blame.detail, 'App');
-});
-
-// React's own listener and a tag manager's, as a development build records them: a click on "Add to cart" whose
-// onClick sets one state, while a trackClick bound on the document burns 159 ms.
-const reactListener = (invoker: string, start: number, duration: number, name = 'dispatchDiscreteEvent', source = 'deps/react-dom_client.js'): ScriptSummary => ({ invoker, name, source, start, duration, forcedLayout: 0 });
-const trackClick = (invoker = '#document.onclick', start = 1005, duration = 159, name = 'trackClick', source = 'src/AnalyticsPage.tsx'): ScriptSummary => ({ invoker, name, source, start, duration, forcedLayout: 0 });
-const addToCart = (handler: string | null = 'onClick') => [input(1000, 'click', { target: element('button', [text('Add to cart (0)')]) as unknown as Node, owners: ['AnalyticsPage'], handler })];
-const oneSet = commit(1004, 1000, { total: 0.4, rendered: 1, roots: ['AnalyticsPage'], hotPath: ['AnalyticsPage'], components: [{ name: 'AnalyticsPage', count: 1, self: 0.4, total: 0.4 }], startedAt: 1003.5 });
-const clicked = (scripts: ScriptSummary[], page?: { roots: string[]; named: boolean }, handler: string | null = 'onClick') =>
-  report([entry('click', 1000, 168, 1002, 1165)], [oneSet], [frame(1000, 168, scripts)], addToCart(handler), 'attributes', [], undefined, undefined, page);
-
-test("a listener React did not attach that took most of a click is blamed as a script by its function, not as the button's handler", () => {
-  // React's listener is in the frame, named by react-dom, so the document's is not React's.
-  const r = clicked([reactListener('DIV#root.onclick', 1002, 2), trackClick()]);
-  assert.deepEqual(r.explanation.blame, { kind: 'script', name: 'trackClick', detail: null, ms: 159, confidence: 'measured' });
-  assert.equal(
-    r.explanation.cause,
-    "A listener React did not attach ran for about 159 ms: trackClick (src/AnalyticsPage.tsx, run as #document.onclick). React's listener, which ran the onClick handler, took 2 ms; React's own render took under 1 ms.",
-  );
-  // React's listener under the 5 ms Long Animation Frames lists: a development build keeps React's listener named,
-  // so a listener by another name is not React's. The rest is said as the handler's and React's together.
-  const unlisted = clicked([trackClick()], { roots: ['DIV#root'], named: true });
-  assert.deepEqual(unlisted.explanation.blame, { kind: 'script', name: 'trackClick', detail: null, ms: 159, confidence: 'measured' });
-  assert.match(unlisted.explanation.cause, /\. The onClick handler and React's listener took the other \d+ ms; /);
-
-  // Where React's own listener took the time, the handler did, and the verdict is the handler's as before.
-  const handled = clicked([reactListener('DIV#root.onclick', 1002, 150), trackClick('#document.onclick', 1153, 10)]);
-  assert.equal(handled.explanation.blame.kind, 'handler');
-  assert.equal(handled.explanation.blame.name, 'onClick');
-
-  // The root on the document, as the Next.js App Router hydrates it: both listeners read "#document.onclick", and
-  // React's is told by its name and its file.
-  const onDocument = clicked([reactListener('#document.onclick', 1002, 2, 'dispatchDiscreteEvent', '_next/static/chunks/react-dom-client.js'), trackClick()]);
-  assert.deepEqual(onDocument.explanation.blame, { kind: 'script', name: 'trackClick', detail: null, ms: 159, confidence: 'measured' });
-
-  // The same minified into one bundle: nothing tells the two apart, so the handler keeps the verdict.
-  const minified = clicked([reactListener('#document.onclick', 1002, 6, '_h', 'assets/index.js'), trackClick('#document.onclick', 1009, 155, 'a', 'assets/index.js')], { roots: ['#document'], named: false });
-  assert.equal(minified.explanation.blame.kind, 'handler');
-  assert.equal(minified.explanation.blame.name, 'onClick');
-  // Minified with the root on an element of its own: React's listener is the one on the root's container. The
-  // minifier's "a" says nothing, so the listener is named by what ran it.
-  const onRoot = clicked([reactListener('DIV#root.onclick', 1002, 6, '_h', 'assets/index.js'), trackClick('#document.onclick', 1009, 155, 'a', 'assets/index.js')], { roots: ['DIV#root'], named: false });
-  assert.deepEqual(onRoot.explanation.blame, { kind: 'script', name: '#document.onclick', detail: null, ms: 155, confidence: 'measured' });
-  assert.match(onRoot.explanation.cause, /^A listener React did not attach ran for about 155 ms: #document\.onclick \(assets\/index\.js\)\. /);
-  // With React's listener under the 5 ms the browser lists, a listener on the document is still not React's, since
-  // React listens on the document only where a root is on it.
-  const unlistedOnRoot = clicked([trackClick('#document.onclick', 1005, 159, 'a', 'assets/index.js')], { roots: ['DIV#root'], named: false });
-  assert.deepEqual(unlistedOnRoot.explanation.blame, { kind: 'script', name: '#document.onclick', detail: null, ms: 159, confidence: 'measured' });
-  // The render untimed, as a production build leaves it, where the count alone would have put it on the handler.
-  const counted = commit(1004, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['AnalyticsPage'], hotPath: ['AnalyticsPage'], components: [{ name: 'AnalyticsPage', count: 1, self: null, total: null }] });
-  const untimed = report([entry('click', 1000, 160, 1001, 1152)], [counted], [frame(1000, 160, [trackClick('#document.onclick', 1002, 150, 'a', 'assets/index.js')])], addToCart(), 'attributes', [], undefined, undefined, { roots: ['DIV#root'], named: false });
-  assert.deepEqual(untimed.explanation.blame, { kind: 'script', name: '#document.onclick', detail: null, ms: 150, confidence: 'measured' });
-  assert.match(untimed.explanation.cause, /^A listener React did not attach ran for about 150 ms: #document\.onclick \(assets\/index\.js\)\. The onClick handler and React's listener took the other \d+ ms; React re-rendered only 1 component\.$/);
-  // The same listener on an element with no React handler goes by the same name.
-  const untimedUnhandled = report([entry('click', 1000, 160, 1001, 1152)], [counted], [frame(1000, 160, [trackClick('#document.onclick', 1002, 150, 'a', 'assets/index.js')])], addToCart(null), 'attributes', [], undefined, undefined, { roots: ['DIV#root'], named: false });
-  assert.equal(untimedUnhandled.explanation.blame.name, '#document.onclick');
-  // A development build keeps the listener's name, as React's listener beside it keeps its own.
-  assert.equal(clicked([trackClick('#document.onclick', 1005, 159)], { roots: ['DIV#root'], named: true }).explanation.blame.name, 'trackClick');
-  // A minified listener on an element that is no root's container is unknown, with no listener of React's listed.
-  const elsewhere = clicked([trackClick('DIV#menu.onclick', 1005, 159, 'a', 'assets/index.js')], { roots: ['DIV#root'], named: false });
-  assert.equal(elsewhere.explanation.blame.kind, 'handler');
-
-  // With no React handler on the button the listener is a script too, named by its function.
-  const unhandled = clicked([reactListener('DIV#root.onclick', 1002, 2), trackClick()], undefined, null);
-  assert.deepEqual(unhandled.explanation.blame, { kind: 'script', name: 'trackClick', detail: null, ms: 159, confidence: 'measured' });
-  assert.match(unhandled.explanation.cause, / The longest script the browser recorded in that time was trackClick \(src\/AnalyticsPage\.tsx, run as #document\.onclick\), 159 ms\.$/);
 });
 
 test("React's own listener rendering a key's input between its handlers hands its time to that render, known by the root it listens on", () => {
