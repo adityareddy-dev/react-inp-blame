@@ -299,10 +299,13 @@ test('the panel fits the phone screen, with its close button and the first row i
     return box;
   };
   await inside('the panel', '#react-inp-blame .panel');
-  const close = await inside('the close button', '#react-inp-blame .panel .x');
-  // A finger needs about 40 px; the button was 24 px across before phones got a larger one, and so do the rows.
-  expect(close.width).toBeGreaterThanOrEqual(40);
-  expect(close.height).toBeGreaterThanOrEqual(40);
+  // A finger needs about 44 px. The close button was 24 px across before phones got a larger one, and so do
+  // the rows. Clear was 24 by 15 up to 0.18.0.
+  for (const [what, selector] of [['the close button', '.x'], ['Clear', '.clear']]) {
+    const box = await inside(what, `#react-inp-blame .panel ${selector}`);
+    expect(box.width, `${what} is wide enough for a finger`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `${what} is tall enough for a finger`).toBeGreaterThanOrEqual(44);
+  }
   expect(await page.locator('#react-inp-blame .panel .row').first().evaluate((row) => getComputedStyle(row).paddingTop)).toBe('14px');
   await inside("the first row's milliseconds", '#react-inp-blame .panel .row .ms');
   await page.locator('#react-inp-blame .panel .x').tap();

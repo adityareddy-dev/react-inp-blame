@@ -1632,7 +1632,9 @@ comes from `explanation.blame`, a data twin of the cause sentence decided in the
 branch, so the short and the long form never disagree. Since 2026-09-28 it wraps: cut to one
 line with an ellipsis, in a panel 372 px wide, it lost the very name it is there to give,
 "browser recalculated styles and layout · 315 ms in LayoutT…" on a phone, and opening the row
-did not bring it back. Page INP, on the badge, in the panel
+did not bring it back. On a touch screen, or one 480 px wide or less, the close button and Clear
+are at least 44 px each way, which a finger needs. Clear was 24 by 15 up to 0.18.0, the close
+button 40 by 40. Page INP, on the badge, in the panel
 head and from `api.inp()`, is the web-vitals estimate computed in-library, with no web-vitals
 dependency: the interaction count is `performance.interactionCount` where the browser has
 it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
