@@ -39,10 +39,12 @@ const SEPARATOR = ' > ';
 /**
  * A web-vitals INP metric, in the fields this entry reads. `INPMetric` and
  * `INPMetricWithAttribution` both satisfy it, and so does the metric Next.js's `useReportWebVitals`
- * hands over, which comes from the build without attribution.
+ * hands over, which comes from the build without attribution. So does web-vitals' plain `Metric`,
+ * whose entries are typed as `PerformanceEntry`, which is what Honeycomb's INP hook hands over: each
+ * entry's `interactionId` is read where it is a number, the one field of `InpMetricEntry`.
  */
 export interface InpMetric<Attribution extends object = Record<string, never>> {
-  readonly entries: readonly InpMetricEntry[];
+  readonly entries: readonly object[];
   /** What web-vitals' attribution build adds; absent everywhere else. */
   readonly attribution?: Attribution;
 }
@@ -198,11 +200,14 @@ export function attributeINP<Attribution extends object>(metric: InpMetric<Attri
  * sides read the same Event Timing entries, so the numbers are identical rather than close. Newest
  * first, because an id is reused only after a reload.
  */
-function reportFor(entries: readonly InpMetricEntry[]): InteractionReport | null {
+function reportFor(entries: readonly object[]): InteractionReport | null {
   const api = page.installed?.api;
   if (!api) return null;
   const ids = new Set<number>();
-  for (const e of entries) if (e?.interactionId) ids.add(e.interactionId);
+  for (const e of entries) {
+    const id = (e as { interactionId?: unknown } | null)?.interactionId;
+    if (typeof id === 'number' && id > 0) ids.add(id);
+  }
   if (!ids.size) return null;
   const reports = api.reports();
   for (let i = reports.length - 1; i >= 0; i--) {
