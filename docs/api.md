@@ -39,7 +39,8 @@ goes, but never one of the ten slowest or one INP can still point at), `last()`,
 (`{ value, rating, interactionId, interactionCount, report }` for this navigation, or null, with clicks,
 taps and key presses on [the badge and panel](#the-badge-and-panel) left out of it and of its count,
 though Chrome's own INP and web-vitals count them), `onInteraction(fn)`, `clear()` (drops reports and
-commits, and starts the INP estimate over), `dispose()` and `stats()`: `mode` (`'shim'`, `'chained'`,
+commits, and starts the INP estimate over, though in WebKit a key press on the panel's Clear stays in the new
+count, since WebKit counts it at the keyup, after the clear), `dispose()` and `stats()`: `mode` (`'shim'`, `'chained'`,
 `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `react` (`'reading'`, `'waiting'`
 while React has not rendered on the page, `'installed-late'` when it has and no react-dom registered
 because install() ran after react-dom loaded, or `'unreadable'`), `walks`, and the

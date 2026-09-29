@@ -1920,7 +1920,8 @@ takes it off the count once, where the count holds it: it moves up the base the 
 from, as a reset does. `performance.interactionCount` takes a tap at its release, before any
 entry of it comes, so a tap that began before the last reset is in that base already. The
 panel's Clear tap is one, since its click handler clears after the browser counted it. Taken off
-again when its entries came, it made one real tap after Clear read "0 interactions". The id
+again when its entries came, it made one real tap after Clear read "0 interactions". In WebKit a
+key press on Clear stays in the count, since WebKit counts it at the keyup, after the clear. The id
 spacing holds a tap once an `event` entry of it widens the spacing, so one that sent only its
 `first-input` entry, the panel closed quickly as the page's first tap, does not come off a count
 that never held it. A tap there too quick to send an entry, under 16 ms, stays in the count,
