@@ -1774,21 +1774,25 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
 
 - Each report is one entry in an "Interaction blame" track (not "Interactions", which is
   Chrome's own track), from the input to the paint, in `warning` like React's event spans, with
-  the verdict as its tooltip and the phases as properties. It is a `performance.measure` with a
-  `devtools` detail, because `console.timeStamp` carries no tooltip: a seventh argument reaches
-  the trace as an empty field in Chromium 147. Its count of renders before the paint is the one
-  the verdict's "React rendered 3 times" makes, which `join.ts` works out once for both, and it
-  says what that leaves out and why ("2, a hydration, and 3 too small to count"): on the
-  shadcn/ui Sheet the tooltip said 3 and the Summary 6, for the six commits the renders track
-  drew. A render whose committing or effects were worth saying, or the one a render blame names,
-  or a layout blame's subtree is, is never too small to count, or a 3 ms render whose useEffect ran for 300 ms was blamed in the
-  tooltip and too small in the Summary. Its handlers and React rendering row is the working time,
-  with this library's own read taken out and on a row of its own, and the row says what the
-  layout sentence's window counts differently: the time between one event's handlers and the
-  next's, which the window leaves out, and the read, which it holds, from half a millisecond,
-  where it rounds to 1 ms ("146 ms, 30 ms of it between the keydown's handlers and the
-  keyup's, not counting react-inp-blame itself"). Without the words, the tooltip's "of the 118 ms
-  it took to handle the key press" and the Summary read as two figures for the same time.
+  the verdict as its tooltip and the phases as properties. It is named after the component the
+  heaviest commit's render went to, or since 0.20.0 after the component a layout blame is named
+  after where that is where the same commit's render started: the shadcn/ui Sheet's close read
+  "160 ms click · DismissableLayer" beside a tooltip that blamed Dialog. It is a
+  `performance.measure` with a `devtools` detail, because `console.timeStamp` carries no
+  tooltip: a seventh argument reaches the trace as an empty field in Chromium 147. Its count of
+  renders before the paint is the one the verdict's "React rendered 3 times" makes, which
+  `join.ts` works out once for both, and it says what that leaves out and why ("2, a hydration,
+  and 3 too small to count"): on the shadcn/ui Sheet the tooltip said 3 and the Summary 6, for
+  the six commits the renders track drew. A render whose committing or effects were worth
+  saying, or the one a render blame names, or a layout blame's subtree is, is never too small to
+  count, or a 3 ms render whose useEffect ran for 300 ms was blamed in the tooltip and too small
+  in the Summary. Its handlers and React rendering row is the working time, with this library's
+  own read taken out and on a row of its own, and the row says what the layout sentence's window
+  counts differently: the time between one event's handlers and the next's, which the window
+  leaves out, and the read, which it holds, from half a millisecond, where it rounds to 1 ms
+  ("146 ms, 30 ms of it between the keydown's handlers and the keyup's, not counting
+  react-inp-blame itself"). Without the words, the tooltip's "of the 118 ms it took to handle
+  the key press" and the Summary read as two figures for the same time.
 - Each commit joined to the report gets an entry in a "React renders" track, but only where
   React draws none itself. Development builds of React 19.2 and later draw every component in
   Components ⚛, and there the interaction's tooltip points to it instead; production and

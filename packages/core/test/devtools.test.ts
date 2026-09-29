@@ -254,6 +254,23 @@ test('the interaction entry is named after the heaviest render before the paint,
   assert.equal(r.explanation.blame.name, 'OrderSummary');
 });
 
+test("the interaction entry takes the start a layout blame is named after, where that start is the heaviest render's", () => {
+  // Closing a Sheet on the shadcn/ui docs, production build: 56 components from Dialog down, 15 of them inside
+  // DismissableLayer, and 87 ms of layout forced in BODY.onclick. The tooltip blamed Dialog and the entry read DismissableLayer.
+  const close = { ...click, duration: 160, processingStart: 3.2, processingEnd: 105 };
+  const hotPath = ['Dialog', 'DialogProvider', 'SheetContent', 'Presence', 'Portal', 'DialogContent', 'FocusScope', 'DismissableLayer'];
+  const sheet = commit(60, { rendered: 56, mounted: 0, roots: ['Dialog'], hotPath, startRendered: 56, pathRendered: 15, components: [{ name: 'Presence', count: 4, self: null, total: null }] });
+  const frames = [{ start: 0, duration: 160, blocking: 110, forcedLayout: 87, scripts: [{ invoker: 'BODY.onclick', name: '', source: 'app.js', start: 3.2, duration: 101.8, forcedLayout: 87 }], styleAndLayoutStart: null }];
+  const label = (r: ReturnType<typeof report>) => recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn[0]?.label;
+  const layout = sealReport(buildReport([close], [sheet], frames));
+  assert.deepEqual([layout.explanation.blame.kind, layout.explanation.blame.name], ['layout', 'Dialog']);
+  assert.equal(label(layout), '160 ms click · Dialog');
+  // A render blame on the same commit is named after where the render went, and so is the entry.
+  const render = sealReport(buildReport([close], [sheet], null));
+  assert.deepEqual([render.explanation.blame.kind, render.explanation.blame.name], ['render', 'DismissableLayer']);
+  assert.equal(label(render), '160 ms click · DismissableLayer');
+});
+
 test("the interaction's count of renders before the paint is the tooltip's, and says how many were too small to count", () => {
   // Shaped like opening the shadcn/ui Sheet: six commits before the paint, three with work in them, and an empty
   // one and two small ones beside them. The tooltip said React rendered 3 times and the Summary said 6.
