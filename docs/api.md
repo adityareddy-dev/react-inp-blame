@@ -123,7 +123,10 @@ overlapped, a walk cut short, or no Long Animation Frames to rule other scripts 
 with "the frame waited on the next key press" is still the screen update's own time, measured. That clause
 rests on the next press's timings instead (`nextInput`), so it is only said where the page worked on that
 press before the paint for half the screen update or more, and it says "most likely" unless a long animation
-frame over this interaction recorded a script from the press on that shows it, the way a wait's is named.
+frame over this interaction recorded a script that shows it, from that press's own listener on (`onkeydown`,
+`onpointerdown`, or one for an event the press dispatches), the way a wait's is named. With none of that
+press's listeners recorded, a script that started after both that press and this interaction's handlers counts
+where the screen update was over 100 ms, and under that only the press's render says it, hedged.
 
 ## Labels and personal data
 
