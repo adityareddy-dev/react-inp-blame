@@ -498,8 +498,11 @@ const INPUT_HANDLERS = ['onClick', 'onDoubleClick', 'onPointerDown', 'onPointerU
  */
 export function namingFiber(node: Node | null): Fiber | null {
   const icon = node && iconAround(node);
-  const start = icon && fiberFromNode(icon);
-  if (!start) return fiberFromNode(node);
+  const cached = icon && fiberFromNode(icon);
+  if (!cached) return fiberFromNode(node);
+  // React 19 caches on an element the fiber it made it with, which on every other render holds the render before,
+  // and the handler from then: the climb reads the one on the screen.
+  const start = onScreen(cached);
   let f = start;
   // An icon with no fiber is read from the element around it. Where React set that element's markup through
   // dangerouslySetInnerHTML and its tag is not a control's, the element is the icon, as the `<svg>` an icon
@@ -512,7 +515,7 @@ export function namingFiber(node: Node | null): Fiber | null {
   // screen, not the one cached on it.
   const handled =
     handlesInput(start) &&
-    (fiberOn(icon) === start || isMarkupIcon(start) || !isControlHost(start) || (rendersNothing(onScreen(start)) && (start.type === 'i' || start.type === 'span' || roleHandedDown(start))));
+    (fiberOn(icon) === cached || isMarkupIcon(start) || !isControlHost(start) || (rendersNothing(start) && (start.type === 'i' || start.type === 'span' || roleHandedDown(start))));
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {

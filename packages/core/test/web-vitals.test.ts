@@ -280,6 +280,47 @@ test('an icon a script drew is placed by what React renders in the element now, 
   }
 });
 
+test("an icon a handler was handed down to is climbed from its fiber on the screen, not the one cached on it", () => {
+  // `<Trash2 onClick={() => remove(id)} />` beside a label in RemoveRow, where lucide's Trash2 and Icon hand the
+  // onClick to the svg. React 19 caches on the svg the fiber it was made with, and on every other render that one
+  // holds the render before, with the handler from then: the climb stopped at Trash2, since the Icon above it,
+  // on the screen, was handed the new one.
+  const hostFiber = (tag: string, props: Record<string, unknown> = {}): Record<string, unknown> => ({ tag: 5, elementType: tag, type: tag, memoizedProps: props, child: null, sibling: null, alternate: null });
+  const link = (parent: Record<string, unknown>, ...kids: Record<string, unknown>[]) => {
+    parent.child = kids[0] ?? null;
+    kids.forEach((kid, i) => Object.assign(kid, { return: parent, sibling: kids[i + 1] ?? null }));
+    return parent;
+  };
+  const tree = () => {
+    const onClick = () => {};
+    const path = hostFiber('path');
+    const svg = link(hostFiber('svg', { className: 'lucide', onClick }), path);
+    const icon = link(Object.assign(component('Icon'), { memoizedProps: { onClick } }), svg);
+    const trash = link(Object.assign(component('Trash2'), { memoizedProps: { onClick } }), icon);
+    const span = link(hostFiber('span'), trash, hostFiber('span'));
+    const removeRow = link(Object.assign(component('RemoveRow'), { memoizedProps: {} }), span);
+    const rows = link(component('Rows'), removeRow);
+    const root = link({ tag: 3, memoizedProps: null, child: null, sibling: null }, rows);
+    return { root, rows, removeRow, span, trash, icon, svg, path };
+  };
+  const now = tree();
+  const before = tree();
+  for (const key of Object.keys(now) as (keyof typeof now)[]) {
+    now[key].alternate = before[key];
+    before[key].alternate = now[key];
+  }
+  now.root.stateNode = before.root.stateNode = { current: now.root };
+  // The svg from the render before points at the Icon on the screen, as React left it.
+  before.svg.return = now.icon;
+  const svg = element('svg', { classes: ['lucide'], fiber: before.svg });
+  const path = element('path', { fiber: before.path, parentNode: svg });
+  assert.equal(generateTarget(asNode(path)), 'Rows > RemoveRow (path)');
+  // With the fiber on the screen cached, as on the first render, the same.
+  svg[FIBER_KEY] = now.svg;
+  path[FIBER_KEY] = now.path;
+  assert.equal(generateTarget(asNode(path)), 'Rows > RemoveRow (path)');
+});
+
 test("an svg an app's Icon sets through dangerouslySetInnerHTML is placed as one it renders, whoever gave the element its role", () => {
   // `<Icon svg={trash} onClick={remove} />` beside a label in RemoveRow, where Icon renders
   // `<span role={onClick ? 'button' : 'img'} onClick={onClick} dangerouslySetInnerHTML={{ __html: svg }} />`. The
