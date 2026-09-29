@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { heaviest, mostlyComponent } from '../src/commits.ts';
 import type { InputRecord } from '../src/hook.ts';
-import { attachLaterRender, blamedCommit, buildReport, carriesWork, isLaterRender, refreshReport, renderedVerb, sealReport, type LabelSource } from '../src/join.ts';
+import { attachLaterRender, blamedCommit, buildReport, carriesWork, isLaterRender, refreshReport, renderedVerb, sealReport, verdictCounts, type LabelSource } from '../src/join.ts';
 import type { PageNavigation } from '../src/navigation.ts';
 import type { CommitSummary, FrameSummary, InteractionReport, ScriptSummary } from '../src/types.ts';
 
@@ -3317,6 +3317,21 @@ test("the render a layout blame names counts as one of the renders before the sc
   const r = report([entry('click', 0, 300, 2, 280)], [popover, rows], frames, [input(0, 'click')]);
   assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'Popover']);
   assert.ok(r.explanation.notes.includes('React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.'), r.verdict);
+});
+
+test("a layout blame's small render is counted beside a render said inside the timer after the handlers, which is not counted again", () => {
+  // Popover's 4 components inside the listener that forced the layout, and 20 rows a timer rendered after the
+  // handlers. The layout's render counts, as a render blame's does. The timer's is said inside the timer, and so
+  // neither the note nor the Summary counts it as a second render.
+  const popover = commit(60, 0, { hasDurations: false, total: 0, rendered: 4, roots: ['Popover'], hotPath: ['Popover'], components: [{ name: 'PopoverContent', count: 4, self: null, total: null }] });
+  const rows = commit(310, 0, { hasDurations: false, total: 0, rendered: 20, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 20, self: null, total: null }] });
+  const frames = [frame(0, 360, [script('DIV#root.onclick', 2, 150, 160), script('TimerHandler:setTimeout', 300, 40)], 350)];
+  const r = report([entry('click', 0, 360, 2, 280)], [popover, rows], frames, [input(0, 'click')]);
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'Popover']);
+  assert.deepEqual(r.explanation.notes, [
+    'After the handler finished, the screen took another 80 ms to update, mostly because a script (TimerHandler:setTimeout, app.js) ran for 40 ms before the next frame, and React rendered inside it: re-rendering 20 components inside List, mostly Row (20 of them).',
+  ]);
+  assert.deepEqual([verdictCounts(r).renders, verdictCounts(r).forced, verdictCounts(r).small], [1, 1, 0]);
 });
 
 test('a press before hydration and a click after it is not a click on HTML React never hydrated', () => {
