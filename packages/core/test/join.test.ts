@@ -1218,6 +1218,27 @@ test("where the working time was longer, the screen update's note says the frame
         `After the handler finished, the screen took another 92 ms to update: the frame waited on the next click, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), 56 ms.`,
       ], `${invoker}, ${entries.length} entries`);
     }
+    // Nor does a pointer whose release or click this frame handled last, with its pointerup's click too quick for an
+    // entry or with one. The next click's press is still to come, and it is only that press that makes these its own.
+    const releasedAt = (next: InputRecord[]) => [input(1000, 'pointerdown', { pointerType: 'mouse' }), input(1010, 'pointerup', { gestureTs: 1000, pointerType: 'mouse' }), ...next];
+    const released = (next: InputRecord[]) =>
+      unreleased(invoker, [entry('pointerdown', 1000, 24, 1001, 1002), entry('pointerup', 1010, 262, 1011, 1180)], pointers, [{ ...three, inputType: 'pointerdown' }], releasedAt(next));
+    const clicked = unreleased(
+      invoker,
+      [entry('pointerdown', 1000, 272, 1001, 1002), entry('pointerup', 1000, 272, 1002, 1003), entry('click', 1000, 272, 1003, 1180)],
+      keys.map((s) => ({ ...s, invoker: 'DIV#root.onclick' })),
+      [{ ...three, inputType: 'click' }],
+      [input(1000, 'pointerdown', { pointerType: 'mouse' }), input(1000, 'pointerup', { gestureTs: 1000, pointerType: 'mouse' }), input(1000, 'click', { gestureTs: 1000, pointerType: 'mouse' }), mouse],
+    );
+    for (const [last, pointer] of [['pointerup', released([mouse])], ['click', clicked]] as const) {
+      assert.deepEqual([pointer.blame, pointer.cause], [held.blame, held.cause], `${invoker}, ${last}`);
+      assert.deepEqual(pointer.notes, [
+        `After the handler finished, the screen took another 92 ms to update: the frame waited on the next click, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), 56 ms.`,
+      ], `${invoker}, ${last}`);
+    }
+    // A next click pressed before this one and let go during it has only its release in the window.
+    const earlier = released([input(950, 'pointerdown', { pointerType: 'mouse' }), input(1150, 'pointerup', { gestureTs: 950, pointerType: 'mouse' }), input(1150, 'click', { gestureTs: 950, pointerType: 'mouse' })]);
+    assert.deepEqual(earlier.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, invoker);
     const pointer = (nexts: InputRecord[]) =>
       unreleased(invoker, [entry('pointerdown', 1000, 272, 1001, 1180)], pointers, [{ ...three, inputType: 'pointerdown' }], [input(1000, 'pointerdown', { pointerType: 'mouse' }), ...nexts]);
     const own = pointer([]);
