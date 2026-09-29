@@ -710,7 +710,8 @@ export function titleFor(r: InteractionReport): string {
   if (isTyping(r)) return label ? `Typing in ${label}` : 'Typing';
   if (isTypingEvent(r.type)) return label ? `Key press on ${label}` : 'Key press';
   if (isPointerEvent(r.type)) {
-    const kind = kindOf(r.type, r.pointerType) === 'tap' ? 'Tap' : 'Click';
+    // Only where the pointer is known: a press the library did not see may have been a mouse's.
+    const kind = r.pointerType === 'touch' || r.pointerType === 'pen' ? 'Tap' : 'Click';
     return label ? `${kind} on ${label}` : kind;
   }
   return `${kindOf(r.type)} ${label}`.trim();
