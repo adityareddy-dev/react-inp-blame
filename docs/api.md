@@ -31,7 +31,7 @@ their first value, with a warning, until `dispose()`.
 | `sampleRate` | `1` | Share of page loads that install anything; in a production build, also of the pages that [warn about a browser without Event Timing](troubleshooting.md#unsupported-browser) |
 | `walkBudget` | `5000` | Component fibers React rendered or passed through, per commit; one it only cloned and skipped does not count. A commit past it is reported as partial: its counts say "at least", and in a production build, which has only counts to go on, the blame names the one subtree the walk was in where nothing it did not reach rendered beside it, and otherwise the component the subtrees all sit under, or the app where they sit under none, rather than the subtree the walk reached first |
 | `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside an input's own dispatch are always walked. It also bounds `followUps`, whose window runs from the paint as a rule |
-| `devtoolsTrack` | `'auto'` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track. `'auto'` draws it only under a development build of React, since any script on the page can read each entry, verdict and label included, through a `PerformanceObserver`; `true` draws it under production and profiling builds too |
+| `devtoolsTrack` | `'auto'` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track. `'auto'` draws it only under a development build of React, since any script on the page can read each entry, verdict and label included, through a `PerformanceObserver`; `true` draws it under production and profiling builds too. The entries' names, tooltips and properties are display text |
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
 
 The API has `reports()` (up to 50 published, oldest first, at their latest revision; past 50 the oldest
@@ -161,30 +161,31 @@ where the screen update was over 100 ms, and under that only the press's render 
 ## Labels and personal data
 
 `target.label` names the element by its tag and a name of at most 40 characters, and never reads a form
-field's value or an element's whole text. It is read as the input is dispatched, before your handlers run,
-so a click on a button reading "Count is 0" is labelled that, not with the "Count is 1" it then shows. A click that lands inside a control is labelled by that control,
-tag and name included: the first of the element and its five nearest ancestors that is a `button`, a link,
-`summary`, `label`, `input`, `select` or `textarea`, or has the ARIA role `button`, `link`, `menuitem`,
-`menuitemcheckbox`, `menuitemradio`, `tab`, `option`, `checkbox`, `radio` or `switch`. A click on the `path`
-of an icon button reads `button "Close"`, not `path`, and `target.selector` stays the element the browser
-reported. Under a production build of React the label uses only what your code wrote on the element:
-`aria-label`, a form field's `placeholder`, `aria-placeholder` or `name`, an input's `type`, or `data-testid`
-or `data-test`. An element's text can be a person's name or email, and reports are made to be forwarded to
-error trackers and analytics, so text is opt-in there: with `install({ labels: 'text' })` a form field with
-no `aria-label` is named by the text of its `<label>` before the attributes above, and any other element with
-no `aria-label` by its first run of text. An element inside a `contenteditable` editor, or inside one with
-the role `textbox`, `searchbox`, `combobox` or `spinbutton`, counts as a form field, and so does an element
-an `EditContext` is attached to, or one up to five elements inside it. The search for that first run of text
-never goes into any of them, or into a `textarea` or a `select`'s options. An
-editor that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco does,
-cannot be told from the rest of the page, so a click on that text can be named by it. Development builds use
-text by default. Whatever `labels` says, `target.selector` has the tag, the `id` if there is one, and
-`data-test` or `data-testid` or else two classes, and `navigationURL` and `startedNavigation.url` are full
-URLs, query string included. A script the browser names by its URL, or by the page's for an inline script,
-loses any password, query or fragment in a blame's `name`, the sentences and `frames`. What your code wrote
-goes out as written, though: an `aria-label`, `data-testid` or `id` built from user data, such as
-`` aria-label={`Message ${user.name}`} ``, lands in `target.label` or `target.selector`, and the label in the
-verdict.
+field's value or an element's whole text. It is read as the input is dispatched, before your handlers run, so
+a click on a button reading "Count is 0" is labelled that, not with the "Count is 1" it then shows. A click
+that lands inside a control is labelled by that control, tag and name included: the first of the element and
+its five nearest ancestors that is a `button`, a link, `summary`, `label`, `input`, `select` or `textarea`, or
+has the ARIA role `button`, `link`, `menuitem`, `menuitemcheckbox`, `menuitemradio`, `tab`, `option`,
+`checkbox`, `radio` or `switch`. A click on the `path` of an icon button reads `button "Close"`, not `path`,
+and `target.selector` stays the element the browser reported. Under a production build of React the label uses
+only what your code wrote on the element: `aria-label`, a form field's `placeholder`, `aria-placeholder` or
+`name`, an input's `type`, or `data-testid` or `data-test`. An element's text can be a person's name or email,
+and reports are made to be forwarded to error trackers and analytics, so text is opt-in there: with
+`install({ labels: 'text' })` a form field with no `aria-label` is named by the text of its `<label>` before
+the attributes above, and any other element with no `aria-label` by its first run of text. An element inside a
+`contenteditable` editor, or inside one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`,
+counts as a form field, and so does an element an `EditContext` is attached to, or one up to five elements
+inside it. The search for that first run of text never goes into any of them, or into a `textarea` or a
+`select`'s options. An editor that draws its text in ordinary elements and takes key presses in a hidden one,
+as Monaco does, cannot be told from the rest of the page, so a click on that text can be named by it.
+Development builds use text by default. What each `labels` value may read is fixed for 1.x, though the words a
+label comes out with, and which source wins, can change in a minor. Whatever `labels` says, `target.selector`
+has the tag, the `id` if there is one, and `data-test` or `data-testid` or else two classes, and
+`navigationURL` and `startedNavigation.url` are full URLs, query string included. A script the browser names
+by its URL, or by the page's for an inline script, loses any password, query or fragment in a blame's `name`,
+the sentences and `frames`. What your code wrote goes out as written, though: an `aria-label`, `data-testid`
+or `id` built from user data, such as `` aria-label={`Message ${user.name}`} ``, lands in `target.label` or
+`target.selector`, and the label in the verdict.
 
 ## The badge and panel
 

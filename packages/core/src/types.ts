@@ -239,7 +239,10 @@ export interface UnsupportedReason {
   message: string;
 }
 
-/** The DevTools hook as this library found and uses it. */
+/**
+ * The DevTools hook as this library found and uses it. For debugging, like `Api.debug`: not part of the
+ * report contract, and its shape may change in any version.
+ */
 export interface HookInfo {
   /**
    * Who owns the hook: this library, or the keys of the hook it chained onto. Where the page turned that hook off
@@ -295,6 +298,10 @@ export interface Api {
   dispose(): void;
 }
 
+/**
+ * What `Api.debug` holds. For debugging: not part of the report contract, and its shape may change in
+ * any version.
+ */
 export interface DebugApi {
   /**
    * The last 300 commits walked, in or out of an interaction window, oldest first. They carry no
@@ -565,18 +572,18 @@ export interface InteractionReport {
   /**
    * The build of react-dom the page renders with. A development build is slower than the others, and StrictMode
    * renders twice there, so its numbers run higher than production's: this is what to drop or label reports by
-   * before they are forwarded. 'development' where a react-dom on the page says so to the DevTools hook, as the
-   * badge's mark does, whichever registered first. A production and a profiling build say the same there, and
-   * only a profiling build puts its roots in React's ProfileMode, so those two are told apart by the page's
-   * first commit. Null where react-dom did not say, where no react-dom registered, and for a production or
-   * profiling build before the page's first commit.
+   * before they are forwarded. 'development' where any react-dom on the page says so to the DevTools hook, as
+   * the badge's mark does, in whatever order they registered. A production and a profiling build say the same
+   * there, and only a profiling build puts its roots in React's ProfileMode, so those two are told apart by the
+   * page's first commit. Null where react-dom did not say, where no react-dom registered, and for a production
+   * or profiling build before the page's first commit.
    */
   readonly reactBuild: 'development' | 'production' | 'profiling' | null;
   /**
    * Whether a component React rendered for this interaction was under `<StrictMode>`, which renders each
-   * component under it twice in a development build. It says nothing of how much of the render time that
-   * was. Null unless `reactBuild` is 'development' and the report holds a commit, since no other build
-   * renders twice.
+   * component twice in a development build, so its render times run higher than the same code's outside
+   * StrictMode. Null unless `reactBuild` is 'development' and the report holds a commit, since no other
+   * build renders twice.
    */
   readonly strictMode: boolean | null;
   /**
@@ -677,7 +684,10 @@ export interface InteractionReport {
 }
 
 export interface OverlayOptions {
-  /** Which corner the badge sits in. Default 'bottom-right'. */
+  /**
+   * Which corner the badge sits in. Without it the badge starts bottom right and moves to the next free corner
+   * when the page's own fixed or sticky element holds that one.
+   */
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
   /** Start with the panel open. Default false. */
   open?: boolean;
@@ -687,10 +697,11 @@ export interface OverlayOptions {
 
 export interface InstallOptions {
   /**
-   * Show the on-page badge and panel. `true` always; `'query'` only when the URL carries
-   * `?inp-blame` / `#inp-blame` or localStorage has `react-inp-blame=overlay`, which is how you
-   * open it on a production page without shipping UI to users. Their code is loaded with a
-   * dynamic import after install() returns. Default false.
+   * Show the on-page badge and panel. `true` or an options object shows them, unless someone pressed
+   * Hide for me in this browser, which `?inp-blame` or `#inp-blame` in the URL clears. `'query'` shows
+   * them only when the URL carries `?inp-blame` / `#inp-blame` or localStorage has
+   * `react-inp-blame=overlay`, which is how you open it on a production page without shipping UI to
+   * users. Their code is loaded with a dynamic import after install() returns. Default false.
    */
   overlay?: boolean | 'query' | OverlayOptions;
   /** Report interactions at or above this duration (ms), plus shorter ones that trigger a later render INP does not count. Default 40. */
@@ -728,10 +739,10 @@ export interface InstallOptions {
    *
    * `'attributes'`: only what the page's code wrote on the element: its `aria-label`, a form field's
    * `placeholder`, `aria-placeholder` or `name`, an input's `type`, or its `data-testid` or `data-test`.
-   * `'text'`: the same, except that an element with no `aria-label` that is not a form field is
-   * named by its first run of text, the way a person would name it. That text can be what the page
-   * shows about a person (a name in a table cell), and it travels with every report you forward to
-   * an error tracker or analytics.
+   * `'text'`: the same, except that a form field with no `aria-label` is named by its `<label>` first,
+   * and any other element with no `aria-label` by its first run of text, the way a person would name
+   * it. That text can be what the page shows about a person (a name in a table cell), and it travels
+   * with every report you forward to an error tracker or analytics.
    * `'auto'`: text under a development build of React, attributes under any other.
    *
    * Default 'auto'.
