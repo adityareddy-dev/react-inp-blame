@@ -1,4 +1,4 @@
-import { heaviest, leafName } from './commits.js';
+import { dominantComponent, heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { unexplainedReports } from './install-state.js';
 import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
@@ -540,8 +540,29 @@ export function blameLine(r: InteractionReport): Child[] {
   // "mounted" where the commit the blame names was mostly components rendering for the first time, as the
   // cause says of it: not always the heaviest commit, where one's committing and effects outweighed it.
   const named = blame.kind === 'render' ? blamedCommit(r) : null;
-  const line = blameText(blame, named ? renderedVerb(named) : 're-rendered');
+  const line = named && blame.name && !mayHaveRendered(named, blame.name) ? startedLine(blame, named) : blameText(blame, named ? renderedVerb(named) : 're-rendered');
   return blame.confidence === 'inferred' && blame.kind !== 'none' ? ['most likely ', ...line] : line;
+}
+
+/**
+ * Whether `name` can have rendered in `c`: it is among the components the commit lists, or the list is not all
+ * of them. The component a render is named after is where the render went, and can be one that bailed out
+ * above the ones that rendered, as a context's consumers render under a list that does not.
+ */
+function mayHaveRendered(c: CommitSummary, name: string): boolean {
+  return c.components.some((x) => x.name === name) || c.components.reduce((a, x) => a + x.count, 0) < c.rendered;
+}
+
+/**
+ * The row's line for a render blame named after a component that did not render: where it started, when one
+ * root did, and what rendered inside the named one, "PrefsProvider updated · ProductRow ×375 re-rendered inside
+ * ProductList". What rendered is the commit's, never the blame's detail.
+ */
+function startedLine(blame: Blame, c: CommitSummary): Child[] {
+  const top = dominantComponent(c);
+  const what = top && top.count > 1 ? `${top.name} ×${top.count}` : renderedCount(c);
+  const root = c.roots.length === 1 ? [b(c.roots[0]!), ` updated${DOT}`] : [];
+  return [...root, `${what} ${renderedVerb(c)} inside `, b(blame.name!), blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : ''];
 }
 
 /** The row's line for a blame: text with the name it turns on in bold. */
