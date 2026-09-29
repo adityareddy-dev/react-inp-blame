@@ -87,12 +87,13 @@ export function createInpTracker(nativeCount: (() => number) | null) {
   let minId = Infinity;
   let maxId = 0;
   // The part of the browser's count that is not this estimate's: every interaction before the last reset,
-  // and since then the taps on the library's own badge and panel (`leaveOut`), which the browser counts too.
+  // and since then the taps on the library's own badge and panel (`leaveOut`) that the count holds.
   let notCounted = 0;
   // Set by a reset for a navigation, after which web-vitals stands in for interactions it counted but never saw.
   let afterNavigation = false;
-  // Interactions that are not the page's (`leaveOut`).
+  // Interactions that are not the page's (`leaveOut`), and of those, the ones taken off the count.
   const leftOut = new Set<number>();
+  const countedOff = new Set<number>();
   // Kept while the value stays the same: web-vitals moves its reported interaction only when INP
   // changes, so an interaction of equal latency taking the candidate's place does not move it.
   let current: { id: number | null; value: number; interactionCount: number } | null = null;
@@ -102,6 +103,16 @@ export function createInpTracker(nativeCount: (() => number) | null) {
     return maxId ? (maxId - minId) / ID_STEP + 1 : 0;
   }
 
+  /** Whether the count made from id spacing holds this id. */
+  const spaced = (id: number) => id >= minId && id <= maxId;
+
+  /** Takes a left-out interaction off the count, once, where the count since the last reset holds it. */
+  function countOff(id: number, held: boolean): void {
+    if (!held || countedOff.has(id)) return;
+    countedOff.add(id);
+    notCounted++;
+  }
+
   function addEntry(entry: TimedInteraction): void {
     const id = entry.interactionId;
     if (!id) return;
@@ -109,7 +120,11 @@ export function createInpTracker(nativeCount: (() => number) | null) {
       minId = Math.min(minId, id);
       maxId = Math.max(maxId, id);
     }
-    if (leftOut.has(id)) return;
+    if (leftOut.has(id)) {
+      // Its `event` entry is what puts it in the count made from id spacing.
+      if (!nativeCount) countOff(id, spaced(id));
+      return;
+    }
     let c = byId.get(id);
     const shortest = list[list.length - 1];
     if (!c && shortest && list.length >= MAX_CANDIDATES && entry.duration <= shortest.latency) return;
@@ -141,12 +156,16 @@ export function createInpTracker(nativeCount: (() => number) | null) {
     },
     /**
      * Leaves an interaction out, one the browser counts as the page's though it is not: a tap on the
-     * library's own badge or panel, given with an entry of it. It comes off the count, once, and it is never a
-     * candidate: one that was already stops being one, and INP is chosen again at the next batch.
+     * library's own badge or panel, given with an entry of it. It is never a candidate: one that was already
+     * stops being one, and INP is chosen again at the next batch. It comes off the count once, where the
+     * count since the last reset holds it. The browser's own count takes a tap at its release, before any
+     * entry of it comes, so one that began before the reset (`beganBefore`), as the panel's Clear tap does,
+     * is in the count the reset started from already. A count made from id spacing holds it once an `event`
+     * entry of it widens the spacing, which a `first-input` entry never does.
      */
-    leaveOut(id: number): void {
-      if (!leftOut.has(id)) notCounted++;
+    leaveOut(id: number, beganBefore = false): void {
       leftOut.add(id);
+      countOff(id, nativeCount ? !beganBefore : spaced(id));
       const c = byId.get(id);
       if (c) {
         list.splice(list.indexOf(c), 1);
