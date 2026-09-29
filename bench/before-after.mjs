@@ -42,6 +42,8 @@ const slowest = (r, name) => {
   return ds.length ? Math.max(...ds) : 0;
 };
 const f1 = (x) => (Math.round(x * 10) / 10).toString();
+// report.mjs's floor: below 8 pairs the interval can collapse and look decisive when it isn't.
+const MIN_N = 8;
 
 for (const throttle of [...new Set(runs.map((r) => r.throttle))]) {
   const B = runs.filter((r) => r.config === 'B' && r.throttle === throttle).sort((a, b) => a.runIndex - b.runIndex);
@@ -55,16 +57,17 @@ for (const throttle of [...new Set(runs.map((r) => r.throttle))]) {
   const byIndex = new Map(F.map((r) => [r.runIndex, r]));
   const pairs = B.filter((r) => byIndex.has(r.runIndex)).map((r) => [r, byIndex.get(r.runIndex)]);
   const alone = [['B', B.length - pairs.length], ['F', F.length - pairs.length]].filter(([, k]) => k);
-  console.log(`\n## x${throttle}, ${pairs.length} paired runs${alone.length ? `, left out for want of a partner: ${alone.map(([c, k]) => `${c} ${k}`).join(', ')}` : ''}`);
+  console.log(`\n## x${throttle}, ${pairs.length || 'no'} paired runs${alone.length ? `, left out for want of a partner: ${alone.map(([c, k]) => `${c} ${k}`).join(', ')}` : ''}`);
   const metrics = [
     ['INP', (r) => r.inp],
     ...B[0].steps.map((s) => [s.name, (r) => slowest(r, s.name)]),
   ];
-  for (const [name, get] of metrics) {
+  for (const [name, get] of pairs.length ? metrics : []) {
     const b = pairs.map(([r]) => get(r));
     const f = pairs.map(([, r]) => get(r));
     const d = boot(f.map((x, i) => x - b[i]));
-    console.log(`- ${name}: B ${f1(median(b))}, F ${f1(median(f))}, F − B ${d.point > 0 ? '+' : ''}${f1(d.point)} [${f1(d.lo)}, ${f1(d.hi)}]`);
+    const few = pairs.length < MIN_N ? `, n=${pairs.length}, too few runs to call` : '';
+    console.log(`- ${name}: B ${f1(median(b))}, F ${f1(median(f))}, F − B ${d.point > 0 ? '+' : ''}${f1(d.point)} [${f1(d.lo)}, ${f1(d.hi)}]${few}`);
   }
   // The verdict each build's library gave the first sort, run 1 and the most common blame.
   for (const [label, rs] of [['B', B], ['F', F]]) {

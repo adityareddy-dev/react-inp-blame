@@ -183,6 +183,20 @@ test('before-after.mjs pairs B and F by run index, so a failed run shifts nothin
   assert.match(out, /^- INP: B 200, F 200, F − B 0 \[0, 0\]$/m);
 });
 
+test('before-after.mjs prints no numbers when B and F share no run index', () => {
+  const skip = [5, 6, 7, 8, 9].map((i) => `B:${i}`).concat([0, 1, 2, 3, 4].map((i) => `F:${i}`));
+  const out = node('before-after.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip }));
+  assert.match(out, /^## x1, no paired runs, left out for want of a partner: B 5, F 5$/m);
+  assert.doesNotMatch(out, /NaN|^- INP/m);
+});
+
+test('before-after.mjs says an interval from under 8 pairs is too few to call, as report.mjs does', () => {
+  const skip = [3, 4, 5, 6, 7, 8, 9].map((i) => `B:${i}`);
+  const out = node('before-after.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip }));
+  assert.match(out, /^## x1, 3 paired runs, left out for want of a partner: F 7$/m);
+  assert.match(out, /^- INP: B 120, F 120, F − B 0 \[0, 0\], n=3, too few runs to call$/m);
+});
+
 test('before-after.mjs says so when a pass has no B runs', () => {
   const skip = Array.from({ length: 10 }, (_, i) => `B:${i}`);
   const out = node('before-after.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip }));
