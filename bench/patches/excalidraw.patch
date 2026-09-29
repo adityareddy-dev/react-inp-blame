@@ -1,0 +1,73 @@
+diff --git a/excalidraw-app/vite.config.mts b/excalidraw-app/vite.config.mts
+index 21469eb..661b2d5 100644
+--- a/excalidraw-app/vite.config.mts
++++ b/excalidraw-app/vite.config.mts
+@@ -8,6 +8,22 @@ import checker from "vite-plugin-checker";
+ import { createHtmlPlugin } from "vite-plugin-html";
+ import Sitemap from "vite-plugin-sitemap";
+ import { woff2BrowserPlugin } from "../scripts/woff2/woff2-vite-plugins";
++import { inpBlame } from "react-inp-blame/vite";
++
++// BENCH: which of the three configurations this build is.
++// "" -> A, library absent; "b" -> defaults; "c" -> overlay: true
++const BENCH_CONFIG = process.env.BENCH_CONFIG || "";
++const benchBlame =
++  BENCH_CONFIG === ""
++    ? []
++    : inpBlame({
++        enabled: true,
++        runtime:
++          BENCH_CONFIG === "c"
++            ? { debugGlobal: true, overlay: true }
++            : { debugGlobal: true },
++      });
++
+ export default defineConfig(({ mode }) => {
+   // To load .env variables
+   const envVars = loadEnv(mode, `../`);
+@@ -92,7 +108,7 @@ export default defineConfig(({ mode }) => {
+       ],
+     },
+     build: {
+-      outDir: "build",
++      outDir: process.env.BENCH_OUTDIR || "build",
+       rollupOptions: {
+         output: {
+           assetFileNames(chunkInfo) {
+@@ -142,7 +158,7 @@ export default defineConfig(({ mode }) => {
+       woff2BrowserPlugin(),
+       react(),
+       checker({
+-        typescript: true,
++        typescript: false,
+         eslint:
+           envVars.VITE_APP_ENABLE_ESLINT === "false"
+             ? undefined
+@@ -155,6 +171,7 @@ export default defineConfig(({ mode }) => {
+       svgrPlugin(),
+       ViteEjsPlugin(),
+       VitePWA({
++        disable: true, // BENCH: off for A, B and C alike, it would precache 5 MB inside every run
+         registerType: "autoUpdate",
+         devOptions: {
+           /* set this flag to true to enable in Development mode */
+@@ -319,6 +336,7 @@ export default defineConfig(({ mode }) => {
+       createHtmlPlugin({
+         minify: true,
+       }),
++      ...benchBlame,
+     ],
+     publicDir: "../public",
+   };
+diff --git a/package.json b/package.json
+index c91ee03..28aa8c6 100644
+--- a/package.json
++++ b/package.json
+@@ -32,6 +32,7 @@
+     "lint-staged": "12.3.7",
+     "pepjs": "0.5.3",
+     "prettier": "2.6.2",
++    "react-inp-blame": "0.12.0",
+     "rewire": "6.0.0",
+     "rimraf": "^5.0.0",
+     "typescript": "5.9.3",

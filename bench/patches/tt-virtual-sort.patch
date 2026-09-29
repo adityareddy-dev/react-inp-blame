@@ -1,0 +1,17 @@
+diff --git a/src/main.tsx b/src/main.tsx
+index a16dc65..7f572cb 100644
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -70,6 +70,12 @@ function App() {
+         }),
+         columnHelper.accessor((row) => row.lastName, {
+           id: 'lastName',
++          // Plain string order on the raw value: no getValue call and no lowercasing per comparison.
++          sortFn: (rowA, rowB) => {
++            const a = rowA.original.lastName
++            const b = rowB.original.lastName
++            return a < b ? -1 : a > b ? 1 : 0
++          },
+           cell: (info) => info.getValue(),
+           header: () => <span>Last Name</span>,
+         }),

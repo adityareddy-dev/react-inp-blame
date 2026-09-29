@@ -1,0 +1,78 @@
+diff --git a/apps/v4/next.config.mjs b/apps/v4/next.config.mjs
+index ddb3b0d..e077372 100644
+--- a/apps/v4/next.config.mjs
++++ b/apps/v4/next.config.mjs
+@@ -1,6 +1,7 @@
+ import { existsSync, readFileSync } from "fs"
+ import path from "path"
+ import { createMDX } from "fumadocs-mdx/next"
++import { withInpBlame } from "react-inp-blame/next"
+ 
+ // The generated styles under styles/ are gitignored (see styles/README.md),
+ // but registry/__components__.tsx (tracked in git) dynamically imports from
+@@ -69,6 +70,9 @@ const nextConfig = {
+   turbopack: {
+     root: path.resolve(import.meta.dirname, "../.."),
+   },
++  // Benchmark only: three builds of the same source have to coexist, so each
++  // one gets its own output directory and its own `next start`.
++  distDir: process.env.BENCH_OUTDIR || ".next",
+   redirects() {
+     return [
+       // Form redirects to /docs/forms.
+@@ -257,4 +261,22 @@ const nextConfig = {
+ 
+ const withMDX = createMDX({})
+ 
+-export default withMDX(nextConfig)
++// Benchmark only. BENCH_CONFIG picks the configuration under test:
++//   ""  A  the library is not applied at all, so nothing from it reaches the build
++//   "b" B  enabled, debugGlobal on so the harness can read stats()/reports()
++//   "c" C  as B plus the on-page overlay
++// withInpBlame goes outermost so it merges into whatever turbopack rules and
++// webpack hook the MDX wrapper already added.
++function withBench(config) {
++  const runtime = { debugGlobal: true }
++  switch (process.env.BENCH_CONFIG || "") {
++    case "b":
++      return withInpBlame(config, { enabled: true, runtime })
++    case "c":
++      return withInpBlame(config, { enabled: true, runtime: { ...runtime, overlay: true } })
++    default:
++      return config
++  }
++}
++
++export default withBench(withMDX(nextConfig))
+diff --git a/apps/v4/package.json b/apps/v4/package.json
+index 68e2cc9..900f39e 100644
+--- a/apps/v4/package.json
++++ b/apps/v4/package.json
+@@ -87,6 +87,7 @@
+     "react-day-picker": "^9.7.0",
+     "react-dom": "19.2.3",
+     "react-hook-form": "^7.62.0",
++    "react-inp-blame": "0.12.0",
+     "react-qr-code": "^2.0.18",
+     "react-resizable-panels": "^4",
+     "react-textarea-autosize": "^8.5.9",
+diff --git a/apps/v4/tsconfig.registry-node.json b/apps/v4/tsconfig.registry-node.json
+new file mode 100644
+index 0000000..f6f679e
+--- /dev/null
++++ b/apps/v4/tsconfig.registry-node.json
+@@ -0,0 +1,14 @@
++{
++  "$schema": "https://json.schemastore.org/tsconfig",
++  "extends": "./tsconfig.json",
++  "compilerOptions": {
++    "target": "ES2017",
++    "module": "ESNext",
++    "moduleResolution": "node",
++    "esModuleInterop": true,
++    "isolatedModules": false,
++    "allowImportingTsExtensions": true
++  },
++  "include": ["**/*.ts", "**/*.mts", "**/*.tsx"],
++  "exclude": ["node_modules"]
++}
