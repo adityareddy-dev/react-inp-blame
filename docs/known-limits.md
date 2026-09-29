@@ -71,6 +71,15 @@
   holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
   it, `name` is `null` and the cause names the largest with the share it holds. The milliseconds are the
   browser's either way, so `confidence` is about them alone and is never lowered to cover a doubtful name.
+- **A listener React did not attach is blamed only where it is known not to be React's own.** A tag
+  manager's click listener on the document that took most of a click is a `'script'` blame named by its
+  function ("trackClick") where a development build keeps React's listener named, or where React's listener
+  is in the same frame, known by its react-dom file or its name, or in a production build by the root
+  container it listens on (`DIV#root`). A listener on the document is known not to be React's where no root
+  is the document. A page whose root is the document, as the Next.js App Router's is, with names minified,
+  has React's listener and the tag manager's both read `#document.onclick`, and nothing tells them apart:
+  there the button's handler keeps the blame. A minified listener on an element, beside a React listener too
+  short for the browser to list, keeps it too, since React also listens on a portal's container.
 - **The next press's work is told from the interaction's own by a listener of that press the browser
   recorded.** Typing or clicking fast, the frame an interaction paints in can hold the next press's handlers
   too, and Long Animation Frames lists only scripts over 5 ms, which in a React app often leaves out the next

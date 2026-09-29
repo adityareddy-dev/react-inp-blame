@@ -1,4 +1,4 @@
-import type { InputRecord } from './hook.js';
+import type { InputRecord, ReactPage } from './hook.js';
 import { createInpTracker, rateInp, type InpEstimate } from './inp.js';
 import { attachLaterRender, awaitsEntry, buildReport, interactionTarget, isLaterRender, refreshFrames, refreshReport, sealReport, timed, type LabelSource, type ReportData } from './join.js';
 import type { PageNavigation } from './navigation.js';
@@ -48,6 +48,8 @@ export interface LifecycleOptions {
   labels(): LabelSource;
   /** Whether React can be seen as the next report is built (`Stats.react`); 'reading' where not given. */
   reactStatus?(): ReactStatus;
+  /** What tells React's own listener from another in the next report's scripts; none where not given. */
+  reactPage?(): ReactPage;
   /** The clock Event Timing and the commits use: `performance.now()`. */
   now(): number;
   /** Called with each report when it is published, and with every later revision of it: a new frozen report each time. */
@@ -200,7 +202,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     if (existing) {
       // A late entry of the same interaction: the click after a held pointerdown, the keyup.
       const wasQuiet = quiet.includes(existing);
-      revise(existing, refreshReport(existing.data, entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow, options.reactStatus?.()), started);
+      revise(existing, refreshReport(existing.data, entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow, options.reactStatus?.(), options.reactPage?.()), started);
       if (wasQuiet) {
         if (!worthPublishing(existing.data)) return;
         quiet.splice(quiet.indexOf(existing), 1);
@@ -213,7 +215,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       spend(started);
       return;
     }
-    const held = revise(null, buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow, options.reactStatus?.()), started);
+    const held = revise(null, buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow, options.reactStatus?.(), options.reactPage?.()), started);
     if (!worthPublishing(held.data)) return holdBack(held);
     keep(held);
     publish(held.report);
