@@ -420,10 +420,11 @@ export interface Blame {
    * `name` gives, where that is fewer ("812 of 1216 components"); a hydration is named after a boundary or
    * the page, which holds them all, so it carries the whole count. Null where it rendered one. For a
    * handler, its component, or null where the name is a listener the browser recorded rather than a React
-   * handler. For a 'layout', what that same commit was mostly made of, as a render's, wherever `name` came
-   * from that commit, and null wherever `name` did not, since a script has no component counts. For a
-   * 'waiting' inside the working time, where it came: "between click and keyup", or "between handlers"
-   * where it was split across more than one; null for a wait before the first handler.
+   * handler. For a 'layout', what that same commit was mostly made of, as a render's, or with the whole
+   * count ("56 components") where `name` is the component the render started from and that holds the whole
+   * commit, wherever `name` came from that commit, and null wherever `name` did not, since a script has no
+   * component counts. For a 'waiting' inside the working time, where it came: "between click and keyup", or
+   * "between handlers" where it was split across more than one; null for a wait before the first handler.
    */
   readonly detail: string | null;
   /**

@@ -974,9 +974,11 @@ in a layout effect, in four Presences, and none of them is inside DismissableLay
 own sits above it and the overlay's beside it. It is named after Dialog now, with "56 components".
 Where the path starts at one that does not hold the whole commit (the Sheet's opening, whose path
 starts at one of two Portals) or at a name a reader could not search for, the component the render
-is named after is kept, and so it is where that one holds all of it itself. So a render blame and a
-layout blame on the same commit can name different components: on a commit shaped like cal.com's
-advanced tab, EventAdvancedWebWrapper for the render and EventTypeWeb for the layout.
+is named after is kept, and so it is where that one holds all of it itself, or is the one rendered
+many times over (a TreeNode in a tree of them), since the sentence then says how many are inside it
+and names no start. So a render blame and a layout blame on the same commit can name different
+components: on a commit shaped like cal.com's advanced tab, EventAdvancedWebWrapper for the render
+and EventTypeWeb for the layout.
 
 The invoker is only a name for the whole layout while one script holds nine tenths of it. The
 browser charges forced layout per script, so a window holding three of them holds three totals, and

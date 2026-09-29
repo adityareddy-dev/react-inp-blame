@@ -82,7 +82,9 @@ export function leafName(c: CommitSummary): string | null {
  * path, where the path goes below it, the name is not a layer, and it holds the whole commit
  * (`startRendered`), since "from X down" claims the count under X, and the path starts at the heaviest of
  * the roots that rendered, not at all of them. It is often where the cause is: on cal.com the form's state
- * lives in EventTypeWeb, and the render was named after a component eleven layers down.
+ * lives in EventTypeWeb, and the render was named after a component eleven layers down. A layout blame is
+ * named after it too, where the sentence says "from X down", since the read that forced the layout can be
+ * anywhere in what React rendered.
  */
 export function startName(c: CommitSummary): string | null {
   const first = c.hotPath[0];
