@@ -973,11 +973,13 @@ that: a production build times nothing and its subtree names are no worse for it
 Which subtree it names matters, since the commit's hot path says where the render went and the read
 can be anywhere in what React rendered. Where the render started from a component that holds the
 whole commit (`startName`, the one the sentence says it went "from ... down"), that is the one named,
-with the whole count as `detail`. Closing a Sheet on the shadcn/ui docs re-renders 56 components from
-Dialog down, 15 of them inside DismissableLayer, and until 2026-09-28 the layout was named after
-DismissableLayer with "15 of 56 components". The read was Radix's `Presence` reading `animationName`
-in a layout effect, in four Presences, and none of them is inside DismissableLayer: the content's
-own sits above it and the overlay's beside it. It is named after Dialog now, with "56 components".
+and `detail` is what a render's would be, many of one component ("Row ×3") or one component's own
+render, and where it is a count, the whole commit's ("56 components") rather than "N of M". Closing a
+Sheet on the shadcn/ui docs re-renders 56 components from Dialog down, 15 of them inside
+DismissableLayer, and until 2026-09-28 the layout was named after DismissableLayer with "15 of 56
+components". The read was Radix's `Presence` reading `animationName` in a layout effect, in four
+Presences, and none of them is inside DismissableLayer: the content's own sits above it and the
+overlay's beside it. It is named after Dialog now, with "56 components".
 Where the path starts at one that does not hold the whole commit (the Sheet's opening, whose path
 starts at one of two Portals) or at a name a reader could not search for, the component the render
 is named after is kept, and so it is where that one holds all of it itself, or is the one rendered
