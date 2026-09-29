@@ -1430,7 +1430,8 @@ the rest, and not left to the note as it is over that: a keydown's own 30 ms tim
 screen update, is the verdict. Nor, where no note names the script after the handlers, does a verdict take the
 next press's work, a script that started once that press's own listener did, where the browser recorded one: a
 `keydown` or `pointerdown` listener, a key's `input`, `beforeinput` or `keypress` one before the next key, where
-the last event the frame handled was this interaction's keyup, or a pointer's `mousedown` or `touchstart` one
+the last event the frame handled was this interaction's keyup, or for `keypress`, which a pointer never dispatches,
+where that event was a pointer's, or a pointer's `mousedown` or `touchstart` one
 before the next pointer press, where that event was not a pointerdown, or its `pointerup`, `mouseup` or `click`
 one, where that event was this interaction's click or a key's. A key with no keyup, or whose keyup waited for a
 later frame, runs its own `input` listener in its task, right after its handlers, and so does a checkbox's click.
@@ -1439,7 +1440,12 @@ until 2026-09-28 the next click's 56 ms `onmousedown` was named as a key's scrip
 later frame. Until 2026-09-27 the next key's 44 ms handler, under half of a 90 ms screen update, was named the
 same way. A pointerdown, or a pointerup whose click was too quick for an entry, still has its own click to
 dispatch, but a key or a handled click does not: in a React app the next click's listeners on its press are
-usually under 5 ms and not recorded, and until 2026-09-28 its 44 ms `onclick` was named as a key's script. After
+usually under 5 ms and not recorded, and until 2026-09-28 its 44 ms `onclick` was named as a key's script. A next
+click whose button went down before this interaction, or whose pointerdown was not recorded, has only its click in
+the ring, and nothing tells its `onclick` or `onpointerup` from this interaction's own, so it is weighed as in
+0.18.0: every script from that click on is its work, and where that work held the frame for half the screen update
+or more, the painting blame says the frame waited on that click. Weighed on the listeners, its 36 ms `onclick`
+under a 40 ms screen update was named as a key's script. After
 a keydown whose keyup waited for a later frame, the next key's `input` listener is still ranked as this key's:
 this key's own runs right after its handlers, but a `beforeinput` listener too short to be recorded can push its
 start past the tick they ended on, so the start alone cannot tell the two apart. A script that started before the
