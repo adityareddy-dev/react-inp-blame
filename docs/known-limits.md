@@ -77,11 +77,13 @@
   one that did only overlapped the interaction in time, was walked short of the end, or sat beside
   commits that could not be tied to the interaction. The invoker itself is named only while one script
   holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
-  it, `name` is `null` and the cause names the largest with the share it holds, unless that is React's
-  own listener (its react-dom file or function, a root container the hook saw, or the document where a
-  root is the document or the hook saw none it could name), which the cause does not name. The
-  milliseconds are the browser's either way, so `confidence` is about them alone and is never lowered
-  to cover a doubtful name.
+  it, `name` is `null` and the cause names the largest with the share it holds, unless that is React's own
+  listener (its react-dom file or function, a root container the hook saw, or the document where a root is
+  the document or the hook saw none it could name), which the cause does not name. So under the Next.js
+  App Router, where the root is the document, a tag manager's or a heatmap's document listener reads the
+  same as React's (`#document.onclick`), and a layout it forced is not named there either, though the
+  frames in the report still hold it. The milliseconds are the browser's either way, so `confidence` is
+  about them alone and is never lowered to cover a doubtful name.
 - **A long animation frame that lists no scripts says nothing about what the time outside React went on.**
   Under `next dev --webpack` a modal whose layout effect forced layout came back as a 365 ms frame with no
   scripts in it, and the verdict read "On top of that, the onClick handler ran for about 151 ms" for a
