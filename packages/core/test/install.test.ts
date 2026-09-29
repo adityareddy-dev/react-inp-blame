@@ -346,7 +346,10 @@ function badgeDocument() {
         return el.parentNode !== null;
       },
       listeners: {},
-      setAttribute() {},
+      attributes: {},
+      setAttribute(name: string, value: string) {
+        el.attributes[name] = value;
+      },
       addEventListener(type: string, listener: (event: unknown) => void) {
         el.listeners[type] = listener;
       },
@@ -371,11 +374,14 @@ function badgeDocument() {
   const hosts = () => body.childNodes.filter((node: { id: string }) => node.id === 'react-inp-blame');
   const wrap = () => hosts()[0].shadowRoot.childNodes.find((node: { className?: string }) => node.className?.startsWith('wrap'));
   const panel = () => wrap().childNodes.find((node: { className?: string }) => node.className === 'panel');
+  const holds = (node: Record<string, any>, cls: string): boolean => node.attributes?.class === cls || !!node.childNodes?.some((child: Record<string, any>) => holds(child, cls));
   return {
     hosts: () => hosts().length,
     panelHidden: (): boolean => panel().hidden,
     badge: () => wrap().childNodes.find((node: { tagName: string }) => node.tagName === 'button'),
     press: (button: string) => panel().listeners.click({ target: { closest: (selector: string) => (selector === `.${button}` ? {} : null) } }),
+    /** Whether the panel draws a button of this class. */
+    drawn: (button: string) => holds(panel(), button),
   };
 }
 
@@ -589,7 +595,7 @@ test("a stored 'hidden' keeps the badge off for that person whatever overlay say
   }
 });
 
-test('after Hide for me, mountOverlay() still shows the badge, and the overlay option asked again does not', async (t) => {
+test('after Hide for me, mountOverlay() still shows the badge, with no Hide for me of its own, and the overlay option asked again does not', async (t) => {
   const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   t.after(() => {
     if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
@@ -601,16 +607,21 @@ test('after Hide for me, mountOverlay() still shows the badge, and the overlay o
   await inBrowser(async () => {
     const { search, hash } = new URL(PAGE_URL);
     Object.defineProperty(globalThis, 'location', { value: { href: PAGE_URL, search, hash }, configurable: true, writable: true });
-    const { hosts, press } = badgeDocument();
+    const { hosts, press, drawn, badge, panelHidden } = badgeDocument();
     const api = install({ overlay: true });
     await installState.overlay;
     assert.equal(hosts(), 1);
+    badge().listeners.click();
+    assert.ok(drawn('hide'), 'the overlay option drew no Hide for me');
     press('hide');
     assert.equal(hosts(), 0);
     assert.equal(stored.get('react-inp-blame'), 'hidden');
     // The badge the page's own code asks for is shown regardless, and not the one Hide for me took down.
     const shown = await mountOverlay();
     assert.equal(hosts(), 1, 'mountOverlay() handed back the badge Hide for me took down');
+    // The panel opens as it was left, so it is drawn.
+    assert.equal(panelHidden(), false);
+    assert.ok(!drawn('hide'), "mountOverlay()'s badge offered Hide for me, which only the overlay option's can");
     shown?.dispose();
     await nextTask();
     assert.equal(hosts(), 0);
