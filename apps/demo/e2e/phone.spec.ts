@@ -202,7 +202,8 @@ test('the sign-in page and every lab page fit the phone, with the badge on the s
     await page.goto('about:blank');
     await page.goto(path);
     const badge = page.locator('#react-inp-blame .badge');
-    await expect(badge).toBeVisible();
+    // The restyle storm lays out 30,000 cells as it loads, which on the slowed CPU takes seconds.
+    await expect(badge).toBeVisible({ timeout: 15_000 });
     const fit = await page.evaluate(() => ({ innerWidth, scrollWidth: document.documentElement.scrollWidth }));
     expect(fit, `${path} is as wide as the screen`).toEqual({ innerWidth: screen.width, scrollWidth: screen.width });
     const box = (await badge.boundingBox())!;
