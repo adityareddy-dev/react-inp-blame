@@ -1382,7 +1382,8 @@ for the interaction.
 
 
 **Navigations.** Every report carries `navigationURL` and `navigationType`, with web-vitals' names
-and values, so it lines up with the INP web-vitals reports for the same navigation. The page's
+and values, so it lines up with the INP web-vitals reports for the same navigation. A report keeps
+only the origin and path of its URL though, so match the two on those. The page's
 navigations begin with the document's own, named from its navigation timing entry the way
 web-vitals names it (`navigate`, `reload`, `back-forward`, `prerender`, `restore`). A `pageshow`
 with `persisted` adds a `back-forward-cache` navigation, and `react-inp-blame/next` adds a
