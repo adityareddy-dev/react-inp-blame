@@ -4082,6 +4082,25 @@ test("under StrictMode in a development build, a render blame says about half of
   assert.deepEqual(strictNotes(explained([{ ...list, strictMode: false }, { ...sidebar, strictMode: false }])), []);
   assert.deepEqual(strictNotes(explained([list, sidebar], 'production')), []);
   assert.deepEqual(strictNotes(explained([list, sidebar], 'profiling')), []);
+  // Where <StrictMode> wraps part of the app, the render the blame names has to be under it, and the note gives the
+  // total only where every render in it was.
+  const plainList = { ...list, strictMode: false };
+  assert.deepEqual(strictNotes(explained([plainList, sidebar])), []);
+  assert.deepEqual(strictNotes(explained([list, { ...sidebar, strictMode: false }])), [note(30)]);
+  // A strict render after the paint says nothing of List's, which rendered once.
+  const alone = buildReport([entry('click', 0, 72, 2, 40)], [plainList], [], [input(0, 'click')], 'attributes', [], undefined, 'reading', 'development');
+  const later = attachLaterRender(alone, commit(400, 0, { total: 5, roots: ['Toast'], hotPath: ['Toast'], strictMode: true }), [])!;
+  assert.equal(later.strictMode, true);
+  assert.equal(sealReport(later).explanation.blame.name, 'List');
+  assert.deepEqual(strictNotes(sealReport(later).explanation), []);
+  // A render that is a sliver of the blame, beside 300 ms of useEffect, has nothing worth halving.
+  const chart = (total: number) =>
+    commit(1010, 1000, { startedAt: 1004, total, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1010, effectsEndedAt: 1310, strictMode: true });
+  for (const total of [0.3, 5]) {
+    const effectsLed = explained([chart(total)], 'development', [entry('click', 1000, 330, 1003, 1320)], [input(1000, 'click', { handler: 'onClick', owners: ['Chart'] })]);
+    assert.equal(effectsLed.blame.kind, 'render');
+    assert.deepEqual(strictNotes(effectsLed), [], `a ${total} ms render`);
+  }
   // StrictMode does not run a handler twice, so a handler blame gets no note though its cause gives React's render time.
   const handled = explained([list, sidebar], 'development', [entry('click', 0, 216, 2, 200)], loginClick('handleSave'));
   assert.equal(handled.blame.kind, 'handler');
