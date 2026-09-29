@@ -2165,7 +2165,9 @@ function explain(r: InteractionReport): Explanation {
    * stamp (`cameAfter` says why). One that began before the handlers, or committed with them and ran longer than
    * the time from their start to its commit, was not all in the working time, and where it ran is left unsaid: a
    * 43 ms render in the task the click waited behind, committed as its handlers began, was said as that wait and
-   * then as 43 ms in the 15 ms of working time after it. Only a render in the working time is said against it.
+   * then as 43 ms in the 15 ms of working time after it. Only a render in the working time is said against it,
+   * and only where its figure, rounded, is not longer than the working time: a 61.8 ms render, within the stamps'
+   * tolerance of 61 ms of it, read "about 62 ms of the 61 ms of working time".
    */
   const renderRan = !rc
     ? 'in'
@@ -2173,7 +2175,9 @@ function explain(r: InteractionReport): Explanation {
       ? 'unplaced'
       : cameAfter(rc) && !withTheHandlers(rc)
         ? 'after'
-        : 'in';
+        : hasDurations && Math.round(rc.total) > Math.round(r.processing)
+          ? 'unplaced'
+          : 'in';
   // The render's place, said after `lead`: `within` where that is the working time, and nothing where it is unknown.
   const placed = (lead: string, within: string) =>
     renderRan === 'after' ? `${lead}after the handlers, before the next frame` : renderRan === 'in' ? `${lead}${within}` : '';

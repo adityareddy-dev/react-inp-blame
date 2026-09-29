@@ -3723,6 +3723,19 @@ test("a render committed at the end of the handlers, past the paint the duration
   assert.equal(partial.explanation.cause, 'React most likely spent about 40 ms of the 61 ms of working time re-rendering at least 30 components inside List.');
   const production = report(click, [commit(1065.5, 1000, { hasDurations: false, total: 0, rendered: 300 })], [], [input(1000, 'click')]);
   assert.match(production.explanation.cause, /^React was most likely re-rendering 300 components inside List, in the 61 ms of working time\. /);
+  // Only where its figure, rounded, is not longer than the working time. A 61.8 ms render that began just after the
+  // handlers and committed with them, one of 61.9 ms with no start kept, committed as 61 ms of them ended, and one of
+  // 62 ms on a clock that steps in whole milliseconds each read "about 62 ms of the 61 ms of working time".
+  const past = [
+    report(click, [commit(1065.5, 1000, { startedAt: 1003.5, total: 61.8, truncated: true })], [], [input(1000, 'click')]),
+    report([entry('click', 1000, 64, 1003, 1064)], [commit(1064, 1000, { total: 61.9, truncated: true })], [], [input(1000, 'click')]),
+    report([entry('click', 1000, 64, 1003, 1064)], [commit(1064, 1000, { total: 62, coarseClock: true })], [], [input(1000, 'click')]),
+  ];
+  for (const r of past) assert.match(r.explanation.cause, /^React most likely spent about 62 ms re-rendering /);
+  // So does the note under a wait. It read "React still spent 62 ms ... in the 61 ms of working time after the wait."
+  const waited = report([entry('click', 1000, 136, 1075, 1138)], [commit(1137.5, 1000, { startedAt: 1075.5, total: 61.8 })], [], [input(1000, 'click')]);
+  assert.equal(waited.explanation.blame.kind, 'waiting');
+  assert.deepEqual(waited.explanation.notes, ['React still spent 62 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).']);
   // A hydration there held all of its time too. It read "39 ms of the 61 ms of working time, in a hydration that took
   // 40 ms in all".
   const hydrated = report(click, [{ ...ended, hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' } }], [], [input(1000, 'click')]);
@@ -3737,7 +3750,7 @@ test("a render committed at the end of the handlers, past the paint the duration
   assert.equal(longer.explanation.blame.ms, 61);
   assert.deepEqual(longer.explanation.phases[1]?.parts?.map((p) => p.ms), [61]);
   assert.match(longer.explanation.cause, /: all 61 ms of working time, in a hydration that took 75 ms in all\.$/);
-  for (const r of [framed, unframed, unstarted, begun, ...through, ...together, pressed, small, rounded, filling, partial, production, hydrated, longer]) {
+  for (const r of [framed, unframed, unstarted, begun, ...through, ...together, pressed, small, rounded, filling, partial, production, ...past, waited, hydrated, longer]) {
     saysWithinTheWorkingTime(r);
   }
 });
