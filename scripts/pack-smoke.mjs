@@ -259,6 +259,24 @@ function assertPackage(app) {
   const names = Object.assign({}, ...onServer.map((subpath) => EXPECTED[subpath].names));
   const noOp = Object.fromEntries(onServer.map((subpath) => [subpath, { names }]));
   assertLoads(app, 'plan.react-server.json', noOp, ['--conditions=react-server']);
+  assertOtelApart(dir, manifest);
+}
+
+// The files that may name react-inp-blame/otel: the entry itself and the no-op standing in for it.
+const OTEL_FILES = ['dist/otel.js', 'dist/otel.d.ts', 'dist/react-server.js', 'dist/react-server.d.ts'];
+
+/**
+ * An app that does not import react-inp-blame/otel pays nothing for it. That holds while no other module
+ * imports it and sideEffects does not list it, so a bundler can leave it out of every other entry.
+ */
+function assertOtelApart(dir, manifest) {
+  const naming = fs
+    .readdirSync(path.join(dir, 'dist'))
+    .map((file) => `dist/${file}`)
+    .filter((file) => !OTEL_FILES.includes(file) && /otel\.js|InpBlameLogRecordProcessor/.test(fs.readFileSync(path.join(dir, file), 'utf8')));
+  assert.ok(naming.length === 0, `${naming.join(', ')} ${naming.length === 1 ? 'names' : 'name'} react-inp-blame/otel, so an app that never imports it can load it`);
+  const listed = (manifest.sideEffects || []).filter((file) => file.includes('otel'));
+  assert.ok(listed.length === 0, `sideEffects lists ${listed.join(', ')}, so a bundler has to keep it wherever it is reachable`);
 }
 
 /** `bare`: the package has no dependencies and npm leaves optional peers out, so it arrives alone. */

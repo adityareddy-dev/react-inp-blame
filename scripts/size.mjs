@@ -39,6 +39,12 @@ const ROWS = [
     input: { auto: path.join(dist, 'auto.js'), 'web-vitals': path.join(dist, 'web-vitals.js') },
     part: 'web-vitals',
   },
+  {
+    key: 'otel',
+    label: '`react-inp-blame/otel`, on top of `/auto`',
+    input: { auto: path.join(dist, 'auto.js'), otel: path.join(dist, 'otel.js') },
+    part: 'otel',
+  },
 ];
 
 /** The chunks of one build, by file name. */
@@ -63,10 +69,10 @@ async function build(input) {
   }
 }
 
-/** The chunks a row counts: an entry and what it imports, the chunks only `import()` reaches, or the web-vitals entry's own. */
+/** The chunks a row counts: an entry and what it imports, the chunks only `import()` reaches, or the web-vitals or otel entry's own. */
 function counted(chunks, part) {
   const entries = [...chunks.values()].filter((c) => c.isEntry);
-  if (part === 'web-vitals') return entries.filter((c) => c.name === 'web-vitals');
+  if (part === 'web-vitals' || part === 'otel') return entries.filter((c) => c.name === part);
   const reached = new Set();
   const pending = entries.map((c) => c.fileName);
   while (pending.length) {
