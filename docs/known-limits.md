@@ -51,6 +51,13 @@
   only thing that can lower a confidence, though: a script blame is `'inferred'` whenever a commit could
   not be tied to the interaction, since a script is what is left once React is ruled out and an unjoined
   commit is exactly what stops React from being ruled out.
+  Where the count alone chose between the handler and the render beside it, the cause names both ("the
+  onClick handler or React's render of StatsPanel (2 components)") and says a profiling build can tell them
+  apart, and the blame keeps the count's pick: in three production runs of apps written to test this, it
+  picked wrong both ways. A list whose rows took 2 ms or less each decides it and names nothing else. Two
+  ways to a profiling build: in Vite, a `resolve.alias` from `react-dom/client` to `react-dom/profiling`, and
+  in Next.js, `next build --profile`. The Vite alias added 5.4 KB gzipped to one app. The runtime cost of
+  either is not measured yet.
 - **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only. The
   browser counts style recalculation in the same figure, so a `'layout'` blame covers either. Its share of
   a script that ran on past the handlers is apportioned by time rather than measured, so such a blame is
