@@ -302,8 +302,8 @@ test("an svg an app's Icon sets through dangerouslySetInnerHTML is placed as one
   assert.equal(generateTarget(asNode(icon({}, { ...markup, role: 'button' }))), 'Rows > RemoveRow (svg)');
   assert.equal(generateTarget(asNode(icon({ role: 'button' }, markup))), 'Rows > RemoveRow (svg)');
   // Where a script draws the svg in an empty `<span role="button" aria-label="Delete">` that Icon renders, the
-  // span is a control of Icon's own, as IconButton's button is, and holds what is drawn in it.
-  assert.equal(generateTarget(asNode(icon({}, { role: 'button', 'aria-label': 'Delete' }))), 'Rows > RemoveRow > Icon (svg)');
+  // span is the icon, as Font Awesome's empty `<i>` is, and RemoveRow wrote it.
+  assert.equal(generateTarget(asNode(icon({}, { role: 'button', 'aria-label': 'Delete' }))), 'Rows > RemoveRow (svg)');
 });
 
 test('text a component returned adds that component to the path of the element holding it', () => {
