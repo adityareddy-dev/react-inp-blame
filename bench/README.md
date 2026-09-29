@@ -86,6 +86,9 @@ root (yarn 1 through corepack) before the first run.
 clone's root. In `apps/v4/next.config.mjs` it wraps the config in `withInpBlame` outermost, by
 `BENCH_CONFIG`, and takes `distDir` from `BENCH_OUTDIR`. It pins react-inp-blame in `apps/v4/package.json`
 and adds `apps/v4/tsconfig.registry-node.json`, which lets the registry build run under tsx rather than bun.
+It adds `/.next-*/` to `apps/v4/.gitignore` for the side-by-side builds, since Tailwind scans every file git
+doesn't ignore and would otherwise read one build while it makes another. And it adds react-inp-blame to
+`minimumReleaseAgeExclude` in `pnpm-workspace.yaml`, or pnpm refuses a pinned release under 48 hours old.
 `shadcn-v4`, `shadcn-sheet` and `shadcn-sheet-phone` all use this clone and the builds `shadcn-v4` makes, so
 the two Sheet apps build nothing of their own.
 
@@ -119,6 +122,8 @@ install stops until these changes are made:
 - In `apps/web/modules/notifications/components/WebPushContext.tsx`, return early from the effect that
   registers `/service-worker.js`, in both builds. Every run is a fresh context, so the worker would
   install inside every run's measurement.
+- In `apps/web/.gitignore`, add `/.next-*/`. That covers the side-by-side builds, so Tailwind doesn't scan
+  one build while it makes another.
 
 B also needs a line in `apps/web/instrumentation-client.ts`. `apps-caldiy.mjs` writes that for B's build and
 puts the file back afterwards, so leave it alone. cal.diy builds A and B only, so run it with

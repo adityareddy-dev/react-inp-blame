@@ -1,3 +1,15 @@
+diff --git a/apps/v4/.gitignore b/apps/v4/.gitignore
+index c588538..0079fe4 100644
+--- a/apps/v4/.gitignore
++++ b/apps/v4/.gitignore
+@@ -61,3 +61,7 @@ next-env.d.ts
+ # `pnpm registry:build --style all`). See styles/README.md.
+ /styles/*
+ !/styles/README.md
++
++# Benchmark only: the side-by-side builds, so Tailwind does not scan one build
++# while it makes another.
++/.next-*/
 diff --git a/apps/v4/next.config.mjs b/apps/v4/next.config.mjs
 index ddb3b0d..e077372 100644
 --- a/apps/v4/next.config.mjs
@@ -76,3 +88,13 @@ index 0000000..f6f679e
 +  "include": ["**/*.ts", "**/*.mts", "**/*.tsx"],
 +  "exclude": ["node_modules"]
 +}
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+index e2527dd..6359330 100644
+--- a/pnpm-workspace.yaml
++++ b/pnpm-workspace.yaml
+@@ -17,3 +17,5 @@ minimumReleaseAgeExclude:
+   - "@tanstack/table-core"
+   - "@tanstack/react-store"
+   - "@tanstack/store"
++  # Benchmark only: a release under test can be younger than the 48h window.
++  - "react-inp-blame"
