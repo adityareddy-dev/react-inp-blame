@@ -3449,6 +3449,15 @@ test('a render that began before the handlers is weighed and blamed on what the 
     two.explanation.cause,
     'React spent 128 ms rendering across 2 commits, 28 ms of it re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). Some of that rendering began before the handlers, so at most 35 ms of it was in the 40 ms of working time.',
   );
+  // Two 20 ms renders committed in 27 ms of handlers are longer than them, so some of the 40 ms began before them,
+  // whether the first held 17 ms of the working time or all its 20: the part held is never more than the 27 ms.
+  const longerThan = 'That rendering was longer than the 27 ms of working time, so some of it began before the handlers.';
+  const twice = (first: number) => report([entry('click', 0, 40, 3, 30)], [commit(first, 0, { total: 20 }), commit(29, 0, { total: 20, ...sidebarRender })], [], [input(0, 'click')]);
+  assert.equal(
+    twice(20).explanation.cause,
+    `React spent 40 ms rendering across 2 commits, 20 ms of it re-rendering 500 components inside Sidebar, mostly Item (500 of them, 10 ms). ${longerThan}`,
+  );
+  assert.ok(twice(25).explanation.cause.endsWith(` ${longerThan}`), twice(25).explanation.cause);
   // The handler's sentence and the layout's say it the same way. The handler's read "ran for about 80 ms; React spent
   // 60 ms re-rendering" in 97 ms of working time.
   const handled = report([entry('click', 0, 120, 3, 100)], [commit(20, 0, { startedAt: -40, total: 60 })], [], [input(0, 'click')]);
@@ -3457,6 +3466,19 @@ test('a render that began before the handlers is weighed and blamed on what the 
     handled.explanation.cause,
     'Code outside React (the click handler or other scripts) ran for about 80 ms; React spent 60 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). The render began before the handlers, so at most 17 ms of it was in the 97 ms of working time.',
   );
+  // The effects the handler's sentence gives are set against the render it names, the one the working time held most
+  // of, which ran them. Set against the longer render that began before the handlers, they were "in another commit".
+  const effected = report(
+    [entry('click', 0, 120, 2, 100)],
+    [commit(4, 0, { startedAt: -200, total: 100 }), commit(60, 0, { startedAt: 50, total: 10, effectsStartedAt: 60, effectsEndedAt: 90, ...sidebarRender })],
+    [],
+    [input(0, 'click', { handler: 'handleSave' })],
+  );
+  assert.equal(effected.explanation.blame.kind, 'handler');
+  assert.equal(
+    effected.explanation.cause,
+    'Code outside React (the click handler or other scripts) ran for about 56 ms; React spent 110 ms rendering across 2 commits, 10 ms of it re-rendering 500 components inside Sidebar, mostly Item (500 of them, 10 ms). Some of that rendering began before the handlers, so at most 12 ms of it was in the 98 ms of working time. React also spent 30 ms running useEffect callbacks.',
+  );
   const forced = [frame(0, 200, [script('BUTTON.onclick', 2, 178, 120)])];
   const layout = report([entry('click', 0, 200, 2, 180)], [commit(20, 0, { startedAt: -60, total: 90 })], forced, loginClick('handleSave'));
   assert.equal(layout.explanation.blame.kind, 'layout');
@@ -3464,7 +3486,7 @@ test('a render that began before the handlers is weighed and blamed on what the 
     layout.explanation.cause,
     / React spent 90 ms re-rendering 30 components inside List, mostly Row \(30 of them, 20 ms\)\. The render began before the handlers, so at most 18 ms of it was in the 178 ms of working time\. /,
   );
-  for (const r of [measured, partial, unstarted, painted, unkept, kept, beside, two, handled, layout]) saysWithinTheWorkingTime(r);
+  for (const r of [measured, partial, unstarted, painted, unkept, kept, beside, two, twice(20), twice(25), handled, effected, layout]) saysWithinTheWorkingTime(r);
 });
 
 test('a note standing in for a closed render rung sets only the named render against the working time, and the total of several after it', () => {
@@ -3652,6 +3674,9 @@ test("a render committed at the end of the handlers, past the paint the duration
   // And one too small for the verdict, in 4 ms of working time whose handlers ran 2 ms past it, is too.
   const small = report([entry('click', 0, 8, 4, 10)], [commit(9.5, 0, { startedAt: -100, total: 104 })], [], [input(0, 'click')]);
   assert.match(small.explanation.cause, /^At most 4 ms of the 4 ms of working time went to React's render, which began before the handlers \(104 ms /);
+  // One within the stamps' tolerance of what the working time held is small as it was: 4.6 ms against those 4 ms.
+  const rounded = report([entry('click', 0, 8, 4, 10)], [commit(9.5, 0, { startedAt: -100, total: 4.6 })], [], [input(0, 'click')]);
+  assert.match(rounded.explanation.cause, /^React's render was small \(/);
   // It is placed in the working time, where a hedged sentence or a production build's says where it ran. Both said
   // "after the handlers, before the next frame".
   const partial = report(click, [{ ...ended, truncated: true }], [], [input(1000, 'click')]);
@@ -3667,7 +3692,12 @@ test("a render committed at the end of the handlers, past the paint the duration
   );
   assert.equal(hydrated.explanation.blame.ms, 40);
   assert.deepEqual(hydrated.explanation.phases[1]?.parts?.map((p) => p.ms), [40]);
-  for (const r of [framed, unframed, unstarted, begun, small, partial, production, hydrated]) saysWithinTheWorkingTime(r);
+  // One longer than the working time is weighed on all of it and no more, though it ran on to the handlers' end.
+  const longer = report(click, [commit(1065.5, 1000, { total: 75, hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' } })], [], [input(1000, 'click')]);
+  assert.equal(longer.explanation.blame.ms, 61);
+  assert.deepEqual(longer.explanation.phases[1]?.parts?.map((p) => p.ms), [61]);
+  assert.match(longer.explanation.cause, /: all 61 ms of working time, in a hydration that took 75 ms in all\.$/);
+  for (const r of [framed, unframed, unstarted, begun, small, rounded, partial, production, hydrated, longer]) saysWithinTheWorkingTime(r);
 });
 
 test("a render with no start kept is weighed on the time from the handlers' start to its commit, and a bound that is all the working time is left out", () => {
