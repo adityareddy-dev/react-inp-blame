@@ -1,7 +1,7 @@
 import { dominantComponent, frameworkLayers, frameworkWrappers, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
-import { DEFAULT_INPUT_WINDOW, INPUT_TYPES, joinWindow, type InputRecord } from './hook.js';
+import { DEFAULT_INPUT_WINDOW, INPUT_TYPES, joinWindow, type InputRecord, type ReactPage } from './hook.js';
 import { rateInp } from './inp.js';
 import { unexplainedReports } from './install-state.js';
 import type { PageNavigation } from './navigation.js';
@@ -108,6 +108,8 @@ const PRESENTATION_NOTE_MS = 100;
 const BROWSER_WORK_MIN_SHARE = 0.5;
 // React's scheduler runs its work from a MessageChannel, so Long Animation Frames names its tasks after the port.
 const REACT_TASK = 'MessagePort.onmessage';
+// The functions react-dom attaches as its listeners on a root, by the names a build that keeps them gives.
+const REACT_LISTENER = /^(bound )?dispatch(Discrete|Continuous)Event$/;
 const READS_SIZE = "That happens when code reads an element's size right after changing styles";
 const USUAL_READ = `${READS_SIZE}, often in a layout effect.`;
 // A press held around the interaction is worth a note from 100 ms; an ordinary click is shorter.
@@ -499,6 +501,7 @@ export function buildReport(
   navigations: readonly PageNavigation[] = [],
   inputWindow = DEFAULT_INPUT_WINDOW,
   reactStatus: ReactStatus = 'reading',
+  reactPage: ReactPage = NO_REACT_PAGE,
 ): ReportData {
   const longest = entries.reduce((a, e) => (e.duration > a.duration ? e : a));
   const group = paintGroupOf(entries, longest);
@@ -614,6 +617,8 @@ export function buildReport(
   // (`explain` says so only on evidence). A release sets nothing off: a modifier let go before the paint.
   const own = ringInputs(inputs, stamps);
   const next = inputs.find((i) => (PRESSES.includes(i.type) || i.type === 'click') && i.ts > start && i.ts < end && !own.includes(i));
+  const summaries = Object.freeze(entries.map(summarize));
+  if (reactPage.named || reactPage.roots.length) reactPages.set(summaries, reactPage);
 
   return {
     schemaVersion: 3,
@@ -625,7 +630,7 @@ export function buildReport(
     end,
     duration,
     holdMs,
-    entries: Object.freeze(entries.map(summarize)),
+    entries: summaries,
     inputDelay: processingStart - start,
     processing: processingEnd - processingStart - walkMs,
     walkMs,
@@ -647,6 +652,10 @@ export function buildReport(
     overheadMs: walked(inWindow) + walked(followUps),
   };
 }
+
+/** What each report was built knowing of the page's React (`ReactPage`), by its entries, which every revision of it shares. */
+const reactPages = new WeakMap<readonly EventEntrySummary[], ReactPage>();
+const NO_REACT_PAGE: ReactPage = { roots: [], named: false };
 
 /** The report a revision is published as: frozen, with its explanation and verdict built on first read. */
 export function sealReport(data: ReportData): InteractionReport {
@@ -750,10 +759,11 @@ export function refreshReport(
   navigations: readonly PageNavigation[] = [],
   inputWindow = DEFAULT_INPUT_WINDOW,
   reactStatus: ReactStatus = r.reactStatus,
+  reactPage: ReactPage = reactPages.get(r.entries) ?? NO_REACT_PAGE,
 ): ReportData {
   // Time already spent building the report stays counted; the walks are recounted for the commits it now holds.
   const building = r.overheadMs - walked(r.commits) - walked(r.followUps);
-  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations, inputWindow, reactStatus);
+  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations, inputWindow, reactStatus, reactPage);
   return { ...fresh, revision: r.revision + 1, overheadMs: fresh.overheadMs + building };
 }
 
@@ -1266,6 +1276,8 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
 
 /** "DIV.onscroll (app.js)": a script by its name and file, and one the browser gave no name as "one with no name (app.js)". */
 const namedWithFile = (s: ScriptSummary): string => `${scriptName(s) ?? 'one with no name'}${s.source ? ` (${s.source})` : ''}`;
+/** "trackClick (src/analytics.ts, run as #document.onclick)": a listener by its function, where the browser gives one, else as `namedWithFile`. */
+const listenerWithFile = (s: ScriptSummary): string => (s.name && s.invoker ? `${s.name} (${s.source ? `${s.source}, ` : ''}run as ${s.invoker})` : namedWithFile(s));
 
 /**
  * A sentence naming the longest script the browser recorded, where it has a name, and `also` what it did.
@@ -1393,6 +1405,14 @@ function explain(r: InteractionReport): Explanation {
   const framesSay = !!r.frames && framedWaited >= FRAMES_COVER_SHARE * waitedBetween;
   const renderedBetween = r.commits.filter((x) => inAGap(x.at));
   const renderedBetweenMs = renderedBetween.reduce((a, x) => a + (x.hasDurations ? x.total : 0), 0);
+  // React's own listener, where the script says so: its file is react-dom's, or its function is one react-dom
+  // attaches. Where a production build says neither, a listener on the container of a root the hook saw is
+  // React's, unless that is the document: under the Next.js App Router the root is the document, and there
+  // React's click listener and a tag manager's both read "#document.onclick" (`ReactPage`).
+  const page = reactPages.get(r.entries) ?? NO_REACT_PAGE;
+  const targetOf = (s: ScriptSummary) => s.invoker.replace(/\.on\w+$/, '');
+  const reactsOwn = (s: ScriptSummary) =>
+    /react-dom/.test(s.source) || REACT_LISTENER.test(s.name) || (!page.named && targetOf(s) !== '#document' && page.roots.includes(targetOf(s)));
   // React's scheduler tasks up to a commit in a gap are that commit's render, time-sliced or not: each task is
   // the first commit's at or after its start, since a commit cannot come before its own task. A commit inside
   // any other script a long frame recorded, a store update at the end of a timer's, was rendered there, so it
@@ -1402,8 +1422,11 @@ function explain(r: InteractionReport): Explanation {
   const renderedElsewhere = (x: CommitSummary) =>
     (r.frames ?? []).some((f) => f.scripts.some((s) => s.invoker !== REACT_TASK && x.at >= s.start && x.at <= s.start + s.duration));
   const commitFrom = (t: number) => r.commits.reduce<CommitSummary | null>((a, x) => (x.at >= t && !renderedElsewhere(x) && (!a || x.at < a.at) ? x : a), null);
+  // React's own listener times the render it holds the same way: Gboard fires a key's oninput after its
+  // keydown's handlers, and React renders what the input changed in its root listener, between the handlers.
   const untimedIn = partsBetween.filter((p) => {
-    const x = p.script.invoker === REACT_TASK ? commitFrom(p.script.start) : null;
+    const s = p.script;
+    const x = s.invoker === REACT_TASK ? commitFrom(s.start) : reactsOwn(s) ? (r.commits.find((y) => y.at >= s.start && y.at <= s.start + s.duration) ?? null) : null;
     return !!x && !x.hasDurations && carriesWork(x) && renderedBetween.includes(x);
   });
   const untimedMs = untimedIn.reduce((a, p) => a + p.ms, 0);
@@ -1434,6 +1457,13 @@ function explain(r: InteractionReport): Explanation {
   const frames = r.frames ?? [];
   // A script that started between one event's handlers and the next's is no handler's.
   const whileHandling = scriptParts(frames, processingStart, processingEnd).filter((p) => !startsInAGap(p.script.start));
+  // And a script known not to be React's: where a development build keeps React's listener named, or where
+  // React's own ran beside it while the input was handled, too short for the browser to list it as often as not.
+  // React 17 and later listen only on a root's container and a portal's, never on the window, and on the document
+  // only where it is a root's, so a listener there is not React's where the hook saw roots and none of them was
+  // the document. A minified build with its root on the document knows none of that.
+  const offRoots = (s: ScriptSummary) => targetOf(s) === 'Window' || (targetOf(s) === '#document' && page.roots.length > 0 && !page.roots.includes('#document'));
+  const notReacts = (s: ScriptSummary) => !reactsOwn(s) && (page.named || offRoots(s) || whileHandling.some((p) => reactsOwn(p.script)));
   const forcedWhileHandling = forcedLayoutOf(whileHandling);
   const forcedAfterInput = forcedLayoutOf(scriptParts(frames, processingStart, r.end));
   const lateScript = longestPart(scriptParts(frames, processingEnd, r.end));
@@ -2075,6 +2105,22 @@ function explain(r: InteractionReport): Explanation {
   // The handler is the blame where it outruns all of React's time, or where React's time, whatever it
   // is, would not be the blame anyway: a 28 ms handler beside a 4 ms render and 24 ms of effects.
   const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
+  // A listener React did not attach (a shortcut bound on the document, a tag manager's, a library's own) is what
+  // the handler's time went on where it holds most of it and is known not to be React's own listener, which runs
+  // the handler and renders: it names the blame, as a script, by its function where the browser gives one. A tag
+  // manager's trackClick on the document took 159 ms of a click whose onClick set one state, and the verdict
+  // said the onClick ran for 161.
+  const listener = longestPart(whileHandling);
+  const listenerHolds = !!listener && listener.ms >= WAITED_BEHIND_MIN_SHARE * outside;
+  const otherListener = listenerHolds && notReacts(listener.script) ? listener : null;
+  /** The sentence that blames `otherListener` beside a React handler, with what the handler and React took. */
+  const otherListenerCause = (p: ScriptPart, confidence: Blame['confidence'], rest: string): string => {
+    // React's listener ran the handler, so its time is the handler's with React's dispatch around it.
+    const dispatch = whileHandling.filter((x) => reactsOwn(x.script)).reduce<ScriptPart | null>((a, x) => (!a || x.ms > a.ms ? x : a), null);
+    const theirs = dispatch ? `React's listener, which ran ${handler}, took ${ms(dispatch.ms)}` : `${cap(handler ?? 'the handler')} and React's listener took the other ${ms(outside - p.ms)}`;
+    const ranFor = `ran for about ${ms(p.ms)}: ${listenerWithFile(p.script)}`;
+    return say(confidence, `A listener React did not attach ${ranFor}. ${theirs}; ${rest}.`, `A listener React did not attach ${HEDGE} ${ranFor}. ${theirs}; ${rest}.`);
+  };
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
@@ -2370,19 +2416,22 @@ function explain(r: InteractionReport): Explanation {
     // totals, since the render named here need not be the commit that spent them.
     const spent = figures(committing, effects, totalsSaid);
     const also = spent.length ? ` React also spent ${spent.join(' and ')}${whereOf(c, totalsSaid)}.` : '';
-    cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
-    // A listener React did not attach (a shortcut bound on the document, a library's own listener) has
-    // no React name, and "code outside React" sends nobody anywhere. The browser still says which
-    // listener it ran and from which file, so the sentence passes that on as what the browser
-    // recorded. It is not said to be the 190 ms: the script's time can hold React's render too.
-    const listener = handlerName ? null : longestPart(whileHandling);
-    const listenerName = listener ? scriptName(listener.script) : null;
-    cause += longestSaid(listener);
-    // It names the blame only where it covers most of the time being blamed.
-    const blamedListener = listener && listener.ms >= WAITED_BEHIND_MIN_SHARE * outside ? listenerName : null;
-    // The component is the target's, which is where a React handler lives. A listener on the document
-    // lives nowhere in the tree, so a name that came from the browser goes without one.
-    blame = { kind: 'handler', name: handlerName ?? blamedListener, detail: blamedListener && !handlerName ? null : component, ms: outside, confidence };
+    if (otherListener && handlerName) {
+      const scriptConfidence = unsure ? 'inferred' : 'measured';
+      cause = otherListenerCause(otherListener, scriptConfidence, rest) + also;
+      blame = { kind: 'script', name: otherListener.script.name || scriptName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence };
+    } else {
+      cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
+      // With no React name, "code outside React" sends nobody anywhere. The browser still says which listener
+      // it ran and from which file, so the sentence passes that on as what the browser recorded. It is not
+      // said to be the 190 ms: the script's time can hold React's render too.
+      if (!handlerName) cause += otherListener ? ` The longest script the browser recorded in that time was ${listenerWithFile(otherListener.script)}, ${ms(otherListener.ms)}.` : longestSaid(listener);
+      // A listener names the blame only where it covers most of the time being blamed, and lives nowhere in the
+      // tree, so it goes without the target's component.
+      blame = otherListener
+        ? { kind: 'script', name: otherListener.script.name || scriptName(otherListener.script), detail: null, ms: otherListener.ms, confidence }
+        : { kind: 'handler', name: handlerName ?? (listenerHolds ? scriptName(listener.script) : null), detail: listenerHolds && !handlerName ? null : component, ms: outside, confidence };
+    }
   } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
     saidAcross = rc;
     const confidence = measuredFrom(rc);
@@ -2424,8 +2473,13 @@ function explain(r: InteractionReport): Explanation {
           ? `React ${renderedVerb(c)} only ${plural(c.rendered, 'component')}`
           : `React ${renderedVerb(c)} ${renderedWhere(c)}, none of them ${RENDER_MIN_COMPONENTS_BESIDE_HANDLER} times over, and ${ms(r.processing)} is more than ${RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER} ms for each of them`;
     const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';
-    cause = `${cap(handler)} ${HEDGE} took ${untimedTook}: ${howLittle}${ranEffects}.${profiling}`;
-    blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
+    // A listener React did not attach is timed by the browser, so the build's missing durations leave it measured.
+    const scriptConfidence = unsure ? 'inferred' : 'measured';
+    if (otherListener) cause = otherListenerCause(otherListener, scriptConfidence, `${howLittle}${ranEffects}`);
+    else cause = `${cap(handler)} ${HEDGE} took ${untimedTook}: ${howLittle}${ranEffects}.${profiling}`;
+    blame = otherListener
+      ? { kind: 'script', name: otherListener.script.name || scriptName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence }
+      : { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (waitingWins) {
     // What the input waited behind is usually on record: the long animation frame that was open when
     // it came lists its scripts, and the one that filled the wait is the thing to go and look at. It is
@@ -2459,7 +2513,7 @@ function explain(r: InteractionReport): Explanation {
     // React's own task is named after the port its scheduler posts to, which nobody wrote: where React
     // rendered inside it, the blame names that render's component, and the sentence still names the task.
     // On a phone a cascading effect's 400 rows read "screen took 148 ms to update · MessagePort.onmessage".
-    const reactTaskRender = lateLeads?.script.invoker === REACT_TASK && lateRender ? leafName(lateRender) : null;
+    const reactTaskRender = lateLeads && (lateLeads.script.invoker === REACT_TASK || reactsOwn(lateLeads.script)) && lateRender ? leafName(lateRender) : null;
     blame = { kind: 'painting', name: reactTaskRender ?? (lateLeads ? scriptBlameName(lateLeads.script) : null), detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (unseen) {
     // No react-dom is read, so what React rendered for this input, if anything, is unknown, and with it

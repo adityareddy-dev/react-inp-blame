@@ -1416,6 +1416,9 @@ that task, or the task reads as a script that held the screen update, and not as
 Where the screen update did outrank the working time, the `painting` blame names the component that render is
 named after and not the task, since 2026-09-28. On a phone the cascading effect's row had read "screen took
 148 ms to update · MessagePort.onmessage", in bold the name of React's scheduler, which no page ever writes.
+Since 0.20.0 React's own listener is named the same way, known as "Whose listener it is" below says: the
+Gboard key press whose root listener rendered 3,000 rows after the keydown's handlers had read
+`DIV#root.oninput`, and now reads BigList.
 A render is inside a script where its commit is stamped, give or take a millisecond, only where no other script
 the browser recorded holds the stamp, one on the tick a script ends and the next begins being the first one's,
 as for the forced layout's commits: taken a millisecond wide regardless, a production render committed at the
@@ -1503,8 +1506,11 @@ it stays a wait too. The tasks are known only by their name, `MessagePort.onmess
 MessagePort messages share. A render timed this way is taken off the wait and set against it the way a timed
 render's length is, and is never the script the wait is named after, though the sentence still counts its task
 among the scripts that ran. Only where it rendered 10 components or more, the bar a render counts from
-anywhere else: under that, its task is weighed as a script. A render still time-slicing when the next event
-comes, committing after its handlers, is not in the gap, and its slices before them are a wait. Where the part nothing placed is a tenth of the gap or more, the sentence says
+anywhere else: under that, its task is weighed as a script. Since 0.20.0 React's own listener that holds the
+commit is timed the same way (the listener rule under "Whose listener it is" says how it is known). Gboard
+fires a key's `input` after the keydown's handlers, and React renders what it changed in its root listener
+before the keyup: a production build said a 357 ms wait named after `DIV#root.oninput`, and now says the render
+of BigList. A render still time-slicing when the next event comes, committing after its handlers, is not in the gap, and its slices before them are a wait. Where the part nothing placed is a tenth of the gap or more, the sentence says
 what the wait was, and the two figures add up to the gap as printed. Before a release (a keyup, or a pointerup,
 mouseup, touchend, click or auxclick), and with long animation frames recorded, it says the key or pointer was
 still down for that long with nothing on record running; before any other event, that nothing on record ran
@@ -1897,6 +1903,42 @@ was under 50 ms and whatever style recalculation and layout it forced went unmea
 opening on a phone forces four whole-document recalculations inside 31 ms of working time), and the
 sentence says so. Hydration is the exception: a boundary the interaction waited for is named by its
 count at any working time, as it was.
+
+### Whose listener it is
+
+Tag managers, analytics and consent tools listen for clicks on the document, and they are among the commonest
+reasons a click is slow in a real app. Until 0.20.0 the browser's scripts were read in the handler branch only
+where the target had no React handler, so a tag manager's `trackClick` that ran for 159 ms of a click whose
+onClick set one state was blamed on the onClick, measured, and the developer opened the one piece of code that
+was fine. The browser's own record in the same report named the function and its file.
+
+React's own listener is known by the script before its invoker. Its file is a react-dom file
+(`deps/react-dom_client.js` under Vite's development server), or its function is `dispatchDiscreteEvent` or
+`dispatchContinuousEvent`, the listeners react-dom attaches. That settles it in a development build. A
+minified production bundle says neither (`_h` in `assets/index.js`), so there a listener on the container of a
+root the hook has seen is React's, the hook reading each root's `containerInfo` as the report is built
+(`reactPage` in hook.ts, passed to `buildReport` and kept beside the report's entries, so nothing is read at
+explain time). The container is kept only where Long Animation Frames names one node by it: one with an id
+(`DIV#root`), the body, or the document. A listener on the document is never taken for React's that way.
+Under the Next.js App Router the root is the document (`hydrateRoot(document)`), and React's listener and a
+tag manager's both read `#document.onclick` there, so on that page with minified names nothing tells them
+apart.
+
+A script is known not to be React's where it is not React's own and every react-dom read is a development
+build, whose listener keeps its name, or React's own listener is among the scripts that ran while the input
+was handled, or it listens on the window, or on the document where the hook saw roots and none of them was
+the document. React 17 and later listen on a root's container and a portal's, and nowhere else. React's
+listener is often too short for Long Animation Frames to list it (5 ms), which is why the build and the roots
+count. A portal's container is not recorded, which is why no other listener is ruled out as React's by the
+roots alone. Then, in the handler branch, the longest script in the handlers that holds half the
+time outside React's render and is known not to be React's is the verdict, a `script` blame named by its
+function where the browser gives one and by its invoker otherwise, with its own milliseconds. The sentence
+names it with its file and what ran it, and gives the rest to React's listener, which ran the handler, with that
+listener's time where it is listed. Where React's listener took the time, or nothing says whose the script is,
+the handler keeps the verdict as before. With no React handler on the target the same listener was a `handler`
+blame named after it, and it is now the same `script` blame, so one cause has one kind; unknown, it stays as
+it was. The same rule names a render inside React's own listener after its component where the screen update
+is the verdict, and times one between the handlers as React's scheduler task is timed.
 
 ## The demo
 
