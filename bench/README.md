@@ -9,13 +9,17 @@ machine's. The paired deltas are the part that carries over to yours.
 
 ## What it measures
 
-Each app is built from one source up to three times, all production builds:
+Each app is built from one source up to three times, with `vite build` or `next build`:
 
 | | |
 | --- | --- |
 | **A** | the library absent: the app's Vite or Next config never constructs the plugin or calls the wrapper |
 | **B** | `enabled: true` and `runtime: { debugGlobal: true }`, so the harness can read `stats()` and `reports()` |
 | **C** | as B, with `overlay: true` |
+
+The two TanStack examples pin `NODE_ENV` to `development` in their Vite configs, and the patches leave that
+alone, so those two apps ship React's development build, as the [benchmark docs](../docs/benchmarks/README.md)
+say.
 
 `bench.mjs` serves each build on a port of its own and drives headless Chromium through Playwright 1.59.1
 along a scripted sequence of real interactions. Every step asserts that the page changed, so a step that did
