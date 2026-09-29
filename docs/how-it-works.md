@@ -59,7 +59,10 @@ interaction's latency is its longest Event Timing entry, and INP is the one at i
 `min(floor(count / 50), n - 1)` among the `n` longest it kept, `n` at most 10, chosen as entries arrive
 and again when the page is hidden, the two moments web-vitals chooses at. It starts over at each soft
 navigation and back/forward cache restore, and after one of those, interactions the browser counted but no
-entry was sent for read as the same 8 ms web-vitals reports for them. `apps/demo/e2e/inp.spec.ts` runs
+entry was sent for read as the same 8 ms web-vitals reports for them. Clicks, taps and key presses on the
+badge and panel are left out, of INP and of the count: the browser counts them as the page's, but they are
+not, and on a phone opening the panel can take longer than the page's own taps. One too quick to send an
+entry, under 16 ms, stays in the count, since nothing says where it landed. `apps/demo/e2e/inp.spec.ts` runs
 web-vitals 6.2.2's `onINP` in the same page (`reportAllChanges`, `durationThreshold: 16`) through more
 than 50 interactions and asserts after
 each that both name the same value and the same interaction. That is one session, not a promise: this is the
@@ -67,7 +70,8 @@ same algorithm written again from the same entries, and it is not web-vitals. Th
 threshold, which `useReportWebVitals` keeps, when INP is under 40 ms or too few interactions reach it; at a
 soft navigation; after `clear()`; for a moment after each interaction, while web-vitals waits for an idle
 page; and against the older web-vitals that Next.js 16.3 vendors, which keeps counting every interaction
-since the page loaded after a back/forward cache restore.
+since the page loaded after a back/forward cache restore. They part wherever the badge or panel was used
+too, since web-vitals and Chrome's own INP count those taps as the page's.
 
 ## What it reads from React
 
