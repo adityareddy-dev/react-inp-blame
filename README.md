@@ -232,9 +232,9 @@ line's module stays, as an empty function); where it loads:
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 87.3 KB | 30.9 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 15.4 KB | 6.0 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 29.5 KB | 10.8 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 91.5 KB | 32.4 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 15.3 KB | 6.0 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 30.4 KB | 11.1 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.5 KB | 0.8 KB |
 <!-- size:end -->
 
