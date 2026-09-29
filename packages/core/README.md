@@ -450,10 +450,12 @@ unless the build keeps function names (terser's `keep_fnames`, esbuild's `keepNa
 
 Reports are frozen and carry `schemaVersion: 4`. When a late Event Timing entry, a long animation
 frame or a later render joins one, the next revision arrives as a new object with `revision`
-bumped. `explanation.blame`, `rating`, the phases' milliseconds and the report's own numbers are
-data; `verdict` and the other sentences are display text. `navigationURL` and `navigationType` say
-which page the interaction happened on, with web-vitals' names and values, and `startedNavigation`
-names the soft navigation it started, if it started one.
+bumped. The blame's `kind`, `name`, `ms` and `confidence`, `rating`, the phases' milliseconds and
+the report's own numbers are data, and `blame.detail`, `verdict` and the other sentences are display
+text. `navigationURL` and `navigationType` say which page the interaction happened on, under
+web-vitals' names, and `startedNavigation` names the soft navigation it started, if it started one.
+`navigationURL` keeps only the origin and path though, where web-vitals' URL keeps the query too, so
+match the two on the path.
 
 A report's `target.label` names the clicked element, or the control it sits in, by its tag and a name of
 at most 40 characters. A control is a button, link, summary, label or form field, or an element with a
