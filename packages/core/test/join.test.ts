@@ -347,6 +347,32 @@ test("with attributes only, the label comes from what the page's code wrote on t
   assert.equal(label(element('div', [], { 'aria-label': 'B'.repeat(60) })), `div "${'B'.repeat(40)}"`);
 });
 
+test('with text allowed, a field is named by its <label>, and a control by its text across the marks and spans inside it', () => {
+  // `<label><input type="checkbox" /> Compact rows</label>`: the input's labels hold the label around it.
+  const box = element('input', [], { type: 'checkbox' });
+  Object.assign(box, { labels: [element('label', [box, text(' Compact rows')])] });
+  assert.equal(labelOf(box, 'text'), 'input "Compact rows"');
+  assert.equal(labelOf(box, 'attributes'), 'input "checkbox"');
+  // A label comes before the placeholder, and what was typed into the field is never read, only the label's text.
+  const email = element('input', [], { type: 'email', placeholder: 'you@example.com' });
+  Object.assign(email, { value: 'ada@example.com', labels: [element('label', [text('Email'), email])] });
+  assert.equal(labelOf(email, 'text'), 'input "Email"');
+  assert.equal(labelOf(email, 'attributes'), 'input "you@example.com"');
+  // A label around a textarea reads no text inside it, and an aria-label still comes first.
+  const notes = element('textarea', [text('Hi Ada, the password is hunter2')]);
+  Object.assign(notes, { labels: [element('label', [text('Notes '), notes])] });
+  assert.equal(labelOf(notes, 'text'), 'textarea "Notes"');
+  const named = element('input', [], { 'aria-label': 'Search members' });
+  Object.assign(named, { labels: [element('label', [text('Search')])] });
+  assert.equal(labelOf(named, 'text'), 'input "Search members"');
+  // A search result that highlights what matched: `<a><mark>Oak</mark> Chair 1</a>`.
+  assert.equal(labelOf(element('a', [element('mark', [text('Oak')]), text(' Chair 1')]), 'text'), 'link "Oak Chair 1"');
+  assert.equal(labelOf(element('button', [text('Save '), element('b', [text('3')]), text(' drafts')]), 'text'), 'button "Save 3 drafts"');
+  // A block inside still ends the run.
+  assert.equal(labelOf(element('div', [element('div', [text('Oak')]), element('div', [text('Chair 1')])]), 'text'), 'div "Oak"');
+  assert.equal(labelOf(element('a', [element('mark', [text('Oak')]), text(' Chair 1')]), 'attributes'), 'link');
+});
+
 test('an editor is named like a form field whatever labels allows, never by the text a person typed into it', () => {
   for (const labels of ['text', 'attributes'] as const) {
     const label = (target: Record<string, unknown>) => labelOf(target, labels);
