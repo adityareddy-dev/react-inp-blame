@@ -162,15 +162,20 @@ initializeFaro({
 ## Where the setup goes
 
 The library does its work as the interaction happens, and the entry reads its report when the INP event is
-sent, which without `reportAllChanges` is when the page is hidden. So the order of the two setups matters less
-than both being on the page from the start. The demo's check sets web-vitals up before the library and still
-matches.
+sent, which without `reportAllChanges` is when the page is hidden. The library has to install before the
+telemetry is set up. At the hide its own listener, added first, hands the library the entries the browser
+still holds, and only then does web-vitals take them and report, so the report is there when the record is
+sent. With the telemetry set up first, an interaction the page hides on before the browser hands its entries
+over says `no-report`. The demo's check sets web-vitals up before the library and still matches, but only
+because it waits for the entries before it hides.
 
 - **Next.js 16.3 and later:** `withInpBlame` injects the install ahead of `instrumentation-client.ts`, so the
   telemetry setup goes in that file.
 - **Next.js 15.3 to 16.2:** the install is the library's line in `instrumentation-client.ts`
   ([Next.js](install.md#install-with-nextjs-142-or-later)), and the telemetry setup is imported after it.
 - **Vite:** the plugin's script runs ahead of the app, so import the setup from your entry module as usual.
+- **Your own `install()` call:** call it before the telemetry setup is imported, in a module that loads ahead
+  of it.
 
 ## What lands on the record
 
@@ -189,7 +194,7 @@ build.
 | `react_inp_blame.blame.confidence` | `measured` or `inferred` | `measured` | yes |
 | `react_inp_blame.handler` | The React handler that ran | `add` | yes |
 | `react_inp_blame.target.components` | Up to four components around the element, outermost first | `App > Lab > ContextStorm` | yes |
-| `react_inp_blame.hot_path` | The path down to where the render spent its time | `ContextStorm > OrderSummary` | yes |
+| `react_inp_blame.hot_path` | The path down to where the render spent its time. Without the `displayName` transform in production, the minifier's names, which change with each build, so group by `target.components` or `blame.name` there | `ContextStorm > OrderSummary` | yes |
 | `react_inp_blame.react_status` | Whether the library could see React: `reading`, `waiting`, `installed-late` or `unreadable` | `reading` | yes |
 | `react_inp_blame.react_build` | The build of react-dom that measured it. A `development` one reads high | `development` | yes, and filter it out |
 | `react_inp_blame.commits.count` | React commits inside the interaction | `1` | no |
@@ -256,11 +261,16 @@ User Timing measures picks those up, whatever this entry sends.
 - **`reportAllChanges`, or any SDK that reports INP before the page is hidden,** can send a record before the
   library has its report, which then says `no-report`. Honeycomb passes its `inp` options straight to
   web-vitals, so a `reportAllChanges` there does this.
+- **The telemetry set up before the library.** An interaction the page hides on before the browser hands its
+  entries over says `no-report`, since web-vitals reports before the library has built the report. A flush at
+  the hide for this order is planned for after 1.0. Until then, install first
+  ([Where the setup goes](#where-the-setup-goes)).
 - **A click or tap on the badge or panel** counts toward INP in web-vitals, which every setup here goes
   through, but the library makes no report for it, so its record says `no-report`.
 - **Processor order.** Behind a processor that exports as the record is emitted, the attributes miss the
   export. First in the list is always safe.
 - **Upstream is 0.x.** The web vitals instrumentation lives under an `experimental/` path of a 0.x package,
   and `browser.web_vital` is a development-stage name in OpenTelemetry's conventions. CI runs every setup on
-  this page against the versions above, and again every day against the newest, so a release that moves a
-  hook or the INP timestamp shows up there first.
+  this page except Embrace's, which it only compiles, against the versions above, and again every day against
+  the newest, so a release that moves a hook or the INP timestamp shows up there first. For Embrace it would
+  not.
