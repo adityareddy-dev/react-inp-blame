@@ -75,6 +75,8 @@ const presented = (e: TimedInteraction) => e.startTime + e.duration;
  *   no match for; at a soft navigation web-vitals is not asked to report, only this estimate starts over.
  * - web-vitals updates once the page is idle, this estimate as entries arrive, so for a moment after
  *   an interaction this one can be ahead.
+ * - The taps on the library's own badge and panel are left out here (`leaveOut`). web-vitals and the
+ *   browser's own INP count them as the page's.
  * - Next.js 16.3's `useReportWebVitals` runs the web-vitals 4 it vendors, which after a back/forward
  *   cache restore keeps counting every interaction since the page loaded. Past 50 interactions before
  *   a restore, it and this estimate can point at different interactions.
@@ -84,9 +86,13 @@ export function createInpTracker(nativeCount: (() => number) | null) {
   const byId = new Map<number, Candidate>();
   let minId = Infinity;
   let maxId = 0;
-  let countAtReset = 0;
+  // The part of the browser's count that is not this estimate's: every interaction before the last reset,
+  // and since then the taps on the library's own badge and panel (`leaveOut`), which the browser counts too.
+  let notCounted = 0;
   // Set by a reset for a navigation, after which web-vitals stands in for interactions it counted but never saw.
   let afterNavigation = false;
+  // Interactions that are not the page's (`leaveOut`).
+  const leftOut = new Set<number>();
   // Kept while the value stays the same: web-vitals moves its reported interaction only when INP
   // changes, so an interaction of equal latency taking the candidate's place does not move it.
   let current: { id: number | null; value: number; interactionCount: number } | null = null;
@@ -103,6 +109,7 @@ export function createInpTracker(nativeCount: (() => number) | null) {
       minId = Math.min(minId, id);
       maxId = Math.max(maxId, id);
     }
+    if (leftOut.has(id)) return;
     let c = byId.get(id);
     const shortest = list[list.length - 1];
     if (!c && shortest && list.length >= MAX_CANDIDATES && entry.duration <= shortest.latency) return;
@@ -119,7 +126,7 @@ export function createInpTracker(nativeCount: (() => number) | null) {
   }
 
   function choose(): void {
-    const n = totalCount() - countAtReset;
+    const n = totalCount() - notCounted;
     const candidate = list[Math.min(list.length - 1, Math.floor(n / INTERACTIONS_PER_CANDIDATE))] ?? (afterNavigation && n > 0 ? UNSEEN_INTERACTION : null);
     if (!candidate) return;
     if (current && candidate.latency === current.value) current.interactionCount = n;
@@ -131,6 +138,21 @@ export function createInpTracker(nativeCount: (() => number) | null) {
     add(batch: readonly TimedInteraction[]): void {
       for (const entry of batch.slice().sort((a, b) => presented(a) - presented(b))) addEntry(entry);
       choose();
+    },
+    /**
+     * Leaves an interaction out, one the browser counts as the page's though it is not: a tap on the
+     * library's own badge or panel, given with an entry of it. It comes off the count, once, and it is never a
+     * candidate: one that was already stops being one, and INP is chosen again at the next batch.
+     */
+    leaveOut(id: number): void {
+      if (!leftOut.has(id)) notCounted++;
+      leftOut.add(id);
+      const c = byId.get(id);
+      if (c) {
+        list.splice(list.indexOf(c), 1);
+        byId.delete(id);
+        current = null;
+      }
     },
     /** Chooses again at the interaction count by now, as web-vitals does when the page is hidden: interactions too quick to be observed still count. */
     update(): void {
@@ -150,7 +172,7 @@ export function createInpTracker(nativeCount: (() => number) | null) {
      * has no match for.
      */
     reset(cause: 'navigation' | 'clear'): void {
-      countAtReset = totalCount();
+      notCounted = totalCount();
       list.length = 0;
       byId.clear();
       current = null;

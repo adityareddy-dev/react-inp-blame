@@ -171,6 +171,8 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       });
     }
   };
+  /** Whether an interaction was a tap or key press on the badge or panel, from its entries so far: none of those is the page's. */
+  const onOverlay = (entries: readonly InteractionTiming[]) => inOverlay(interactionTarget(entries, options.inputs()));
   const find = (id: number): Held | null => {
     for (const list of [published, quiet]) {
       for (let i = list.length - 1; i >= 0; i--) {
@@ -209,8 +211,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       publish(existing.report);
       return;
     }
-    // Clicks on the badge and panel are not the app's interactions.
-    if (inOverlay(interactionTarget(entries, options.inputs()))) {
+    if (onOverlay(entries)) {
       spend(started);
       return;
     }
@@ -223,18 +224,22 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
   return {
     onEntries(batch) {
       const started = now();
-      // Counted toward INP apart from the reports, so an error in the count keeps none of them from being
-      // built.
-      alone(() => inp.add(batch.filter((e) => e.startTime >= navigationStart)));
-      spend(started);
-      // Before the batch's own interactions, so the newest report is still the last published.
-      settle(batch);
       const byId = new Map<number, InteractionTiming[]>();
       for (const e of batch) {
         const group = byId.get(e.interactionId);
         if (group) group.push(e);
         else byId.set(e.interactionId, [e]);
       }
+      // Counted toward INP apart from the reports, so an error in the count keeps none of them from being
+      // built. The badge and panel's own taps are left out of it as they are of the reports: the browser
+      // counts them, but they are not the page's, and on a phone opening the panel can take longer than its taps.
+      alone(() => {
+        for (const [id, group] of byId) if (onOverlay((entriesById.get(id) ?? []).concat(group))) inp.leaveOut(id);
+        inp.add(batch.filter((e) => e.startTime >= navigationStart));
+      });
+      spend(started);
+      // Before the batch's own interactions, so the newest report is still the last published.
+      settle(batch);
       // One at a time, so a report that cannot be built drops only itself, and not the others painted with it.
       for (const [id, group] of byId) alone(() => onInteraction(id, group));
     },

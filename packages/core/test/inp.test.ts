@@ -58,6 +58,49 @@ test('where the browser counts interactions itself, its count picks the candidat
   assert.deepEqual(t.estimate(), { id: 7, value: latency(1), interactionCount: 120 });
 });
 
+test("an interaction left out, a tap on the library's own badge or panel, is never INP and comes off the browser's count", () => {
+  let count = 1;
+  const t = createInpTracker(() => count);
+  t.add([interaction(1, 56)]);
+  // Opening the panel took longer than the page's own tap, and its entries came in two batches.
+  count = 2;
+  t.leaveOut(14);
+  t.add([interaction(2, 104)]);
+  t.add([interaction(2, 88)]);
+  assert.deepEqual(t.estimate(), { id: 7, value: 56, interactionCount: 1 });
+  // One taken for the page's before it was known to be left out is dropped from the candidates and from INP,
+  // and counted off once, whether or not another entry of it comes.
+  count = 3;
+  t.add([interaction(3, 120)]);
+  assert.equal(t.estimate()?.id, 21);
+  t.leaveOut(21);
+  t.add([interaction(3, 96)]);
+  assert.deepEqual(t.estimate(), { id: 7, value: 56, interactionCount: 1 });
+  count = 4;
+  t.add([interaction(4, 120)]);
+  assert.equal(t.estimate()?.id, 28);
+  t.leaveOut(28);
+  count = 5;
+  t.add([interaction(5, 120)]);
+  assert.deepEqual(t.estimate(), { id: 35, value: 120, interactionCount: 2 });
+});
+
+test('an interaction left out comes off the count made from id spacing too, and a reset counts on from there', () => {
+  const t = createInpTracker(null);
+  t.leaveOut(7);
+  t.add([interaction(1, 104)]);
+  t.add([interaction(2, 56)]);
+  t.leaveOut(21);
+  t.add([interaction(3, 96)]);
+  t.add([interaction(4, 64)]);
+  assert.deepEqual(t.estimate(), { id: 28, value: 64, interactionCount: 2 });
+  t.reset('clear');
+  t.leaveOut(35);
+  t.add([interaction(5, 200)]);
+  t.add([interaction(6, 48)]);
+  assert.deepEqual(t.estimate(), { id: 42, value: 48, interactionCount: 1 });
+});
+
 test('a batch is taken in the order its entries were presented, so equal latencies rank as they do in web-vitals', () => {
   const t = createInpTracker(null);
   // Delivered second-interaction first, but the first interaction's frame was presented earlier.

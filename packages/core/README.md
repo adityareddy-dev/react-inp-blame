@@ -413,7 +413,8 @@ for an inline script, and never has a password, query or fragment.
 - The API: `reports()` (up to 50, keeping the ten slowest and those INP can still point at past that),
   `last()`, `inp()` (the INP of the navigation the page is on, estimated the
   way web-vitals does, chosen again when the page is hidden; it starts over at each soft navigation
-  and each restore from the back/forward cache), `clear()`, `stats()` (the mode, why a page is
+  and each restore from the back/forward cache, and leaves out clicks, taps and key presses on the
+  badge and panel, which Chrome's own INP and web-vitals count), `clear()`, `stats()` (the mode, why a page is
   unsupported, what the library has cost), `dispose()`, and `debug.commits()` and `debug.hook()`,
   which are for debugging and may change in any version.
 - `mountOverlay(options?)` shows the on-page badge and panel; their code loads when shown.

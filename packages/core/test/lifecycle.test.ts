@@ -361,16 +361,30 @@ test('every revision is frozen, down to its entries, commits, frames and explana
   }, TypeError);
 });
 
-test("a click on the library's own badge or panel is never reported, though INP counts it as web-vitals does", () => {
-  const { life, published } = lifecycle();
-  life.onEntries([entry(7, 'click', 120, { target: elementWithId('react-inp-blame') })]);
-  assert.deepEqual(published, []);
-  assert.deepEqual(life.reports(), []);
-  assert.equal(life.inp()?.interactionId, 7);
-  assert.equal(life.inp()?.report, null);
+test("a tap on the library's own badge or panel is never reported, and INP and its count leave it out", () => {
+  let count = 1;
+  const { life, published } = lifecycle({ interactionCount: () => count });
+  life.onEntries([entry(7, 'click', 56)]);
+  // Opening the panel on a phone takes longer than the page's tap did: its pointerdown, then its click in a
+  // later batch. Up to 0.18.0 it became the page's INP, with no report to explain it.
+  count = 2;
+  life.onEntries([entry(14, 'pointerdown', 104, { target: elementWithId('react-inp-blame') })]);
+  life.onEntries([entry(14, 'click', 96)]);
+  assert.deepEqual(
+    published.map((r) => r.interactionId),
+    [7],
+  );
+  assert.deepEqual(
+    life.reports().map((r) => r.interactionId),
+    [7],
+  );
+  assert.deepEqual(life.inp(), { value: 56, rating: 'good', interactionId: 7, interactionCount: 1, report: published[0] });
   // The page's own element with an id that merely starts the same way is the page's.
-  life.onEntries([entry(14, 'click', 120, { target: elementWithId('react-inp-blame-docs') })]);
-  assert.equal(published.length, 1);
+  count = 3;
+  life.onEntries([entry(21, 'click', 120, { target: elementWithId('react-inp-blame-docs') })]);
+  assert.equal(published.length, 2);
+  assert.equal(life.inp()?.interactionId, 21);
+  assert.equal(life.inp()?.interactionCount, 2);
 });
 
 test('an interaction whose report cannot be built goes to dropped on its own, and the others in its batch are still published', () => {

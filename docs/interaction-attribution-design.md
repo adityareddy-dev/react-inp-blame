@@ -1621,9 +1621,10 @@ waiting / working / updating bar. Consecutive key presses in one field collapse 
 that shows the slowest and the typical. A row opens into the cause sentence, the notes, and
 the components that rendered before and after the paint. It is plain DOM in a shadow root
 (no React, so it renders while React is busy and never adds a commit), about 3 ms of work per
-report, and the page's own clicks on it are dropped before they become reports. Its code
-arrives by dynamic `import()` after `install()` has returned, so a page that never shows it
-never downloads it, and `mountOverlay()` returns a promise of a handle of the caller's own.
+report, and the page's own clicks on it are dropped before they become reports and left out
+of the INP it shows (below). Its code arrives by dynamic `import()` after `install()` has
+returned, so a page that never shows it never downloads it, and `mountOverlay()` returns a
+promise of a handle of the caller's own.
 The badge goes when the last of those is disposed, handles from other copies of this version
 or later included, so a component can show it from an effect under StrictMode, whose cleanup
 runs between two mounts, and a load that failed is tried again at the next call. The blame line
@@ -1664,7 +1665,7 @@ a page has exactly one first input, so the spec makes that click on up to three 
 and keeps the first page whose click was quiet. If none of them is, it carries on with the last page
 and annotates the run to say that path went unexercised there, rather than failing on the machine.
 
-The two still part in four cases. web-vitals observes at 40 ms unless given `durationThreshold:
+The two still part in six cases. web-vitals observes at 40 ms unless given `durationThreshold:
 16`; at its default, interactions of 16 to 40 ms are not its candidates, so the numbers differ
 when INP is under 40 ms or fewer than floor(count / 50) + 1 interactions reach 40 ms (Next.js's
 `useReportWebVitals` passes no threshold). Both start over after a back/forward cache restore, but
@@ -1673,10 +1674,27 @@ the browser's soft navigation entries where the library learns of it from the ro
 Navigations above), so at a soft navigation the two can start over at different moments, or only
 one of them at all. The library starts over on `clear()`, including the panel's Clear button;
 web-vitals does not. web-vitals updates once the page is idle, so for a moment after an interaction the
-library's number is ahead. And Next.js 16.3.5's `useReportWebVitals` runs the web-vitals 4 it vendors,
-which after a back/forward cache restore keeps counting every interaction since the page loaded (its
-base is only ever set to 0), so past 50 interactions before a restore that copy and this estimate can
-point at different interactions.
+library's number is ahead. The library leaves out the taps on its own badge and panel, which
+web-vitals counts as the page's (below). And Next.js 16.3.5's `useReportWebVitals` runs the
+web-vitals 4 it vendors, which after a back/forward cache restore keeps counting every interaction
+since the page loaded (its base is only ever set to 0), so past 50 interactions before a restore
+that copy and this estimate can point at different interactions.
+
+Since 2026-09-28 the clicks, taps and key presses on the badge and panel are left out of the INP
+estimate too, not only out of the reports. On a Pixel 7 emulator running Chrome 124, opening the
+panel took 104 ms after a 56 ms tap on `#fine` was the page's only one: `inp()` moved to the
+panel's tap with a null `report`, the head read 104 ms with no "from click on" above a single
+56 ms row, and one real tap showed as 3 interactions. Each batch now asks, before INP counts it,
+whether an interaction's entries so far land on `#react-inp-blame`, the same test that keeps it
+from becoming a report. The tracker's `leaveOut` then keeps it from ever being a candidate and
+takes it off the count, once, whether that count is `performance.interactionCount` or the id
+spacing: it moves up the base the count starts from, as a reset does. A tap there too quick to
+send an entry, under 16 ms, stays in the count, since nothing says where it landed. `apps/demo/e2e/phone.spec.ts` taps `#fine`, opens, closes
+and opens the panel on the Pixel 7 project, and checks that INP stays on the tap and that the
+count is the browser's less the panel's taps that sent an entry. WebKit on the iPhone project
+paints all of those taps under 16 ms, so there is nothing to leave out and the check is skipped.
+The panel's `backdrop-filter` went at the same time: its background is 97% opaque, so the blur
+showed nothing, and on a phone's GPU it is a cost at every open.
 
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
