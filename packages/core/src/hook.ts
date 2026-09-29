@@ -700,9 +700,9 @@ export function hookInfo(): HookInfo {
 }
 
 /**
- * `InteractionReport.reactBuild`: 'development' where any react-dom is a development build, as the badge says,
- * whichever registered first, and one this library cannot read too: the page still renders with it. Otherwise
- * what the readable ones' commits showed, a profiling build over a production one.
+ * `InteractionReport.reactBuild`: 'development' where any react-dom on the page says so to the DevTools hook,
+ * as the badge's mark does, in whatever order they registered, one this library cannot read included, since the
+ * page still renders with it. Otherwise what the readable ones' commits showed, a profiling build over a production one.
  */
 export function reactBuild(): InteractionReport['reactBuild'] {
   const hook = state.attached ?? state.turnedOffHook;
