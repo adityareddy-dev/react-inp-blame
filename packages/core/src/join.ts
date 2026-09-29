@@ -176,10 +176,12 @@ interface PaintGroup {
 
 /**
  * What a person would call the interaction: "click", "tap", "key press" or "typing", from the event type
- * and, for a pointer event, the pointer it came from (a mouse's pointerdown is a click). Display text.
+ * and, for a pointer event, the pointer it came from (a mouse's pointerdown is a click, a finger's or a
+ * pen's click a tap). Display text.
  */
 export function kindOf(type: string, pointerType?: string | null): string {
   if (pointerType === 'mouse' && (type === 'pointerdown' || type === 'pointerup')) return 'click';
+  if ((pointerType === 'touch' || pointerType === 'pen') && POINTER_EVENTS.includes(type)) return 'tap';
   return FRIENDLY[type] || type;
 }
 

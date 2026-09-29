@@ -1299,9 +1299,9 @@ test("a next click whose pointerdown came before this press, or is not in the ri
       [frame(1000, 20 + paint, [script('DIV#root.onkeydown', 1002, 18), script(invoker, at, ms)])],
       ring,
     ).explanation;
-  const waited = (invoker: string, paint: number, ms: number) => ({
+  const waited = (invoker: string, paint: number, ms: number, next = 'click') => ({
     blame: { kind: 'painting', name: invoker, detail: null, ms: paint, confidence: 'measured' },
-    cause: `After the key press was handled, the screen took another ${paint} ms to update: the frame waited on the next click, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), ${ms} ms.`,
+    cause: `After the key press was handled, the screen took another ${paint} ms to update: the frame waited on the next ${next}, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), ${ms} ms.`,
     notes: [],
   });
   const said = (e: ReturnType<typeof clicked>) => ({ blame: e.blame, cause: e.cause, notes: e.notes });
@@ -1313,7 +1313,8 @@ test("a next click whose pointerdown came before this press, or is not in the ri
         ['no pointerdown', [key, input(1021, 'click', { pointerType: 'mouse' })]],
         ['down in the window', [key, input(1010, 'pointerdown', { pointerType: 'mouse' }), input(1021, 'click', { gestureTs: 1010, pointerType: 'mouse' })]],
       ] as const) {
-        assert.deepEqual(said(clicked(invoker, paint, ms, [...ring])), waited(invoker, paint, ms), `${invoker}, ${paint} ms, ${how}`);
+        // A finger's click is the next tap.
+        assert.deepEqual(said(clicked(invoker, paint, ms, [...ring])), waited(invoker, paint, ms, how === 'touched first' ? 'tap' : 'click'), `${invoker}, ${paint} ms, ${how}`);
       }
     }
     // So on the tick the key's handlers ended, where that click's dispatch, queued behind them, runs.
@@ -5008,6 +5009,12 @@ test("a mouse's pointerdown alone reads as a click, a finger's as a tap", () => 
   assert.match(unseen.verdict, /^120 ms tap\b/);
   // A key's click carries no pointer.
   assert.equal(report([entry('click', 0, 120, 2, 92)], [], [], [input(0, 'click', { pointerType: '' })]).pointerType, null);
+  // A finger's or a pen's click is a tap too, all through the sentences, and a mouse's is a click.
+  const clicked = (pointerType: string) => report([entry('click', 0, 120, 2, 92)], [], [], [input(0, 'click', { pointerType })]);
+  assert.match(clicked('touch').verdict, /^120 ms tap\b/);
+  assert.match(clicked('touch').explanation.cause, /\bthe tap\b/);
+  assert.match(clicked('pen').verdict, /^120 ms tap\b/);
+  assert.match(clicked('mouse').verdict, /^120 ms click\b/);
 });
 
 test('a click inside a link or an option is named by the component it landed in; only an icon gives way to its control', () => {

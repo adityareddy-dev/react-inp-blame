@@ -584,15 +584,18 @@ function blameText(blame: Blame, rendered: string): Child[] {
 }
 
 /**
- * "Typing in Password" / "Key press on Close" / "Click on Log in", from the report's target. A report
- * with no target is just "Typing", "Key press" or "Click".
+ * "Typing in Password" / "Key press on Close" / "Click on Log in", or "Tap on Log in" for a finger's,
+ * from the report's target. A report with no target is just "Typing", "Key press", "Click" or "Tap".
  */
 export function titleFor(r: InteractionReport): string {
   const t = r.target;
   const label = t?.label ? t.label.replace(/^\w+ /, '') : (t?.selector ?? '');
   if (isTyping(r)) return label ? `Typing in ${label}` : 'Typing';
   if (isTypingEvent(r.type)) return label ? `Key press on ${label}` : 'Key press';
-  if (isPointerEvent(r.type)) return label ? `Click on ${label}` : 'Click';
+  if (isPointerEvent(r.type)) {
+    const kind = kindOf(r.type, r.pointerType) === 'tap' ? 'Tap' : 'Click';
+    return label ? `${kind} on ${label}` : kind;
+  }
   return `${kindOf(r.type)} ${label}`.trim();
 }
 

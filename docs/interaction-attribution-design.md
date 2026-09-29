@@ -1814,7 +1814,8 @@ at, which is where the count of renders and the render with no length above come
 
 **The badge and panel** (`overlay: true`, or `'query'` for production pages, 2026-09-14).
 A corner badge with the page's INP so far, coloured by the INP thresholds, and a panel that
-lists interactions newest first: title ("Click on Log in"), duration, one blame line, and the
+lists interactions newest first: title ("Click on Log in", or "Tap on Log in" for a finger's or a
+pen's click since 0.20.0, the word the verdict uses too), duration, one blame line, and the
 waiting / working / updating bar. Consecutive key presses in one field collapse into a row
 that shows the slowest and the typical. A row opens into the cause sentence, the notes, and
 the components that rendered before and after the paint. It is plain DOM in a shadow root
