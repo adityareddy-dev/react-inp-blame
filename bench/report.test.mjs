@@ -143,3 +143,24 @@ test('the run count names each configuration when a failed run leaves them uneve
   const fix = node('report.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip: ['B:2'] }));
   assert.match(fix, /^B 9, F 10 runs\.$/m);
 });
+
+test('the library check shows in the report, and a copy that differs is said at the top', () => {
+  const check = (match) =>
+    JSON.stringify({
+      spec: 'react-inp-blame@0.12.0',
+      files: 40,
+      apps: { 'tt-fuzzy': { installed: 'a/tt/node_modules/react-inp-blame', version: '0.12.0', match, differs: match ? [] : ['dist/index.js'], extra: [] } },
+    });
+  const top = (md) => md.slice(0, md.indexOf('## Configurations'));
+
+  const ok = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], libCheck: check(true) }));
+  assert.match(ok, /^\| react-inp-blame in tt-fuzzy \| matches `react-inp-blame@0\.12\.0` byte for byte \|$/m);
+  assert.doesNotMatch(top(ok), /\*\*/);
+
+  const bad = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], libCheck: check(false) }));
+  assert.match(bad, /^\| react-inp-blame in tt-fuzzy \| DIFFERS from `react-inp-blame@0\.12\.0`: `dist\/index\.js` \|$/m);
+  assert.match(top(bad), /\*\*The library check failed\.\*\*/);
+
+  const none = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'] }));
+  assert.match(top(none), /\*\*The library was not checked\.\*\*/);
+});

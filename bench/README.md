@@ -190,8 +190,9 @@ Every patch pins react-inp-blame to exactly 0.12.0, the release real-apps.md mea
 
 To measure a local build, run `npm pack` in `packages/core`, point each app's pin at the tarball with a
 `file:` path, and set `BENCH_TARBALL` to its path relative to `bench/`, so the results record its hash. The
-check against npm then fails, as it should. The overhead run in [docs/benchmarks](../docs/benchmarks/README.md)
-used a 0.3.0 candidate tarball that was never published, so that run can't be repeated exactly.
+check against npm then fails, as it should, and the report says so at the top. The overhead run in
+[docs/benchmarks](../docs/benchmarks/README.md) used a 0.3.0 candidate tarball that was never published, so
+that run can't be repeated exactly.
 
 ## Environment variables
 

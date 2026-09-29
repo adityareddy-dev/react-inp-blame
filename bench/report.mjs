@@ -202,6 +202,20 @@ function main() {
   p(`Source: \`${path.basename(file)}\``);
   p(`Started ${data.started}, finished ${data.finished}. \`--runs ${data.args.runs}\`, throttle passes ${data.args.throttles.join(', ')}x.`);
   p();
+  // verify-lib.mjs's JSON, which bench.mjs keeps even when the check fails. A run on a copy that isn't
+  // the release says so up here, not only inside the results file.
+  let libCheck = null;
+  try {
+    libCheck = versions.libCheck ? JSON.parse(versions.libCheck) : null;
+  } catch {}
+  const differ = libCheck ? Object.entries(libCheck.apps).filter(([, a]) => !a.match).map(([id]) => id) : [];
+  if (!libCheck) {
+    p(`**The library was not checked.** verify-lib.mjs gave nothing back, so nothing here says the apps ran the release.`);
+    p();
+  } else if (differ.length) {
+    p(`**The library check failed.** The react-inp-blame in ${differ.join(', ')} is not \`${libCheck.spec}\` byte for byte, see Versions. These numbers are not that release's.`);
+    p();
+  }
   p(`## Configurations`);
   p();
   p(`| | |`);
@@ -230,6 +244,14 @@ function main() {
       .filter((name) => v[name])
       .map((name) => `${name} ${v[name]}`);
     p(`| ${id} | commit \`${v.commit}\`, ${pkgs.join(', ')} |`);
+  }
+  for (const [id, a] of Object.entries(libCheck?.apps ?? {})) {
+    const what = a.match
+      ? `matches \`${libCheck.spec}\` byte for byte`
+      : a.installed
+        ? `DIFFERS from \`${libCheck.spec}\`: ${a.differs.map((f) => `\`${f}\``).join(', ')}`
+        : 'not installed';
+    p(`| react-inp-blame in ${id} | ${what} |`);
   }
   p();
   p(`**Machine load caveat.** These numbers are only as quiet as the machine that produced them. Every configuration of an app is interleaved run by run, so drift hits A, B and C equally and the paired deltas survive a noisy machine, but the absolute medians do not. Do not quote an absolute figure from a run made on a busy machine.`);
