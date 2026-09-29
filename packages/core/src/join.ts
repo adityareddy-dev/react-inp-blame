@@ -675,6 +675,28 @@ function explained(r: InteractionReport): { explanation: Explanation; verdict: s
   return built;
 }
 
+/** What a verdict counted, for the Performance panel's Summary rows to say the same. */
+export interface VerdictCounts {
+  /** The renders before the paint that the "React rendered 3 times" note counts. */
+  readonly renders: number;
+  /** The rest of the renders before the paint, by why the note leaves them out. */
+  readonly hydrations: number;
+  readonly forced: number;
+  readonly small: number;
+  /** The working time that went by between one event's handlers and the next's, and where, in the verdict's words. */
+  readonly between: number;
+  readonly whereBetween: string;
+}
+
+/** Counts by report, kept as each is explained. */
+const countsByReport = new WeakMap<InteractionReport, VerdictCounts>();
+
+/** What the verdict counted, or where explaining the report threw, every commit before the paint and no time between handlers. */
+export function verdictCounts(r: InteractionReport): VerdictCounts {
+  explained(r);
+  return countsByReport.get(r) ?? { renders: r.commits.length, hydrations: 0, forced: 0, small: 0, between: 0, whereBetween: '' };
+}
+
 /**
  * Reports are built in the Event Timing callback, where every millisecond can delay the next
  * input, and many are never read, so the explanation and verdict are built on first read. They
@@ -1614,9 +1636,10 @@ function explain(r: InteractionReport): Explanation {
    * React's renders, one set for every sentence that counts them and for the "React rendered N times" note: every
    * commit that rendered at all but a render a script forced. Counted apart, a cause read "rendering across 3
    * commits" beside a note saying React "rendered 2 times": the note left out a 3 ms render the total had. A build
-   * that records no durations counts only a render with real work in it, as the note did. A hydration is rendering
-   * and is counted, though the note is not said for one. The sentences about the working time leave out a render
-   * the screen update's clause says was inside a script after it, which the note still counts.
+   * that records no durations counts only a render with real work in it, as the note did, and the note adds one
+   * whose committing or effects were worth saying, or that the render blame names. A hydration is rendering and is
+   * counted, though the note is not said for one. The sentences about the working time leave out a render the
+   * screen update's clause says was inside a script after it, which the note still counts.
    */
   const rendersAll = r.commits.filter((x) => !forcedByScript.includes(x) && (x.hasDurations ? x.total > 0 || x.rendered > 0 : carriesWork(x)));
   const renders = rendersAll.filter((x) => !insideLate.includes(x));
@@ -2544,16 +2567,26 @@ function explain(r: InteractionReport): Explanation {
   const waitIsTheVerdict = blame.kind === 'waiting' && blame.detail === null;
   // A note standing in for a closed render rung names the render that rung would have, and gives its total the same way.
   if (((closedByTheScreen && blame.kind === 'painting') || (closedByTheWait && waitIsTheVerdict)) && !handlerWins && c && rc && renderMatters) saidAcross = rc;
-  // Said where two renders carried real work and were not a hydration. A hydration is not a re-render: it is the
-  // first render of that HTML on the client, and firing on it would tell every click that waited for one to go
-  // looking for an effect that updates state. So it is not counted either, except where a sentence gave React's
-  // render time across commits with the hydration among them, and then it counts the renders that sentence did:
-  // "React rendered 2 times" beside "rendering across 3 commits", one of them the hydration, read as two counts of
-  // the same thing. Counted everywhere, a click that waited for a boundary to hydrate and rendered twice read
-  // "React rendered 3 times", in a production build too, where no sentence gives a count.
-  const reRenders = rendersAll.filter((x) => x.hydratedTarget == null);
-  const rendersSaid = saidAcross && severalRenders(saidAcross) ? rendersAll : reRenders;
-  if (reRenders.filter(carriesWork).length > 1) notes.push(`React rendered ${rendersSaid.length} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
+  // Said where two renders count and were not a hydration. A render with little in it counts where its committing or
+  // effects were worth saying, or the render blame names it: a 3 ms render whose useEffect ran for 100 ms and set
+  // state is the chain the note is about. A hydration is not a re-render: it is the first render of that HTML on
+  // the client, and firing on it would tell every click that waited for one to go looking for an effect that
+  // updates state. So it is not counted either, except where a sentence gave React's render time across commits
+  // with the hydration among them, and then it counts the renders that sentence did: "React rendered 2 times"
+  // beside "rendering across 3 commits", one of them the hydration, read as two counts of the same thing. Counted
+  // everywhere, a click that waited for a boundary to hydrate and rendered twice read "React rendered 3 times", in a
+  // production build too, where no sentence gives a count.
+  const counts = (x: CommitSummary) => carriesWork(x) || committingShows((committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0)) || (blame.kind === 'render' && x === rc);
+  // The renders the sentences count, and one that counts though the build gave it no time.
+  const counted = r.commits.filter((x) => rendersAll.includes(x) || (!forcedByScript.includes(x) && counts(x)));
+  const reRenders = counted.filter((x) => x.hydratedTarget == null);
+  const rendersSaid = saidAcross && severalRenders(saidAcross) ? counted : reRenders;
+  // The Performance panel's Summary gives the same count, and says why it leaves out the rest.
+  const left = r.commits.filter((x) => !rendersSaid.includes(x));
+  const hydrations = left.filter((x) => x.hydratedTarget != null).length;
+  const forced = left.filter((x) => x.hydratedTarget == null && forcedByScript.includes(x)).length;
+  countsByReport.set(r, { renders: rendersSaid.length, hydrations, forced, small: left.length - hydrations - forced, between, whereBetween });
+  if (reRenders.filter(counts).length > 1) notes.push(`React rendered ${rendersSaid.length} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
   if (closedByTheWait && waitIsTheVerdict) notes.push(closedByTheWait);
   // Where the screen update did take the blame, the work it outranked is what this report would otherwise never
   // mention. Only where it took it, though: a rung above the comparison that won anyway had nothing closed off,

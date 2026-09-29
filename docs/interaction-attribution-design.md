@@ -1112,16 +1112,19 @@ renders of under 1 ms each put their 2 ms on List. A hedged render sentence, and
 a closed render branch, keep the named render against the working time first and add the total after it,
 "and 55 ms of rendering in all across 2 commits", since the total can hold renders that ran after the
 handlers or began before them, more than the working time. The renders counted are the ones the note
-"React rendered 3 times before the screen updated" counts, so the two never disagree. The note also
-counts a render the screen update's clause says ran inside a script after the handlers, which the
-sentences about the working time leave to that clause. A hydration is not a re-render, so the note
-leaves it out, except where a sentence gave React's render time across commits with the hydration among
-them: there it counts what that sentence counted, and "React rendered 2 times" never sits beside
-"rendering across 3 commits". In a production build no sentence gives a count, and the note leaves the
-hydration out there too. Until 2026-09-27 the note counted only renders of 5 ms or more, and the handler
-and layout sentences put the total beside the one commit's phrase, which gave List a 500-component
-Sidebar's 25 ms. The render verdict said only the commit it named, so three 3 ms renders that earned it
-together read as 3 ms, under the 5 ms a render needs.
+"React rendered 3 times before the screen updated" counts, so the two never disagree. The note, and the
+Performance panel's Summary, count one more kind of render, however little it rendered: one whose
+committing or effects were worth saying, or the one a render blame names. In a production build 5 rows
+whose useEffect ran for 35 ms, then 800 rows after the handlers, are two renders. The note also counts a
+render the screen update's clause says ran inside a script after the handlers, which the sentences about
+the working time leave to that clause. A hydration is not a re-render, so the note leaves it out, except
+where a sentence gave React's render time across commits with the hydration among them: there it counts
+what that sentence counted, and "React rendered 2 times" never sits beside "rendering across 3 commits".
+In a production build no sentence gives a count, and the note leaves the hydration out there too. Until
+2026-09-27 the note counted only renders of 5 ms or more, and the handler and layout sentences put the
+total beside the one commit's phrase, which gave List a 500-component Sidebar's 25 ms. The render
+verdict said only the commit it named, so three 3 ms renders that earned it together read as 3 ms, under
+the 5 ms a render needs.
 
 React commits some updates once a commit's effects are done and before it says they ran: one an
 effect made with `flushSync`, and one a layout effect made, the measure-then-`setState` a tooltip
@@ -1679,14 +1682,19 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   Chrome's own track), from the input to the paint, in `warning` like React's event spans, with
   the verdict as its tooltip and the phases as properties. It is a `performance.measure` with a
   `devtools` detail, because `console.timeStamp` carries no tooltip: a seventh argument reaches
-  the trace as an empty field in Chromium 147. Its count of renders before the paint leaves out
-  the commits too small to count, as the verdict's "React rendered 3 times" does, and says how
-  many it left out ("3, and 3 too small to count"): on the shadcn/ui Sheet the tooltip said 3 and
-  the Summary 6, for the six commits the renders track drew. Its handlers and React rendering row
-  is the working time, with this library's own read taken out and on a row of its own, and where
-  there is one the row says so ("469 ms, not counting react-inp-blame itself"): the tooltip's
-  "of the 474 ms it took to handle the click" holds the read, and without the words the two read
-  as two figures for the same time.
+  the trace as an empty field in Chromium 147. Its count of renders before the paint is the one
+  the verdict's "React rendered 3 times" makes, which `join.ts` works out once for both, and it
+  says what that leaves out and why ("2, a hydration, and 3 too small to count"): on the
+  shadcn/ui Sheet the tooltip said 3 and the Summary 6, for the six commits the renders track
+  drew. A render whose committing or effects were worth saying, or the one a render blame names,
+  is never too small to count, or a 3 ms render whose useEffect ran for 300 ms was blamed in the
+  tooltip and too small in the Summary. Its handlers and React rendering row is the working time,
+  with this library's own read taken out and on a row of its own, and the row says what the
+  layout sentence's window counts differently: the time between one event's handlers and the
+  next's, which the window leaves out, and the read, which it holds, from half a millisecond,
+  where the verdict starts naming it ("146 ms, 30 ms of it between the keydown's handlers and the
+  keyup's, not counting react-inp-blame itself"). Without the words, the tooltip's "of the 118 ms
+  it took to handle the key press" and the Summary read as two figures for the same time.
 - Each commit joined to the report gets an entry in a "React renders" track, but only where
   React draws none itself. Development builds of React 19.2 and later draw every component in
   Components ⚛, and there the interaction's tooltip points to it instead; production and

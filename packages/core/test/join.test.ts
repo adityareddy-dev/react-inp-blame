@@ -3247,16 +3247,23 @@ test('a render a closed verdict does not take is said to have run after the hand
   const effects = { effectsStartedAt: 120.5, effectsEndedAt: 150.5 };
   const beside = report([entry('click', 0, 400, 100, 160)], [commit(120, 0, { total: 2, rendered: 3, ...effects }), commit(250, 0, { total: 43 })], [], save);
   assert.equal(beside.explanation.blame.kind, 'painting');
-  assert.equal(
-    beside.explanation.notes[0],
+  // The small render's effects were worth saying, so it counts as one of the two renders the note names.
+  const twice = 'React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.';
+  assert.deepEqual(beside.explanation.notes.slice(0, 2), [
+    twice,
     'React still spent 43 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame, and 45 ms of rendering in all across 2 commits.',
-  );
+  ]);
   // So where that render is only a reading, walked short of its end.
   const cut = report([entry('click', 0, 400, 100, 160)], [commit(120, 0, { total: 2, rendered: 3, ...effects }), commit(250, 0, { total: 43, truncated: true })], [], save);
-  assert.equal(cut.explanation.notes[0], 'React most likely still spent about 43 ms re-rendering at least 30 components inside List after the handlers, before the next frame, and 45 ms of rendering in all across 2 commits.');
+  assert.deepEqual(cut.explanation.notes.slice(0, 2), [
+    twice,
+    'React most likely still spent about 43 ms re-rendering at least 30 components inside List after the handlers, before the next frame, and 45 ms of rendering in all across 2 commits.',
+  ]);
   const few = { hasDurations: false, total: 0, rendered: 5, components: [{ name: 'Row', count: 5, self: null, total: null }], effectsStartedAt: 330.2, effectsEndedAt: 365 };
   const rows = { ...counted, rendered: 800, components: [{ name: 'Row', count: 800, self: null, total: null }] };
+  // The 5 rows are few, though their 35 ms of effects were worth saying, and the note counts them too.
   assert.deepEqual(report([entry('click', 0, 500, 300, 400)], [commit(330, 0, few), commit(450, 0, rows)], null, save).explanation.notes, [
+    twice,
     'React was most likely still re-rendering 800 components inside List, mostly Row (800 of them), after the handlers, before the next frame.',
   ]);
   // One committed inside the handlers is still in the working time.

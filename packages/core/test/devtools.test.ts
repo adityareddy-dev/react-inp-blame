@@ -98,6 +98,9 @@ function commit(at: number, opts: Partial<CommitSummary> = {}): CommitSummary {
 /** The same commit where React measured it, as development and profiling builds do. */
 const measured = (at: number, opts: Partial<CommitSummary> = {}) => commit(at, { hasDurations: true, total: 120, components: [{ name: 'LineItem', count: 800, self: 110, total: 0.2 }], ...opts });
 
+/** A Summary row of the interaction entry. */
+const row = (d: Drawn | undefined, name: string) => d?.properties?.find(([n]) => n === name)?.[1];
+
 test('beside a development build of React 19.2 or later only the interaction is drawn, because React draws every render it measured', () => {
   const r = report([measured(150, { priority: 1 })]);
   const { drawn, left } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 1)]).draw(r));
@@ -262,7 +265,69 @@ test("the interaction's count of renders before the paint is the tooltip's, and 
   assert.equal(count(counted[0]), '2');
 });
 
-test("the Summary's handling time says it leaves out the library's own, which the tooltip's time to handle the click holds", () => {
+test('a small render whose useEffect took the time is the render the tooltip blames, and is counted', () => {
+  // Chart renders in 3 ms and its useEffect draws for 300 ms. The tooltip blamed Chart for 304 ms, and the Summary
+  // said "0, and 1 too small to count".
+  const tap: InputRecord[] = [{ ts: 0, type: 'click', gestureTs: 0, press: undefined, target: null, owners: ['Chart'], handler: 'onClick', key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const chart = { rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 10, effectsEndedAt: 310, priority: 1 };
+  const small = { ...chart, startedAt: 6, total: 3, components: [{ name: 'Chart', count: 1, self: 3, total: 3 }] };
+  const handled = { ...click, duration: 330, processingStart: 3, processingEnd: 320 };
+  const builds: [string, CommitSummary, RendererInfo][] = [
+    ['development', measured(10, small), reactDom('18.3.1', 1)],
+    ['production', commit(10, { ...chart, components: [{ name: 'Chart', count: 1, self: null, total: null }] }), reactDom('19.3.0', 0)],
+  ];
+  for (const [build, c, dom] of builds) {
+    const r = sealReport(buildReport([handled], [c], null, tap));
+    assert.equal(r.explanation.blame.kind, 'render', build);
+    assert.equal(r.explanation.blame.name, 'Chart', build);
+    const { drawn } = recording(CHROME_147, () => createTimeline(() => [dom]).draw(r));
+    assert.equal(row(drawn[0], 'React renders before the paint'), '1', build);
+  }
+  // Where the useEffect set state and React rendered that, it is two renders, in the note and in the Summary.
+  const updated = sealReport(buildReport([handled], [measured(10, { ...small, effectsEndedAt: 110 }), measured(315, { startedAt: 115, total: 200, priority: 1 })], null, tap));
+  assert.match(updated.verdict, / React rendered 2 times before the screen updated,/);
+  const { drawn: twice } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(updated));
+  assert.equal(row(twice[0], 'React renders before the paint'), '2');
+  // Effects spread over two small commits, neither enough alone: both are counted, as the tooltip's time "across 2
+  // commits" counts them. The Summary said "1, and 1 too small to count" beside that.
+  const spread = sealReport(
+    buildReport([{ ...handled, duration: 80, processingEnd: 60 }], [measured(10, { ...small, effectsEndedAt: 30 }), measured(35, { ...small, startedAt: 31, effectsStartedAt: 35, effectsEndedAt: 55 })], null, tap),
+  );
+  assert.equal(spread.explanation.blame.kind, 'render');
+  assert.match(spread.verdict, / React spent 6 ms rendering across 2 commits, 3 ms of it re-rendering Chart\. /);
+  const { drawn: spreadDrawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(spread));
+  assert.equal(row(spreadDrawn[0], 'React renders before the paint'), '2');
+});
+
+test("the count of renders before the paint leaves out what the tooltip's count leaves out, and says what", () => {
+  // A click on server-rendered HTML React had not hydrated yet, as on the Next.js App Router, that then rendered
+  // twice. The tooltip said React rendered 2 times and the Summary 3.
+  const hydration = measured(50, { total: 90, hydrated: true, hydratedTarget: { scope: 'boundary', owner: 'ProductPage' } });
+  const r = report([hydration, measured(100, { total: 30 }), measured(150, { total: 30 })]);
+  assert.match(r.verdict, / React rendered 2 times before the screen updated,/);
+  const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(r));
+  assert.equal(row(drawn[0], 'React renders before the paint'), '2, and a hydration');
+  // A development build times every render, so a 1 ms one counts in the note and here as it does in the sentences'
+  // render time. Only a commit that rendered nothing is too small to count.
+  const tiny = report([hydration, measured(100, { total: 30 }), measured(150, { total: 30 }), measured(160, { total: 1, rendered: 2 })]);
+  assert.match(tiny.verdict, / React rendered 3 times before the screen updated,/);
+  const { drawn: withTiny } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(tiny));
+  assert.equal(row(withTiny[0], 'React renders before the paint'), '3, and a hydration');
+  const empty = report([hydration, measured(100, { total: 30 }), measured(150, { total: 30 }), measured(160, { total: 0, rendered: 0, roots: [], hotPath: [], components: [] })]);
+  assert.match(empty.verdict, / React rendered 2 times before the screen updated,/);
+  const { drawn: withSmall } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(empty));
+  assert.equal(row(withSmall[0], 'React renders before the paint'), '2, a hydration, and 1 too small to count');
+  // A render a script after the handlers forced is the screen update's, not a second render of the click's.
+  const script = (invoker: string, start: number, duration: number) => ({ invoker, name: '', source: 'app.js', start, duration, forcedLayout: 0 });
+  const frames = [{ start: 0, duration: 368, blocking: 318, forcedLayout: 0, scripts: [script('INPUT.onclick', 2, 169), script('DIV.onscroll', 175, 174)], styleAndLayoutStart: null }];
+  const tap: InputRecord[] = [{ ts: 0, type: 'click', gestureTs: 0, press: undefined, target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const scrolled = sealReport(buildReport([{ ...click, duration: 368, processingStart: 2, processingEnd: 171 }], [measured(165, { total: 160, priority: 1 }), measured(340, { total: 150, priority: 1 })], frames, tap));
+  assert.doesNotMatch(scrolled.verdict, /React rendered 2 times/);
+  const { drawn: forced } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(scrolled));
+  assert.equal(row(forced[0], 'React renders before the paint'), '1, and 1 forced by a script');
+});
+
+test("the Summary's handling time says what the tooltip's time to handle the click counts differently", () => {
   // Opening the shadcn/ui Sheet, the tooltip said 401 ms "of the 474 ms spent handling the click" and the Summary
   // said "Handlers and React rendering 469 ms", with react-inp-blame's own 5 ms two rows further down.
   const forcing = { invoker: 'DIV#root.onclick', name: '', source: 'app.js', start: 0, duration: 118, forcedLayout: 110 };
@@ -270,12 +335,34 @@ test("the Summary's handling time says it leaves out the library's own, which th
   const r = sealReport(buildReport([{ ...click, processingStart: 0, processingEnd: 120 }], [commit(90, { walkMs: 20 })], frames));
   assert.match(r.verdict, / Of the 120 ms it took to handle the click, the browser spent 110 ms recalculating styles and layout, leaving 10 ms for /);
   const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
-  const row = (name: string) => drawn[0]?.properties?.find(([n]) => n === name)?.[1];
-  assert.equal(row('Handlers and React rendering'), '100 ms, not counting react-inp-blame itself');
-  assert.equal(row('react-inp-blame itself'), '20 ms');
-  // With none of the library's time in it, the row is the time alone.
-  const { drawn: clean } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(report([commit(150, { walkMs: 0 })])));
-  assert.equal(clean[0]?.properties?.find(([n]) => n === 'Handlers and React rendering')?.[1], '178 ms');
+  assert.equal(row(drawn[0], 'Handlers and React rendering'), '100 ms, not counting react-inp-blame itself');
+  assert.equal(row(drawn[0], 'react-inp-blame itself'), '20 ms');
+  // With none of the library's time in it, or under half a millisecond, which the verdict does not name, the row is
+  // the time alone, and the library's own row is left out.
+  for (const walkMs of [0, 0.3]) {
+    const { drawn: clean } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(report([commit(150, { walkMs })])));
+    assert.equal(row(clean[0], 'Handlers and React rendering'), '178 ms', `${walkMs}`);
+    assert.equal(row(clean[0], 'react-inp-blame itself'), undefined, `${walkMs}`);
+  }
+  // A keydown and a keyup painted together: the tooltip's window also leaves out the 30 ms between the keydown's
+  // handlers and the keyup's, which the working time holds. The Summary said "146 ms, not counting react-inp-blame
+  // itself", and 146 ms and the 2 ms read did not make the tooltip's 118.
+  const keyup = { invoker: 'DIV#root.onkeyup', name: '', source: 'app.js', start: 40, duration: 112, forcedLayout: 100 };
+  const keydown = { invoker: 'DIV#root.onkeydown', name: '', source: 'app.js', start: 2, duration: 8, forcedLayout: 0 };
+  const keys = sealReport(
+    buildReport(
+      [
+        { ...click, name: 'keydown', startTime: 0, duration: 160, processingStart: 2, processingEnd: 10 },
+        { ...click, name: 'keyup', startTime: 30, duration: 130, processingStart: 40, processingEnd: 150 },
+      ],
+      [measured(148, { total: 2, rendered: 3, walkMs: 2, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 3, self: 2, total: 2 }] })],
+      [{ start: 0, duration: 160, blocking: 110, forcedLayout: 100, scripts: [keydown, keyup], styleAndLayoutStart: null }],
+    ),
+  );
+  assert.match(keys.verdict, / Of the 118 ms it took to handle the key press, /);
+  const { drawn: pressed } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(keys));
+  assert.equal(row(pressed[0], 'Handlers and React rendering'), "146 ms, 30 ms of it between the keydown's handlers and the keyup's, not counting react-inp-blame itself");
+  assert.equal(row(pressed[0], 'react-inp-blame itself'), '2 ms');
 });
 
 test('before Chrome 134, and in other browsers, every entry is a performance.measure, taken out of the buffer once drawn', () => {
