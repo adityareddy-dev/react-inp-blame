@@ -1975,7 +1975,8 @@ reads the option, so `true`, an options object and `'query'` all show nothing in
 reports, the track and the API run as before. `?inp-blame` in the URL removes the key and shows the
 badge, the same switch `'query'` uses, and the button's title says so. It is offered only on a badge
 the option showed, since a badge `mountOverlay()` shows is the app's own call and would come back at
-the next load whatever the key said. The press itself is left out like any other on the panel, though
+the next load whatever the key said. Nor under `'query'`: the press replaced a stored `overlay` with
+`hidden`, and `?inp-blame` then removed the key, so the opt-in was gone after one load. The press itself is left out like any other on the panel, though
 its host is off the page by the time its entries come, and Event Timing gives no target for a node
 that is no longer connected, so the input ring's target is what says it was the panel's.
 
