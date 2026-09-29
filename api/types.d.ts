@@ -16,6 +16,7 @@ export interface CommitSummary {
     readonly rendered: number;
     readonly mounted?: number;
     readonly effectMounts?: number;
+    readonly effectRuns?: number;
     readonly effectMountName?: string | null;
     readonly hydrated: boolean;
     readonly hydratedTarget: HydrationBoundary | null;

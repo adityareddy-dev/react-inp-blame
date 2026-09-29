@@ -1,7 +1,7 @@
 import type { Blame, InteractionReport, RenderedComponent } from "./types.js";
 declare const SCHEMA_VERSION = 3;
 export interface InpMetric<Attribution extends object = Record<string, never>> {
-    readonly entries: readonly InpMetricEntry[];
+    readonly entries: readonly object[];
     readonly attribution?: Attribution;
 }
 export interface InpMetricEntry {
