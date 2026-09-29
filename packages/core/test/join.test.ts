@@ -1104,7 +1104,7 @@ test("where the working time was longer, the screen update's note says the frame
     assert.deepEqual(own.blame, { kind: 'script', name: 'INPUT#agree.oninput', detail: null, ms, confidence: 'measured' }, `${ms} ms`);
     for (const next of [input(60, 'pointerdown', { pointerType: 'mouse' }), input(60, 'keydown')]) assert.deepEqual(checkbox(ms, [next]), own, `${ms} ms, ${next.type}`);
   }
-  // A pointer press dispatches no `keypress` though, so after a click one is the next key's, as its `onkeydown` is and
+  // A pointer press dispatches no `keypress` or `beforeinput` though, so after a click one is the next key's, as its `onkeydown` is and
   // as in 0.18.0: the frame waited on that key. Taken for the click's own, a 56 ms one under a 76 ms screen update, and
   // a 36 ms one under 40 ms, were named as the click's script after its handler.
   const keyedAfter = (invoker: string, paint: number, ms: number, at: number) =>
@@ -1114,7 +1114,7 @@ test("where the working time was longer, the screen update's note says the frame
       [frame(0, 20 + paint, [script('DIV#root.onclick', 12, 8), script(invoker, at + 0.5, ms)])],
       [input(0, 'pointerdown', { pointerType: 'mouse' }), input(10, 'pointerup', { gestureTs: 0, pointerType: 'mouse' }), input(10, 'click', { gestureTs: 0, pointerType: 'mouse' }), input(at, 'keydown')],
     ).explanation;
-  for (const invoker of ['DIV#root.onkeypress', 'DIV#root.onkeydown']) {
+  for (const invoker of ['DIV#root.onkeypress', 'DIV#root.onbeforeinput', 'DIV#root.onkeydown']) {
     for (const [paint, ms, at] of [[76, 56, 25], [40, 36, 21.5]] as const) {
       const next = keyedAfter(invoker, paint, ms, at);
       assert.deepEqual(next.blame, { kind: 'painting', name: invoker, detail: null, ms: paint, confidence: 'measured' }, `${invoker}, ${paint} ms`);

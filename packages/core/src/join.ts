@@ -1534,8 +1534,8 @@ function explain(r: InteractionReport): Explanation {
    * where this interaction could not have dispatched it. A key's is where the last event this frame handled was
    * this interaction's keyup: a keydown with no keyup, or whose keyup was handled in a later frame, runs its own
    * `oninput` in its task, right after its handlers, as a checkbox's click does, and taken for the next press's, a
-   * keydown's 60 ms `oninput` went to waiting and painting. An `onkeypress` is also the next key's where that event
-   * was a pointer's, which dispatches none: taken for a click's own, the next key's 56 ms `onkeypress` was named as
+   * keydown's 60 ms `oninput` went to waiting and painting. An `onkeypress` or `onbeforeinput` is also the next key's where
+   * that event was a pointer's, which dispatches neither: taken for a click's own, the next key's 56 ms `onkeypress` was named as
    * the click's script where 0.18.0 said the frame waited on that key.
    * A pointer's is where that event was not a pointerdown,
    * which can still dispatch its own `mousedown` or `touchstart`: a key dispatches neither, and where its keyup was
@@ -1569,7 +1569,7 @@ function explain(r: InteractionReport): Explanation {
     !clickOnly &&
     scriptsRun.find((s) => {
       const on = s.start >= nextFrom - STAMP_TOLERANCE && PRESS_LISTENER.exec(s.invoker);
-      return on && (on[2] ? next.type === 'keydown' && (last === 'keyup' || (on[2] === 'keypress' && !last.startsWith('key'))) : !(on[3] || on[4]) || (next.type === 'pointerdown' && (on[3] ? last !== 'pointerdown' : /^(click|key)/.test(last))));
+      return on && (on[2] ? next.type === 'keydown' && (last === 'keyup' || (on[2] !== 'input' && !last.startsWith('key'))) : !(on[3] || on[4]) || (next.type === 'pointerdown' && (on[3] ? last !== 'pointerdown' : /^(click|key)/.test(last))));
     });
   const nextsWork = (s: ScriptSummary) =>
     !!next &&
