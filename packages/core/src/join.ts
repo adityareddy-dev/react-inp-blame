@@ -1501,18 +1501,26 @@ function explain(r: InteractionReport): Explanation {
    * handler as this key's verdict.
    */
   const next = r.nextInput;
+  // A next click whose pointerdown the ring does not have after this interaction, pressed before it or not recorded,
+  // is weighed as in 0.18.0, every script from the click on its work: nothing here tells its listeners from this
+  // interaction's, and weighed on the rules below, its 36 ms `onclick` was a key's script where 0.18.0 said the
+  // frame waited on that click.
+  const clickOnly = next?.type === 'click';
   const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
   const last = r.entries.reduce((a: EventEntrySummary | null, e) => (e.processingStart <= processingEnd && (!a || e.processingStart >= a.processingStart) ? e : a), null)?.name ?? '';
   const nextListener =
     next &&
+    !clickOnly &&
     scriptsRun.find((s) => {
       const on = s.start >= nextFrom - STAMP_TOLERANCE && PRESS_LISTENER.exec(s.invoker);
       return on && (on[2] ? next.type === 'keydown' && last === 'keyup' : !(on[3] || on[4]) || (next.type === 'pointerdown' && (on[3] ? last !== 'pointerdown' : /^(click|key)/.test(last))));
     });
   const nextsWork = (s: ScriptSummary) =>
     !!next &&
-    (nextListener ? s.start >= nextListener.start : s.start >= nextFrom - STAMP_TOLERANCE && s.start > processingEnd + STAMP_TOLERANCE) &&
-    !r.commits.some((x) => x.joinedBy === 'exact' && holds(s, x, s.start));
+    (clickOnly
+      ? s.start >= next.start - STAMP_TOLERANCE
+      : (nextListener ? s.start >= nextListener.start : s.start >= nextFrom - STAMP_TOLERANCE && s.start > processingEnd + STAMP_TOLERANCE) &&
+        !r.commits.some((x) => x.joinedBy === 'exact' && holds(s, x, s.start)));
   const nextScriptMs = scriptParts(frames, nextFrom, r.end).reduce((a, p) => (nextsWork(p.script) ? Math.max(a, p.ms) : a), 0);
   // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
   const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;
@@ -1527,8 +1535,9 @@ function explain(r: InteractionReport): Explanation {
   // where the screen update outranks the working time, go on the press's render alone, hedged as the render's end
   // is: counted from the tick after the handlers, a keydown's own 38 ms timer was its verdict, and the note said in
   // the same report that the frame waited on the next key, naming that timer. Its own 50 ms timer, the painting
-  // blame's script without the next key, was said as the next key's wait.
-  const byRender = !nextListener && r.presentation <= PRESENTATION_NOTE_MS;
+  // blame's script without the next key, was said as the next key's wait. Not for a next click with only its click
+  // in the ring, which 0.18.0 weighed on its scripts too.
+  const byRender = !nextListener && !clickOnly && r.presentation <= PRESENTATION_NOTE_MS;
   const nextNoted = byRender ? next && nextRenderMs >= nextShare : heldByNext;
   const waitedOnNext = nextNoted && r.presentation > r.processing && r.presentation >= r.inputDelay ? next : null;
 
@@ -1658,15 +1667,16 @@ function explain(r: InteractionReport): Explanation {
    * taken: left out, a 60 ms timer between a keydown's handlers and the next key went to waiting and painting, and
    * the note named it as the longest script. Nor, under PRESENTATION_NOTE_MS with no listener of that press on
    * record, is any script that press's work (`byRender`): taken for it, a keydown's own 50 ms timer, the verdict
-   * without the next key, lost it to 181 ms of idle handlers. The rest is ranked by length, not by where it ran,
-   * against every script up to the end of the handlers: ranked by where, a 20 ms click handler took the verdict
-   * from the 150 ms listener, and a 25 ms pointerdown listener from a 120 ms timer the click waited behind, which
-   * was then said nowhere. `ledScript` is that ranking whether or not the note names the script after the handlers,
-   * for the idle handler's rung below, where `ranScript` is settled.
+   * without the next key, lost it to 181 ms of idle handlers. Nor, where the note leaves the late script out, is a
+   * next click's with only its click in the ring, as 0.18.0 ranked every script there. The rest is ranked by
+   * length, not by where it ran, against every script up to the end of the handlers: ranked by where, a 20 ms click
+   * handler took the verdict from the 150 ms listener, and a 25 ms pointerdown listener from a 120 ms timer the
+   * click waited behind, which was then said nowhere. `ledScript` is that ranking whether or not the note names the
+   * script after the handlers, for the idle handler's rung below, where `ranScript` is settled.
    */
   const lateOnly = insideLate.length > 0 && !c;
   const lateNoted = insideLate.length > 0 || (!!lateScript && r.presentation > PRESENTATION_NOTE_MS);
-  const lateTaken = lateLeads && (byRender || !heldByNext || !nextsWork(lateLeads.script)) ? lateLeads : null;
+  const lateTaken = lateLeads && (byRender || (clickOnly && !lateNoted) || !heldByNext || !nextsWork(lateLeads.script)) ? lateLeads : null;
   const earlyScript = longestPart(scriptParts(frames, r.start, processingEnd));
   const ledScript = lateTaken && (!earlyScript || lateTaken.ms > earlyScript.ms) ? lateTaken : earlyScript;
   const ownScript = longestPart(scriptParts(frames, r.start, r.end).filter((p) => !(nextListener && nextsWork(p.script))));
@@ -2584,7 +2594,7 @@ function explain(r: InteractionReport): Explanation {
     notes.push(`${landed}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
   }
 
-  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length || (nextNoted && lateScript) || ((blame.kind === 'script' || (blame.kind === 'none' && !unseen)) && lateScript && lateScript.ms > (ranScript?.ms ?? 0))) && blame.kind !== 'painting') {
+  if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length || (nextNoted && lateScript && !clickOnly) || ((blame.kind === 'script' || (blame.kind === 'none' && !unseen)) && lateScript && lateScript.ms > (ranScript?.ms ?? 0))) && blame.kind !== 'painting') {
     notes.push(`After the handler finished, the screen took another ${ms(r.presentation)} to update${nextNoted ? nextClause(!byRender && nextScriptMs >= nextShare) : lateScriptClause}`);
   }
   if (betweenMatters && !betweenWins) notes.push(`${cap(ms(between))} of the working time also went by ${whereBetween}, with no handler running.`);
