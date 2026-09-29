@@ -3629,11 +3629,13 @@ test("an icon a script drew outside React is read from the element holding it, w
   // So is one where the button's only child is text, which React writes into it with no fiber: the `<svg>`
   // Font Awesome's searchPseudoElements draws for an icon a stylesheet puts before `Close`, or before a count
   // of likes, a number or in React 19 a bigint. The same in a `<div role="button" onClick>` that
-  // `<IconButton role="button" onClick={close} />` hands its role with its onClick, where only that text tells
-  // the div holds the icon. In a `<div onClick>` the handler is the icon's, text or not.
+  // `<IconButton role="button" onClick={close} />` hands its role with its onClick, and in an `<i>` handed it
+  // that way, where only that text tells the element holds the icon. In a `<div onClick>` the handler is the
+  // icon's, text or not.
   const holders: [string, Record<string, unknown>, string[]][] = [
     ['button', {}, ['IconButton', 'Page']],
     ['div', { role: 'button' }, ['IconButton', 'Page']],
+    ['i', { role: 'button' }, ['IconButton', 'Page']],
     ['div', {}, ['Page']],
   ];
   for (const [tag, given, owners] of holders) {
