@@ -1,5 +1,5 @@
 import { heaviest, leafName } from './commits.js';
-import { carriesWork, ms } from './join.js';
+import { ms, verdictCounts } from './join.js';
 import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 import { parseReactVersion } from './version.js';
@@ -89,8 +89,7 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
   const properties: [string, string][] = [
     ['Total', ms(r.duration)],
     ['Waiting before the handler', ms(r.inputDelay)],
-    // The tooltip's time to handle the input holds the library's own read, which the Summary gives on a row of its own.
-    ['Handlers and React rendering', r.walkMs > 0 ? `${ms(r.processing)}, not counting react-inp-blame itself` : ms(r.processing)],
+    ['Handlers and React rendering', handlingTime(r)],
     ['Updating the screen', ms(r.presentation)],
     ['Where', x.where || 'n/a'],
     ['Handler', r.target?.handler || 'n/a'],
@@ -99,7 +98,8 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
     ['Later React renders', String(r.followUps.length)],
   ];
   if (main && main.hotPath.length) properties.push(['Heaviest path', main.hotPath.join(' > ')]);
-  if (r.walkMs > 0) properties.push(['react-inp-blame itself', ms(r.walkMs)]);
+  // From half a millisecond, where the verdict starts naming it: under that the row read "0 ms".
+  if (r.walkMs >= 0.5) properties.push(['react-inp-blame itself', ms(r.walkMs)]);
   measure(`${x.headline}${leaf ? ' · ' + leaf : ''}`, r.start, Math.max(r.end, r.start + 0.1), {
     track: INTERACTION_TRACK,
     color: 'warning',
@@ -109,13 +109,24 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
 }
 
 /**
- * The renders before the paint as the verdict's "React rendered 3 times" counts them: "3", or "3, and 3 too small
- * to count" where commits with too little work in them are drawn beside them, so the Summary and the tooltip agree.
+ * The working time, with what the layout sentence's "of the 118 ms it took to handle the key press" counts
+ * differently said beside it: "146 ms, 30 ms of it between the keydown's handlers and the keyup's, not counting
+ * react-inp-blame itself". That window leaves out the time between handlers and holds the library's own read.
+ */
+function handlingTime(r: InteractionReport): string {
+  const { between, whereBetween } = verdictCounts(r);
+  return `${ms(r.processing)}${between >= 0.5 ? `, ${ms(between)} of it ${whereBetween}` : ''}${r.walkMs >= 0.5 ? ', not counting react-inp-blame itself' : ''}`;
+}
+
+/**
+ * The renders before the paint as the verdict's "React rendered 3 times" counts them, and the rest by why it leaves
+ * them out: "3", or "2, a hydration, and 3 too small to count", so the Summary and the tooltip agree.
  */
 function rendersBefore(r: InteractionReport): string {
-  const counted = r.commits.filter(carriesWork).length;
-  const small = r.commits.length - counted;
-  return small ? `${counted}, and ${small} too small to count` : String(counted);
+  const { renders, hydrations, forced, small } = verdictCounts(r);
+  const rest = [hydrations > 1 ? `${hydrations} hydrations` : hydrations ? 'a hydration' : '', forced ? `${forced} forced by a script` : '', small ? `${small} too small to count` : ''].filter(Boolean);
+  const last = rest.pop();
+  return last ? `${renders}, ${rest.map((x) => `${x}, `).join('')}and ${last}` : String(renders);
 }
 
 /** One entry for one React commit joined to the report. */
