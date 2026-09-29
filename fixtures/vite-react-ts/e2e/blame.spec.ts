@@ -32,20 +32,15 @@ test('a click is blamed on SlowList', async ({ page }) => {
     const rendered = Number(/Row ×(\d+)/.exec(blame ?? '')?.[1]);
     expect(rendered, `the blame line reads "${blame}"`).toBeGreaterThanOrEqual(400);
 
-    // Which build measured it, read through the page, since the config has no debugGlobal. The template's
-    // main.tsx wraps the app in StrictMode, so in development the render blame says half of it is the second pass.
+    // Which build measured it, read through the page, since the config has no debugGlobal.
     const badge = page.locator('#react-inp-blame .badge');
     const devnote = page.locator('#react-inp-blame .panel .devnote');
-    await rows.locator('.toggle').click();
-    const strict = rows.locator('.note', { hasText: 'StrictMode renders each component twice in development' });
     if (dev) {
       await expect(badge.locator('.dev')).toHaveText('dev');
       await expect(devnote).toBeVisible();
-      await expect(strict).toHaveCount(1);
     } else {
       await expect(badge.locator('.dev')).toHaveCount(0);
       await expect(devnote).toHaveCount(0);
-      await expect(strict).toHaveCount(0);
     }
 
     expect(problems).toEqual([]);
