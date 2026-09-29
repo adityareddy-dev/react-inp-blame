@@ -7,9 +7,9 @@ on:
   pull_request:
   # Called by publish.yml, so a release runs the whole suite before it publishes.
   workflow_call:
-  # Daily as well, so the next@canary job fails the run the day a Next.js or React canary breaks
+  # Daily as well, so the next@canary and react@canary jobs fail the run the day a Next.js or React canary breaks
   # something, not at the next push. vite-app-fresh gets its daily run from this too. This run is the only
-  # one either of them can fail: on a push or a pull request they are allowed to.
+  # one any of them can fail: on a push or a pull request they are allowed to.
   schedule:
     - cron: '23 5 * * *'
 
@@ -332,3 +332,29 @@ jobs:
       - name: Packed tarball beside next@canary
         if: ${{ !cancelled() }}
         run: node scripts/pack-smoke.mjs next-canary
+
+  react-canary:
+    name: Vite demo, React canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # next-canary covers the React canary Next.js vendors for the App Router. The Vite demo and the Pages
+    # Router take React from npm, so this runs the demo's whole suite on react@canary and fails the daily run
+    # the day a fiber field or the DevTools hook changes under the library. Allowed to fail on a push or a
+    # pull request, like next-canary.
+    continue-on-error: ${{ github.event_name != 'schedule' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm install react@canary react-dom@canary -w apps/demo
+      - run: npm ls react react-dom -w apps/demo
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: development build
+        run: npm test
+      - name: production build
+        if: ${{ !cancelled() }}
+        run: npm run test:prod
