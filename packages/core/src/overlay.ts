@@ -160,6 +160,8 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?
 
   const expanded = new Set<number>();
   let foldOpen = false;
+  // With no position given, the corner is asked at mount and again at the first report, as widgets often load late.
+  let asks = opts.position ? 0 : 2;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
@@ -196,6 +198,10 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?
     } else {
       badge.dataset.rating = inp.rating;
       fill(badge, h('i', 'dot'), 'INP ', h('span', 'ms', `${Math.round(inp.value)} ms`), dev, mark);
+    }
+    if (asks && (asks === 2 || all.length)) {
+      asks--;
+      if (panel.hidden) place();
     }
     if (panel.hidden) return;
     // The panel is rebuilt below, so the control that has the focus is given it back afterwards.
@@ -238,6 +244,21 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?
       ),
     );
     if (focused) panel.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });
+  }
+
+  /**
+   * Moves the badge off a corner the page's own fixed or sticky element holds, a chat button say, to the first
+   * free one of bottom right, bottom left, top right and top left, or leaves it bottom right where all four are
+   * taken. Asked only while the panel is closed, which would move with it.
+   */
+  function place() {
+    if (!('elementsFromPoint' in document)) return;
+    const { width, height } = badge.getBoundingClientRect();
+    const taken = (c: string) =>
+      document
+        .elementsFromPoint(c[1] === 'r' ? innerWidth - 16 - width / 2 : 16 + width / 2, c[0] === 'b' ? innerHeight - 16 - height / 2 : 16 + height / 2)
+        .some((el) => el !== host && /^(fixed|sticky)$/.test(getComputedStyle(el).position));
+    wrap.className = `wrap ${['br', 'bl', 'tr', 'tl'].find((c) => !taken(c)) ?? 'br'}`;
   }
 
   /**

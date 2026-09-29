@@ -73,6 +73,47 @@ test('overlay: a development build marks the badge dev, and the panel says to ch
   await shot(page, `overlay-build-${prod ? 'prod' : 'dev'}`);
 });
 
+// The app's own chat button, fixed in the bottom right corner, was covered by the badge but for a sliver,
+// and a click on it landed on the badge. With no position given, the badge now starts in a free corner.
+test("overlay: with no position the badge leaves the corner the app's chat button holds, and a click on the button reaches it", async ({ page }) => {
+  await page.goto('/devtools-hook.html?badge&widget');
+  const wrap = page.locator('#react-inp-blame .wrap');
+  await expect(page.locator('#react-inp-blame .badge')).toBeVisible();
+  await expect(wrap).toHaveClass('wrap bl');
+  await page.locator('[data-test=chat]').click({ timeout: 2_000 });
+  await expect(page.locator('[data-test=chat]')).toHaveAttribute('data-clicks', '1');
+  await expect(page.locator('#react-inp-blame .panel')).toBeHidden();
+  // Where nothing holds it, bottom right as before.
+  await page.goto('/devtools-hook.html?badge');
+  await expect(page.locator('#react-inp-blame .badge')).toBeVisible();
+  await expect(wrap).toHaveClass('wrap br');
+});
+
+// Hide for me takes the badge off for this browser alone. The library goes on reporting, and ?inp-blame
+// brings the badge back.
+test('overlay: Hide for me keeps the badge off across loads until ?inp-blame, and reports go on', async ({ page }) => {
+  await page.goto('/devtools-hook.html?badge');
+  await page.waitForSelector('[data-test=trigger]');
+  const badge = page.locator('#react-inp-blame .badge');
+  await badge.click();
+  await page.locator('#react-inp-blame .hide').click();
+  await expect(page.locator('#react-inp-blame')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('react-inp-blame'))).toBe('hidden');
+  await settle(page);
+  // The press on it was the panel's, not the page's: no report, and not in the page's INP or its count.
+  expect(await page.evaluate(() => [window.__REACT_INP_BLAME__.reports().length, window.__REACT_INP_BLAME__.inp()?.interactionCount ?? 0])).toEqual([0, 0]);
+
+  await page.reload();
+  await page.waitForSelector('[data-test=trigger]');
+  await page.click('[data-test=trigger]');
+  await page.waitForFunction(() => window.__REACT_INP_BLAME__.reports().length > 0, null, { timeout: 8_000 });
+  await expect(page.locator('#react-inp-blame')).toHaveCount(0);
+
+  await page.goto('/devtools-hook.html?badge&inp-blame');
+  await expect(badge).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('react-inp-blame'))).toBeNull();
+});
+
 // The panel from the keyboard. A row's header comes after the close button in the Tab order and opens
 // its row on Enter or Space, once however long the key is held. Escape closes the panel and moves the
 // focus to the badge.
@@ -118,7 +159,7 @@ test('overlay: rows work from the keyboard, and Escape hands the focus back to t
   await expect(badge).toBeFocused();
 });
 
-// A new report redraws the open panel, and so does Clear. The close button and Clear have the focus
+// A new report redraws the open panel, and so does Clear. The close button, Hide for me and Clear have the focus
 // afterwards the way a row header does, and closing the panel from its button hands the focus to the
 // badge, as Escape does.
 test('overlay: close and Clear keep the focus when the panel redraws', async ({ page }) => {
@@ -153,11 +194,20 @@ test('overlay: close and Clear keep the focus when the panel redraws', async ({ 
   await expect(rows).toHaveCount(0);
   await expect(clear).toBeFocused();
 
-  // With no rows left, the close button is the control before Clear.
+  // Hide for me is the control before Clear, and keeps the focus through a redraw the same way.
+  const hide = panel.locator('.hide');
+  await page.keyboard.press('Shift+Tab');
+  await expect(hide).toBeFocused();
+  await trigger.click();
+  await expect(rows).toHaveCount(1);
+  await expect(hide).toBeFocused();
+
+  // With one row, Shift+Tab reaches its header before the close button.
+  await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Shift+Tab');
   await expect(close).toBeFocused();
   await trigger.click();
-  await expect(rows).toHaveCount(1);
+  await expect(rows).toHaveCount(2);
   await expect(close).toBeFocused();
 
   // Enter held on the close button. The first keydown closes the panel and moves the focus to the

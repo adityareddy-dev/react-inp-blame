@@ -1935,6 +1935,15 @@ the panel and its sticky header became opaque. The blur had been hiding the 3% o
 a 97% background let through, and without it the page's buttons could be read behind the rows,
 as the rows could behind the header's 98% as they scrolled under it.
 
+**A free corner** (0.20.0). The badge sat on top of an app's own chat button, fixed 16 px from the
+bottom right like the badge, and a click meant for the button landed on the badge. With no `position`
+given, the badge now asks `document.elementsFromPoint` at its centre whether an element other than its
+own host, with a computed `position` of `fixed` or `sticky`, is there, and takes the first free corner of
+bottom right, bottom left, top right and top left, staying bottom right where all four are taken. It
+asks when it mounts and again at the first report, since such widgets often load late, and never while
+the panel is open, which would move with it. An element in the page's own flow is not asked about, so a
+long page's footer under the corner does not move it. A `position` that was given is used as given.
+
 **Hide for me** (0.20.0). In a team repo that commits `overlay: true`, the badge was everyone's or
 no one's. A button beside Clear sets `react-inp-blame` in `localStorage` to `hidden`, the key the
 `'query'` mode already reads, and takes the badge off the page. `overlayWanted` reads it before it
