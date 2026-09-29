@@ -485,8 +485,9 @@ export interface Explanation {
 
 /**
  * How the page came to be at a URL: web-vitals' `Metric['navigationType']`, with the same values.
- * 'soft-navigation' is a client-side navigation a router announced (the Next.js App Router, through
- * `react-inp-blame/next`); 'back-forward-cache' is a page restored from the back/forward cache.
+ * 'soft-navigation' is a client-side navigation a router announced (the Next.js App Router through
+ * `react-inp-blame/next`, any other router through `announceNavigation`); 'back-forward-cache' is a page
+ * restored from the back/forward cache.
  */
 export type NavigationType = 'navigate' | 'reload' | 'back-forward' | 'back-forward-cache' | 'prerender' | 'restore' | 'soft-navigation';
 
@@ -494,7 +495,7 @@ export type NavigationType = 'navigate' | 'reload' | 'back-forward' | 'back-forw
 export interface StartedNavigation {
   /** Where it went, as an absolute URL. */
   readonly url: string;
-  /** The router's word for it: 'push' or 'replace' for a link or `router.push()` / `router.replace()`, 'traverse' for back and forward. */
+  /** The router's word for it: 'push' or 'replace' for a link or `router.push()` / `router.replace()`, 'traverse' for back and forward. `announceNavigation` always records 'push'. */
   readonly type: 'push' | 'replace' | 'traverse';
 }
 

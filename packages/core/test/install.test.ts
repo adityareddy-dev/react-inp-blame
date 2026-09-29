@@ -4,10 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { install, mountOverlay, onInteraction } from '../src/index.ts';
+import { announceNavigation, install, mountOverlay, onInteraction } from '../src/index.ts';
 import { page as installState } from '../src/install-state.ts';
 import { MAX_REPORTS } from '../src/lifecycle.ts';
-import { announceNavigation } from '../src/navigation.ts';
+import { routerNavigated } from '../src/navigation.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 import { attributeINP } from '../src/web-vitals.ts';
 
@@ -1719,6 +1719,93 @@ test("next-client installs nothing and names no navigation in a build withInpBla
   });
 });
 
+test('announceNavigation inside a click names it on that click, starts INP over, and places the reports after it at the new URL', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    clock.now = 1000;
+    page.paint([slowClick(120)]);
+    assert.equal(api.inp()?.interactionId, 7);
+
+    // A router that pushes from inside the click handler, as TanStack Router does for a Link click.
+    clock.now = 2000;
+    const clickedAt = page.duringClick(() => {
+      clock.now = 2004;
+      announceNavigation('/cart');
+    });
+    assert.equal(api.inp(), null);
+    page.paint([click(14, clickedAt, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: { url: 'https://shop.example/cart', type: 'push' } });
+
+    clock.now = 3000;
+    page.paint([click(21, 3000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: 'https://shop.example/cart', navigationType: 'soft-navigation', startedNavigation: null });
+    assert.equal(api.inp()?.interactionId, 21);
+    api.dispose();
+  });
+});
+
+test('announceNavigation from an effect, with no input being dispatched, names no click and places the reports after it at the new URL', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    // React Router renders the new route in a transition, so the call comes after the click that started it.
+    clock.now = 1500;
+    announceNavigation('https://shop.example/cart');
+    page.paint([click(7, 1000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: null });
+    clock.now = 2000;
+    page.paint([click(14, 2000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: 'https://shop.example/cart', navigationType: 'soft-navigation', startedNavigation: null });
+    api.dispose();
+  });
+});
+
+test('announceNavigation resolves a relative URL against the page, takes a URL object, and records a push', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    clock.now = 1000;
+    announceNavigation('?page=2');
+    clock.now = 2000;
+    page.paint([click(7, 2000, 64)]);
+    assert.equal(api.last()?.navigationURL, 'https://shop.example/products?page=2');
+
+    clock.now = 3000;
+    const clickedAt = page.duringClick(() => announceNavigation(new URL('https://shop.example/cart')));
+    page.paint([click(14, clickedAt, 64)]);
+    assert.deepEqual(api.last()?.startedNavigation, { url: 'https://shop.example/cart', type: 'push' });
+    api.dispose();
+  });
+});
+
+test('announceNavigation does nothing and does not throw before install(), after dispose(), or for a URL that does not parse', async () => {
+  await inBrowser((page) => {
+    assert.doesNotThrow(() => announceNavigation('/cart'));
+    const api = install({ devtoolsTrack: false });
+    assert.doesNotThrow(() => announceNavigation('http://['));
+    page.paint([click(7, performance.now() + 10, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: null });
+    api.dispose();
+    assert.doesNotThrow(() => announceNavigation('/cart'));
+  });
+});
+
+test('announceNavigation from another copy of the module reaches the installation', async (t) => {
+  const clock = useClock(t);
+  const tag = 'copy';
+  const copy: typeof import('../src/navigation.ts') = await import(`../src/navigation.ts?${tag}`);
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    clock.now = 1000;
+    copy.announceNavigation('/cart');
+    clock.now = 2000;
+    page.paint([click(7, 2000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: 'https://shop.example/cart', navigationType: 'soft-navigation', startedNavigation: null });
+    api.dispose();
+  });
+});
+
 test('a page restored from the back/forward cache starts its INP over, and its reports say how it came back', async () => {
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false });
@@ -2865,7 +2952,7 @@ test("an error in a window listener of the library's, or in what it does when a 
     router: (page) => {
       page.window.event = unreadableEvent();
       try {
-        announceNavigation({ url: 'https://shop.example/cart', type: 'push', at: 1000 });
+        routerNavigated({ url: 'https://shop.example/cart', type: 'push', at: 1000 });
       } finally {
         delete page.window.event;
       }

@@ -41,8 +41,28 @@ export interface RouterNavigation {
 const router = shared<{ listener: ((navigation: RouterNavigation) => void) | null }>('router', () => ({ listener: null }));
 
 /** Tells the installation that a router started a soft navigation. Does nothing while nothing is installed. */
-export function announceNavigation(navigation: RouterNavigation): void {
+export function routerNavigated(navigation: RouterNavigation): void {
   router.listener?.(navigation);
+}
+
+/**
+ * Tells react-inp-blame that the app's router changed the route in the page, to `url`, resolved against
+ * the page's URL, so include any base path. Reports of the interactions that begin after it carry the
+ * URL, with `navigationType: 'soft-navigation'`, and the INP estimate starts over. Called while a click
+ * or key press is being dispatched, that interaction's report names it in `startedNavigation`, as a
+ * 'push'. Does nothing before install(), on a page the sample left out and on the server, and never
+ * throws. The Next.js App Router needs no call: `withInpBlame` announces its navigations.
+ */
+export function announceNavigation(url: string | URL): void {
+  if (typeof window === 'undefined' || !router.listener) return;
+  let href: string;
+  try {
+    href = new URL(url, location.href).href;
+  } catch {
+    // A URL that does not parse names no navigation.
+    return;
+  }
+  routerNavigated({ url: href, type: 'push', at: performance.now() });
 }
 
 /** Makes `fn` hear router announcements, until the returned undo is called. */

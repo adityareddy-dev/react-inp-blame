@@ -16,6 +16,7 @@ import { dropped, errorText, guarded, warnOnce } from './warn.js';
 export type * from './types.js';
 export type { InpEstimate } from './inp.js';
 export type { OverlayHandle } from './overlay.js';
+export { announceNavigation } from './navigation.js';
 
 /** Where `debugGlobal: true` puts the API on window. */
 const DEBUG_GLOBAL = '__REACT_INP_BLAME__';
@@ -316,8 +317,8 @@ function installNow(opts: InstallOptions): Api {
       }
     }
   });
-  // The App Router announces a navigation from inside the handler that starts it, so the input
-  // being dispatched, if any, is the one that started it.
+  // A router announces a navigation from inside the handler that starts it where it can (the App Router
+  // and TanStack Router do), so the input being dispatched, if any, is the one that started it.
   const stopRouterNavigations = onRouterNavigation(
     guarded(({ url, type, at }) => {
       const input = dispatchedInput();
