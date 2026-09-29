@@ -311,7 +311,7 @@ const ROUTES = {
         beforeSend: (item) => {
           const m = item.payload;
           if (item.type === 'measurement' && m.type === 'web-vitals' && m.values.inp !== undefined) {
-            const blame = inpBlameAttributes(m.values.interaction_time);
+            const blame = inpBlameAttributes(m.values.interaction_time ?? NaN);
             m.context = { ...m.context, ...Object.fromEntries(Object.entries(blame).map(([name, value]) => [name, String(value)])) };
           }
           return item;
@@ -327,6 +327,14 @@ const ROUTES = {
     const { context } = inp[0].payload;
     for (const [name, value] of Object.entries(ours(context))) assert.equal(typeof value, 'string', `Faro's context got ${name} as a ${typeof value}`);
     assertBlamed('Grafana Faro, beforeSend', context, report);
+    // web-vitals' 8 ms stand-in after a back/forward restore with no slow interaction has no entries, so
+    // Faro's measurement comes without interaction_time. It still gets a status, as the other setups do.
+    faro.api.pushMeasurement({ type: 'web-vitals', values: { inp: 8, delta: 8, presentation_delay: 8 } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const standIn = transport.items.filter((i) => i.type === 'measurement' && i.payload.values?.inp === 8);
+    assert.equal(standIn.length, 1, `Faro sent ${standIn.length} stand-in INP measurements, not 1`);
+    const standInStatus = standIn[0].payload.context?.['react_inp_blame.status'];
+    assert.equal(standInStatus, 'no-report', `Faro's stand-in INP went out with status ${standInStatus}, not no-report`);
   },
 };
 

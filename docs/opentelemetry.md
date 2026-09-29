@@ -136,7 +136,9 @@ sdk.start();
 ## Grafana Faro
 
 Faro sends web vitals as measurements, with the interaction's time in `interaction_time`, and a
-measurement's `context` takes strings, so the values go through `String()` in `beforeSend`. Checked with
+measurement's `context` takes strings, so the values go through `String()` in `beforeSend`. The 8 ms INP
+web-vitals stands in after a back/forward restore or a soft navigation with no slow interaction comes without
+`interaction_time`, and the `NaN` gets it `no-report`, as every other setup here does. Checked with
 `@grafana/faro-web-sdk` 2.12.1.
 
 ```ts
@@ -151,7 +153,7 @@ initializeFaro({
   beforeSend: (item) => {
     const m = item.payload as MeasurementEvent;
     if (item.type === 'measurement' && m.type === 'web-vitals' && m.values['inp'] !== undefined) {
-      const blame = inpBlameAttributes(m.values['interaction_time']);
+      const blame = inpBlameAttributes(m.values['interaction_time'] ?? NaN);
       m.context = { ...m.context, ...Object.fromEntries(Object.entries(blame).map(([name, value]) => [name, String(value)])) };
     }
     return item;
