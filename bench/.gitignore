@@ -1,0 +1,8 @@
+node_modules/
+/clones/
+/a/
+/results/
+/state/
+/npm-lib/
+/report.md
+*.tgz
