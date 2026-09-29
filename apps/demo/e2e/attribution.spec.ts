@@ -17,6 +17,12 @@ test('hook is installed before React registers', async ({ page }) => {
   expect(hook.renderers.map((r) => r.rendererPackageName)).toContain('react-dom');
 });
 
+test('a report says which build of react-dom measured it, and whether StrictMode rendered it only under a development one', async ({ page }) => {
+  const r = await interact(page, 'context-storm', () => page.click('[data-test=trigger]'));
+  // The demo renders outside StrictMode.
+  expect({ reactBuild: r.reactBuild, strictMode: r.strictMode }).toEqual(prod ? { reactBuild: 'production', strictMode: null } : { reactBuild: 'development', strictMode: false });
+});
+
 // install() runs before the app does, and Next.js warns when instrumentation-client takes over 16 ms.
 // The budget here is under a third of that, which holds on a developer's machine (about 0.5 ms on the
 // Windows PC this was written on) and on a shared CI runner alike.
