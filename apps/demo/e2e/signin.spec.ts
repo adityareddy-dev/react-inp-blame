@@ -22,13 +22,20 @@ test('sign-in flow: email, password, log in, profile, each attributed to what to
   await settle(page);
   await clearReports(page);
 
+  // A click on a field submits nothing, so whatever its report names, it is not the form's onSubmit.
+  await page.click('[data-test=email]');
   await page.locator('[data-test=email]').pressSequentially('ada@example.com', { delay: 60 });
   await page.locator('[data-test=password]').pressSequentially('Hunter2!', { delay: 60 });
   // Entries arrive with the paint after the keystroke, so the last one is still on its way.
   await page.waitForFunction(() => window.__REACT_INP_BLAME__.reports().some((r) => r.target?.selector?.includes('data-test="password"')), null, { timeout: 8_000 });
   const beforeClick = await reports(page);
 
-  const emails = on(beforeClick, 'email');
+  const pressed = (r: InteractionReport) => ['click', 'pointerdown', 'pointerup'].includes(r.type);
+  for (const r of on(beforeClick, 'email').filter(pressed)) {
+    expect(r.target?.handler ?? null).not.toBe('onSubmit');
+    expect(r.verdict).not.toContain('onSubmit');
+  }
+  const emails = on(beforeClick, 'email').filter((r) => !pressed(r));
   const passwords = on(beforeClick, 'password');
   expect(emails.length, 'no email keystroke was slow enough to report').toBeGreaterThanOrEqual(1);
   expect(passwords.length, 'no password keystroke was slow enough to report').toBeGreaterThanOrEqual(1);

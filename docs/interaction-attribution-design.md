@@ -582,8 +582,9 @@ climbs the fiber chain, taking the first of these props it finds:
 
 | native event | props looked for, in order |
 | --- | --- |
-| `click` | `onClick`, `onSubmit` |
-| `click` on `input[type=checkbox]` or `[type=radio]` | `onClick`, `onChange`, `onSubmit` |
+| `click` | `onClick` |
+| `click` on a submit button, or inside one | `onClick`, `onSubmit` |
+| `click` on `input[type=checkbox]` or `[type=radio]` | `onClick`, `onChange` |
 | `pointerdown` / `pointerup` | `onPointerDown`, `onMouseDown` / `onPointerUp`, `onMouseUp` |
 | `keydown` | `onKeyDown` |
 | `keydown` in a form control | `onKeyDown`, `onChange`, `onInput` |
@@ -596,10 +597,14 @@ climbs the fiber chain, taking the first of these props it finds:
 
 Only the event's own prop is unconditional. Everything else is a prop React dispatches *from* this event
 rather than *for* it, and each is added only where React really would: `onChange` on a control React
-watches for changes, `onSubmit` on the key that submits a form. A fallback that is sometimes right is
-worse than none, because a named handler reads as a fact. There are no `mousedown` or `mouseup` rows:
-the ring records pointer events and Event Timing names those, so a mouse event never reaches the table,
-while an app that wrote `onMouseDown` is still named from the `pointerdown` row.
+watches for changes, `onSubmit` on the key or the click that submits a form. A fallback that is sometimes
+right is worse than none, because a named handler reads as a fact. A submit button is a `button` whose type
+is not `button` or `reset`, or an `input` of type `submit` or `image`, and a click on an icon inside one is
+the button's. Until 0.20.0 every click in a form fell back to its `onSubmit`, and the demo's sign-in page
+named a click on its email field "onSubmit handler", a handler no click there runs. There are no
+`mousedown` or `mouseup` rows: the ring records pointer events and Event Timing names those, so a mouse
+event never reaches the table, while an app that wrote `onMouseDown` is still named from the `pointerdown`
+row.
 
 ChangeEventPlugin picks a different native event per control, which is the row that matters: `select` and
 `input[type=file]` fire `onChange` from `change`; a text field (a `textarea`, or an input whose type is in

@@ -647,11 +647,27 @@ test('React fires onChange from the click on a checkbox or a radio, so that is t
   for (const type of ['checkbox', 'radio']) {
     assert.equal(handlerOf(host('input', { type, onChange: anon() }) as any, 'click'), 'onChange');
   }
-  // The element's own onClick still wins, and onSubmit stays the last resort behind onChange.
+  // The element's own onClick still wins, and a form's onSubmit is never a checkbox's: its click submits nothing.
   const both = host('input', { type: 'checkbox', onClick: anon(), onChange: anon() });
   assert.equal(handlerOf(both as any, 'click'), 'onClick');
   const inForm = host('input', { type: 'checkbox', onChange: anon() }, host('form', { onSubmit: anon() }));
   assert.equal(handlerOf(inForm as any, 'click'), 'onChange');
+  assert.equal(handlerOf(host('input', { type: 'checkbox' }, host('form', { onSubmit: anon() })) as any, 'click'), null);
+});
+
+test("a click reaches a form's onSubmit only on the form's submit button, which is all the browser submits on", () => {
+  // The demo's sign-in page named a click on its email field 'onSubmit handler', a handler no click there runs.
+  const form = () => host('form', { onSubmit: anon() });
+  assert.equal(handlerOf(host('input', { type: 'email' }, form()) as any, 'click'), null);
+  assert.equal(handlerOf(host('button', { type: 'button' }, form()) as any, 'click'), null);
+  assert.equal(handlerOf(host('button', { type: 'reset' }, form()) as any, 'click'), null);
+  // A button in a form submits it unless its type says otherwise, and so do the two submit inputs.
+  assert.equal(handlerOf(host('button', { type: 'submit' }, form()) as any, 'click'), 'onSubmit');
+  assert.equal(handlerOf(host('button', {}, form()) as any, 'click'), 'onSubmit');
+  for (const type of ['submit', 'image']) assert.equal(handlerOf(host('input', { type }, form()) as any, 'click'), 'onSubmit');
+  // So does a click on the icon inside that button, and the button's own onClick still comes first.
+  assert.equal(handlerOf(host('svg', {}, host('button', {}, form())) as any, 'click'), 'onSubmit');
+  assert.equal(handlerOf(host('button', { onClick: anon() }, form()) as any, 'click'), 'onClick');
 });
 
 test("a click on a label's text is the control the label wraps, which is where the handler is", () => {

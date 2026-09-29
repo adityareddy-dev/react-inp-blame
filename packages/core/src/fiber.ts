@@ -642,15 +642,15 @@ export function ownersOf(fiber: Fiber | null, limit = 8): string[] {
  *
  * Only the event's own prop is unconditional. Everything else React dispatches from this event rather
  * than for it is added by `propsFor`, and only where React really would: `onChange` on a form control,
- * `onSubmit` on Enter. The rule for the whole table is that a fallback which is sometimes right is
- * worse than nothing, because a named handler reads as a fact.
+ * `onSubmit` on Enter and on a click on a submit button. The rule for the whole table is that a fallback
+ * which is sometimes right is worse than nothing, because a named handler reads as a fact.
  *
  * `mousedown` and `mouseup` are not here. The ring records pointer events (`INPUT_TYPES` in hook.ts)
  * and Event Timing names the pointer ones, so a mouse event never reaches this table; an app that
  * wrote `onMouseDown` is still named, from the `pointerdown` row's fallback.
  */
 const handlerProp: Record<string, readonly string[]> = {
-  click: ['onClick', 'onSubmit'],
+  click: ['onClick'],
   pointerdown: ['onPointerDown', 'onMouseDown'],
   pointerup: ['onPointerUp', 'onMouseUp'],
   keydown: ['onKeyDown'],
@@ -664,7 +664,7 @@ const handlerProp: Record<string, readonly string[]> = {
 // What a key event can reach besides its own prop, and the click on a toggle that React turns into an
 // onChange. Both are added by `propsFor` only where React would fire them.
 const TYPING = ['onChange', 'onInput'];
-const CLICK_ON_TOGGLE = ['onClick', 'onChange', 'onSubmit'];
+const CLICK_ON_TOGGLE = ['onClick', 'onChange'];
 // `KeyboardEvent.code` for the two Enter keys, and `key` for both, since the ring stores the code and
 // a caller with the event in hand may pass either.
 export const ENTER_KEYS = ['Enter', 'NumpadEnter'];
@@ -751,10 +751,29 @@ function propsFor(fiber: Fiber | null, eventType: string, key: string | null | u
     if (enter && eventType !== 'keyup') props.push('onSubmit');
     return props;
   }
-  if (base.includes('onChange') || !firesChange(fiber, eventType)) return base;
-  // Only `click` gets here, from a checkbox or a radio. onChange goes after the click's own prop and
-  // ahead of the form fallback, so a control with an onClick is still named by it.
-  return CLICK_ON_TOGGLE;
+  if (eventType !== 'click') return base;
+  // A checkbox or a radio fires onChange from its click, after the click's own prop, so a control with an
+  // onClick is still named by it. A submit button's click submits its form, after the button's own onClick.
+  if (firesChange(fiber, eventType)) return CLICK_ON_TOGGLE;
+  return submitsOnClick(fiber) ? [...base, 'onSubmit'] : base;
+}
+
+/**
+ * Whether a click here submits a form: it landed on a submit button or inside one. A button submits unless
+ * its type is button or reset, and an input only as a submit or an image. A click anywhere else in a form, a
+ * field or a checkbox, submits nothing, so it reaches no onSubmit.
+ */
+function submitsOnClick(fiber: Fiber | null): boolean {
+  let f = fiber;
+  let hops = 0;
+  while (f && hops++ < MAX_HOPS) {
+    if (typeof f.type === 'string' && INTERACTIVE.includes(f.type)) {
+      const type = typeof f.memoizedProps?.type === 'string' ? f.memoizedProps.type.toLowerCase() : '';
+      return f.type === 'button' ? type !== 'button' && type !== 'reset' : f.type === 'input' && (type === 'submit' || type === 'image');
+    }
+    f = f.return;
+  }
+  return false;
 }
 
 // Fibers looked at inside a label to find the control its click is forwarded to. A label holds a
