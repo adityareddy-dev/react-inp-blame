@@ -52,6 +52,27 @@ test('overlay: the badge shows the page INP and the panel blames the right thing
   await settle(page);
 });
 
+// React's development build runs slower than production, so there the badge says which build it measured,
+// and the panel says to check a number in a production build. Neither shows in a production build.
+test('overlay: a development build marks the badge dev, and the panel says to check in a production build', async ({ page }) => {
+  await page.goto('/#handler-hog');
+  await page.waitForSelector('[data-test=trigger]');
+  const badge = page.locator('#react-inp-blame .badge');
+  await badge.click();
+  const panel = page.locator('#react-inp-blame .panel');
+  await expect(panel.locator('.head')).toBeVisible();
+  const note = panel.locator('.devnote');
+  if (prod) {
+    await expect(badge.locator('.dev')).toHaveCount(0);
+    await expect(note).toHaveCount(0);
+  } else {
+    await expect(badge.locator('.dev')).toHaveText('dev');
+    await expect(note).toHaveText('Development build. React runs slower here than in production, and StrictMode renders twice, so check anything amber or red in a production build.');
+    await expect(note.locator('a')).toHaveAttribute('href', /\/docs\/install\.md#numbers-in-development$/);
+  }
+  await shot(page, `overlay-build-${prod ? 'prod' : 'dev'}`);
+});
+
 // The panel from the keyboard. A row's header comes after the close button in the Tab order and opens
 // its row on Enter or Space, once however long the key is held. Escape closes the panel and moves the
 // focus to the badge.

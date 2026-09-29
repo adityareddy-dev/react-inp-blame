@@ -415,7 +415,11 @@ is a render the build timed, a note says about half of React's render time is th
 time the cause gives: the total across commits where the cause leads with one, never the named commit's
 share and never `blame.ms`, which holds committing and effects too. A handler is not run twice (a sort
 handler read 2784 ms in development and 2400 on a profiling build), so no other blame gets the note, though
-a handler's cause gives React's render time as well. No number changes.
+a handler's cause gives React's render time as well. No number changes. The overlay reads the build
+from the hook's renderers rather than a report, so it shows before the first interaction: under a
+development react-dom the badge carries a small 'dev' mark and the panel head says to check anything
+amber or red in a production build, with a link to the install guide. The rating and its colour stay as
+measured.
 
 **Coarse clocks.** React times each component with `performance.now()`, which Chromium steps in
 0.1 ms and Firefox 148 and WebKit 26.4 step in whole milliseconds on a page without cross-origin

@@ -80,6 +80,8 @@ const STORE = 'react-inp-blame:overlay';
 /** The dash the badge and the panel's head show before the page has an interaction. */
 const NONE = '\u2014';
 const DOT = ' · ';
+/** Where the panel's line under a development build sends the reader: how to check a number in production. */
+const DEVELOPMENT_DOCS = 'https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#numbers-in-development';
 
 // The phone sizes come after the rules they override, which have the same specificity.
 const CSS = `
@@ -133,6 +135,8 @@ const CSS = `
 .status { padding: 10px 16px; font-size: 11.5px; border-bottom: 1px solid rgba(255,255,255,.08); color: #c3c7d1; }
 .status.warn { background: rgba(251,191,36,.1); color: #fde68a; }
 .mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #fbbf24; color: #111318; font-size: 11px; font-weight: 800; margin-left: 2px; }
+.dev { padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.1); color: #c3c7d1; font-size: 10px; font-weight: 600; letter-spacing: .03em; }
+.devnote a { color: #c3c7d1; }
 .foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px 10px; color: #6f7582; font-size: 10.5px; }
 .foot button { background: none; border: 0; color: #9aa0ad; font: inherit; cursor: pointer; padding: 0; }
 .foot button:hover { color: #fff; }
@@ -176,29 +180,43 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const status = statusOf(source);
     badge.dataset.status = status?.key ?? 'ok';
     const mark = status?.level === 'warn' ? h('span', { class: 'mark', title: status.text }, '!') : null;
+    // React's development build is slower than production and renders twice under StrictMode, so its numbers
+    // run high. The badge says which build it measured and keeps its colours: it never guesses production's.
+    const development = source.debug.hook().renderers.some((r) => r.rendererPackageName === 'react-dom' && r.bundleType === 1);
+    const dev = development && h('span', { class: 'dev', title: 'Development build: React runs slower here than in production.' }, 'dev');
     if (status?.key === 'unsupported-browser') {
       badge.dataset.rating = 'none';
       fill(badge, h('i', 'dot'), 'INP ', h('span', 'n', 'not measured'));
     } else if (!inp) {
       badge.dataset.rating = 'none';
-      fill(badge, h('i', 'dot'), 'INP ', h('span', 'n', NONE), mark);
+      fill(badge, h('i', 'dot'), 'INP ', h('span', 'n', NONE), dev, mark);
     } else {
       badge.dataset.rating = inp.rating;
-      fill(badge, h('i', 'dot'), 'INP ', h('span', 'ms', `${Math.round(inp.value)} ms`), mark);
+      fill(badge, h('i', 'dot'), 'INP ', h('span', 'ms', `${Math.round(inp.value)} ms`), dev, mark);
     }
     if (panel.hidden) return;
     // The panel is rebuilt below, so the control that has the focus is given it back afterwards.
     const focused = focusedControl();
     const groups = groupRows(all).slice(-max).reverse();
     const cost = all.length ? all.reduce((a, r) => a + r.overheadMs, 0) / all.length : 0;
+    const developmentLine =
+      development &&
+      h(
+        'div',
+        'sub devnote',
+        'Development build. React runs slower here than in production, and StrictMode renders twice, so ',
+        h('a', { href: DEVELOPMENT_DOCS, target: '_blank', rel: 'noopener' }, 'check anything amber or red in a production build'),
+        '.',
+      );
     const head = inp
       ? h(
           'div',
           '',
           h('div', 'big', String(Math.round(inp.value)), h('small', '', 'ms'), tag(inp.rating)),
           h('div', 'sub', `Page INP so far${inp.report ? `, from ${inSentence(titleFor(inp.report))}` : ''}${DOT}${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}`),
+          developmentLine,
         )
-      : h('div', '', h('div', 'big', NONE, h('small', '', 'ms')), h('div', 'sub', 'Interaction to Next Paint. Nothing slow yet.'));
+      : h('div', '', h('div', 'big', NONE, h('small', '', 'ms')), h('div', 'sub', 'Interaction to Next Paint. Nothing slow yet.'), developmentLine);
     fill(
       panel,
       h('div', 'head', head, h('button', { class: 'x', type: 'button', 'aria-label': 'Close' }, '×')),
