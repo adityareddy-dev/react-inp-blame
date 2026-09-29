@@ -125,9 +125,11 @@ const LABEL_CHARS = 40;
 const UNSEEN_TEXT_TAGS = ['noscript', 'script', 'style', 'template'];
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
-// Siblings joined into that run once it starts, the separators between them counted: an interpolated
+// Nodes joined into that run once it starts, the separators between them counted: an interpolated
 // string is a handful of nodes, so a long row of them is a list, not a label.
 const RUN_NODES = 16;
+// Elements a run of text goes on through, as in `<mark>Oak</mark> Chair 1`. Any other element ends it.
+const INLINE_TAGS = ['b', 'i', 'em', 'strong', 'mark', 'span', 'small', 'code', 'kbd', 's', 'u', 'sub', 'sup', 'abbr', 'time'];
 // The elements a person types or picks a value in: one the page made editable, and one with a text field's
 // role. The text inside one is that value, so it is named the way a form field is. A mention chip an editor
 // marks contenteditable="false" is still inside the editor. The browser reads "FALSE" as "false", and a
@@ -951,8 +953,9 @@ function describeTarget(node: Node, owners: readonly string[], handler: string |
 /**
  * 'button "Add to cart"': the element's kind and what names it. The name comes from what the page's
  * code wrote on the element: its aria-label, a form field's placeholder, aria-placeholder or name, an
- * input's type, or its data-testid or data-test. Where `labels` is 'text', an element with no aria-label
- * that is not a form field is named by its first run of text before those data attributes are tried.
+ * input's type, or its data-testid or data-test. Where `labels` is 'text', a form field with no aria-label
+ * is named by its `<label>` first, and any other element with no aria-label by its first run of text
+ * before those data attributes are tried.
  * What a person types in is a form field wherever it is: anything inside an editor, or inside an element
  * with a text field's role, whose text is what they typed, and an element an EditContext is attached to,
  * or one up to five elements inside it. Only an input is named by its type: a select trigger with the
@@ -968,11 +971,21 @@ export function labelOf(node: Node, labels: LabelSource): string | null {
   const written = (name: string) => el.getAttribute(name);
   const name =
     written('aria-label') ||
-    (field ? written('placeholder') || written('aria-placeholder') || written('name') || (tag === 'input' && written('type')) : labels === 'text' ? firstText(el) : null) ||
+    (field
+      ? (labels === 'text' && fieldLabel(el)) || written('placeholder') || written('aria-placeholder') || written('name') || (tag === 'input' && written('type'))
+      : labels === 'text'
+        ? firstText(el)
+        : null) ||
     written('data-testid') ||
     written('data-test');
   const label = name ? clip(name) : '';
   return label ? `${word} "${label}"` : word;
+}
+
+/** The text of a form field's first `<label>`, which is what the page shows beside it, never its value. */
+function fieldLabel(el: Element): string {
+  const label = (el as HTMLInputElement).labels?.[0];
+  return label ? firstText(label) : '';
 }
 
 /** Is `el` itself one a person types in: a textarea, an editor, or an element with a text field's role? */
@@ -1006,23 +1019,27 @@ function clip(text: string): string {
 
 /**
  * The first run of text inside `el`: its first text node with more than whitespace, joined to
- * the text nodes right after it (React renders `Add to cart ({n})` as three), stopping once 40
+ * the text after it (React renders `Add to cart ({n})` as three nodes) through inline elements such
+ * as a `<mark>` a search result puts round what matched, stopping at any other element or once 40
  * characters are in hand.
  */
 function firstText(el: Element): string {
   let node: Node | null = el.firstChild;
   for (let looked = 0; node && looked < LABEL_NODES; looked++) {
     if (node.nodeType === TEXT_NODE && /\S/.test(node.nodeValue ?? '')) {
+      // The run stays inside the block the text is in, the nearest element above it that is not inline.
+      let block = node.parentNode ?? el;
+      while (block !== el && block.parentNode && isInline(block)) block = block.parentNode;
       let text = node.nodeValue ?? '';
       let joined = 0;
-      for (let next = node.nextSibling; next && joined < RUN_NODES && text.length < LABEL_CHARS; next = next.nextSibling, joined++) {
+      for (let next = nextNode(node, block); next && joined < RUN_NODES && text.length < LABEL_CHARS; next = nextNode(next, block), joined++) {
         // Server-rendered HTML separates two adjacent text children with `<!-- -->`, a comment
         // holding a single space, so that hydration can tell them apart, and it stays in the DOM.
         // It is a separator inside one run of text, not the end of it: skipping it is what makes
         // the label read the same under Next.js as under a client-only render.
         if (next.nodeType === COMMENT_NODE) continue;
-        if (next.nodeType !== TEXT_NODE) break;
-        text += next.nodeValue ?? '';
+        if (next.nodeType === TEXT_NODE) text += next.nodeValue ?? '';
+        else if (!isInline(next)) break;
       }
       return text;
     }
@@ -1030,6 +1047,8 @@ function firstText(el: Element): string {
   }
   return '';
 }
+
+const isInline = (node: Node): boolean => INLINE_TAGS.includes((node as Element).tagName?.toLowerCase() ?? '');
 
 /** The node after `node` in document order, without leaving `root`. */
 function nextNode(node: Node, root: Node): Node | null {

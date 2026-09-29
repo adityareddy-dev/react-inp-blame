@@ -555,8 +555,9 @@ handler, none is named (since 0.6.0). The element's label
 names it by its tag and a name of at most 40 characters, and its whole `textContent` is never read,
 because a click can land on a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
 form field's placeholder, aria-placeholder or name, an input's type, or its data-testid or data-test),
-and, where text is allowed, from the first run of text of an element with no aria-label that is not a
-form field. Anything a person types in is a form field here, since its text is what they typed: anything
+and, where text is allowed, from the text of a form field's first `<label>` (since 0.20.0, before its
+placeholder, where `input "checkbox"` said nothing a person could find it by) or the first run of text of
+an element with no aria-label that is not a form field. Anything a person types in is a form field here, since its text is what they typed: anything
 inside an element with the role textbox, searchbox, combobox or spinbutton, or inside a contenteditable
 editor, a mention chip it marks contenteditable="false" included. That is asked of `closest` rather than
 found by walking up, since a label is read at every key press. An editor built on Chromium's EditContext
@@ -572,8 +573,10 @@ button, and the type on a button is button, which names nothing. A run
 is the adjacent text nodes React renders an interpolated string as, `Add to cart ({n})` as three, and
 it takes in the `<!-- -->` the server renderer puts between them to keep hydration straight: without
 that, the same button would be labelled `Add to cart (` after hydration and `Add to cart (3)` after a
-client-only render. A run stops after a fixed number of siblings, so skipping those separators is
-never a way to walk a whole element. The label is read by the capture listener as the input is
+client-only render. Since 0.20.0 a run also goes on through inline elements (`mark`, `b`, `span` and the
+like), so a search result that marks what matched, `<mark>Oak</mark> Chair 1`, is `Oak Chair 1` rather
+than `Oak`, and any other element ends it. A run stops after a fixed number of nodes, so skipping those
+separators is never a way to walk a whole element. The label is read by the capture listener as the input is
 dispatched, before React's handlers run, and kept with the input: read when the entry arrives, after the
 paint, a counter's button clicked as `Count is 0` was labelled `Count is 1`. Where the entry's target is
 not the node the listener saw, the label is read from the entry's target when the report is built.

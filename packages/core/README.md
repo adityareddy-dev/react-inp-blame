@@ -459,8 +459,9 @@ the `path` of an icon button is labelled by the button; `target.selector` stays 
 landed on. Under a production build of React the name comes only from what the page's code wrote on the
 element it names: its aria-label, a form field's placeholder, aria-placeholder or name, an input's type,
 or its data-testid or data-test. The text an element shows can be someone's name or email, and reports
-are made to be forwarded, so reading it is opt-in there: `install({ labels: 'text' })`. Development
-builds read it by default. What the page's code wrote goes out as written, though: an aria-label,
+are made to be forwarded, so reading it is opt-in there: `install({ labels: 'text' })`, which names a
+form field by its `<label>` and anything else by its first run of text. Development builds read it by
+default. What the page's code wrote goes out as written, though: an aria-label,
 data-testid or id built from user data, such as `` aria-label={`Message ${user.name}`} ``, lands in
 `target.label` or `target.selector`, and the label in the verdict. An element inside a contenteditable
 editor, or inside one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`, is named like a
