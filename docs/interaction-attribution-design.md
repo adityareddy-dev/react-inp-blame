@@ -1002,6 +1002,10 @@ DismissableLayer, and until 2026-09-28 the layout was named after DismissableLay
 components". The read was Radix's `Presence` reading `animationName` in a layout effect, in four
 Presences, and none of them is inside DismissableLayer: the content's own sits above it and the
 overlay's beside it. It is named after Dialog now, with "56 components".
+Since 0.20.0 that is only where the commit in the scripts that forced the layout is the one the
+sentence describes. Beside a 500-row Table rendered in a later script the cause says only the Table's
+render, so a blame named after Dialog named a component the cause never mentions, and the component
+the render is named after is kept there, as in 0.18.0.
 Where the path starts at one that does not hold the whole commit (the Sheet's opening, whose path
 starts at one of two Portals) or at a name a reader could not search for, the component the render
 is named after is kept, and so it is where that one holds all of it itself, or is the one rendered

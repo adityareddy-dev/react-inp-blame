@@ -5268,6 +5268,17 @@ test('a layout blame is named after the component the render started at where th
   // and the component the render is named after is all there is to name.
   const part = report(close, [commit(60, 0, { ...sheet, roots: ['Dialog', 'Portal'], startRendered: 42 })], forced, [input(0, 'click')]).explanation;
   assert.deepEqual([part.blame.name, part.blame.detail], ['DismissableLayer', '15 of 56 components']);
+  // Where the commit in the forcing script is not the one the cause describes, a 500-row Table rendered in a later
+  // script, the cause never says "from Dialog down", so the blame keeps the name the render went to, as in 0.18.0.
+  const table = commit(190, 0, { hasDurations: false, total: 0, rendered: 500, mounted: 0, roots: ['Table'], hotPath: ['Table'], components: [{ name: 'TableRow', count: 500, self: null, total: null }] });
+  const both = [frame(0, 320, [script('BODY.onclick', 3.2, 150, 130), script('BUTTON.onpointerup', 180, 40, 0)])];
+  const beside = report([entry('click', 0, 320, 3.2, 250)], [commit(100, 0, sheet), table], both, [input(0, 'click')]).explanation;
+  assert.equal(beside.blame.kind, 'layout');
+  assert.deepEqual([beside.blame.name, beside.blame.detail], ['DismissableLayer', '15 of 56 components']);
+  assert.doesNotMatch(beside.cause, /Dialog/);
+  // The Sheet's commit alone is the one the cause describes, and keeps its start.
+  const alone = report([entry('click', 0, 320, 3.2, 250)], [commit(100, 0, sheet)], both, [input(0, 'click')]).explanation;
+  assert.deepEqual([alone.blame.name, alone.blame.detail], ['Dialog', '56 components']);
   // Where that component holds the whole commit itself, it is the nearer of the two that do, and stays named.
   const inside = report(close, [commit(60, 0, { ...sheet, pathRendered: 56 })], forced, [input(0, 'click')]).explanation;
   assert.deepEqual([inside.blame.name, inside.blame.detail], ['DismissableLayer', '56 components']);

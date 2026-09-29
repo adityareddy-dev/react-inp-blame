@@ -2441,7 +2441,9 @@ function explain(r: InteractionReport): Explanation {
     const inTheSubtree = !!own && read.inTheSubtree;
     // The hot path says where the render went, not where the read was, so where the sentence says it went
     // from a component that holds the whole commit (`fromName`) that is the subtree named, with the whole count.
-    const whole = own ? fromName(own) : null;
+    // Only where the forcing script's commit is the one the sentence describes: another commit's start is
+    // never said, so the blame would name a component the cause does not.
+    const whole = own && own === c ? fromName(own) : null;
     blame = {
       kind: 'layout',
       name: inTheSubtree ? (whole ?? leafOf(own)) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null,
