@@ -296,6 +296,12 @@ test("a row says a component re-rendered only where it did, and otherwise leads 
       { name: 'PrefsProvider', count: 1, self: 1, total: 151 },
     ];
     assert.equal(line({ ...c, rendered: 351, pathRendered: 120, components: spread }), 'PrefsProvider updated · 120 of 351 components re-rendered inside ProductList · 151 ms');
+    // One component most of the commit, and more of it than rendered inside: it cannot all have been inside.
+    // The row said "NavItem ×500 re-rendered inside ProductList" where 298 components were.
+    const outside = [{ name: 'NavItem', count: 500, self: 50, total: 50 }, { ...components[0]!, count: 298 }, components[2]!, components[3]!];
+    assert.equal(line({ ...c, rendered: 800, pathRendered: 298, components: outside }), 'PrefsProvider updated · 298 of 800 components re-rendered inside ProductList · 151 ms');
+    // No more of it than rendered inside, it is said as before.
+    assert.equal(line({ ...c, pathRendered: 375 }), 'PrefsProvider updated · ProductRow ×375 re-rendered inside ProductList · 151 ms');
     // Each row updated from its own store, so the rows are the roots, and the row is not said to have started it.
     const store = { ...c, rendered: 375, roots: ['ProductRow'], hotPath: ['Shop', 'ProductList'], components: [components[0]!] };
     assert.equal(line(store), 'ProductRow ×375 re-rendered inside ProductList · 151 ms');

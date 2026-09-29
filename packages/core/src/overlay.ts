@@ -1,7 +1,7 @@
 import { dominantComponent, heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { unexplainedReports } from './install-state.js';
-import { blamedCommit, carriesWork, countInside, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
+import { blamedCommit, carriesWork, countInside, insideCount, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { errorText, warnOnce } from './warn.js';
@@ -655,7 +655,9 @@ function mayHaveRendered(c: CommitSummary, name: string): boolean {
  */
 function startedLine(blame: Blame, c: CommitSummary): Child[] {
   const top = dominantComponent(c);
-  const many = top && top.count > 1 ? top : null;
+  // Never more of one component than rendered inside: then some of it was outside, and the count inside is said.
+  const within = insideCount(c);
+  const many = top && top.count > 1 && (within == null || top.count <= within) ? top : null;
   const what = many ? `${many.name} ×${many.count}` : countInside(c);
   const root = c.roots.length === 1 && c.roots[0] !== many?.name ? [b(c.roots[0]!), ` updated${DOT}`] : [];
   return [...root, `${what} ${renderedVerb(c)} inside `, b(blame.name!), blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : ''];
