@@ -129,18 +129,31 @@ chain starts from the element itself. `target.owners` keeps the chain's eight in
 first, whatever the names are, and `component` is picked from those eight: where nothing in them passes, it is
 the innermost owner as it always was.
 
+`explanation.blame.kind` says where the time mostly went, and these eight are all there are in 1.x. `'render'`
+is React rendering and committing for this input, charged to a subtree. `'handler'` is the input's own event
+handlers, named after the handler. `'hydration'` is React hydrating the server-rendered HTML the input landed
+on. `'layout'` is style and layout the browser recalculated inside the handlers. `'waiting'` is the input
+waiting for the main thread, before its first handler or between handlers. `'painting'` is the screen update
+after the handlers. `'script'` is a script Long Animation Frames recorded while the interaction ran, named
+after what ran it. `'none'` is nothing that stood out, or nothing that could be seen. A slow event listener is
+both a handler and a script, and which of the two a report says can change in a minor. `blame.name` is what
+the time is charged to: a subtree that re-rendered, a handler that ran, what ran a script as the browser names
+it, or the boundary that was hydrated, and null when unknown. Which of them a report names can change in a
+minor as the reading gets better. `blame.detail` is display text, like the headline.
+
 `duration` is the longest single Event Timing entry, as web-vitals measures it; `holdMs` is how much longer
 the span from press to release ran. Reports are frozen: a late entry, frame or render that joins one reaches
 listeners as a new object with `revision` one higher, and `schemaVersion` changes when a field is removed or
-changes meaning. **`verdict`, `cause`, `notes`, `headline`, `where` and the phases' `label` and `hint` are
-display text that may change between versions**; the blame, the rating, the phases' `ms` and the report's
-numbers are the data. `confidence` is `'measured'` when the blame follows from this interaction's own timings,
-and `'inferred'` when it rests on render counts, a clock too coarse to time one component, a commit that only
-overlapped, a walk cut short, or no Long Animation Frames to rule other scripts out. A screen update blamed
-with "the frame waited on the next key press" is still the screen update's own time, measured. That clause
-rests on the next press's timings instead (`nextInput`), so it is only said where the page worked on that
-press before the paint for half the screen update or more, and it says "most likely" unless a long animation
-frame over this interaction recorded a script that shows it, from that press's own listener on (`onkeydown`,
+changes meaning. **`verdict`, `cause`, `notes`, `headline`, `where`, `blame.detail` and the phases' `label`
+and `hint` are display text that may change between versions**: show them, never parse them. The blame's
+`kind`, `name`, `ms` and `confidence`, the rating, the phases' `ms` and the report's numbers are the data.
+`confidence` is `'measured'` when the blame follows from this interaction's own timings, and `'inferred'` when
+it rests on render counts, a clock too coarse to time one component, a commit that only overlapped, a walk cut
+short, or no Long Animation Frames to rule other scripts out. A screen update blamed with
+"the frame waited on the next key press" is still the screen update's own time, measured. That clause rests on
+the next press's timings instead (`nextInput`), so it is only said where the page worked on that press before
+the paint for half the screen update or more, and it says "most likely" unless a long animation frame over
+this interaction recorded a script that shows it, from that press's own listener on (`onkeydown`,
 `onpointerdown`, or one for an event the press dispatches), the way a wait's is named. With none of that
 press's listeners recorded, a script that started after both that press and this interaction's handlers counts
 where the screen update was over 100 ms, and under that only the press's render says it, hedged.

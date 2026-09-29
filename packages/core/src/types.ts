@@ -405,52 +405,61 @@ export interface Hydration extends HydrationBoundary {
 /** Who is to blame, as data: the same call the cause sentence makes, for UIs to render short. */
 export interface Blame {
   /**
-   * Where the time mostly went. 'hydration' is React hydrating, inside the interaction, the
-   * server-rendered HTML the input landed on: the report's `hydration` names the boundary. An input
-   * that was never dispatched because its HTML was *still* waiting spent its time elsewhere, so it
-   * keeps the blame that says where, and `hydration.kind` is `'not-hydrated'`. 'layout' is the
-   * browser recalculating styles and layout inside the handlers, one figure in a Long Animation Frames
-   * entry, which measures it in every build, React's durations or not. 'waiting' is the input waiting
-   * for the main thread: before its first handler, or inside the working time, between one of its
-   * events' handlers and the next's (Enter on a button whose click restyled 30,000 cells, where the
-   * keyup waits for the browser to finish).
+   * Where the time mostly went, one of eight kinds. 'render': React rendering and committing for this
+   * input, charged to a subtree. 'handler': the input's own event handlers, named after the handler.
+   * 'hydration': React hydrating the server-rendered HTML the input landed on. 'layout': style and layout
+   * the browser recalculated inside the handlers. 'waiting': the input waiting for the main thread, before
+   * its first handler or between handlers. 'painting': the screen update after the handlers. 'script': a
+   * script Long Animation Frames recorded while the interaction ran, named after what ran it. 'none':
+   * nothing stood out, or nothing could be seen. A slow event listener is both a handler and a script, and
+   * which of the two a report says can change in a minor.
+   *
+   * 'hydration' is React hydrating, inside the interaction, the server-rendered HTML the input landed on: the
+   * report's `hydration` names the boundary. An input that was never dispatched because its HTML was *still*
+   * waiting spent its time elsewhere, so it keeps the blame that says where, and `hydration.kind` is
+   * `'not-hydrated'`. 'layout' is the browser recalculating styles and layout inside the handlers, one figure
+   * in a Long Animation Frames entry, which measures it in every build, React's durations or not. 'waiting'
+   * is the input waiting for the main thread: before its first handler, or inside the working time, between
+   * one of its events' handlers and the next's (Enter on a button whose click restyled 30,000 cells, where
+   * the keyup waits for the browser to finish).
    */
   readonly kind: 'render' | 'handler' | 'hydration' | 'layout' | 'waiting' | 'painting' | 'script' | 'none';
   /**
-   * The subtree that re-rendered, the handler that ran, the script, or the boundary that was
-   * hydrated; null when unknown. A 'render' always has one: the subtree, or 'the app' where the commit
-   * named none. For a 'layout' it is where the layout was forced, never what forced
-   * it, because no source says that. That is the subtree of a commit the interaction can claim: one
-   * joined by its own input stamp, walked to the end, with no commit of the interaction left
-   * unjoined. Failing that it is the invoker the browser charged the script to ("DIV#root.onclick"),
-   * and only while one script holds nearly all of `ms`; where several scripts share the total, no
-   * one of them is where the layout happened and this is null. The cause sentence names the largest
-   * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script
-   * the input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that
-   * filled at least half of the wait, before the first handler or between them; null otherwise. A
-   * 'painting' takes the invoker of the script after the handlers that ran for at least half of the
-   * screen update ("DIV.onscroll"), or where that script is React's own task (`MessagePort.onmessage`)
-   * and React rendered inside it, the component that render is named after; null otherwise. A 'handler'
-   * React has no name for (a listener bound on the document, say) takes the invoker of the longest script
-   * in the working time on the same terms as a 'waiting': "#document.onkeydown".
+   * What the time is charged to: a subtree that re-rendered, a handler that ran, what ran a script as the
+   * browser names it, or the boundary that was hydrated, and null when unknown. Which of them a report names
+   * can change in a minor as the reading gets better, and the rest of this says how each kind picks one
+   * today. A 'render' always has one: the subtree, or 'the app' where the commit named none. For a 'layout'
+   * it is where the layout was forced, never what forced it, because no source says that. That is the subtree
+   * of a commit the interaction can claim: one joined by its own input stamp, walked to the end, with no
+   * commit of the interaction left unjoined. Failing that it is the invoker the browser charged the script to
+   * ("DIV#root.onclick"), and only while one script holds nearly all of `ms`; where several scripts share the
+   * total, no one of them is where the layout happened and this is null. The cause sentence names the largest
+   * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script the
+   * input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that filled at
+   * least half of the wait, before the first handler or between them; null otherwise. A 'painting' takes the
+   * invoker of the script after the handlers that ran for at least half of the screen update
+   * ("DIV.onscroll"), or where that script is React's own task (`MessagePort.onmessage`) and React rendered
+   * inside it, the component that render is named after; null otherwise. A 'handler' React has no name for (a
+   * listener bound on the document, say) takes the invoker of the longest script in the working time on the
+   * same terms as a 'waiting': "#document.onkeydown".
    */
   readonly name: string | null;
   /**
-   * For a render or a hydration, what it was mostly made of: many of one component ("LineItem ×800"), one
-   * component's own render where React timed it at half the render or more ("TableBody's own render"), else
-   * how many components rendered ("637 components"). For a render, of which how many inside the component
-   * `name` gives, where that is fewer ("812 of 1216 components"); a hydration is named after a boundary or
-   * the page, which holds them all, so it carries the whole count. Null where it rendered one. A render whose
-   * commit spent over half of `ms` in its useEffect callbacks has "useEffect callbacks" instead, "useEffect
-   * callbacks after mounting RevenueChart" where one component mounted in it with one (`effectMountName`), or
-   * "useEffect callbacks in 3 mounted components" where several did and no component that rendered again had one
-   * to run (`effectRuns`). For a
-   * handler, its component, or null where the name is a listener the browser recorded rather than a React
-   * handler. For a 'layout', what that same commit was mostly made of, as a render's, where a count is the
-   * whole commit's ("56 components", not "15 of 56") when `name` is the component the render started from
-   * and that holds the whole commit, wherever `name` came from that commit, and null wherever `name` did not, since a script has no
-   * component counts. For a 'waiting' inside the working time, where it came: "between click and keyup", or
-   * "between handlers" where it was split across more than one; null for a wait before the first handler.
+   * Display text. For a render or a hydration, what it was mostly made of: many of one component
+   * ("LineItem ×800"), one component's own render where React timed it at half the render or more
+   * ("TableBody's own render"), else how many components rendered ("637 components"). For a render, of which
+   * how many inside the component `name` gives, where that is fewer ("812 of 1216 components"); a hydration
+   * is named after a boundary or the page, which holds them all, so it carries the whole count. Null where it
+   * rendered one. A render whose commit spent over half of `ms` in its useEffect callbacks has
+   * "useEffect callbacks" instead, "useEffect callbacks after mounting RevenueChart" where one component
+   * mounted in it with one (`effectMountName`), or "useEffect callbacks in 3 mounted components" where
+   * several did and no component that rendered again had one to run (`effectRuns`). For a handler, its
+   * component, or null where the name is a listener the browser recorded rather than a React handler. For a
+   * 'layout', what that same commit was mostly made of, as a render's, where a count is the whole commit's
+   * ("56 components", not "15 of 56") when `name` is the component the render started from and that holds the
+   * whole commit, wherever `name` came from that commit, and null wherever `name` did not, since a script has
+   * no component counts. For a 'waiting' inside the working time, where it came: "between click and keyup",
+   * or "between handlers" where it was split across more than one; null for a wait before the first handler.
    */
   readonly detail: string | null;
   /**
@@ -488,9 +497,10 @@ export interface Blame {
 export type Rating = 'good' | 'needs-improvement' | 'poor';
 
 /**
- * The report in plain words, for people and for UIs. `blame`, `rating` and the phases' `ms` are
- * data. `headline`, `where`, `cause`, `notes` and the phases' `label` and `hint` are display text:
- * their wording may change in any version, so show them, never parse or compare them.
+ * The report in plain words, for people and for UIs. `blame.kind`, `blame.name`, `blame.ms`,
+ * `blame.confidence`, `rating` and the phases' `ms` are data. `blame.detail`, `headline`, `where`,
+ * `cause`, `notes` and the phases' `label` and `hint` are display text: their wording may change in
+ * any version, so show them, never parse or compare them.
  */
 export interface Explanation {
   /** e.g. "216 ms click". Display text. */
