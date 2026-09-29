@@ -570,6 +570,17 @@ test('the join is on the interactionId, which names one report among several', (
   assert.equal(attributeINP({ entries: [{}] }).react, null);
 });
 
+test("web-vitals' plain Metric, whose entries are any PerformanceEntry, joins on an id only where it is a number above 0", (t) => {
+  t.after(installed([reportOf(CLICK, [commit()], [])]));
+  // Typed as web-vitals' Metric types it, which is what Honeycomb's INP hook hands over.
+  const metric = (entries: object[]): { name: string; value: number; entries: PerformanceEntry[] } => ({ name: 'INP', value: 240, entries: entries as PerformanceEntry[] });
+
+  assert.equal(attributeINP(metric(CLICK)).react?.interactionId, 7);
+  assert.equal(attributeINP(metric([{ ...CLICK[0], interactionId: '7' }])).react, null);
+  assert.equal(attributeINP(metric([{ ...CLICK[0], interactionId: 0 }])).react, null);
+  assert.equal(attributeINP(metric([{ ...CLICK[0], interactionId: -7 }])).react, null);
+});
+
 test('react is null rather than a guess: nothing installed, and no report for that interaction', (t) => {
   assert.equal(page.installed, null);
   assert.equal(attributeINP(metricWithAttribution).react, null);
