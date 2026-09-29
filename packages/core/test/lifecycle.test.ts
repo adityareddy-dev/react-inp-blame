@@ -411,6 +411,23 @@ test("the panel's Clear tap is left out of the count once: the browser counted i
   assert.deepEqual(life.inp(), { value: 72, rating: 'good', interactionId: 28, interactionCount: 2, report: life.reports()[0] });
 });
 
+test('a badge tap that began before a navigation is left out of the count once: the browser counted it before the navigation, so the count the estimate starts over from holds it', () => {
+  let count = 1;
+  let clock = 0;
+  const { life } = lifecycle({ interactionCount: () => count, now: () => clock });
+  life.onEntries([entry(7, 'click', 56)]);
+  // The browser has counted the tap on the badge by the time the router announces.
+  count = 2;
+  clock = 14_050;
+  life.onNavigation(14_050);
+  life.onEntries([entry(14, 'click', 104, { target: elementWithId('react-inp-blame') })]);
+  count = 3;
+  clock = 21_000;
+  life.onEntries([entry(21, 'click', 64)]);
+  assert.equal(life.inp()?.interactionId, 21);
+  assert.equal(life.inp()?.interactionCount, 1);
+});
+
 test('an interaction whose report cannot be built goes to dropped on its own, and the others in its batch are still published', () => {
   const errors: unknown[] = [];
   const { life, published } = lifecycle({ dropped: (error) => errors.push(error) });
