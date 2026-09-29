@@ -1892,6 +1892,18 @@ not be tied to the interaction, which has nothing to do with which build is runn
 A minified handler keeps only the name of the prop
 it was found on, so production sentences say "the onClick handler".
 
+**Both named where the count chose.** Between a named handler and the render beside it, a production
+build has only the count, and three production runs of apps written to test the library had it wrong both
+ways: a dark mode toggle whose 163 ms were 40 StatCard renders read "The click handler toggle most likely
+took the 163 ms: React re-rendered only 41 components", StatsPanel's 134 ms render read as a 135 ms onClick
+beside 2 components, and a sort whose time was its handler read as 401 components inside Products in 1953
+ms. Since 2026-09-28 the cause names both where the count alone chose: "The onClick handler or React's render
+of StatsPanel (2 components) most likely took the 135 ms, the handler the likelier: React re-rendered only 2
+components. A production build of React can't tell these apart, a profiling build can." A list chosen at
+over 2 ms a row gets "It could have been the onClick handler instead." after its sentence. The blame keeps the
+count's pick and stays `inferred`, so no field changes. A list at 2 ms a row or less is what rows cost and
+names nothing else, and neither does a report where React rendered nothing.
+
 **Counts under a long task.** Since 2026-09-25 a count also needs 50 ms of working time, the bar the
 handler rung already had and the `LONG_TASK_MS` comment describes, taken on the figure the sentence
 prints: excalidraw re-rendered 149 components in 2.8 ms of a 40 ms click and read as the render,

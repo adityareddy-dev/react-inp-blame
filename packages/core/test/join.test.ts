@@ -2491,7 +2491,7 @@ test('a render under 1 ms reads "under 1 ms", and a handler known only by its pr
   assert.equal(development.explanation.cause, "The click handler handleLogin ran for about 97 ms; React's own render took under 1 ms.");
   // A minifier leaves the handler a one-letter name, so what the ring names it by is its prop.
   const production = report(slowClick, [commit(50, 0, { hasDurations: false, total: 0, rendered: 2 })], [], loginClick('onClick'));
-  assert.equal(production.explanation.cause, 'The onClick handler most likely took the 97 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.');
+  assert.equal(production.explanation.cause, "The onClick handler or React's render of List (2 components) most likely took the 97 ms, the handler the likelier: React re-rendered only 2 components. A production build of React can't tell these apart, a profiling build can.");
 });
 
 test('in a production build a render beside a handler is blamed only where its count explains the working time', () => {
@@ -2530,6 +2530,40 @@ test('in a production build a render beside a handler is blamed only where its c
   const timed: Partial<CommitSummary> = { rendered: 85, total: 19, roots: ['ExportMenu'], hotPath: ['ExportMenu', 'MenuPortalProvider'], components: [{ name: 'DropdownMenuItem', count: 4, self: 4, total: 4 }] };
   assert.equal(blameOf(209, timed, 'handleExportCsv'), 'handler handleExportCsv measured');
   assert.equal(blameOf(209, { ...timed, coarseClock: true, components: [{ name: 'DropdownMenuItem', count: 4, self: null, total: null }] }, 'handleExportCsv'), 'handler handleExportCsv inferred');
+});
+
+test('in a production build, where only the count chose between the handler and the render, the sentence names both', () => {
+  // The same click as above: handlers for `processing` ms from 3 ms, painted 5 ms after them, one commit at their end.
+  const explained = (processing: number, shape: Partial<CommitSummary>, handler = 'onClick') =>
+    report([entry('click', 0, processing + 8, 3, 3 + processing)], [commit(processing, 0, shape)], [], loginClick(handler)).explanation;
+  const counted = (rendered: number, [name, count]: [string, number], hotPath: string[]): Partial<CommitSummary> => ({ hasDurations: false, total: 0, rendered, roots: [hotPath[0]!], hotPath, components: [{ name, count, self: null, total: null }] });
+  const both = / A production build of React can't tell these apart, a profiling build can\.$/;
+  // StatsPanel's own render took 134 ms of a 135 ms click in development. In production the count said the handler.
+  const stats = explained(135, counted(2, ['StatsPanel', 1], ['Dashboard', 'StatsPanel']));
+  assert.deepEqual(stats.blame, { kind: 'handler', name: 'onClick', detail: 'SignInPage', ms: null, confidence: 'inferred' });
+  assert.equal(stats.cause, "The onClick handler or React's render of StatsPanel (2 components) most likely took the 135 ms, the handler the likelier: React re-rendered only 2 components. A production build of React can't tell these apart, a profiling build can.");
+  // A dark mode toggle whose time was 40 StatCard renders, beside a handler that is one setState.
+  const dark = explained(163, counted(41, ['StatCard', 40], ['Dashboard']), 'toggle');
+  assert.equal(dark.blame.kind, 'handler');
+  assert.match(dark.cause, /^The click handler toggle or React's render of Dashboard \(41 components\) most likely took the 163 ms, the handler the likelier: /);
+  assert.match(dark.cause, both);
+  // A sort whose time was the handler, beside 400 cards re-rendered: a list, though at nearly 5 ms a card.
+  const sort = explained(1953, counted(401, ['ProductCard', 400], ['Products']));
+  assert.deepEqual(sort.blame, { kind: 'render', name: 'Products', detail: 'ProductCard ×400', ms: null, confidence: 'inferred' });
+  assert.match(sort.cause, /^React was most likely re-rendering 401 components inside Products, mostly ProductCard \(400 of them\), in the 1953 ms of working time\. /);
+  assert.match(sort.cause, / It could have been the onClick handler instead\. A production build of React can't tell these apart, a profiling build can\.$/);
+  // 1,500 rows in 160 ms is what rows cost, so the list decides it and nothing else is named.
+  const rows = explained(160, counted(1501, ['Row', 1500], ['Table']));
+  assert.equal(rows.blame.kind, 'render');
+  assert.doesNotMatch(rows.cause, /onClick|tell these apart/);
+  // Nor where React rendered nothing, only ran effects: there is no render to name.
+  const effectsOnly = explained(135, { hasDurations: false, total: 0, rendered: 0, components: [], effectsStartedAt: 105, effectsEndedAt: 125 });
+  assert.equal(effectsOnly.blame.kind, 'handler');
+  assert.match(effectsOnly.cause, /^The onClick handler most likely took about 115 ms of the 135 ms: React rendered nothing and ran useEffect callbacks for 20 ms\./);
+  // Where React timed the render, nothing is in doubt.
+  const timed = explained(135, { rendered: 2, total: 134, roots: ['Dashboard'], hotPath: ['Dashboard', 'StatsPanel'], components: [{ name: 'StatsPanel', count: 1, self: 133, total: 134 }] });
+  assert.equal(timed.blame.kind, 'render');
+  assert.doesNotMatch(timed.cause, /tell these apart|or React's render/);
 });
 
 test('a render blame always names something: the subtree, or the app where the commit named none', () => {
@@ -3927,7 +3961,7 @@ test('in a production build, effects that are a minority of the working time lea
   const r = report([entry('click', 1000, 230, 1005, 1215)], [chart], null, draw({ owners: ['Chart'] }));
   assert.equal(r.explanation.blame.kind, 'handler');
   assert.equal(r.explanation.blame.ms, null);
-  assert.match(r.explanation.cause, /^The onClick handler most likely took about 150 ms of the 210 ms: React re-rendered only 1 component and ran useEffect callbacks for 60 ms./);
+  assert.match(r.explanation.cause, /^The onClick handler or React's render of Chart \(1 component\) most likely took about 150 ms of the 210 ms, the handler the likelier: React re-rendered only 1 component and ran useEffect callbacks for 60 ms\./);
   // Where the effects are most of it, they are React's, as above.
   const most = { ...chart, at: 1055, effectsStartedAt: 1055, effectsEndedAt: 1210 };
   assert.equal(report([entry('click', 1000, 230, 1005, 1215)], [most], null, draw({ owners: ['Chart'] })).explanation.blame.kind, 'render');

@@ -2176,6 +2176,12 @@ function explain(r: InteractionReport): Explanation {
   // working time was a long task and at least the screen update. The effects are measured in every build, so they
   // come off what it is said to have taken.
   const untimedHandler = !!c && !hasDurations && !!handler && longTaskOfWork && r.processing >= r.presentation;
+  // Where the count alone chose between the handler and the render, a build that times neither cannot say which
+  // it was: StatsPanel's own render took 134 ms of a 135 ms click in development, and its count, 2 components,
+  // said the handler. So the sentence names both and the blame keeps the count's pick. A listener React did not
+  // attach that held the time is a verdict of its own, above.
+  const countOnly = !hasDurations && !!handler && !!c && c.rendered > 0;
+  const tellApart = " A production build of React can't tell these apart, a profiling build can.";
   const untimedTook = effects >= 1 || between >= 1 ? `about ${ms(r.processing - between - effects)} of the ${ms(r.processing)}` : `the ${ms(r.processing)}`;
   // A wait between the events' handlers is no handler's and no render's, so it is weighed against both.
   // Where the wait before the first handler or the screen update is larger, it is a note.
@@ -2469,11 +2475,13 @@ function explain(r: InteractionReport): Explanation {
         ? `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}${inAll(rc)}.`
         : `React ${HEDGE} spent about ${ms(rc.total)} ${renderPhrase(rc)}${placed(' ', '')}${inAll(rc)}.`
       : `React was ${HEDGE} ${renderPhrase(rc)}${placed(', ', `in the ${ms(r.processing)} of working time`)}. This React build records no render durations, so that is read from the component counts, not measured.`;
+    // A list is the render's at any length, but past 2 ms a row the handler could hold the time as well.
+    const listByCount = countOnly && !effectsThen && rc.rendered > 0 && r.processing > RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * rc.rendered;
     // A production build times the effects but not the render, so there the effects lead.
     cause =
       !hasDurations && effectsThen
         ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}`
-        : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.`, `${likely}${profiling}`);
+        : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.`, `${likely}${listByCount ? ` It could have been ${handler} instead.${tellApart}` : profiling}`);
     if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
     if (sayEffects && hasDurations) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
     if (acrossCommits && hasDurations) cause += ` React also spent ${acrossCommits}.`;
@@ -2496,6 +2504,7 @@ function explain(r: InteractionReport): Explanation {
     // A listener React did not attach is timed by the browser, so the build's missing durations leave it measured.
     const scriptConfidence = unsure ? 'inferred' : 'measured';
     if (otherListener) cause = otherListenerCause(otherListener, scriptConfidence, `${howLittle}${ranEffects}`);
+    else if (countOnly) cause = `${cap(handler)} or React's render of ${leafOf(c)} (${plural(c.rendered, 'component')}) ${HEDGE} took ${untimedTook}, the handler the likelier: ${howLittle}${ranEffects}.${tellApart}`;
     else cause = `${cap(handler)} ${HEDGE} took ${untimedTook}: ${howLittle}${ranEffects}.${profiling}`;
     blame = otherListener
       ? { kind: 'script', name: otherListener.script.name || scriptName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence }
