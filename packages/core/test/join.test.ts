@@ -1218,6 +1218,24 @@ test("where the working time was longer, the screen update's note says the frame
   }
 });
 
+test("a render inside the timer after the handlers is said inside it whether or not the next key went down, not counted as a second render", () => {
+  // A keydown handled from 1001 to 1030 and its keyup to 1032, with a 36 ms timer after them that rendered 20 rows,
+  // and the next key down at 1031 with no listener of its own recorded. Nothing held the frame for that key, so the
+  // note is the one the same keys give without it.
+  const end = 1072;
+  const entries = [entry('keydown', 1000, end - 1000, 1001, 1030), entry('keyup', 1010, end - 1010, 1031, 1032)];
+  const rows = (n: number): Partial<CommitSummary> => ({ inputType: 'keydown', roots: ['Editor'], hotPath: ['Editor'], hasDurations: false, total: 0, rendered: n, components: [{ name: 'Row', count: n, self: null, total: null }] });
+  const commits = [commit(1025, 1000, rows(150)), commit(1033.6, 1000, rows(20))];
+  const frames = [frame(1000, end - 1000, [script('DIV#root.onkeydown', 1001, 29), script('TimerHandler:setTimeout', 1034, 36)], end - 10)];
+  const keys = [input(1000, 'keydown'), input(1010, 'keyup', { gestureTs: 1000 })];
+  const alone = report(entries, commits, frames, keys).explanation;
+  const typing = report(entries, commits, frames, [...keys, input(1031, 'keydown')]).explanation;
+  assert.deepEqual(alone.notes, [
+    'After the handler finished, the screen took another 40 ms to update, mostly because a script (TimerHandler:setTimeout, app.js) ran for 36 ms before the next frame, and React rendered inside it: re-rendering 20 components inside Editor, mostly Row (20 of them).',
+  ]);
+  assert.deepEqual([typing.blame, typing.cause, typing.notes], [alone.blame, alone.cause, alone.notes]);
+});
+
 test("a next click whose pointerdown came before this press, or is not in the ring, holds the frame as in 0.18.0", () => {
   // A key press with 18 ms of handlers, then the next click's listener after them. Where the ring has only that
   // click, its button pressed before the key (a touch tap, or a held button) or its pointerdown not recorded, the

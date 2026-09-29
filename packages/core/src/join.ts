@@ -1624,7 +1624,9 @@ function explain(r: InteractionReport): Explanation {
     holds(s, x) &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
-  const ranInLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  // Not where the note says the frame waited on the next press, whose render it would be: where it does not, a render
+  // inside the script is said inside it, not counted as a second render beside the handlers'.
+  const ranInLate = lateScript && !nextNoted ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
   const insideLate = screenOutranks || lateScript?.script.invoker !== REACT_TASK ? ranInLate : [];
   const lateRender = ranInLate.length ? heaviest(ranInLate) : null;
   // Said right after the script, the render is "inside it". After all the scripts together, "inside that one".
