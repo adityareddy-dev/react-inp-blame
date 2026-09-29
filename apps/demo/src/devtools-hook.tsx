@@ -5,6 +5,15 @@
 import './styles.css';
 
 const order = (new URLSearchParams(location.search).get('order') ?? 'library').split(',');
+// `?widget` puts an app's own chat button in the bottom right corner, fixed, where the badge starts.
+if (new URLSearchParams(location.search).has('widget')) {
+  const chat = document.createElement('button');
+  chat.dataset.test = 'chat';
+  chat.textContent = 'Chat';
+  chat.style.cssText = 'position: fixed; right: 16px; bottom: 16px; width: 56px; height: 56px; border-radius: 50%';
+  chat.addEventListener('click', () => (chat.dataset.clicks = String(Number(chat.dataset.clicks ?? 0) + 1)));
+  document.body.append(chat);
+}
 for (const step of order) {
   if (step === 'devtools') {
     // What the React DevTools extension runs at document start: the same installHook.
