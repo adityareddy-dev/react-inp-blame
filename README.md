@@ -307,7 +307,8 @@ and path, never its query, fragment or password, and a script's URL in a blame l
 under [labels and personal data](docs/api.md#labels-and-personal-data) in the API page. Each report also goes out
 as a User Timing measure, with its verdict and label in the entry's `detail`, under a development build of React
 unless [`devtoolsTrack`](docs/api.md#installoptions) is `false`, and under any build where it is `true`. Any
-`PerformanceObserver` on the page sees it, a monitoring script that collects measures included.
+`PerformanceObserver` on the page sees it, a monitoring script that collects measures included. Everything it
+reads, changes and keeps on a page is in [SECURITY.md](SECURITY.md#what-it-touches).
 
 ## Documentation
 
