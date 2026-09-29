@@ -155,7 +155,8 @@ node bench.mjs --dry-run --app tt-fuzzy,twenty       # what a run would cover, n
 Name the apps with `--app`. cal-diy has only A and B, and tt-virtual-fix only B and F, so both scripts refuse
 a run over every app in the default `A,B,C` order before anything builds or starts, and the dry run refuses it
 the same way. `run.mjs --dry-run` makes the same check and stops before installing anything. `npm test` runs
-both dry runs over those cases and `report.mjs` over a made-up results file, and needs nothing but `npm ci`.
+both dry runs over those cases and both report scripts over a made-up results file, and needs nothing but
+`npm ci`.
 
 The published five-app run in [real-apps.md](../docs/benchmarks/real-apps.md) used builds made beforehand:
 

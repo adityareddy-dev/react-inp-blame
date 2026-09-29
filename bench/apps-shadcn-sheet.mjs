@@ -16,7 +16,7 @@ const NEXT_BIN = path.join(V4, 'node_modules', 'next', 'dist', 'bin', 'next');
 const DISTS = { A: '.next-a', B: '.next-b-new', C: '.next-c' };
 
 async function startNext(dist, port) {
-  const child = spawn(process.execPath, [NEXT_BIN, 'start', '--port', String(port)], {
+  const child = spawn(process.execPath, [NEXT_BIN, 'start', '--port', String(port), '--hostname', '127.0.0.1'], {
     cwd: V4,
     env: { ...process.env, BENCH_OUTDIR: dist, NODE_ENV: 'production' },
     stdio: ['ignore', 'pipe', 'pipe'],

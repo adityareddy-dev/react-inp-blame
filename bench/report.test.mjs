@@ -1,6 +1,6 @@
-// report.test.mjs: report.mjs over a small results file in the shape bench.mjs writes, and the
-// failure text a run can leave in it. Nothing installed, no browser, the file is made up in a temp
-// folder.
+// report.test.mjs: report.mjs and before-after.mjs over a small results file in the shape bench.mjs
+// writes, the failure text a run can leave in it, and the address shadcn's next start listens on.
+// Nothing installed, no browser, no server, the file is made up in a temp folder.
 //
 //   node --test report.test.mjs      # or npm test
 
@@ -176,4 +176,37 @@ test('before-after.mjs says so when a pass has no B runs', () => {
   const skip = Array.from({ length: 10 }, (_, i) => `B:${i}`);
   const out = node('before-after.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip }));
   assert.match(out, /^## x1, no B runs, so nothing to compare$/m);
+});
+
+test("shadcn's next start listens on 127.0.0.1 only, as cal-diy's does", () => {
+  // Swaps the harness's own spawn for one that throws its arguments, so nothing starts. Only the
+  // shadcn entries: cal-diy's startServer runs its backend before it gets to next start.
+  const child = `
+    import { registerHooks } from 'node:module';
+    import { pathToFileURL } from 'node:url';
+    const stub = 'data:text/javascript,' + encodeURIComponent(
+      "export * from 'node:child_process'; export function spawn(cmd, args) { throw new Error(JSON.stringify(args.slice(1))); }",
+    );
+    const own = /\\/bench\\/[^/]+\\.mjs$/;
+    registerHooks({
+      resolve: (spec, ctx, next) =>
+        spec === 'node:child_process' && own.test(ctx.parentURL ?? '') ? { url: stub, shortCircuit: true } : next(spec, ctx),
+    });
+    const { apps } = await import(pathToFileURL(${JSON.stringify(path.join(HERE, 'apps.mjs'))}).href);
+    for (const id of ['shadcn-v4', 'shadcn-sheet', 'shadcn-sheet-phone']) {
+      await apps[id].startServer('A', 5999).then(
+        () => console.log(id, 'started'),
+        (err) => console.log(id, err.message.split('\\n')[0]),
+      );
+    }
+  `;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', child], { cwd: HERE, encoding: 'utf8', timeout: 60000 });
+  const lines = r.stdout.trim().split('\n');
+  assert.equal(lines.length, 3, `${r.stdout}${r.stderr}`);
+  for (const line of lines) {
+    const [id, json] = [line.slice(0, line.indexOf(' ')), line.slice(line.indexOf(' ') + 1)];
+    const args = JSON.parse(json);
+    assert.equal(args[0], 'start', line);
+    assert.equal(args[args.indexOf('--hostname') + 1], '127.0.0.1', `${id}: ${line}`);
+  }
 });
