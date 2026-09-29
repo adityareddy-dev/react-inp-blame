@@ -41,7 +41,7 @@ const SEPARATOR = ' > ';
  * `INPMetricWithAttribution` both satisfy it, and so does the metric Next.js's `useReportWebVitals`
  * hands over, which comes from the build without attribution. So does web-vitals' plain `Metric`,
  * whose entries are typed as `PerformanceEntry`, which is what Honeycomb's INP hook hands over: each
- * entry's `interactionId` is read where it is a number, the one field of `InpMetricEntry`.
+ * entry's `interactionId` is read where it is a number above 0.
  */
 export interface InpMetric<Attribution extends object = Record<string, never>> {
   readonly entries: readonly object[];
@@ -49,7 +49,10 @@ export interface InpMetric<Attribution extends object = Record<string, never>> {
   readonly attribution?: Attribution;
 }
 
-/** One Event Timing entry of the metric: `PerformanceEventTiming` satisfies it. */
+/**
+ * One Event Timing entry of the metric: `PerformanceEventTiming` satisfies it.
+ * @deprecated `InpMetric.entries` takes any object now, so nothing reads this type. It goes in 2.0.0.
+ */
 export interface InpMetricEntry {
   /** Optional only because TypeScript's DOM library does not declare it yet; web-vitals keeps no entry without one. */
   readonly interactionId?: number;
