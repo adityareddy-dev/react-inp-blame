@@ -11,10 +11,10 @@ test("tag manager: a document listener React did not attach is blamed, not the b
   });
   expect(r.frames, 'the long animation frame that timed the listener never arrived').not.toEqual([]);
   expect(r.target?.handler).toBeTruthy();
-  // The listener busy-waits 150 ms. A production build minifies its name, so there it is only not the handler's.
+  // The listener busy-waits 150 ms. A production build minifies its name, so there it goes by what ran it.
   expect(r.explanation.blame).toMatchObject({ kind: 'script', confidence: 'measured' });
   expect(r.explanation.blame.ms).toBeGreaterThanOrEqual(75);
-  if (prod) expect(r.explanation.blame.name).not.toBe(r.target?.handler);
+  if (prod) expect(r.explanation.blame.name).toBe('#document.onclick');
   else {
     expect(r.explanation.blame.name).toBe('trackClick');
     expect(r.explanation.cause).toMatch(/^A listener React did not attach ran for about \d+ ms: trackClick \(/);
