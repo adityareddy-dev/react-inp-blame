@@ -7,7 +7,7 @@
  */
 import { frameworkLayers, frameworkWrappers } from './commits.js';
 import { install } from './index.js';
-import { announceNavigation } from './navigation.js';
+import { routerNavigated } from './navigation.js';
 import type { InstallOptions, StartedNavigation } from './types.js';
 
 /** What `withInpBlame` hands this module. */
@@ -77,7 +77,7 @@ interface RouterTransitionStartEvent {
  */
 export function onRouterTransitionStart(url: string, navigationType: StartedNavigation['type'], event?: RouterTransitionStartEvent | null): void {
   if (process.env.REACT_INP_BLAME_NEXT && settings) {
-    announceNavigation({
+    routerNavigated({
       // A push or replace announces the path it was given, without the basePath; a traverse, the full URL.
       url: new URL(url.startsWith('/') ? settings.basePath + url : url, location.href).href,
       type: navigationType,

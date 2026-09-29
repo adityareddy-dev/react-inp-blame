@@ -32,7 +32,7 @@ const functions = (...names) => Object.fromEntries(names.map((name) => [name, 'f
 // rather than a set of names. `import` hands that value over as `default` and `require()` as what it
 // returns, and the names are looked for on it.
 const EXPECTED = {
-  '.': { names: functions('install', 'mountOverlay', 'onInteraction') },
+  '.': { names: functions('install', 'mountOverlay', 'onInteraction', 'announceNavigation') },
   // Exports nothing: importing it installs, which in these apps means loading with no `window` and not throwing.
   './auto': { names: {} },
   './next': { names: functions('withInpBlame') },
