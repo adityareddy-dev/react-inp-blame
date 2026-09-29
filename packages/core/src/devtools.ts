@@ -149,7 +149,8 @@ function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boo
   measure(label, start, c.at, {
     track: RENDER_TRACK,
     color,
-    tooltipText: `${counted} rendered${later ? (c.at < r.end ? ' after the press painted' : ' after the screen updated') : ''}${c.hotPath.length ? `; heaviest path ${c.hotPath.join(' > ')}` : ''}`,
+    // A measure hovers as its tooltip, with no length before it, so the tooltip says the time was not measured too.
+    tooltipText: `${counted} rendered${later ? (c.at < r.end ? ' after the press painted' : ' after the screen updated') : ''}${c.hasDurations ? '' : ', time not measured'}${c.hotPath.length ? `; heaviest path ${c.hotPath.join(' > ')}` : ''}`,
     properties: c.components.slice(0, 6).map((y) => [y.name, y.self != null ? `${y.count} rendered, ${ms(y.self)}` : `${y.count} rendered`]),
   });
 }

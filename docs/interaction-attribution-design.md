@@ -1708,8 +1708,9 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   with no length where it committed, and its name says "time not measured". Drawn half a
   millisecond long, it hovered as "0.50 ms React render · OrderSummary (801 components)" beside
   a tooltip that put about 170 ms on that render, since DevTools puts an entry's length before
-  its name. An entry with no length is hovered by its name alone, as a `console.timeStamp` and
-  as a measure, in the panel of Chrome 153.
+  its name. With no length, a `console.timeStamp` entry is hovered by its name alone and a
+  measure by its tooltip with no length before it, in the panel of Chrome 153, so the tooltip
+  says "time not measured" too.
 - Chrome 134 and later take the renders through `console.timeStamp(label, start, end, track,
   group, color)`, as react-dom does. Earlier Chrome, and every other browser, has the
   one-argument `console.timeStamp` and silently drops the rest, which no feature test can see, so

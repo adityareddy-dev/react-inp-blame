@@ -162,7 +162,8 @@ test("where React draws no renders itself, they go to console.timeStamp in Chrom
 
 test('a render the build did not time is drawn with no length where it committed, and its name says the time was not measured', () => {
   // Drawn half a millisecond long, it hovered in the Performance panel as "0.50 ms React render · OrderSummary (801
-  // components)" beside a tooltip that put about 170 ms on the render. An entry with no length is hovered by its name alone.
+  // components)" beside a tooltip that put about 170 ms on the render. With no length, a console.timeStamp entry is
+  // hovered by its name alone and a measure by its tooltip, so both say it.
   const data = buildReport([click], [commit(150)], null);
   const later = attachLaterRender(data, commit(400), null);
   assert.ok(later);
@@ -178,12 +179,16 @@ test('a render the build did not time is drawn with no length where it committed
       userAgent,
     );
   }
+  const { drawn: measures } = recording(CHROME_133, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+  assert.equal(measures.find((d) => d.track === 'React renders')?.tooltip, '801 components rendered, time not measured; heaviest path OrderSummary');
   // One React timed is drawn across the time it took.
   const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 0)]).draw(report([measured(150, { priority: 1 })])));
   assert.deepEqual(
     drawn.filter((d) => d.track === 'React renders').map(({ label, start, end }) => ({ label, start, end })),
     [{ label: 'React render · OrderSummary (801 components)', start: 30, end: 150 }],
   );
+  const { drawn: timed } = recording(CHROME_133, () => createTimeline(() => [reactDom('18.3.1', 0)]).draw(report([measured(150, { priority: 1 })])));
+  assert.equal(timed.find((d) => d.track === 'React renders')?.tooltip, '801 components rendered; heaviest path OrderSummary');
 });
 
 test('beside React 17, which passes the same priority with every commit, a render is coloured by where it landed', () => {
@@ -216,14 +221,14 @@ test('a render a key press set off before its slower keyup is drawn as a later r
   // Drawn as a measure, its tooltip said it rendered after the screen updated, and the interaction's count
   // said it was one of the renders after the paint, which read as after the keyup's.
   const { drawn: measures } = recording(CHROME_133, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
-  assert.equal(measures.find((d) => d.track === 'React renders')?.tooltip, '801 components rendered after the press painted; heaviest path OrderSummary');
+  assert.equal(measures.find((d) => d.track === 'React renders')?.tooltip, '801 components rendered after the press painted, time not measured; heaviest path OrderSummary');
   assert.deepEqual(measures[0]?.properties?.find(([name]) => name.includes('after') || name.startsWith('Later')), ['Later React renders', '1']);
   // A render after the paint the report is about still says so.
   const clicked = buildReport([click], [commit(150)], null);
   const after = attachLaterRender(clicked, commit(400), null);
   assert.ok(after);
   const { drawn: late } = recording(CHROME_133, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(sealReport(after)));
-  assert.equal(late.find((d) => d.label.startsWith('Later render'))?.tooltip, '801 components rendered after the screen updated; heaviest path OrderSummary');
+  assert.equal(late.find((d) => d.label.startsWith('Later render'))?.tooltip, '801 components rendered after the screen updated, time not measured; heaviest path OrderSummary');
   // One the report put before the paint is the interaction's own render, drawn so, though it committed after
   // the paint as the rounded duration has it: the handlers ran to 205, past a 200 ms duration.
   const rounded = sealReport(buildReport([{ ...click, processingEnd: 205 }], [commit(203)], null));
