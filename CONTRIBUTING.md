@@ -34,6 +34,8 @@ we can agree on the approach before you spend time on it.
 - `api/`: the types every entry point publishes, as `scripts/api-snapshot.mjs` prints them. A unit test
   fails when they change.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
+- `bench/`: the benchmark harness behind docs/benchmarks. Not a workspace, not in the package, and CI doesn't
+  run it. It needs the app clones its README describes.
 
 ## Setup
 
