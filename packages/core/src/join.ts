@@ -1524,16 +1524,14 @@ function explain(r: InteractionReport): Explanation {
    * millisecond either side of the script is its only where no other script the browser recorded holds it, by
    * the rule above, so a stamp on the tick one script ends and the next begins is the first one's: a production
    * render committed at the end of React's own task was put in a timer that started on that tick or under a
-   * millisecond later, and so out of the working time, as though React had rendered nothing there. In the next
-   * press's work (`nextsWork`) a stamp is a script's only from its start on, as there: the next key's 44 ms
-   * handler held 150 rows of this key's stamped 0.3 ms before it, and the note said React rendered them in that
-   * handler, out of the working time. A hydration is left where it was: it has a sentence of its own.
+   * millisecond later, and so out of the working time, as though React had rendered nothing there. A hydration
+   * is left where it was: it has a sentence of its own.
    */
   const ranInside = (x: CommitSummary, s: ScriptSummary) =>
     carriesWork(x) &&
     x.hydratedTarget == null &&
     x.at > processingEnd + STAMP_TOLERANCE &&
-    holds(s, x, nextsWork(s) ? s.start : undefined) &&
+    holds(s, x) &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
   const ranInLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];

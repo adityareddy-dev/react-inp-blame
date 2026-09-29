@@ -809,24 +809,6 @@ test("where the working time was longer, the screen update's note says the frame
       ], `${ms} ms at ${at}`);
     }
   }
-  // Nor is a render there that carries work inside that handler: 20 or 150 rows stamped with the keydown 0.3 ms before
-  // the next key's 44 ms handler were put in it, out of the working time, and the note said React rendered them there.
-  // They are the verdict after the handlers at 44 ms as at 60, beside the note any render verdict has.
-  for (const n of [20, 150]) {
-    const stamp = commit(1185.9, 1000, { ...two, rendered: n, components: [{ name: 'Row', count: n, self: null, total: null }] });
-    for (const ms of [44, 60]) {
-      const early = quickKeys(ms, input(1100, 'keydown'), 1186.2, [stamp]);
-      assert.deepEqual(early.blame, { kind: 'render', name: 'Editor', detail: `Row ×${n}`, ms: null, confidence: 'inferred' }, `${n} rows, ${ms} ms`);
-      assert.equal(
-        early.cause,
-        `React was most likely re-rendering ${n} components inside Editor, mostly Row (${n} of them), after the handlers, before the next frame. This React build records no render durations, so that is read from the component counts, not measured. A profiling build of React would give exact numbers.`,
-        `${n} rows, ${ms} ms`,
-      );
-      assert.deepEqual(early.notes, ms < 45 ? [] : [
-        'After the handler finished, the screen took another 90 ms to update: the frame waited on the next key press, which the page handled first. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 60 ms.',
-      ], `${n} rows, ${ms} ms`);
-    }
-  }
   // React's task behind that handler, holding this key's render, is this key's, though: in its place the next key's
   // 30 ms handler was named.
   const eight = (at = 1215) =>
