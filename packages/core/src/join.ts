@@ -1479,12 +1479,40 @@ function explain(r: InteractionReport): Explanation {
   const renderedElsewhere = (x: CommitSummary) =>
     (r.frames ?? []).some((f) => f.scripts.some((s) => s.invoker !== REACT_TASK && x.at >= s.start && x.at <= s.start + s.duration));
   const commitFrom = (t: number) => r.commits.reduce<CommitSummary | null>((a, x) => (x.at >= t && !renderedElsewhere(x) && (!a || x.at < a.at) ? x : a), null);
+  // Without durations (production builds) a render only earns the blame when it is big; a
+  // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler
+  // its count has to explain the working time as well: a list of 50 of one component, or a tree at no
+  // more than 2 ms a component (RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER). With durations, a commit
+  // that took as long as a handler would need to be blamed earns it too: a 3 ms render whose layout
+  // effects ran for 300 ms is React's work, and taking that time off the handler has to leave it
+  // somewhere. A few milliseconds of committing, which any development build spends, earn nothing.
+  // Effects are timed in every build, so a production build's render earns it by them too.
+  const countExplains = (x: CommitSummary) =>
+    x.rendered >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER &&
+    ((mostlyComponent(x)?.count ?? 0) >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER || r.processing <= RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * x.rendered);
+  // A count says what React rendered and nothing about how long it took, so a render known by its count
+  // alone is held to the working time it sat in: a long task, the bar the handler is held to without
+  // durations (below) and the one LONG_TASK_MS promises. Under it the count is not a slow render, however
+  // large. excalidraw finishing a rectangle re-rendered 149 components in 2.8 ms of working time, with 34
+  // of the click's 40 ms on the screen update, and closing a shadcn/ui Sheet re-rendered 56 in 17 ms of
+  // working time, most of it one style recalculation that no frame under 50 ms reports; both read as the
+  // render. The same bar keeps a render out of the blame where its working time was the smaller part of
+  // the interaction: a screen update longer than 50 ms of working time is over a long task itself, and
+  // `screenOutranks` gives it the verdict. The bar is taken on the figure the sentence prints, or 49.6 ms
+  // read as "50 ms of working time, short of a long task".
+  const longTaskOfWork = Math.round(r.processing) >= LONG_TASK_MS;
+  const countSays = (x: CommitSummary) => (handlerName ? countExplains(x) : x.rendered >= RENDER_MIN_COMPONENTS);
+  const countEarns = (x: CommitSummary) => longTaskOfWork && countSays(x);
   // React's own listener times the render it holds the same way: Gboard fires a key's oninput after its
   // keydown's handlers, and React renders what the input changed in its root listener, between the handlers.
+  // Only where the render's count earns it that time: the listener runs the page's onChange too, and 12
+  // components rendered in a 120 ms oninput beside an 18 ms keydown handler handed the handler the verdict,
+  // with the 124 ms between said nowhere.
   const untimedIn = partsBetween.filter((p) => {
     const s = p.script;
-    const x = s.invoker === REACT_TASK ? commitFrom(s.start) : reactsOwn(s) ? (r.commits.find((y) => y.at >= s.start && y.at <= s.start + s.duration) ?? null) : null;
-    return !!x && !x.hasDurations && carriesWork(x) && renderedBetween.includes(x);
+    const own = s.invoker !== REACT_TASK && reactsOwn(s);
+    const x = s.invoker === REACT_TASK ? commitFrom(s.start) : own ? (r.commits.find((y) => y.at >= s.start && y.at <= s.start + s.duration) ?? null) : null;
+    return !!x && !x.hasDurations && carriesWork(x) && renderedBetween.includes(x) && (!own || countEarns(x));
   });
   const untimedMs = untimedIn.reduce((a, p) => a + p.ms, 0);
   /**
@@ -2055,30 +2083,7 @@ function explain(r: InteractionReport): Explanation {
   const idleHandler = reactIdle && !(framedHandlers && ledScript);
   const ranScript = (reactIdle && framedHandlers && ledScript) || (lateNoted ? ledScript : ownScript);
   const outsideMatters = (hasDurations || idleHandler) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
-  // Without durations (production builds) a render only earns the blame when it is big; a
-  // click that re-rendered 10 components and took 260 ms was slow in its handler. Beside a named handler
-  // its count has to explain the working time as well: a list of 50 of one component, or a tree at no
-  // more than 2 ms a component (RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER). With durations, a commit
-  // that took as long as a handler would need to be blamed earns it too: a 3 ms render whose layout
-  // effects ran for 300 ms is React's work, and taking that time off the handler has to leave it
-  // somewhere. A few milliseconds of committing, which any development build spends, earn nothing.
-  // Effects are timed in every build, so a production build's render earns it by them too.
-  const countExplains = (x: CommitSummary) =>
-    x.rendered >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER &&
-    ((mostlyComponent(x)?.count ?? 0) >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER || r.processing <= RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * x.rendered);
-  // A count says what React rendered and nothing about how long it took, so a render known by its count
-  // alone is held to the working time it sat in: a long task, the bar the handler is held to without
-  // durations (below) and the one LONG_TASK_MS promises. Under it the count is not a slow render, however
-  // large. excalidraw finishing a rectangle re-rendered 149 components in 2.8 ms of working time, with 34
-  // of the click's 40 ms on the screen update, and closing a shadcn/ui Sheet re-rendered 56 in 17 ms of
-  // working time, most of it one style recalculation that no frame under 50 ms reports; both read as the
-  // render. The same bar keeps a render out of the blame where its working time was the smaller part of
-  // the interaction: a screen update longer than 50 ms of working time is over a long task itself, and
-  // `screenOutranks` gives it the verdict. The bar is taken on the figure the sentence prints, or 49.6 ms
-  // read as "50 ms of working time, short of a long task".
-  const longTaskOfWork = Math.round(r.processing) >= LONG_TASK_MS;
-  const countSays = (x: CommitSummary) => (handlerName ? countExplains(x) : x.rendered >= RENDER_MIN_COMPONENTS);
-  const countEarns = (x: CommitSummary) => longTaskOfWork && countSays(x);
+  // Whether the render earns the blame: by its durations, by its effects, or by its count (`countEarns`, above).
   const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : countEarns(c)));
   // A count the bar alone kept from naming the render. The rungs below the phase blames say so, with the
   // working time the count sat in, rather than calling the render small: nothing measured it, and a

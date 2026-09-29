@@ -3115,6 +3115,42 @@ test("React's own listener rendering a key's input between its handlers hands it
   }
 });
 
+test("React's own listener between a key's handlers keeps the wait named after it where its render is too small to take that time", () => {
+  // handleKeyDown ran for 18 ms, then React's root listener ran the oninput for 120 ms before the keyup, and React
+  // re-rendered 12 components in it. The listener runs the page's onChange too, so 12 components do not account
+  // for its time, and the wait is said and named after it as before the listener was known.
+  const oninput = { ...script('DIV#root.oninput', 25, 120), source: 'assets/index.js' };
+  const typed = (rendered: number, entries: ReturnType<typeof entry>[], at: number, scripts: ScriptSummary[], sls: number | null) =>
+    report(
+      entries,
+      [commit(at, 0, { inputType: 'keydown', rendered, roots: ['SearchBox'], hotPath: ['SearchBox', 'Results'], components: [{ name: 'ResultRow', count: rendered - 2, self: null, total: null }], total: 0, hasDurations: false })],
+      [frame(-2, entries[0]!.duration + 2, scripts, sls)],
+      [input(0, 'keydown', { target: element('button', [text('Save')]) as unknown as Node, owners: ['Toolbar'], handler: 'handleKeyDown', press: 'KeyA' })],
+      'attributes',
+      [],
+      undefined,
+      undefined,
+      { roots: ['DIV#root'], named: false },
+    ).explanation;
+  const keys = [entry('keydown', 0, 178.5, 4, 24), entry('keyup', 145.5, 33, 147.5, 148.5)];
+  const small = typed(12, keys, 139, [{ ...script('DIV#root.onkeydown', 4, 18), source: 'assets/index.js' }, oninput], null);
+  assert.deepEqual(small.blame, { kind: 'waiting', name: 'DIV#root.oninput', detail: 'between keydown and keyup', ms: 123.5, confidence: 'measured' });
+  assert.match(small.cause, /124 ms went by between the keydown's handlers and the keyup's\. A script \(DIV#root\.oninput, assets\/index\.js\) ran for 120 ms of it\./);
+  // 400 rows do account for it, and the render takes it.
+  const large = typed(400, keys, 139, [{ ...script('DIV#root.onkeydown', 4, 18), source: 'assets/index.js' }, oninput], null);
+  assert.deepEqual([large.blame.kind, large.blame.name], ['render', 'Results']);
+
+  // Under a longer screen update the wait between is a note, which the small render leaves in place.
+  const painted = [entry('keydown', 0, 275, 4, 24), entry('keyup', 94.7, 180.3, 95, 115)];
+  const note = "71 ms of the working time also went by between the keydown's handlers and the keyup's, with no handler running.";
+  const smallPainted = typed(12, painted, 90.7, [{ ...oninput, start: 24.2, duration: 70 }], 195);
+  assert.equal(smallPainted.blame.kind, 'painting');
+  assert.ok(smallPainted.notes.includes(note), smallPainted.notes.join(' | '));
+  const largePainted = typed(400, painted, 90.7, [{ ...oninput, start: 24.2, duration: 70 }], 195);
+  assert.match([largePainted.cause, ...largePainted.notes].join(' '), /React was most likely still re-rendering 400 components inside Results/);
+  assert.ok(!largePainted.notes.includes(note));
+});
+
 test('a commit timed by a clock too coarse for its components is blamed on its total, as inferred, with no per-component milliseconds', () => {
   const coarse = commit(430, 0, {
     coarseClock: true,

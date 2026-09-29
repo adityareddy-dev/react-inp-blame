@@ -1573,7 +1573,9 @@ anywhere else: under that, its task is weighed as a script. Since 0.20.0 React's
 commit is timed the same way (the listener rule under "Whose listener it is" says how it is known). Gboard
 fires a key's `input` after the keydown's handlers, and React renders what it changed in its root listener
 before the keyup: a production build said a 357 ms wait named after `DIV#root.oninput`, and now says the render
-of BigList. A render still time-slicing when the next event comes, committing after its handlers, is not in the gap, and its slices before them are a wait. Where the part nothing placed is a tenth of the gap or more, the sentence says
+of BigList. The listener's time is the render's only where the count earns the render the verdict, since the
+listener runs the page's onChange too: 12 components rendered in a 120 ms `oninput` beside an 18 ms keydown
+handler leave the wait named after the listener, as before. A render still time-slicing when the next event comes, committing after its handlers, is not in the gap, and its slices before them are a wait. Where the part nothing placed is a tenth of the gap or more, the sentence says
 what the wait was, and the two figures add up to the gap as printed. Before a release (a keyup, or a pointerup,
 mouseup, touchend, click or auxclick), and with long animation frames recorded, it says the key or pointer was
 still down for that long with nothing on record running; before any other event, that nothing on record ran
