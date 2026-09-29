@@ -133,7 +133,7 @@ function installNow(opts: InstallOptions): Api {
     // Exposed anyway, so stats() on the page says why nothing is reported. A badge that was asked for says
     // it too, rather than leaving someone looking for one that never comes.
     const api = inertApi('unsupported', { unsupportedReason: { kind: 'browser', message }, installMs: installTime, dispose: hideOverlay });
-    if (overlayWanted(opts.overlay) && !page.overlay) showOverlay(api, typeof opts.overlay === 'object' ? opts.overlay : {}, true);
+    if (overlayWanted(opts.overlay) && !page.overlay) showOverlay(api, typeof opts.overlay === 'object' ? opts.overlay : {}, opts.overlay !== 'query');
     return expose(api, opts.debugGlobal);
   }
   if (!(Math.random() < (opts.sampleRate ?? 1))) {
@@ -427,7 +427,7 @@ function installNow(opts: InstallOptions): Api {
   const applyOverlay = (option: InstallOptions['overlay']) => {
     if (option === undefined) return;
     hideOverlay();
-    if (overlayWanted(option)) showOverlay(api, typeof option === 'object' ? option : {}, true);
+    if (overlayWanted(option)) showOverlay(api, typeof option === 'object' ? option : {}, option !== 'query');
   };
   page.installed = {
     api,
@@ -511,7 +511,8 @@ export function onInteraction(fn: Listener): () => void {
  * is requested, evaluated or mounted.
  */
 function showOverlay(api: Api, opts: OverlayOptions, hideable = false): Promise<OverlayHandle | null> {
-  // Hide for me is offered only on a badge the overlay option shows, the one a stored 'hidden' keeps off.
+  // Hide for me is offered only on a badge the overlay option shows, the one a stored 'hidden' keeps off. Not under
+  // 'query', where it would take the place of the 'overlay' this person stored to see it.
   const hidden = () => {
     if (page.overlay === shown) page.overlay = null;
   };
