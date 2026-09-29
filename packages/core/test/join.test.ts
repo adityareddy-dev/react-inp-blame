@@ -3692,12 +3692,14 @@ test("an icon a script drew outside React is read from the element holding it, w
 
   // Markup set through dangerouslySetInnerHTML is the element's own, as the svg an icon library renders is:
   // an onClick the app's Icon handed its `<span>` names the component that wrote `<Icon onClick>`. So is the
-  // `<svg>` Font Awesome draws in an empty `<i onClick>` when it nests the svg and keeps the `<i>`, which is not
-  // a control, and the one it swaps for the `<i>` in Bulma's `<span className="icon" onClick={onClick}><i
-  // className="fas fa-trash" /></span>`, where React still holds the `<i>` the page no longer does.
+  // `<svg>` Font Awesome draws in an empty `<i onClick>` when it nests the svg and keeps the `<i>`, with the
+  // `role="button"` an accessible one is given or without, and the one it swaps for the `<i>` in Bulma's
+  // `<span className="icon" onClick={onClick}><i className="fas fa-trash" /></span>`, where React still holds
+  // the `<i>` the page no longer does.
   const shapes: [string, Record<string, unknown>, Record<string, unknown> | null][] = [
     ['span', { dangerouslySetInnerHTML: { __html: '<svg></svg>' } }, null],
     ['i', { className: 'fa-solid fa-trash' }, null],
+    ['i', { className: 'fa-solid fa-trash', role: 'button' }, null],
     ['span', { className: 'icon' }, fiberOf(5, 'i', { className: 'fas fa-trash' })],
   ];
   for (const [tag, props, replaced] of shapes) {

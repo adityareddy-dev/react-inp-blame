@@ -505,10 +505,11 @@ export function namingFiber(node: Node | null): Fiber | null {
   // dangerouslySetInnerHTML and its tag is not a control's, the element is the icon, as the `<svg>` an icon
   // library renders is, and its handler is the icon's whatever role it has. So is the handler of an element
   // that is not a control. A control holds what is drawn in it, so its handler is its own and IconButton's
-  // `<button onClick>` names IconButton, save where React rendered nothing in it and its role was handed down
-  // with its handler, as `<ReactSVG role="button" onClick>` hands both to the empty `<div>` react-svg draws its
-  // svg in. What React rendered there is read from the element's fiber on the screen, not the one cached on it.
-  const handled = handlesInput(start) && (fiberOn(icon) === start || isMarkupIcon(start) || !isControlHost(start) || (rendersNothing(onScreen(start)) && roleHandedDown(start)));
+  // `<button onClick>` names IconButton, save where React rendered nothing in it and it is an `<i>`, the icon
+  // itself that Font Awesome nests its svg in, or its role was handed down with its handler, as `<ReactSVG
+  // role="button" onClick>` hands both to the empty `<div>` react-svg draws its svg in. What React rendered
+  // there is read from the element's fiber on the screen, not the one cached on it.
+  const handled = handlesInput(start) && (fiberOn(icon) === start || isMarkupIcon(start) || !isControlHost(start) || (rendersNothing(onScreen(start)) && (start.type === 'i' || roleHandedDown(start))));
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {
