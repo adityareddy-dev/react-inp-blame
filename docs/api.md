@@ -36,8 +36,10 @@ their first value, with a warning, until `dispose()`.
 
 The API has `reports()` (up to 50 published, oldest first, at their latest revision; past 50 the oldest
 goes, but never one of the ten slowest or one INP can still point at), `last()`, `inp()`
-(`{ value, rating, interactionId, interactionCount, report }` for this navigation, or null), `onInteraction(fn)`,
-`clear()` (drops reports and commits, and starts the INP estimate over), `dispose()` and `stats()`: `mode`
+(`{ value, rating, interactionId, interactionCount, report }` for this navigation, or null, with clicks, taps
+and key presses on [the badge and panel](#the-badge-and-panel) left out of it and of its count, though Chrome's
+own INP and web-vitals count them), `onInteraction(fn)`, `clear()` (drops reports and commits, and starts the
+INP estimate over), `dispose()` and `stats()`: `mode`
 (`'shim'`, `'chained'`, `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `react` (`'reading'`,
 `'waiting'` while React has not rendered on the page, `'installed-late'` when it has and no react-dom registered
 because install() ran after react-dom loaded, or `'unreadable'`), `walks`, and the
@@ -159,7 +161,8 @@ rendered before and after the paint. `overlay: 'query'` shows it only when the U
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`: that is how to open it on a production
 page. `{ position, open, max }` sets the corner, whether the panel starts open and how many rows it keeps
 (20). It is plain DOM in a shadow root, so it never causes a React render, and its code is a chunk loaded
-after `install()` returns, only when shown. `mountOverlay(options)` shows it after an `/auto` import. The shadow
+after `install()` returns, only when shown. A click, tap or key press on it is not the page's: it gets no
+report, and `inp()` and the badge leave it out. `mountOverlay(options)` shows it after an `/auto` import. The shadow
 root is an open one on `#react-inp-blame`, but a test that wants the reports should read them through
 [`debugGlobal`](#installoptions) rather than from the panel's DOM, which may change between versions.
 

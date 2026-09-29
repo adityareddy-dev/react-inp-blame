@@ -212,6 +212,56 @@ test('the sign-in page and every lab page fit the phone, with the badge on the s
   }
 });
 
+// A tap on the badge or the close button is an interaction to the browser, on #react-inp-blame, and on a
+// phone opening the panel can take longer than the page's own taps. Up to 0.18.0 one look at the panel could
+// make it the page's INP, with no row to explain it, and each tap on the panel added to the interactions.
+test("the badge and panel's own taps are not the page's: INP stays on the tap in the lab", async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'WebKit, with no CPU slowdown, paints these taps under the 16 ms floor, so they send no entry to leave out');
+  await page.goto('/#lab/fine');
+  await page.waitForSelector('[data-test=trigger]');
+  const badge = page.locator('#react-inp-blame .badge');
+  await expect(badge).toBeVisible();
+  await settle(page);
+  await clearReports(page);
+  // What the browser sends at the library's 16 ms floor: each interaction's longest entry, and whether it was on the overlay.
+  await page.evaluate(() => {
+    const seen = new Map<number, { ms: number; overlay: boolean }>();
+    (window as unknown as { seen: typeof seen }).seen = seen;
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries() as PerformanceEventTiming[]) {
+        if (!e.interactionId) continue;
+        const was = seen.get(e.interactionId);
+        seen.set(e.interactionId, { ms: Math.max(was?.ms ?? 0, e.duration), overlay: (was?.overlay ?? false) || (e.target as Element | null)?.id === 'react-inp-blame' });
+      }
+    }).observe({ type: 'event', durationThreshold: 16 } as PerformanceObserverInit);
+  });
+  await page.locator('[data-test=trigger]').tap();
+  const panel = page.locator('#react-inp-blame .panel');
+  await badge.tap();
+  await expect(panel).toBeVisible();
+  await page.locator('#react-inp-blame .panel .x').tap();
+  await expect(panel).toBeHidden();
+  await badge.tap();
+  await expect(panel).toBeVisible();
+  // The entries come after each tap is painted.
+  await page.waitForTimeout(1_000);
+  const { seen, inp, count } = await page.evaluate(() => ({
+    seen: [...(window as unknown as { seen: Map<number, { ms: number; overlay: boolean }> }).seen],
+    inp: window.__REACT_INP_BLAME__.inp(),
+    count: (performance as Performance & { interactionCount: number }).interactionCount,
+  }));
+  const entries = `entries by interaction: ${JSON.stringify(seen)}`;
+  const own = seen.filter(([, x]) => x.overlay);
+  const tapped = seen.filter(([, x]) => !x.overlay);
+  expect(own.length, entries).toBeGreaterThan(0);
+  expect(tapped.length, entries).toBe(1);
+  const [[id, lab]] = tapped;
+  expect(inp, entries).toMatchObject({ interactionId: id, value: lab.ms });
+  expect(inp?.report?.target?.selector).toContain(testAttribute('trigger'));
+  // The browser counts every tap, and those on the overlay come off its count.
+  expect(inp?.interactionCount, entries).toBe(count - own.length);
+});
+
 test('the panel fits the phone screen, with its close button and the first row in reach', async ({ page }) => {
   // #budget is a page that fits a phone, as the lab's pages do: a page wider than the phone is widened by its
   // browser to fit, and a fixed badge sits outside what the screen shows.

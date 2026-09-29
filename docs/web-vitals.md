@@ -41,7 +41,8 @@ above it, which is web-vitals' signal to fall back to its own selector, and it n
 hotPath, components, commits, followUps }`, frozen, from this library's own report for that interaction.
 It is `null` when nothing is installed on the page, and when there is no report for the interaction:
 one that stayed under `threshold` and set off no later render INP leaves out, one already pushed out
-of the 50 reports a page keeps, which the ten slowest and those INP can still point at never are, or one
+of the 50 reports a page keeps, which the ten slowest and those INP can still point at never are, a click or
+tap on [the badge and panel](api.md#the-badge-and-panel), which web-vitals counts as the page's, or one
 whose report the library dropped after [an error of its own](troubleshooting.md#library-error). It is `null` too for a
 report such an error kept the library from explaining, though `reports()` still has that report.
 It never guesses, and like `generateTarget` it never throws: a metric it cannot
