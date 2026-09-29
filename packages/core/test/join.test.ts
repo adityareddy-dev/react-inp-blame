@@ -2895,38 +2895,20 @@ test('an input that waited behind a script says which script, and gives it the b
   assert.equal(bare.explanation.blame.name, null);
 });
 
-test("a key press that waited behind React's own task is blamed on the component React was rendering there", () => {
-  // Typing fast into a bio whose Preview reads useDeferredValue: React's scheduler task started at 995 and ran
-  // until 1180 rendering Preview for an earlier key, and this key's handler could start only at 1181.
-  const task = { ...script('MessagePort.onmessage', 995, 185), source: 'deps/react-dom_client.js' };
-  const busy = (s: ScriptSummary, before: ScriptSummary[] = []) => [frame(950, 250, [...before, s, script('INPUT.onkeydown', 1181, 5)])];
-  const preview = commit(1178, 900, { inputType: 'keydown', priority: 3, rendered: 1, roots: ['Settings'], hotPath: ['Settings', 'Preview'], components: [{ name: 'Preview', count: 1, self: 170, total: 170 }], total: 172, startedAt: 996 });
+test("a wait behind React's task or listener keeps the script's name, whatever small render ended inside it", () => {
+  // A key that waited 181 ms behind React's listener, mostly the click before it, which rendered Results for 6 ms.
   const key = [entry('keydown', 1000, 216, 1181, 1186)];
-  const deferred = report(key, [preview], busy(task), []).explanation;
-  assert.deepEqual(deferred.blame, { kind: 'waiting', name: 'Preview', detail: null, ms: 181, confidence: 'measured' });
-  assert.equal(
-    deferred.cause,
-    'The key press waited 181 ms before its handler could start: a script (MessagePort.onmessage, deps/react-dom_client.js) was already running when the key press came and held the main thread for 180 ms of that wait, and React rendered an earlier update inside it: 172 ms re-rendering Preview. Making Preview cheaper to render, or splitting it up, is what shortens this wait.',
-  );
-  // A render that ended within a frame of the task is still the task's.
-  assert.equal(report(key, [{ ...preview, at: 1176 }], busy({ ...task, duration: 170 }), []).explanation.blame.name, 'Preview');
+  const results = commit(1178, 900, { inputType: 'click', rendered: 3, roots: ['Results'], hotPath: ['Results'], components: [{ name: 'Results', count: 1, self: 6, total: 6 }], total: 6, startedAt: 1172 });
+  const behind = (s: ScriptSummary) => report(key, [results], [frame(950, 250, [s, script('INPUT.onkeydown', 1181, 5)])], []).explanation;
+  const listener = behind({ ...script('DIV#root.onclick', 995, 185), name: 'dispatchDiscreteEvent', source: 'deps/react-dom_client.js' });
+  assert.deepEqual(listener.blame, { kind: 'waiting', name: 'DIV#root.onclick', detail: null, ms: 181, confidence: 'measured' });
+  assert.match(listener.cause, /held the main thread for 180 ms of that wait\.$/);
+  assert.equal(behind({ ...script('MessagePort.onmessage', 995, 185), source: 'deps/react-dom_client.js' }).blame.name, 'MessagePort.onmessage');
 
-  // With no render on record the task keeps its own name, and the sentence is as it was.
-  const unseen = report(key, [], busy(task), []).explanation;
-  assert.deepEqual(unseen.blame, { kind: 'waiting', name: 'MessagePort.onmessage', detail: null, ms: 181, confidence: 'measured' });
-  assert.match(unseen.cause, /held the main thread for 180 ms of that wait\.$/);
-  // A page's own message handler with nothing rendered inside it is named as before.
-  assert.equal(report(key, [], busy({ ...task, source: 'app.js' }), []).explanation.blame.name, 'MessagePort.onmessage');
-  // A render that ended before the task began, or in a timer that ran after it, was not the task's. A render inside
-  // a timer is the timer's work, which the timer names. And a render too small to count says nothing of the task.
-  assert.equal(report(key, [{ ...preview, at: 985 }], busy(task), []).explanation.blame.name, 'MessagePort.onmessage');
-  const after = busy({ ...task, duration: 105 }, [])[0]!;
-  const timed = [{ ...after, scripts: [after.scripts[0]!, script('TimerHandler:setTimeout', 1101, 75), after.scripts[1]!] }];
-  assert.equal(report(key, [{ ...preview, at: 1110 }], timed, []).explanation.blame.name, 'MessagePort.onmessage');
-  assert.equal(report(key, [{ ...preview, at: 1110 }], busy({ ...task, duration: 105 }), []).explanation.blame.name, 'Preview');
-  const tiny = { ...preview, total: 0.2, components: [{ name: 'Preview', count: 1, self: 0.2, total: 0.2 }] };
-  assert.equal(report(key, [tiny], busy(task), []).explanation.blame.name, 'MessagePort.onmessage');
-  assert.equal(report(key, [preview], busy({ ...task, invoker: 'TimerHandler:setTimeout', source: 'app.js' }), []).explanation.blame.name, 'TimerHandler:setTimeout');
+  // The same listener after a click's handlers, holding the screen update, is named for itself too.
+  const oninput = { ...script('DIV#root.oninput', 1015, 150), name: 'dispatchDiscreteEvent', source: 'deps/react-dom_client.js' };
+  const painted = report([entry('click', 1000, 200, 1001, 1010)], [{ ...results, at: 1160, startedAt: 1154 }], [frame(1000, 198, [script('BUTTON.onclick', 1001, 9), oninput])], []).explanation;
+  assert.deepEqual([painted.blame.kind, painted.blame.name], ['painting', 'DIV#root.oninput']);
 });
 
 test('a slow listener React did not attach is named by what the browser recorded for it', () => {
@@ -2977,7 +2959,8 @@ test("React's own listener rendering a key's input between its handlers hands it
   const other = typed(false, [432, 424], [oninput('DIV#editor.oninput')], ['DIV#root']);
   assert.deepEqual([other.explanation.blame.kind, other.explanation.blame.name], ['waiting', 'DIV#editor.oninput']);
 
-  // The keyup after the paint: the screen update is the verdict, named after the render React's listener held.
+  // The keyup after the paint: the screen update is the verdict, and React's listener keeps its own name, since it
+  // runs the handlers too and a render inside it need not be most of its time.
   for (const hasDurations of [true, false]) {
     const painted = report(
       [entry('keydown', 0, 368, 0.5, 0.9), entry('keyup', 420, 16, 426.5, 426.8)],
@@ -2990,7 +2973,7 @@ test("React's own listener rendering a key's input between its handlers hands it
       undefined,
       { roots: ['DIV#root'], named: false },
     );
-    assert.deepEqual([painted.explanation.blame.kind, painted.explanation.blame.name], ['painting', 'BigList'], `durations ${hasDurations}`);
+    assert.deepEqual([painted.explanation.blame.kind, painted.explanation.blame.name], ['painting', 'DIV#root.oninput'], `durations ${hasDurations}`);
   }
 });
 

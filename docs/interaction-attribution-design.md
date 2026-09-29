@@ -1440,20 +1440,6 @@ that task, or the task reads as a script that held the screen update, and not as
 Where the screen update did outrank the working time, the `painting` blame names the component that render is
 named after and not the task, since 2026-09-28. On a phone the cascading effect's row had read "screen took
 148 ms to update · MessagePort.onmessage", in bold the name of React's scheduler, which no page ever writes.
-Since 0.20.0 React's own listener is named the same way, known as "Whose listener it is" below says: the
-Gboard key press whose root listener rendered 3,000 rows after the keydown's handlers had read
-`DIV#root.oninput`, and now reads BigList. Since 0.20.0 a `waiting` blame before the first handler goes by
-the same rule: where the script the input waited behind is React's task or listener and a render the library
-saw ended in it, or within a frame after it, the blame names that render's component. Typing fast into a bio
-whose Preview reads `useDeferredValue` had read "waited 181 ms · MessagePort.onmessage" three keys running,
-just as the developer checked whether React's own fix had worked. It now reads Preview, and the sentence says
-that making Preview cheaper or splitting it helps. It does not say the render was deferred: React's task
-also runs a plain update set from a fetch or an effect, which a transition could split, and a commit's
-priority does not tell a transition from one. That render is none of the
-interaction's, so buildReport keeps the commits that ended while the input waited beside the report, as it
-keeps the page's roots. The task is known by its invoker alone, as in the painting rung, so the two cannot
-disagree on one script, and a page's own `MessagePort` message that rendered is named after its render too.
-Where no render the library saw fits, the script keeps its name.
 A render is inside a script where its commit is stamped, give or take a millisecond, only where no other script
 the browser recorded holds the stamp, one on the tick a script ends and the next begins being the first one's,
 as for the forced layout's commits: taken a millisecond wide regardless, a production render committed at the
@@ -1965,13 +1951,14 @@ Under the Next.js App Router the root is the document (`hydrateRoot(document)`),
 tag manager's both read `#document.onclick` there, so on that page with minified names nothing tells them
 apart.
 
-The rule names a render inside React's own listener after its component where the screen update is the
-verdict, and times one between the handlers as React's scheduler task is timed. It does not go the other way:
-a listener it does not know as React's is not known to be anyone else's. A page that wraps every listener
-before React creates its root, as Sentry's default integration and New Relic's agent do, hides both marks in
-a development build, and React's root listener then reads as `sentryWrapped` or as no name at all. So a tag
-manager's click listener that took most of a click beside a React handler still leaves the verdict with the
-handler, and the browser's scripts are read in the handler branch only where the target has no React handler.
+The rule times a render inside React's own listener between the handlers as React's scheduler task is
+timed. Where the screen update is the verdict, the listener keeps its own name: it runs the page's handlers
+too, so a render inside it need not be most of its time. It does not go the other way: a listener it does not
+know as React's is not known to be anyone else's. A page that wraps every listener before React creates its
+root, as Sentry's default integration and New Relic's agent do, hides both marks in a development build, and
+React's root listener then reads as `sentryWrapped` or as no name at all. So a tag manager's click listener
+that took most of a click beside a React handler still leaves the verdict with the handler, and the
+browser's scripts are read in the handler branch only where the target has no React handler.
 
 ## The demo
 

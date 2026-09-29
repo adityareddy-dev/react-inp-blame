@@ -619,11 +619,6 @@ export function buildReport(
   const next = inputs.find((i) => (PRESSES.includes(i.type) || i.type === 'click') && i.ts > start && i.ts < end && !own.includes(i));
   const summaries = Object.freeze(entries.map(summarize));
   if (reactPage.named || reactPage.roots.length) reactPages.set(summaries, reactPage);
-  // The renders that ended while the input waited, none of them its own: what React's task the input waited
-  // behind was rendering (`explain`'s waiting rung). Kept now, since the report holds only its own commits.
-  const waitFrom = (frames ?? []).reduce((a, f) => (f.start < processingStart && f.start + f.duration > start ? Math.min(a, f.start) : a), start);
-  const waitedOn = commits.filter((c) => c.at >= waitFrom - STAMP_TOLERANCE && c.at < processingStart && !inWindow.some((x) => x.at === c.at));
-  if (waitedOn.length) rendersWaitedOn.set(summaries, Object.freeze(waitedOn));
 
   return {
     schemaVersion: 3,
@@ -661,8 +656,6 @@ export function buildReport(
 /** What each report was built knowing of the page's React (`ReactPage`), by its entries, which every revision of it shares. */
 const reactPages = new WeakMap<readonly EventEntrySummary[], ReactPage>();
 const NO_REACT_PAGE: ReactPage = { roots: [], named: false };
-/** The renders each report's input waited behind, by its entries, as `reactPages` is: none of them joined to it. */
-const rendersWaitedOn = new WeakMap<readonly EventEntrySummary[], readonly CommitSummary[]>();
 
 /** The report a revision is published as: frozen, with its explanation and verdict built on first read. */
 export function sealReport(data: ReportData): InteractionReport {
@@ -2514,28 +2507,17 @@ function explain(r: InteractionReport): Explanation {
     // it came lists its scripts, and the one that filled the wait is the thing to go and look at. It is
     // counted for its part inside the wait only, since what it did before the input came delayed nobody.
     const behind = longestPart(scriptParts(frames, r.start, processingStart));
-    // Where that script was React's, by the rule the painting rung names a render by, a render that ended in it,
-    // or within a frame after it, is what it was doing: typing into a useDeferredValue preview, the key waits
-    // behind the preview's render for the key before, in React's scheduler task, which is no code of the app's.
-    const s = behind?.script;
-    const inTask = s && (s.invoker === REACT_TASK || reactsOwn(s)) ? (rendersWaitedOn.get(r.entries) ?? []).filter((x) => carriesWork(x) && x.at >= s.start - STAMP_TOLERANCE && x.at <= s.start + s.duration + FRAME_MS && (holderOf(x) ?? s) === s) : [];
-    const heldBy = inTask.length ? heaviest(inTask) : null;
-    const heldName = heldBy && leafName(heldBy);
-    if (behind && s) {
+    if (behind) {
+      const s = behind.script;
       const already = s.start < r.start - STAMP_TOLERANCE;
       const what = aScript(s);
-      const rendering = heldBy ? `, and React rendered an earlier update inside it: ${heldBy.hasDurations ? `${ms(heldBy.total)} ` : ''}${renderPhrase(heldBy)}` : '';
-      // Not "defer it more": React's task can hold a plain update from a fetch or an effect, not only a deferred one,
-      // and the commit's priority cannot tell a transition from those.
-      const helps = heldName ? ` Making ${heldName} cheaper to render, or splitting it up, is what shortens this wait.` : '';
-      cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: ${what} ${already ? `was already running when the ${kind} came and` : 'ran first and'} held the main thread for ${Math.round(behind.ms) >= Math.round(r.inputDelay) ? 'all' : ms(behind.ms)} of that wait${rendering}.${helps}`;
+      cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: ${what} ${already ? `was already running when the ${kind} came and` : 'ran first and'} held the main thread for ${Math.round(behind.ms) >= Math.round(r.inputDelay) ? 'all' : ms(behind.ms)} of that wait.`;
     } else {
       cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;
     }
     // The milliseconds are the wait, so the script only gets its name on them when it filled most of
     // it. A 30 ms timer inside a 400 ms wait is in the sentence, with its own figure, and is not the blame.
-    // React's task gives the name to the component it was rendering, as a painting blame does.
-    const named = behind && behind.ms >= WAITED_BEHIND_MIN_SHARE * r.inputDelay ? (heldName ?? scriptName(behind.script)) : null;
+    const named = behind && behind.ms >= WAITED_BEHIND_MIN_SHARE * r.inputDelay ? scriptName(behind.script) : null;
     blame = { kind: 'waiting', name: named, detail: null, ms: r.inputDelay, confidence: 'measured' };
   } else if (waitedOnNext) {
     // The frame waited on the next press, which the page handled first. What it did for that press is the
@@ -2553,7 +2535,7 @@ function explain(r: InteractionReport): Explanation {
     // React's own task is named after the port its scheduler posts to, which nobody wrote: where React
     // rendered inside it, the blame names that render's component, and the sentence still names the task.
     // On a phone a cascading effect's 400 rows read "screen took 148 ms to update · MessagePort.onmessage".
-    const reactTaskRender = lateLeads && (lateLeads.script.invoker === REACT_TASK || reactsOwn(lateLeads.script)) && lateRender ? leafName(lateRender) : null;
+    const reactTaskRender = lateLeads?.script.invoker === REACT_TASK && lateRender ? leafName(lateRender) : null;
     blame = { kind: 'painting', name: reactTaskRender ?? (lateLeads ? scriptBlameName(lateLeads.script) : null), detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (unseen) {
     // No react-dom is read, so what React rendered for this input, if anything, is unknown, and with it
