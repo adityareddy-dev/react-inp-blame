@@ -76,9 +76,11 @@
   press's `onkeydown` or `onpointerdown`. Where none of its listeners was recorded, under a screen update of
   100 ms or less every script is ranked as the interaction's own, so the next press's handler can be named as
   its script, and over that, one of its own that started a millisecond or more after its handlers ended is
-  taken for the next press's work. Rollover typing, the next key down before this one is up, is read the same
-  way even with the next key's `oninput` on record: where this key's keyup was handled in a later frame, its
-  own `oninput` runs right after its handlers, and nothing on record tells the next key's from it.
+  taken for the next press's work. A next click whose button went down before the interaction, or whose
+  pointerdown was not recorded, has no listener to go by, since nothing tells its `onclick` or `onpointerup`
+  from the interaction's own, so it is weighed as in 0.18.0: every script from that click on is its work.
+  Rollover typing, where the next key goes down before this one comes up, can still put the next key's work on
+  this one.
 - **Reports name the nearest component with a readable name, not always the innermost one.** A component
   whose real name is one or two characters (`Td`, `Li`), or lowercase in any part of it (`header`,
   `motion.div`, `UI.list`), or that a styling library named after what it wraps (`styled.li`, `Styled(span)`),
