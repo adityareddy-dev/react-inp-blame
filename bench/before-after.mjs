@@ -46,15 +46,23 @@ const f1 = (x) => (Math.round(x * 10) / 10).toString();
 for (const throttle of [...new Set(runs.map((r) => r.throttle))]) {
   const B = runs.filter((r) => r.config === 'B' && r.throttle === throttle).sort((a, b) => a.runIndex - b.runIndex);
   const F = runs.filter((r) => r.config === 'F' && r.throttle === throttle).sort((a, b) => a.runIndex - b.runIndex);
-  const n = Math.min(B.length, F.length);
-  console.log(`\n## x${throttle}, ${n} paired runs`);
+  if (!B.length || !F.length) {
+    console.log(`\n## x${throttle}, no ${B.length ? 'F' : 'B'} runs, so nothing to compare`);
+    continue;
+  }
+  // Joined on runIndex, as report.mjs pairs. A failed run is missing from runs, so pairing by
+  // position would shift every later pair by one.
+  const byIndex = new Map(F.map((r) => [r.runIndex, r]));
+  const pairs = B.filter((r) => byIndex.has(r.runIndex)).map((r) => [r, byIndex.get(r.runIndex)]);
+  const alone = [['B', B.length - pairs.length], ['F', F.length - pairs.length]].filter(([, k]) => k);
+  console.log(`\n## x${throttle}, ${pairs.length} paired runs${alone.length ? `, left out for want of a partner: ${alone.map(([c, k]) => `${c} ${k}`).join(', ')}` : ''}`);
   const metrics = [
     ['INP', (r) => r.inp],
     ...B[0].steps.map((s) => [s.name, (r) => slowest(r, s.name)]),
   ];
   for (const [name, get] of metrics) {
-    const b = B.slice(0, n).map(get);
-    const f = F.slice(0, n).map(get);
+    const b = pairs.map(([r]) => get(r));
+    const f = pairs.map(([, r]) => get(r));
     const d = boot(f.map((x, i) => x - b[i]));
     console.log(`- ${name}: B ${f1(median(b))}, F ${f1(median(f))}, F − B ${d.point > 0 ? '+' : ''}${f1(d.point)} [${f1(d.lo)}, ${f1(d.hi)}]`);
   }

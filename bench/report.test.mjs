@@ -164,3 +164,16 @@ test('the library check shows in the report, and a copy that differs is said at 
   const none = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'] }));
   assert.match(top(none), /\*\*The library was not checked\.\*\*/);
 });
+
+test('before-after.mjs pairs B and F by run index, so a failed run shifts nothing', () => {
+  // F equals B at every run index, so every true pair differs by 0. B's run 2 failed.
+  const out = node('before-after.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip: ['B:2'] }));
+  assert.match(out, /^## x1, 9 paired runs, left out for want of a partner: F 1$/m);
+  assert.match(out, /^- INP: B 200, F 200, F − B 0 \[0, 0\]$/m);
+});
+
+test('before-after.mjs says so when a pass has no B runs', () => {
+  const skip = Array.from({ length: 10 }, (_, i) => `B:${i}`);
+  const out = node('before-after.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip }));
+  assert.match(out, /^## x1, no B runs, so nothing to compare$/m);
+});
