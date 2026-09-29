@@ -1396,17 +1396,18 @@ for a later frame. Until 2026-09-27 the next key's 44 ms handler, under half of 
 the same way. A script that started before that listener, or that holds a render joined to this report by its
 input stamp, is this interaction's own: React's own task that held a key's render, or a timer 1 ms after its
 handlers, is the verdict with the next key as without it. A script holds a render from its start on, not from a
-moment before it, since the next key is in the ring by the time that key's listener runs. With no listener
-recorded, as for one under 5 ms, nothing shows where that press's work began. Under 100 ms the verdict ranks
-every script as it does without the next press, and the note says the frame most likely waited on that press only
-where its render ended by the paint, half the screen update or more after the handlers, and so does the painting
-blame where the screen update outranks the working time: counted from the tick after the handlers, the note said
-so beside a verdict naming a keydown's own 38 ms timer, and named the same timer, and the blame said so where
-without the next press it named a keydown's own 50 ms timer. Over 100 ms a script from that tick on is that
-press's work, as in 0.16.0, and one on the tick is still this interaction's own. Where the frame waited on the
-next press, a script from half the screen update that is not that press's work is still taken, as this
-interaction's own: until 2026-09-27 a 60 ms timer between a keydown's handlers and the next key went to waiting
-and painting.
+moment before it, since the next key is in the ring by the time that key's listener runs, and one of that key's
+has a render inside it on the same terms: until 2026-09-28 a key's 150 rows, stamped 0.3 ms before the next key's
+44 ms handler, were put inside that handler and out of the working time. With no listener recorded, as for one
+under 5 ms, nothing shows where that press's work began. Under 100 ms the verdict ranks every script as it does
+without the next press, and the note says the frame most likely waited on that press only where its render ended
+by the paint, half the screen update or more after the handlers, and so does the painting blame where the screen
+update outranks the working time: counted from the tick after the handlers, the note said so beside a verdict
+naming a keydown's own 38 ms timer, and named the same timer, and the blame said so where without the next press
+it named a keydown's own 50 ms timer. Over 100 ms a script from that tick on is that press's work, as in 0.16.0,
+and one on the tick is still this interaction's own. Where the frame waited on the next press, a script from half
+the screen update that is not that press's work is still taken, as this interaction's own: until 2026-09-27 a 60
+ms timer between a keydown's handlers and the next key went to waiting and painting.
 Where a `script` verdict, or a `none`, passed over a longer script after the handlers, the note names that one
 at any length: until 2026-09-27 an idle click's 22 ms handler took the verdict from a 49 ms timer after it
 under a 100 ms screen update, and that timer went unsaid. A script after the handlers is said as
