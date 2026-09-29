@@ -38,8 +38,10 @@ test("a panel row says tap for a finger's click and click for a mouse's", () => 
   assert.equal(titleFor(pressed('pointerdown', 'touch')), 'Tap on "Save"');
   assert.equal(titleFor(pressed('click', 'mouse')), 'Click on "Save"');
   assert.equal(titleFor(pressed('pointerup', 'mouse')), 'Click on "Save"');
-  // A key's click carries no pointer, and stays a click.
+  // A key's click carries no pointer, and stays a click, as does a press whose pointer the library did not see.
   assert.equal(titleFor(pressed('click', null)), 'Click on "Save"');
+  assert.equal(titleFor(pressed('pointerdown', null)), 'Click on "Save"');
+  assert.equal(titleFor(pressed('pointerup', null)), 'Click on "Save"');
   assert.equal(titleFor({ ...pressed('click', 'touch'), target: null }), 'Tap');
 });
 
