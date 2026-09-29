@@ -296,6 +296,46 @@ test("a row says a component re-rendered only where it did, and otherwise leads 
   }
 });
 
+test('quick rows with nothing to fix fold into one line that opens on a click, and the rows worth reading stay rows', (t) => {
+  t.mock.method(console, 'warn', () => {});
+  // Ten 45 ms clicks whose handlers ran 5 ms, then a 300 ms one whose handler ran nearly all of it.
+  const click = (id: number, duration: number, processingEnd: number) =>
+    sealReport(buildReport([{ name: 'click', interactionId: id, startTime: id * 1000, duration, processingStart: id * 1000 + 5, processingEnd: id * 1000 + processingEnd, target: null }], [], [], []));
+  const quiet = Array.from({ length: 10 }, (_, i) => click(i + 1, 45, 10));
+  const slow = click(11, 300, 290);
+  assert.equal(quiet[0]!.explanation.blame.kind, 'none');
+  assert.notEqual(slow.explanation.blame.kind, 'none');
+  // A quiet row where React is not read is "can't tell", not "nothing to fix", and stays a row.
+  const unread = sealReport(buildReport([{ name: 'click', interactionId: 12, startTime: 12000, duration: 45, processingStart: 12005, processingEnd: 12010, target: null }], [], [], [], 'attributes', [], undefined, 'unreadable'));
+  const { body, restore } = panelDocument();
+  try {
+    const source = {
+      reports: () => [...quiet, slow, unread],
+      inp: () => null,
+      onInteraction: () => () => {},
+      clear() {},
+      stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
+      debug: { hook: () => ({ devtoolsLockedOut: false }) },
+    };
+    const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true });
+    const panel = byClass(body.childNodes[0].shadowRoot, 'panel')!;
+    const rows = () => panel.childNodes.filter((node: Drawn) => typeof node !== 'string' && node.className.split(' ').includes('row'));
+    const fold = () => byClass(panel, 'fold');
+    // The unread click, the slow one, and the fold, which the header's count and the badge still count in.
+    assert.equal(rows().length, 3);
+    assert.equal(fold()?.textContent, '10 quick interactions, nothing to fix');
+    assert.deepEqual(rows().map((row: Drawn) => row.dataset.id ?? 'fold'), ['12', '11', 'fold']);
+    panel.listeners.click({ target: byClass(fold()!, 'toggle') });
+    assert.equal(rows().length, 13);
+    assert.deepEqual(rows().slice(3).map((row: Drawn) => row.dataset.id), ['10', '9', '8', '7', '6', '5', '4', '3', '2', '1']);
+    panel.listeners.click({ target: byClass(fold()!, 'toggle') });
+    assert.equal(rows().length, 3);
+    overlay.dispose();
+  } finally {
+    restore();
+  }
+});
+
 test("the panel's row and its open section say a key press's render before the slower keyup came after the press painted", () => {
   // The keydown painted at 24 and set off a render of 400 components at 150, before the key came up at 300.
   // The keyup's entry was the slower one and painted at 348.
