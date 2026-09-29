@@ -5089,6 +5089,12 @@ test('a development build is warned once, at the second interaction whose long f
           // The same interaction revised is still one.
           page.queue([longFrame(2100, [])]);
           page.paint([]);
+          // Handlers of 3 ms in frames long for styles and layout list no script on any page, since the browser lists
+          // none under 5 ms, so they say nothing about this one.
+          page.queue([{ ...click(11, 2400, 256), processingEnd: 2405 }, longFrame(2400, [])]);
+          page.paint([]);
+          page.queue([{ ...click(12, 2700, 256), processingEnd: 2705 }, longFrame(2700, [])]);
+          page.paint([]);
           assert.equal(unlisted().length, 0);
           page.queue([click(9, 3000, 300), longFrame(3010, [])]);
           page.paint([]);

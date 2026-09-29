@@ -710,10 +710,14 @@ function listsNoScripts(frames: readonly FrameSummary[], start: number, end: num
   return over.length > 0 && over.every((f) => f.scripts.length === 0) && over.some((f) => f.duration >= LONG_TASK_MS);
 }
 
-/** Whether the report's verdict could not say what its handlers' time went on, since the frames over them listed no scripts. */
+/**
+ * Whether the report's verdict could not say what its handlers' time went on, since the frames over them listed no
+ * scripts. Only where the handlers ran long: the browser lists no script under 5 ms, so a quick handler in a frame
+ * long for styles and layout lists none on any page.
+ */
 export function scriptsUnlisted(r: InteractionReport): boolean {
   const start = r.start + r.inputDelay;
-  return listsNoScripts(r.frames ?? [], start, start + r.processing + r.walkMs);
+  return r.processing >= LONG_TASK_MS && listsNoScripts(r.frames ?? [], start, start + r.processing + r.walkMs);
 }
 
 /** Counts by report, kept as each is explained. */
