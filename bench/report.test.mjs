@@ -19,11 +19,11 @@ after(() => {
 });
 
 /** One run as bench.mjs records it, with the library in for every configuration but A. */
-function run(app, config, runIndex, inp) {
+function run(app, config, runIndex, inp, throttle = 1) {
   return {
     app,
     config,
-    throttle: 1,
+    throttle,
     runIndex,
     warmup: false,
     inp,
@@ -60,13 +60,21 @@ function run(app, config, runIndex, inp) {
 }
 
 /**
- * Writes a results file for `app` with `configs` and ten runs each, `inp(config, i)` for run i, and
- * returns its path. `skip` holds the `config:i` runs that failed and so are left out of the runs.
+ * Writes a results file for `app` with `configs` and ten runs each per pass in `throttles`,
+ * `inp(config, i)` for run i, and returns its path. `skip` holds the runs that failed and so are left
+ * out of the runs, `config:i` in every pass or `config:ixT` in the xT pass only. `each` can change a run.
  */
-function results({ app, configs, inp = (c, i) => 100 + 20 * i, skip = [], failures = [], libCheck = null }) {
+function results({ app, configs, throttles = [1], inp = (c, i) => 100 + 20 * i, skip = [], failures = [], libCheck = null, each = () => {} }) {
   const runs = [];
-  for (let i = 0; i < 10; i++) {
-    for (const c of configs) if (!skip.includes(`${c}:${i}`)) runs.push(run(app, c, i, inp(c, i)));
+  for (const t of throttles) {
+    for (let i = 0; i < 10; i++) {
+      for (const c of configs) {
+        if (skip.includes(`${c}:${i}`) || skip.includes(`${c}:${i}x${t}`)) continue;
+        const r = run(app, c, i, inp(c, i), t);
+        each(r);
+        runs.push(r);
+      }
+    }
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-report-'));
   temps.push(dir);
@@ -75,7 +83,7 @@ function results({ app, configs, inp = (c, i) => 100 + 20 * i, skip = [], failur
   const data = {
     started: '2026-09-29T00:00:00.000Z',
     finished: '2026-09-29T01:00:00.000Z',
-    args: { runs: 10, app, throttles: [1] },
+    args: { runs: 10, app, throttles },
     versions: {
       node: 'v24.0.0',
       chromium: '1',
@@ -93,8 +101,8 @@ function results({ app, configs, inp = (c, i) => 100 + 20 * i, skip = [], failur
   return file;
 }
 
-function node(script, file) {
-  const r = spawnSync(process.execPath, [path.join(HERE, script), file], { cwd: HERE, encoding: 'utf8', timeout: 60000 });
+function node(script, file, ...args) {
+  const r = spawnSync(process.execPath, [path.join(HERE, script), file, ...args], { cwd: HERE, encoding: 'utf8', timeout: 60000 });
   assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
   return r.stdout;
 }
@@ -201,6 +209,36 @@ test('before-after.mjs says so when a pass has no B runs', () => {
   const skip = Array.from({ length: 10 }, (_, i) => `B:${i}`);
   const out = node('before-after.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip }));
   assert.match(out, /^## x1, no B runs, so nothing to compare$/m);
+});
+
+/** Every run of `configs` in the xT pass (every pass when `t` is null), as `skip` and as failures. */
+function failed(app, configs, t = null) {
+  const runs = configs.flatMap((c) => Array.from({ length: 10 }, (_, i) => [c, i]));
+  return {
+    skip: runs.map(([c, i]) => (t ? `${c}:${i}x${t}` : `${c}:${i}`)),
+    failures: runs.map(([c, i]) => ({ app, config: c, throttle: t ?? 1, runIndex: i, error: 'timed out' })),
+  };
+}
+
+test('a pass where every B run failed says so, not that B reported nothing and logged nothing', () => {
+  const md = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], ...failed('tt-fuzzy', ['B']) }));
+  assert.match(md, /^10 runs per configuration \(A, C\)\.$/m);
+  assert.match(md, /^No B runs in this pass, see Failures\.$/m);
+  assert.doesNotMatch(md, /No reports\./);
+  assert.match(md, /^Nothing: no errors or warnings in A or C\. B had no runs to check, see Failures\.$/m);
+});
+
+test('a pass where every run failed says so once and prints nothing else for it', () => {
+  const md = node('report.mjs', results({ app: 'excalidraw', configs: ['A', 'B', 'C'], throttles: [1, 4], ...failed('excalidraw', ['A', 'B', 'C'], 4) }));
+  const pass = md.slice(md.indexOf('### 4x CPU throttling'));
+  assert.equal(pass.trim(), '### 4x CPU throttling\n\nEvery run in this pass failed, see Failures.');
+  assert.match(md.slice(0, md.indexOf('### 4x')), /^Nothing: no errors or warnings in any configuration\.$/m);
+});
+
+test('an app with no A and no F gets no pointer to before-after.mjs', () => {
+  const md = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], ...failed('tt-fuzzy', ['A']) }));
+  assert.match(md, /^No A runs in this pass, so no baseline to pair against and no A\/B\/C table\. See Failures\.$/m);
+  assert.doesNotMatch(md, /before-after/);
 });
 
 test("shadcn's next start listens on 127.0.0.1 only, as cal-diy's does", () => {

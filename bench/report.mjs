@@ -71,6 +71,9 @@ function scrub(s) {
   return [home, home.replaceAll('\\', '/')].reduce((t, h) => t.split(h).join('~'), String(s));
 }
 
+/** `A`, `A or C`, `A, B or C`. */
+const or = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} or ${xs.at(-1)}` : xs.join(''));
+
 const fmt = (x, d = 1) => (x === null || x === undefined || Number.isNaN(x) ? 'n/a' : x.toFixed(d));
 
 // Below this many paired runs a percentile bootstrap is not worth believing. With three runs the
@@ -268,8 +271,10 @@ function main() {
     p();
   }
 
-  const appIds = [...new Set(runs.map((r) => r.app))];
-  const throttles = [...new Set(runs.map((r) => r.throttle))].sort((a, b) => a - b);
+  // Failures count too, so an app or a pass where every run failed still gets its section.
+  const tried = [...runs, ...(failures ?? [])];
+  const appIds = [...new Set(tried.map((r) => r.app))];
+  const throttles = [...new Set(tried.map((r) => r.throttle))].sort((a, b) => a - b);
 
   for (const app of appIds) {
     p(`---`);
@@ -287,6 +292,13 @@ function main() {
       p();
       // The configurations this app actually ran: cal-diy has no C, and tt-virtual-fix has B and F only.
       const configs = ['A', 'B', 'C', 'F'].filter((c) => pick(runs, app, c, throttle).length);
+      if (!configs.length) {
+        p(`Every run in this pass failed, see Failures.`);
+        p();
+        continue;
+      }
+      // Configurations this app ran or tried in some pass that have no run in this one.
+      const missing = ['A', 'B', 'C', 'F'].filter((c) => !configs.includes(c) && tried.some((r) => r.app === app && r.config === c));
       // A failed run is left out of runs, so the counts can differ. Then each one is named.
       const counts = configs.map((c) => pick(runs, app, c, throttle).length);
       if (new Set(counts).size <= 1) p(`${counts[0] ?? 0} runs per configuration (${configs.join(', ')}).`);
@@ -311,8 +323,11 @@ function main() {
         p();
         p(`Deltas are paired by run index and bootstrapped (${BOOTSTRAP} resamples of the per-run difference, percentile interval). "Interactions captured" counts only interactions whose longest Event Timing entry reached the 16 ms \`durationThreshold\`, so it moves when the library pushes a short interaction over that line; read it alongside total interaction time rather than instead of it. JS heap is a single \`performance.memory\` sample taken at the end of a run with no forced collection, so it reflects when the garbage collector happened to run and should not be read as a memory verdict.`);
         p();
-      } else {
+      } else if (configs.includes('F')) {
         p(`No configuration A, so no baseline to pair against and no A/B/C table. For \`tt-virtual-fix\`, \`node before-after.mjs results/${path.basename(file)}\` compares F with B.`);
+        p();
+      } else {
+        p(`No A runs in this pass, so no baseline to pair against and no A/B/C table. See Failures.`);
         p();
       }
 
@@ -363,7 +378,9 @@ function main() {
       p(`#### What it blamed (top 3 interactions per run, configuration B)`);
       p();
       const bl = blameSummary(runs, app, 'B', throttle);
-      if (!bl.length) {
+      if (!configs.includes('B')) {
+        p(`No B runs in this pass, see Failures.`);
+      } else if (!bl.length) {
         p(`No reports. Every interaction stayed under the library's default 40 ms \`threshold\` and set off no heavy later render.`);
       } else {
         p(`| seen | interaction | target | blame kind | blamed | detail | blame ms (median) | confidence |`);
@@ -394,7 +411,9 @@ function main() {
       const uniq = [...new Set(noisy)];
       p(`#### Console`);
       p();
-      p(uniq.length ? uniq.map((s) => `- \`${s}\``).join('\n') : `Nothing: no errors or warnings in any configuration.`);
+      if (uniq.length) p(uniq.map((s) => `- \`${s}\``).join('\n'));
+      else if (!missing.length) p(`Nothing: no errors or warnings in any configuration.`);
+      else p(`Nothing: no errors or warnings in ${or(configs)}. ${or(missing)} had no runs to check, see Failures.`);
       p();
     }
   }
