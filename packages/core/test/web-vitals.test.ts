@@ -215,11 +215,13 @@ test('an icon a script drew in an element handed its role through a styled compo
 });
 
 test('an icon a script drew is placed by what React renders in the element now, not by the fiber cached on it', () => {
-  // `<LikeButton onClick={like} />` beside a title in Page, where LikeButton renders `<div className="like"
-  // onClick={onClick}>{count > 0 && <Count />}{liked && <Liked />}</div>` and a script drew an svg in the div. The
-  // fiber cached on the div is the one React made it with, and the div's two fibers take turns being on the
-  // screen, so on every other render the cached one holds the render before: no Count before the first like,
-  // and no child at all once React has cleared the child list it deleted one from.
+  // `<LikeButton role="button" onClick={like} />` beside a title in Page, where LikeButton renders `<div
+  // className="like" role={role} onClick={onClick}>{count > 0 && <Count />}{liked && <Liked />}</div>` and a
+  // script drew an svg in the div. The div is a control by the role it was handed with its onClick, so it holds
+  // the svg while React renders something in it, and the svg is Page's while React renders nothing there, as in
+  // the empty div ReactSVG draws in. The fiber cached on the div is the one React made it with, and the div's two
+  // fibers take turns being on the screen, so on every other render the cached one holds the render before: no
+  // Count before the first like, and no child at all once React has cleared the child list it deleted one from.
   const like = () => {};
   const link = (parent: Record<string, unknown>, ...kids: Record<string, unknown>[]) => {
     parent.child = kids[0] ?? null;
@@ -229,9 +231,9 @@ test('an icon a script drew is placed by what React renders in the element now, 
   const hostFiber = (tag: string, props: Record<string, unknown> = {}): Record<string, unknown> => ({ tag: 5, elementType: tag, type: tag, memoizedProps: props, child: null, sibling: null });
   /** One of the two trees React keeps, whose div holds `inside`, the fiber React rendered there, or nothing. */
   const tree = (children: unknown[], inside: Record<string, unknown> | null) => {
-    const div = hostFiber('div', { className: 'like', onClick: like, children });
+    const div = hostFiber('div', { className: 'like', role: 'button', onClick: like, children });
     if (inside) link(div, inside);
-    const likeButton = link(Object.assign(component('LikeButton'), { memoizedProps: { onClick: like } }), div);
+    const likeButton = link(Object.assign(component('LikeButton'), { memoizedProps: { role: 'button', onClick: like } }), div);
     const header = link(hostFiber('header'), likeButton, hostFiber('h1'));
     const page = link(component('Page'), header);
     const root = link({ tag: 3, memoizedProps: null, child: null, sibling: null }, page);
@@ -256,7 +258,7 @@ test('an icon a script drew is placed by what React renders in the element now, 
     if (shape === 'bailed out') before.header.child = now.header.child;
     if (shape === 'one parent') before.div.return = now.likeButton;
     if (shape === 'cleared') before.header.child = null;
-    const div = element('div', { classes: ['like'], fiber: cached === 'now' ? now.div : before.div });
+    const div = element('div', { attributes: { role: 'button' }, classes: ['like'], fiber: cached === 'now' ? now.div : before.div });
     now.div.stateNode = before.div.stateNode = div;
     return element('svg', { parentNode: div });
   };

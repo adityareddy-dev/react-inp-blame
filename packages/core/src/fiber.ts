@@ -503,15 +503,12 @@ export function namingFiber(node: Node | null): Fiber | null {
   let f = start;
   // An icon with no fiber is read from the element around it. Where React set that element's markup through
   // dangerouslySetInnerHTML and its tag is not a control's, the element is the icon, as the `<svg>` an icon
-  // library renders is, and its handler is the icon's whatever role it has. Otherwise the handler is the icon's
-  // only where the element is not a control of its own and React rendered nothing in it, as with the empty
-  // `<div>` react-svg draws its svg in, which `<ReactSVG role="button" onClick>` hands its role with its
-  // onClick. A control holds what is drawn in it, and so does an element React rendered something in, an `<i>`
-  // that feather.replace() or Font Awesome's autoReplaceSvg swapped for an `<svg>` or the text of
-  // `<div onClick>Close</div>`: the handler is the element's own, and IconButton's `<button onClick>` names
-  // IconButton. What React rendered there is read from the element's fiber on the screen, not the one cached
-  // on it.
-  const handled = handlesInput(start) && (fiberOn(icon) === start || isMarkupIcon(start) || (rendersNothing(onScreen(start)) && (!isControlHost(start) || roleHandedDown(start))));
+  // library renders is, and its handler is the icon's whatever role it has. So is the handler of an element
+  // that is not a control. A control holds what is drawn in it, so its handler is its own and IconButton's
+  // `<button onClick>` names IconButton, save where React rendered nothing in it and its role was handed down
+  // with its handler, as `<ReactSVG role="button" onClick>` hands both to the empty `<div>` react-svg draws its
+  // svg in. What React rendered there is read from the element's fiber on the screen, not the one cached on it.
+  const handled = handlesInput(start) && (fiberOn(icon) === start || isMarkupIcon(start) || !isControlHost(start) || (rendersNothing(onScreen(start)) && roleHandedDown(start)));
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {

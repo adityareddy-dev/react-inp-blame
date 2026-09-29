@@ -3574,7 +3574,7 @@ test('what an icon belongs to is read from the fiber tree: a card\'s photo is th
   assert.deepEqual(ownersFor(drawnIn(component('Icon'), 'span', {}, { ...markup, role: 'button' })), ['RemoveRow', 'Rows']);
 });
 
-test("an icon a script drew outside React is placed by the element holding it, whose handler is that element's own", () => {
+test("an icon a script drew outside React is read from the element holding it, whose handler is its own in a control", () => {
   // feather.replace() and Font Awesome's autoReplaceSvg swap the `<i>` React rendered for an `<svg>` React
   // never saw, so the svg has no fiber and is read from the element around it. IconButton handed that element
   // its onClick, but the click is still on IconButton's button.
@@ -3596,14 +3596,15 @@ test("an icon a script drew outside React is placed by the element holding it, w
   /**
    * `<IconButton onClick={close} />` beside a title in Page, IconButton rendering `<tag onClick={onClick}>` around
    * `rendered`: a fiber, text React writes into the element itself with no fiber for it, or nothing. `props` are
-   * the element's others. `layer` is a component IconButton renders the element through, given its props.
+   * the element's others. `layer` is a component IconButton renders the element through, given its props, and
+   * `given` what IconButton was given beside the onClick and hands the element with it.
    */
-  const inIconButton = (tag: string, drawn: Record<string, unknown>, rendered: Record<string, unknown> | string | number | bigint | null, props: Record<string, unknown> = {}, layer?: Record<string, unknown>) => {
+  const inIconButton = (tag: string, drawn: Record<string, unknown>, rendered: Record<string, unknown> | string | number | bigint | null, props: Record<string, unknown> = {}, { layer, given = {} }: { layer?: Record<string, unknown>; given?: Record<string, unknown> } = {}) => {
     const close = () => {};
     const written = rendered !== null && typeof rendered !== 'object';
-    const holder = host(tag, written ? { ...props, onClick: close, children: rendered } : { ...props, onClick: close }, written ? [drawn, text(String(rendered))] : [drawn]);
+    const holder = host(tag, written ? { ...given, ...props, onClick: close, children: rendered } : { ...given, ...props, onClick: close }, written ? [drawn, text(String(rendered))] : [drawn]);
     if (rendered !== null && typeof rendered === 'object') children(holder.fiber, rendered);
-    const iconButton = component('IconButton', { onClick: close });
+    const iconButton = component('IconButton', { ...given, onClick: close });
     if (layer) children(Object.assign(layer, { memoizedProps: holder.fiber.memoizedProps }), holder.fiber);
     children(iconButton, layer ?? holder.fiber);
     const title = host('h1');
@@ -3616,23 +3617,30 @@ test("an icon a script drew outside React is placed by the element holding it, w
   const stroke = element('path', []);
   inIconButton('button', element('svg', [stroke]), drawnOver());
   assert.deepEqual(ownersFor(stroke), ['IconButton', 'Page']);
-  // The same where IconButton's element is a `<div onClick>`, which is not a control.
+  // Where IconButton's element is a `<div onClick>`, which is not a control, the handler is the icon's: the
+  // onClick IconButton handed the div is its caller's, as the one Trash2 hands its svg is.
   const inDiv = element('svg', []);
   inIconButton('div', inDiv, drawnOver());
-  assert.deepEqual(ownersFor(inDiv), ['IconButton', 'Page']);
+  assert.deepEqual(ownersFor(inDiv), ['Page']);
   // An svg React rendered in the same button was placed there already.
   const rendered = host('svg');
   inIconButton('button', rendered.el, rendered.fiber);
   assert.deepEqual(ownersFor(rendered.el), ['IconButton', 'Page']);
   // So is one where the button's only child is text, which React writes into it with no fiber: the `<svg>`
   // Font Awesome's searchPseudoElements draws for an icon a stylesheet puts before `Close`, or before a count
-  // of likes, a number or in React 19 a bigint. The same in a `<div onClick>`, where only that text tells
-  // the div holds the icon.
-  for (const tag of ['button', 'div']) {
+  // of likes, a number or in React 19 a bigint. The same in a `<div role="button" onClick>` that
+  // `<IconButton role="button" onClick={close} />` hands its role with its onClick, where only that text tells
+  // the div holds the icon. In a `<div onClick>` the handler is the icon's, text or not.
+  const holders: [string, Record<string, unknown>, string[]][] = [
+    ['button', {}, ['IconButton', 'Page']],
+    ['div', { role: 'button' }, ['IconButton', 'Page']],
+    ['div', {}, ['Page']],
+  ];
+  for (const [tag, given, owners] of holders) {
     for (const written of ['Close', 12, 12n]) {
       const drawn = element('svg', []);
-      inIconButton(tag, drawn, written);
-      assert.deepEqual(ownersFor(drawn), ['IconButton', 'Page']);
+      inIconButton(tag, drawn, written, {}, { given });
+      assert.deepEqual(ownersFor(drawn), owners);
     }
   }
   // And where React rendered nothing in the button: an svg imported as a string and set through
@@ -3652,7 +3660,7 @@ test("an icon a script drew outside React is placed by the element holding it, w
   // wrote it, so the div is a control of IconButton's all the same.
   const inStyled = element('svg', []);
   const clickable = fiberOf(11, { $$typeof: Symbol.for('react.forward_ref'), render: () => null, styledComponentId: 'sc-a1b2', target: 'div' });
-  inIconButton('div', inStyled, null, { role: 'button', 'aria-label': 'Close' }, clickable);
+  inIconButton('div', inStyled, null, { role: 'button', 'aria-label': 'Close' }, { layer: clickable });
   assert.deepEqual(ownersFor(inStyled), ['styled.div', 'IconButton', 'Page']);
   // A role a script set on the div, which React never saw, was not handed down either.
   const inScriptRole = element('svg', []);
@@ -3661,39 +3669,42 @@ test("an icon a script drew outside React is placed by the element holding it, w
   assert.deepEqual(ownersFor(inScriptRole), ['IconButton', 'Page']);
   // A count of likes that `{count > 0 && count}` leaves out at 0 is a `false` React writes nothing for, and
   // `{count > 0 ? count : null}` a `null`: the count is written there at any other count, so an icon drawn
-  // before it is placed as it is beside the count, in a button or a `<div onClick>`.
-  for (const tag of ['button', 'div']) {
+  // before it is placed as it is beside the count.
+  for (const [tag, given, owners] of holders) {
     for (const nothing of [false, null]) {
       const drawn = element('svg', []);
-      inIconButton(tag, drawn, null, { children: nothing });
-      assert.deepEqual(ownersFor(drawn), ['IconButton', 'Page']);
+      inIconButton(tag, drawn, null, { children: nothing }, { given });
+      assert.deepEqual(ownersFor(drawn), owners);
     }
   }
   // Only a lone one, though. Two, as `{count > 0 && count}{liked && ' (you)'}` leaves at 0, or the empty list a
   // `.map()` returns, are nothing: the fiber holds them as it holds the `[false, false]` in the empty div
-  // ReactSVG draws in, and cannot tell them apart. An icon drawn in a `<div onClick>` holding them is the
-  // writer's until React renders something there. A button holds what is drawn in it either way.
+  // ReactSVG draws in, and cannot tell them apart. An icon drawn in a div handed its role that holds them is
+  // the writer's until React renders something there. A button holds what is drawn in it either way.
   for (const nothing of [[false, false], []]) {
     const drawnInButton = element('svg', []);
     inIconButton('button', drawnInButton, null, { children: nothing });
     assert.deepEqual(ownersFor(drawnInButton), ['IconButton', 'Page']);
     const drawnInDiv = element('svg', []);
-    inIconButton('div', drawnInDiv, null, { children: nothing });
+    inIconButton('div', drawnInDiv, null, { children: nothing }, { given: { role: 'button' } });
     assert.deepEqual(ownersFor(drawnInDiv), ['Page']);
   }
 
   // Markup set through dangerouslySetInnerHTML is the element's own, as the svg an icon library renders is:
   // an onClick the app's Icon handed its `<span>` names the component that wrote `<Icon onClick>`. So is the
   // `<svg>` Font Awesome draws in an empty `<i onClick>` when it nests the svg and keeps the `<i>`, which is not
-  // a control.
-  const shapes: [string, Record<string, unknown>][] = [
-    ['span', { dangerouslySetInnerHTML: { __html: '<svg></svg>' } }],
-    ['i', { className: 'fa-solid fa-trash' }],
+  // a control, and the one it swaps for the `<i>` in Bulma's `<span className="icon" onClick={onClick}><i
+  // className="fas fa-trash" /></span>`, where React still holds the `<i>` the page no longer does.
+  const shapes: [string, Record<string, unknown>, Record<string, unknown> | null][] = [
+    ['span', { dangerouslySetInnerHTML: { __html: '<svg></svg>' } }, null],
+    ['i', { className: 'fa-solid fa-trash' }, null],
+    ['span', { className: 'icon' }, fiberOf(5, 'i', { className: 'fas fa-trash' })],
   ];
-  for (const [tag, props] of shapes) {
+  for (const [tag, props, replaced] of shapes) {
     const remove = () => {};
     const glyph = element('svg', []);
     const holder = host(tag, { ...props, onClick: remove }, [glyph]);
+    if (replaced) children(holder.fiber, replaced);
     const icon = component('Icon', { name: 'trash', onClick: remove });
     children(icon, holder.fiber);
     const writer = component('RemoveRow');
