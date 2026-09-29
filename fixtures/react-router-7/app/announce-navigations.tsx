@@ -7,7 +7,8 @@ import { announceNavigation } from "react-inp-blame";
 // where React 18 warns about useLayoutEffect, it is useEffect, which never runs there either.
 const useCommitEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
-// Tells react-inp-blame each time React Router changes the route. Render it once, in the root route's App.
+// Tells react-inp-blame each time React Router changes the route. Render it once, before the Outlet in the root
+// route's App, so that it announces before the new route's own layout effects run.
 export function AnnounceNavigations() {
   const { key } = useLocation();
   const last = useRef(key);
