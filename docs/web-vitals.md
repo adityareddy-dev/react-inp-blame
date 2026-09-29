@@ -140,6 +140,6 @@ other sentences can hold text the page shows: under `labels: 'text'`, and by def
 (see [Labels and personal data](api.md#labels-and-personal-data)). If you forward those as well, install with
 `labels: 'attributes'`, so a label comes only from what your code wrote on the element. That label, and the id
 and test id in `generateTarget`'s string, go out as your code wrote them, so check none is built from user
-data. `navigationURL`, sent above as `page_location`, keeps its query string. `blame.name` does not: when a
-script takes the blame it can be the script's URL, or the page's for an inline script, without any password,
-query or fragment.
+data. web-vitals' `navigationURL`, sent above as `page_location`, keeps its query string, where a report's
+keeps only the origin and path. `blame.name` does not keep it either: when a script takes the blame it can be
+the script's URL, or the page's for an inline script, without any password, query or fragment.

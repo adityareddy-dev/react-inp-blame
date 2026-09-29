@@ -638,7 +638,7 @@ export function buildReport(
   if (reactPage.named || reactPage.roots.length) reactPages.set(summaries, reactPage);
 
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     interactionId: longest.interactionId,
     type: named.name,
     reactStatus,

@@ -125,7 +125,8 @@ shows is a good start, but the JSON has everything its sentence was built from.
 The form also asks for the versions of react-inp-blame, react and react-dom, and Next.js or Vite, the bundler,
 whether it was a development or a production build, and the browser. Each changes what a report can say: a
 production build of React records no render times, and only Chromium has Long Animation Frames. A report
-carries the page's URL and the label of the element you clicked, so read it through before you paste it.
+carries the page's origin and path and the label of the element you clicked, so read it through before you
+paste it.
 
 These reports are how the blame gets better. If the console printed a warning instead, it ends with a link to
 its entry under [Troubleshooting](#troubleshooting).
@@ -264,14 +265,14 @@ interaction, 10 at 4x.
 ## Labels and personal data
 
 Reports are made to be forwarded to error trackers and analytics, so `target.label` never reads a form field's
-value, and under a production build of React it uses only what your code wrote on the element (`aria-label`,
-a form field's `placeholder`, `aria-placeholder` or `name`, an input's `type`, `data-testid` or `data-test`). An
+value, and under a production build of React it uses only what your code wrote on the element (`aria-label`, a
+form field's `placeholder`, `aria-placeholder` or `name`, an input's `type`, `data-testid` or `data-test`). An
 element's text is opt-in there, with `labels: 'text'`. What your code wrote goes out as written, though: an
 `aria-label`, `data-testid` or `id` built from user data, such as `` aria-label={`Message ${user.name}`} ``,
-lands in `target.label` or `target.selector`, and the label in the verdict. The page's URLs are kept whole, query
-string included, but a script's URL in a blame loses any password, query or fragment. The details are under
-[labels and personal data](docs/api.md#labels-and-personal-data) in the API page. Each report also goes out as a
-User Timing measure, with its verdict and label in the entry's `detail`, under a development build of React
+lands in `target.label` or `target.selector`, and the label in the verdict. A URL in a report keeps its origin
+and path, never its query, fragment or password, and a script's URL in a blame loses the same. The details are
+under [labels and personal data](docs/api.md#labels-and-personal-data) in the API page. Each report also goes out
+as a User Timing measure, with its verdict and label in the entry's `detail`, under a development build of React
 unless [`devtoolsTrack`](docs/api.md#installoptions) is `false`, and under any build where it is `true`. Any
 `PerformanceObserver` on the page sees it, a monitoring script that collects measures included.
 

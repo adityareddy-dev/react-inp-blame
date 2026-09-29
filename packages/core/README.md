@@ -393,8 +393,9 @@ Neither recipe sends a label or a sentence: a report's `target.label`, `verdict`
 can hold text the page shows, under `labels: 'text'` and by default in a development build, so forward
 those only from an app installed with `labels: 'attributes'`. The label that setting gives, and the id
 and test id in `generateTarget`'s string, go out as your code wrote them, so check none is built from
-user data. `page_location` keeps its query string. `blame.name` can be a script's URL, or the page's
-for an inline script, and never has a password, query or fragment.
+user data. `page_location`, web-vitals' URL, keeps its query string, where a report's `navigationURL`
+keeps only the origin and path. `blame.name` can be a script's URL, or the page's for an inline script,
+and never has a password, query or fragment.
 
 ## API
 
@@ -447,7 +448,7 @@ only: a production build's minifier renames `handleLogin` too, so there it reads
 unless the build keeps function names (terser's `keep_fnames`, esbuild's `keepNames`).
 `target.component` and the prop still say where to look.
 
-Reports are frozen and carry `schemaVersion: 3`. When a late Event Timing entry, a long animation
+Reports are frozen and carry `schemaVersion: 4`. When a late Event Timing entry, a long animation
 frame or a later render joins one, the next revision arrives as a new object with `revision`
 bumped. `explanation.blame`, `rating`, the phases' milliseconds and the report's own numbers are
 data; `verdict` and the other sentences are display text. `navigationURL` and `navigationType` say

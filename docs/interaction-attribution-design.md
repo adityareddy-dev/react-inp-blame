@@ -1778,7 +1778,7 @@ because web-vitals does not start over there unless asked to report soft navigat
 panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's own
 "Scheduler ⚛" and "Components ⚛".
 
-- The report is a contract from 0.1.0. It carries `schemaVersion` (1 until 0.3.0, 2 until 0.11.0, 3 since), which
+- The report is a contract from 0.1.0. It carries `schemaVersion` (1 until 0.3.0, 2 until 0.11.0, 3 until 0.20.0, 4 since), which
   changes when a field is removed or changes meaning, and it is frozen down to its commits, frames and
   explanation.
   Each commit a report holds is a frozen copy stamped with how it joined that report
