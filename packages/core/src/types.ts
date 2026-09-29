@@ -54,6 +54,11 @@ export interface CommitSummary {
    */
   readonly effectMounts?: number;
   /**
+   * Of `rendered`, the components with a useEffect to run after this commit, mounted or rendered again. Always 0 on
+   * React 17. Absent on a report stored by an earlier release.
+   */
+  readonly effectRuns?: number;
+  /**
    * The name of the one component `effectMounts` counts, where it counts one and no other component that rendered
    * has a useEffect to run; null otherwise. Absent on a report stored by an earlier release.
    */
@@ -438,7 +443,8 @@ export interface Blame {
    * the page, which holds them all, so it carries the whole count. Null where it rendered one. A render whose
    * commit spent over half of `ms` in its useEffect callbacks has "useEffect callbacks" instead, "useEffect
    * callbacks after mounting RevenueChart" where one component mounted in it with one (`effectMountName`), or
-   * "useEffect callbacks in 3 mounted components" where several did. For a
+   * "useEffect callbacks in 3 mounted components" where several did and no component that rendered again had one
+   * to run (`effectRuns`). For a
    * handler, its component, or null where the name is a listener the browser recorded rather than a React
    * handler. For a 'layout', what that same commit was mostly made of, as a render's, where a count is the
    * whole commit's ("56 components", not "15 of 56") when `name` is the component the render started from
