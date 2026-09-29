@@ -546,10 +546,11 @@ export interface InteractionReport {
   /**
    * The build of react-dom the page renders with. A development build is slower than the others, and StrictMode
    * renders twice there, so its numbers run higher than production's: this is what to drop or label reports by
-   * before they are forwarded. 'development' where react-dom says so to the DevTools hook. A production and a
-   * profiling build say the same there, and only a profiling build puts its roots in React's ProfileMode, so
-   * those two are told apart by the page's first commit. Null where react-dom did not say, where no react-dom
-   * registered, and for a production or profiling build before the page's first commit.
+   * before they are forwarded. 'development' where a react-dom on the page says so to the DevTools hook, as the
+   * badge's mark does, whichever registered first. A production and a profiling build say the same there, and
+   * only a profiling build puts its roots in React's ProfileMode, so those two are told apart by the page's
+   * first commit. Null where react-dom did not say, where no react-dom registered, and for a production or
+   * profiling build before the page's first commit.
    */
   readonly reactBuild: 'development' | 'production' | 'profiling' | null;
   /**
