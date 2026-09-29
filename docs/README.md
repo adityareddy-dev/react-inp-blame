@@ -8,6 +8,8 @@ compares and what it costs. These pages have the rest.
   [no HTML page](install.md#no-html-page-in-the-build) (Laravel, Rails, Django).
 - [With web-vitals](web-vitals.md): the React side added to web-vitals' INP attribution, and sending it to
   Sentry or GA4.
+- [With OpenTelemetry](opentelemetry.md), experimental: the blame added to the INP event OpenTelemetry, Honeycomb,
+  Elastic, Embrace or Grafana Faro already sends.
 - [API](api.md): `onInteraction`, `install()` and its options, every field of a report, what a label may hold,
   and the badge and panel.
 - [How it works](how-it-works.md): clicks before hydration, the INP estimate, what it reads from React, and

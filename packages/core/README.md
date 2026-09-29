@@ -397,6 +397,26 @@ user data. `page_location`, web-vitals' URL, keeps its query string, where a rep
 keeps only the origin and path. `blame.name` can be a script's URL, or the page's for an inline script,
 and never has a password, query or fragment.
 
+## With OpenTelemetry
+
+Experimental. `react-inp-blame/otel` puts the blame on the INP event OpenTelemetry's web vitals
+instrumentation, Honeycomb, Elastic, Embrace or Grafana Faro already sends, as `react_inp_blame.*`
+attributes. Its export names and the attribute names can change in any minor release, 1.x included, until
+OpenTelemetry names these fields. With OpenTelemetry's web SDK the processor goes first, since one that
+exports as the record is emitted would send it without them:
+
+    import { BatchLogRecordProcessor, LoggerProvider } from '@opentelemetry/sdk-logs';
+    import { InpBlameLogRecordProcessor } from 'react-inp-blame/otel';
+
+    const loggerProvider = new LoggerProvider({
+      processors: [new InpBlameLogRecordProcessor(), new BatchLogRecordProcessor({ exporter })],
+    });
+
+It sends what the library measured, so it needs the library in production: with `enabled` left at its
+default every record says `react_inp_blame.status: not-installed`. The setup for each SDK, what each
+attribute holds and what it costs are in
+[docs/opentelemetry.md](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/opentelemetry.md).
+
 ## API
 
     // Any module the browser runs: instrumentation-client.ts on Next.js, the entry module on Vite
