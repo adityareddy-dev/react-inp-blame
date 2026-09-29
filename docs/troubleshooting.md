@@ -67,8 +67,9 @@ usually says whose it is.
 ### Long Animation Frames on this page list no scripts
 
 The browser timed long frames on this page but named no script inside them, so the library cannot tell a
-slow handler from a forced layout in an effect, and cannot measure the layout at all. Reports say the time
-outside React's render is not accounted for instead of putting it on a handler. It has been seen under
+slow handler from a forced layout in an effect, and cannot measure the layout at all. Beside a render that
+has the verdict, reports say the time outside it is not accounted for. Where that time is larger than the
+render, the handler is blamed for it, though it may have been a layout. It has been seen under
 `next dev --webpack`, where the same page under Turbopack (`next dev`) lists its scripts, though the cause is
 not confirmed. A production build, or another dev server, is where to measure layout on such a page.
 
