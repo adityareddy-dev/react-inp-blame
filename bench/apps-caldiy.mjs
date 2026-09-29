@@ -93,6 +93,27 @@ TASKER_ENABLE_WEBHOOKS=0
 TASKER_ENABLE_EMAILS=0
 `;
 
+/**
+ * Writes DOTENV to `dotenv`. A .env of the user's own (say one made from cal.diy's .env.example) is
+ * moved to .env.before-bench first, once. If that file is taken already, it stops and names both
+ * rather than lose either. An older text of the harness's own is simply replaced.
+ */
+export function writeDotenv(dotenv) {
+  if (fs.existsSync(dotenv)) {
+    const text = fs.readFileSync(dotenv, 'utf8');
+    if (text === DOTENV) return;
+    if (!text.startsWith(DOTENV.slice(0, DOTENV.indexOf(')') + 1))) {
+      const kept = `${dotenv}.before-bench`;
+      if (fs.existsSync(kept)) {
+        throw new Error(`${path.relative(HERE, dotenv)} is not the benchmark's, and ${path.relative(HERE, kept)} already holds an earlier one. Move one of them away and run again`);
+      }
+      fs.renameSync(dotenv, kept);
+      console.log(`moved your ${path.relative(HERE, dotenv)} to ${path.relative(HERE, kept)} and wrote the benchmark's own`);
+    }
+  }
+  fs.writeFileSync(dotenv, DOTENV);
+}
+
 /** The signed-in user's email as a SQL string literal, any single quote in it doubled. */
 const userEmailSql = () => `'${user().email.replaceAll("'", "''")}'`;
 
@@ -276,14 +297,13 @@ export const apps = {
       run(process.execPath, [YARN, 'install'], { cwd: ROOT, env: { ...process.env, ...QUIET }, shell: false });
     },
 
-    // Everything the two builds share, each part only when it is missing: the clone's .env, the
-    // database (created, migrated, seeded by the repository's own seed), and the three steps the
-    // repository's Dockerfile runs before `next build` (the tRPC types, the embed bundle, the app
-    // store's static files).
+    // Everything the two builds share: the clone's .env, written whenever its text isn't DOTENV (see
+    // writeDotenv), then each other part only when it is missing: the database (created, migrated,
+    // seeded by the repository's own seed), and the three steps the repository's Dockerfile runs
+    // before `next build` (the tRPC types, the embed bundle, the app store's static files).
     prepare(run) {
       const env = { ...process.env, ...QUIET };
-      const dotenv = path.join(ROOT, '.env');
-      if (!fs.existsSync(dotenv) || fs.readFileSync(dotenv, 'utf8') !== DOTENV) fs.writeFileSync(dotenv, DOTENV);
+      writeDotenv(path.join(ROOT, '.env'));
 
       if (psql(`SELECT 1 FROM pg_database WHERE datname = '${DB}'`, 'postgres') !== '1') {
         run('docker', ['exec', PG, 'createdb', '-U', 'postgres', DB], { shell: false });

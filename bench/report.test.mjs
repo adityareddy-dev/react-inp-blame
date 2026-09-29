@@ -272,6 +272,34 @@ test('steps.mjs labels B and F blames apart, and gives each configuration its ow
   assert.match(abc, /^  C stats \(median over 10 runs\): .*overheadTotalMs 30,/m);
 });
 
+test("cal.diy's prepare keeps a .env of the user's own as .env.before-bench, and stops rather than lose a second one", async () => {
+  const { writeDotenv } = await import('./apps-caldiy.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-dotenv-'));
+  temps.push(dir);
+  const dotenv = path.join(dir, '.env');
+  const mine = 'DATABASE_URL="postgresql://me:mine@127.0.0.1:5433/calendso"\nNEXTAUTH_SECRET="my-own-secret"\n';
+
+  writeDotenv(dotenv);
+  const bench = fs.readFileSync(dotenv, 'utf8');
+  assert.match(bench, /^# Benchmark only/);
+  assert.ok(!fs.existsSync(`${dotenv}.before-bench`));
+
+  fs.writeFileSync(dotenv, mine);
+  writeDotenv(dotenv);
+  assert.equal(fs.readFileSync(`${dotenv}.before-bench`, 'utf8'), mine);
+  assert.equal(fs.readFileSync(dotenv, 'utf8'), bench);
+
+  // An older text of the harness's own is simply replaced.
+  fs.writeFileSync(dotenv, '# Benchmark only (react-inp-blame bench, apps-caldiy.mjs). An older one.\n');
+  writeDotenv(dotenv);
+  assert.equal(fs.readFileSync(dotenv, 'utf8'), bench);
+
+  fs.writeFileSync(dotenv, 'NEXTAUTH_SECRET="another"\n');
+  assert.throws(() => writeDotenv(dotenv), /\.env\.before-bench/);
+  assert.equal(fs.readFileSync(dotenv, 'utf8'), 'NEXTAUTH_SECRET="another"\n');
+  assert.equal(fs.readFileSync(`${dotenv}.before-bench`, 'utf8'), mine);
+});
+
 test("shadcn's next start listens on 127.0.0.1 only, as cal-diy's does", () => {
   // Swaps the harness's own spawn for one that throws its arguments, so nothing starts. Only the
   // shadcn entries: cal-diy's startServer runs its backend before it gets to next start.

@@ -129,6 +129,10 @@ B also needs a line in `apps/web/instrumentation-client.ts`. `apps-caldiy.mjs` w
 puts the file back afterwards, so leave it alone. cal.diy builds A and B only, so run it with
 `BENCH_ORDER=A,B`.
 
+`prepare` also writes the clone's `.env`, with the local database and dummy secrets. A `.env` of your own
+already there is moved to `.env.before-bench` first, and if that name is taken too, `prepare` stops and names
+both files rather than lose one.
+
 ### Signing in
 
 twenty and cal.diy measure the signed-in app, so each needs a user on your own local copy. twenty's dev seed
