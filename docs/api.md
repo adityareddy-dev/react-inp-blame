@@ -179,7 +179,8 @@ verdict.
 `overlay: true`, in `runtime` or `install()`, shows a corner badge with the page's INP so far, green, amber or
 red. Click it for the recent slow interactions, newest first, each with what to blame and a bar split into
 waiting, working and updating the screen; a row opens into the full explanation and the components that
-rendered before and after the paint. `overlay: 'query'` shows it only when the URL has `?inp-blame` or
+rendered before and after the paint. Rows under 200 ms that blame nothing fold into one line, "12 quick
+interactions, nothing to fix", that opens on a click. `overlay: 'query'` shows it only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`: that is how to open it on a production
 page. `{ position, open, max }` sets the corner, whether the panel starts open and how many rows it keeps
 (20). It is plain DOM in a shadow root, so it never causes a React render, and its code is a chunk loaded
