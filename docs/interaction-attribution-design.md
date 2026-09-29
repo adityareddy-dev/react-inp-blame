@@ -1154,9 +1154,10 @@ them and the detail is "useEffect callbacks": a chart that draws in its useEffec
 mounts it read as its parent's own render, 60 ms beside 361 ms of effects, with the note that memoising the
 components under it would not help. That note is left out there. The walk counts the components that
 mounted with a useEffect to run, React's Passive flag on a fiber with no alternate (`effectMounts`, and
-`effectMountName` where it is one), so the detail is "useEffect callbacks after mounting RevenueChart", or
-"useEffect callbacks in 3 mounted components", and the sentence says so after the effects. The blame's name
-stays the render's. Where more than one commit in the working time rendered, a
+`effectMountName` where it is one and no component that rendered again has the flag too, since a chart
+running its effect again beside a tooltip that mounted named the tooltip), so the detail is "useEffect
+callbacks after mounting RevenueChart", or "useEffect callbacks in 3 mounted components", and the sentence
+says so after the effects. The blame's name stays the render's. Where more than one commit in the working time rendered, a
 sentence gives their total and the share of the commit it names: "React spent 55 ms rendering across 2
 commits, 30 ms of it re-rendering 30 components inside List". The share is not called the heaviest,
 since the commit a render blame names can

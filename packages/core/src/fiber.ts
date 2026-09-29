@@ -985,9 +985,12 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // Of them, the components rendering for the first time: a fiber React made in this commit has no alternate.
   let mounted = 0;
   // Of those, the ones with a useEffect to run after the commit, and the name of the last. React 17 numbers its
-  // flags otherwise, and says nothing of when its effects ran anyway (`reportsPassiveEffects`).
+  // flags otherwise, and says nothing of when its effects ran anyway (`reportsPassiveEffects`). `effectRuns`
+  // counts every component that rendered with one to run, mounted or not, so a name is given only where it
+  // is the one: a chart running its effect again beside a tooltip that mounted with one named the tooltip.
   const effectFlag = context.profileMode === profileModeBit(17) ? 0 : PassiveFlags;
   let effectMounts = 0;
+  let effectRuns = 0;
   let effectMountName: string | null = null;
   // Rendered components with a time, and whether any time had a fraction of a millisecond.
   let timed = 0;
@@ -1040,6 +1043,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     rendered++;
     strict ||= (f.mode & context.strictMode) !== 0;
     const name = nameOf(f) || '(anonymous)';
+    if (f.flags & effectFlag) effectRuns++;
     if (f.alternate === null) {
       mounted++;
       if (f.flags & effectFlag) {
@@ -1151,7 +1155,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     rendered,
     mounted,
     effectMounts,
-    effectMountName: effectMounts === 1 ? effectMountName : null,
+    effectMountName: effectMounts === 1 && effectRuns === 1 ? effectMountName : null,
     hydrated: hydrated || hydratedTarget != null,
     hydratedTarget: hydratedTarget && Object.freeze(hydratedTarget),
     truncated,

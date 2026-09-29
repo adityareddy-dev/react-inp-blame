@@ -255,7 +255,7 @@ test('a commit counts the components rendering for the first time, and those ins
   assert.equal(walkCommit(root(rendered(App, rendered(Sidebar, element('nav', text())))) as any, 5000, 100, click, development).mounted, 2);
 });
 
-test('a commit counts the components that mounted with a useEffect to run, and names the one where there is one', () => {
+test('a commit counts the components that mounted with a useEffect to run, and names the one where no other component has one to run', () => {
   function Reports() {}
   function RevenueChart() {}
   function Row() {}
@@ -267,6 +267,11 @@ test('a commit counts the components that mounted with a useEffect to run, and n
   // Several are counted and none is named. One that rendered again runs an update's effects, not a mount's.
   const rows = walkCommit(root(withEffect(again(rendered(Reports, ...Array.from({ length: 3 }, () => withEffect(rendered(Row, element('li')))))))) as any, 5000, 100, click, development);
   assert.deepEqual([rows.mounted, rows.effectMounts, rows.effectMountName], [3, 3, null]);
+  // Nor is the one that mounted named where a component that rendered again has a useEffect to run too: which
+  // of them took the time is not known.
+  function Tooltip() {}
+  const beside = walkCommit(root(again(rendered(Reports, withEffect(again(rendered(RevenueChart, element('canvas')))), withEffect(rendered(Tooltip, element('div')))))) as any, 5000, 100, click, development);
+  assert.deepEqual([beside.mounted, beside.effectMounts, beside.effectMountName], [1, 1, null]);
   // React 17 gives that bit another meaning.
   const react17 = walkCommit(root(again(rendered(Reports, withEffect(rendered(RevenueChart, element('canvas')))))) as any, 5000, 100, click, { ...development, profileMode: 0b1000 });
   assert.deepEqual([react17.effectMounts, react17.effectMountName], [0, null]);

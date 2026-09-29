@@ -53,7 +53,10 @@ export interface CommitSummary {
    * 0 on React 17. Absent on a report stored by an earlier release.
    */
   readonly effectMounts?: number;
-  /** The name of the one component `effectMounts` counts, where it counts one; null otherwise. Absent on a report stored by an earlier release. */
+  /**
+   * The name of the one component `effectMounts` counts, where it counts one and no other component that rendered
+   * has a useEffect to run; null otherwise. Absent on a report stored by an earlier release.
+   */
   readonly effectMountName?: string | null;
   /**
    * The commit hydrated server-rendered HTML, a root's or a Suspense boundary's. Hydrating is the page
