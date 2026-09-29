@@ -251,7 +251,7 @@ export const apps = {
       );
       if (fixed) process.stdout.write(`(reset: event type ${fixed} was left hidden by an earlier run) `);
       const state = statePath(config);
-      if (!fs.existsSync(state)) throw new Error(`no sign-in state at ${state}; startServer should have written it`);
+      if (!fs.existsSync(state)) throw new Error(`no sign-in state at ${path.relative(HERE, state)}; startServer should have written it`);
       // The browser's time zone is the signed-in user's own (the seed's Europe/London). Otherwise
       // the app opens a "Want to update your timezone?" dialog over the page on every load, and
       // what it shows depends on the machine the benchmark runs on.

@@ -8,6 +8,7 @@
 // at the same moment. A 95% confidence interval that contains zero is reported as inside the noise.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const BOOTSTRAP = 10000;
@@ -61,6 +62,13 @@ function bootstrapMedianDelta(pairs) {
     lo: quantile(meds, 0.025),
     hi: quantile(meds, 0.975),
   };
+}
+
+/** Error text with the user folder cut to `~`, since a failure can name a file by its full path. */
+function scrub(s) {
+  const home = os.homedir();
+  if (!home) return String(s);
+  return [home, home.replaceAll('\\', '/')].reduce((t, h) => t.split(h).join('~'), String(s));
 }
 
 const fmt = (x, d = 1) => (x === null || x === undefined || Number.isNaN(x) ? 'n/a' : x.toFixed(d));
@@ -230,7 +238,7 @@ function main() {
   if (failures?.length) {
     p(`## Failures`);
     p();
-    for (const f of failures) p(`- \`${f.app}\` ${f.config} x${f.throttle} run ${f.runIndex}: ${f.error}`);
+    for (const f of failures) p(`- \`${f.app}\` ${f.config} x${f.throttle} run ${f.runIndex}: ${scrub(f.error)}`);
     p();
   }
 

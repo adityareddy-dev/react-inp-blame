@@ -467,7 +467,7 @@ export const apps = {
     startServer: (config, port) => startFront(config, port),
     contextOptions(config) {
       const file = statePath(config);
-      if (!fs.existsSync(file)) throw new Error(`no saved sign-in at ${file}; startServer should have made it`);
+      if (!fs.existsSync(file)) throw new Error(`no saved sign-in at ${path.relative(HERE, file)}; startServer should have made it`);
       return { storageState: file };
     },
     install(run) {
