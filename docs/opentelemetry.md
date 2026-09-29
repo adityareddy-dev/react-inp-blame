@@ -196,17 +196,28 @@ build.
 | `react_inp_blame.blame.confidence` | `measured` or `inferred` | `measured` | yes |
 | `react_inp_blame.handler` | The React handler that ran | `add` | yes |
 | `react_inp_blame.target.components` | Up to four components around the element, outermost first | `App > Lab > ContextStorm` | yes |
-| `react_inp_blame.hot_path` | The path down to where the render spent its time. Without the `displayName` transform in production, the minifier's names, which change with each build, so group by `target.components` or `blame.name` there | `ContextStorm > OrderSummary` | yes |
+| `react_inp_blame.hot_path` | The path down to where the render spent its time | `ContextStorm > OrderSummary` | yes |
 | `react_inp_blame.react_status` | Whether the library could see React: `reading`, `waiting`, `installed-late` or `unreadable` | `reading` | yes |
 | `react_inp_blame.react_build` | The build of react-dom that measured it. A `development` one reads high | `development` | yes, and filter it out |
 | `react_inp_blame.commits.count` | React commits inside the interaction | `1` | no |
 | `react_inp_blame.commits.rendered` | Components they rendered | `801` | no |
-| `react_inp_blame.commits.ms` | How long they took, in ms, where the build records it | `163.0999999998603` | no |
+| `react_inp_blame.commits.ms` | What React spent rendering them, in ms, where the build records it | `163.0999999998603` | no |
 | `react_inp_blame.follow_ups.count` | Commits after the paint that belong to it | `0` | no |
-| `react_inp_blame.follow_ups.ms` | How long those took, in ms. Left out with none | | no |
+| `react_inp_blame.follow_ups.ms` | What React spent rendering those, in ms. Left out with none | | no |
 
 On a production build of React the same click gave `inferred` and `production`, and no `blame.ms` or
 `commits.ms`, since that build times no renders.
+
+`commits.ms` is React's render time alone. A render blame's `blame.ms` also counts committing that render and
+its effects, so it can be more than `commits.ms`, as it is in the example.
+
+Component names in production need the `displayName` transform, which the Next.js wrapper, the Vite plugin
+and the loader add wherever they run, `runtime: false` included
+([Next.js](install.md#install-with-nextjs-142-or-later), [Vite](install.md#install-with-vite),
+[the loader](install.md#webpack-or-rspack)). Without it every component name here is the minifier's, in
+`hot_path`, `target.components` and a render blame's `blame.name` alike, and the next build renames them, so
+a dashboard grouped on them starts over with each deploy. Everything but the names still groups cleanly
+there, `blame.kind` and the statuses first.
 
 `blame.name` follows what a report's blame names ([Blame](api.md#interactionreport)). Two kinds changed what
 they name in 0.19.0: a `painting` blame on React's own task names the component that render is named after,
