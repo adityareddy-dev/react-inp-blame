@@ -2,6 +2,7 @@
 //
 //   node run.mjs --runs 15 --app tt-virtual     # one app
 //   node run.mjs --runs 3 --app tt-virtual      # smoke run
+//   node run.mjs --dry-run                      # check the apps and configurations, then exit
 //
 // README.md has the commands for the published runs. An app asked for a configuration it doesn't
 // have (cal-diy has only A and B, tt-virtual-fix only B and F) is refused before anything builds.
@@ -28,13 +29,20 @@ function run(cmd, args, opts = {}) {
 }
 
 // --no-build skips install, prepare and build, for builds made already; BENCH_ORDER limits which
-// configurations are built, as it limits which are run.
+// configurations are built, as it limits which are run. --dry-run stops after the check below.
 const noBuild = process.argv.includes('--no-build');
+const dryRun = process.argv.includes('--dry-run');
 const argv = process.argv.slice(2).filter((a) => a !== '--no-build');
 const appArg = argv.includes('--app') ? argv[argv.indexOf('--app') + 1] : null;
 const appIds = appArg ? appArg.split(',') : Object.keys(apps);
 const CONFIGS = (process.env.BENCH_ORDER ?? 'A,B,C').split(',');
 checkConfigs(appIds, CONFIGS);
+if (dryRun) {
+  // Written synchronously, since process.exit would cut an asynchronous write short.
+  fs.writeSync(1, `${JSON.stringify({ apps: appIds, configs: CONFIGS, build: !noBuild })}
+`);
+  process.exit(0);
+}
 
 for (const id of noBuild ? [] : appIds) {
   const app = apps[id];
