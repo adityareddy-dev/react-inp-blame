@@ -269,6 +269,33 @@ function panelFor(r: InteractionReport): Drawn {
   }
 }
 
+test("a row says a component re-rendered only where it did, and otherwise leads with where the render started", () => {
+  // A checkbox flipped a context every row reads: PrefsProvider and 375 ProductRows rendered, and ProductList,
+  // the component the hot path went through, bailed out. The row read "ProductList re-rendered".
+  const components = [
+    { name: 'ProductRow', count: 375, self: 140, total: 140 },
+    { name: 'LinkComponent', count: 4, self: 2, total: 2 },
+    { name: 'Nav', count: 1, self: 1, total: 1 },
+    { name: 'PrefsProvider', count: 1, self: 1, total: 151 },
+  ];
+  const c = { at: 50, rendered: 381, hasDurations: true, total: 151, truncated: false, hydrated: false, roots: ['PrefsProvider'], hotPath: ['PrefsProvider', 'Shop', 'ProductList'], components } as unknown as CommitSummary;
+  const blame = { kind: 'render', name: 'ProductList', detail: 'ProductRow ×375', ms: 151, confidence: 'measured' };
+  const { restore } = panelDocument();
+  try {
+    const line = (commit: CommitSummary) => blameLine({ explanation: { blame }, commits: [commit], reactStatus: 'reading' } as unknown as InteractionReport).map((x) => (typeof x === 'string' ? x : x ? (x as unknown as Drawn).textContent : '')).join('');
+    assert.equal(line(c), 'PrefsProvider updated · ProductRow ×375 re-rendered inside ProductList · 151 ms');
+    // With no one root, what rendered and where.
+    assert.equal(line({ ...c, roots: ['PrefsProvider', 'Toaster'] }), 'ProductRow ×375 re-rendered inside ProductList · 151 ms');
+    // Where it did render, as before.
+    const rendered = [...components, { name: 'ProductList', count: 1, self: 1, total: 141 }];
+    assert.equal(line({ ...c, rendered: 382, components: rendered }), 'ProductList re-rendered · ProductRow ×375 · 151 ms');
+    // Where the list holds only the heaviest and some that rendered are not in it, it may have, and is said as before.
+    assert.equal(line({ ...c, rendered: 900 }), 'ProductList re-rendered · ProductRow ×375 · 151 ms');
+  } finally {
+    restore();
+  }
+});
+
 test("the panel's row and its open section say a key press's render before the slower keyup came after the press painted", () => {
   // The keydown painted at 24 and set off a render of 400 components at 150, before the key came up at 300.
   // The keyup's entry was the slower one and painted at 348.

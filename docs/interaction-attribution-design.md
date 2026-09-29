@@ -1845,9 +1845,13 @@ promise of a handle of the caller's own. The badge goes when the last of those i
 handles from other copies of this version or later included, so a component can show it from an
 effect under StrictMode, whose cleanup runs between two mounts, and a load that failed is tried
 again at the next call. The blame line comes from `explanation.blame`, a data twin of the cause
-sentence decided in the same branch, so the short and the long form never disagree. Since
-2026-09-28 it wraps: cut to one line with an ellipsis, in a panel 372 px wide, it lost the very
-name it is there to give, "browser recalculated styles and layout · 315 ms in LayoutT…" on a
+sentence decided in the same branch, so the short and the long form never disagree. The row says
+a component re-rendered only where its commit lists it among what rendered. A render is named after
+where it went, and that can be a list that bailed out while the context consumers inside it rendered,
+so since 0.20.0 that row leads with the commit's one root where there is one, "PrefsProvider updated ·
+ProductRow ×375 re-rendered inside ProductList", in place of "ProductList re-rendered", and the blame
+itself is unchanged. Since 2026-09-28 it wraps: cut to one line with an ellipsis, in a panel 372 px
+wide, it lost the very name it is there to give, "browser recalculated styles and layout · 315 ms in LayoutT…" on a
 phone, and opening the row did not bring it back. On a touch screen, or one 480 px wide or
 less, the close button and Clear are at least 44 px each way, which a finger needs. Clear was
 24 by 15 up to 0.18.0, the close button 40 by 40. Page INP, on the badge, in the panel
