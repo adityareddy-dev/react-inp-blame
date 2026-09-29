@@ -1150,7 +1150,12 @@ export function mostlyOf(c: CommitSummary, inside = true): string | null {
   if (top && top.count > 1) return `${top.name} ×${top.count}`;
   const own = ownRender(c);
   if (own) return `${own.name}'s own render`;
-  const within = inside ? insideCount(c) : null;
+  return inside ? countInside(c) : renderedCount(c);
+}
+
+/** "812 of 1216 components" where the walk counted fewer inside the component the commit is named after, else "1216 components". */
+export function countInside(c: CommitSummary): string {
+  const within = insideCount(c);
   return within == null ? renderedCount(c) : `${atLeast(c)}${within} of ${renderedCount(c)}`;
 }
 

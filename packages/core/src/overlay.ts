@@ -1,7 +1,7 @@
 import { dominantComponent, heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { unexplainedReports } from './install-state.js';
-import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
+import { blamedCommit, carriesWork, countInside, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { errorText, warnOnce } from './warn.js';
@@ -644,12 +644,14 @@ function mayHaveRendered(c: CommitSummary, name: string): boolean {
 /**
  * The row's line for a render blame named after a component that did not render: where it started, when one
  * root did, and what rendered inside the named one, "PrefsProvider updated · ProductRow ×375 re-rendered inside
- * ProductList". What rendered is the commit's, never the blame's detail.
+ * ProductList". What rendered is the commit's, never the blame's detail, and counts only what was inside. A root
+ * that is the component said to have re-rendered, each row updating from its own store, is not said twice.
  */
 function startedLine(blame: Blame, c: CommitSummary): Child[] {
   const top = dominantComponent(c);
-  const what = top && top.count > 1 ? `${top.name} ×${top.count}` : renderedCount(c);
-  const root = c.roots.length === 1 ? [b(c.roots[0]!), ` updated${DOT}`] : [];
+  const many = top && top.count > 1 ? top : null;
+  const what = many ? `${many.name} ×${many.count}` : countInside(c);
+  const root = c.roots.length === 1 && c.roots[0] !== many?.name ? [b(c.roots[0]!), ` updated${DOT}`] : [];
   return [...root, `${what} ${renderedVerb(c)} inside `, b(blame.name!), blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : ''];
 }
 
