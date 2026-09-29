@@ -361,6 +361,7 @@ test("with no position the badge leaves a corner the page's own fixed or sticky 
   Object.assign(globalThis, { innerWidth: 1000, innerHeight: 800, getComputedStyle: (el: Drawn) => ({ position: el.position ?? 'static' }) });
   const page = { tagName: 'HTML', position: 'static' };
   const corner = (x: number, y: number) => `${y > 400 ? 'b' : 't'}${x > 500 ? 'r' : 'l'}`;
+  const widgetAt = (position: string) => (position === 'shadow' ? { position: 'absolute', shadowRoot: { elementsFromPoint: () => [{ position: 'fixed' }, page] } } : { position });
   const run = (opts: Parameters<typeof createOverlay>[1], held: Record<string, string>, later: Record<string, string> = held) => {
     const { body, restore } = panelDocument();
     try {
@@ -369,7 +370,8 @@ test("with no position the badge leaves a corner the page's own fixed or sticky 
       let reports: InteractionReport[] = [];
       Object.assign(globalThis.document, {
         // The host is on top at its own corner, fixed like the page's widget, and never counts as one.
-        elementsFromPoint: (x: number, y: number) => [body.childNodes[0], ...(now[corner(x, y)] ? [{ position: now[corner(x, y)] }] : []), page],
+        // 'shadow' is a host that is not fixed itself, with its widget fixed inside its shadow root, as Next.js draws its dev indicator.
+        elementsFromPoint: (x: number, y: number) => [body.childNodes[0], ...(now[corner(x, y)] ? [widgetAt(now[corner(x, y)]!)] : []), page],
       });
       const source = {
         reports: () => reports,
@@ -400,10 +402,16 @@ test("with no position the badge leaves a corner the page's own fixed or sticky 
   assert.deepEqual(run({}, {}), ['br', 'br']);
   assert.deepEqual(run({}, chat), ['bl', 'bl']);
   assert.deepEqual(run({}, { br: 'fixed', bl: 'sticky' }), ['tr', 'tr']);
-  assert.deepEqual(run({}, { br: 'fixed', bl: 'fixed', tr: 'fixed', tl: 'fixed' }), ['br', 'br']);
+  const backdrop = { br: 'fixed', bl: 'fixed', tr: 'fixed', tl: 'fixed' };
+  assert.deepEqual(run({}, backdrop), ['br', 'br']);
+  // A dialog's backdrop over every corner at the first report leaves the badge off the chat button it moved from.
+  // It went back on top of it.
+  assert.deepEqual(run({}, chat, backdrop), ['bl', 'bl']);
   // An element of the page's own flow in the corner is not a widget on top of it.
   assert.deepEqual(run({}, { br: 'relative' }), ['br', 'br']);
   assert.deepEqual(run({}, {}, chat), ['br', 'bl']);
+  // A widget inside a shadow root whose host is not fixed holds its corner. The badge sat on it.
+  assert.deepEqual(run({}, { br: 'fixed', bl: 'shadow' }), ['tr', 'tr']);
   // A corner that was asked for is used as given.
   assert.deepEqual(run({ position: 'bottom-right' }, chat), ['br', 'br']);
   assert.deepEqual(run({ position: 'top-left' }, {}), ['tl', 'tl']);
