@@ -1934,6 +1934,17 @@ the panel and its sticky header became opaque. The blur had been hiding the 3% o
 a 97% background let through, and without it the page's buttons could be read behind the rows,
 as the rows could behind the header's 98% as they scrolled under it.
 
+**Hide for me** (0.20.0). In a team repo that commits `overlay: true`, the badge was everyone's or
+no one's. A button beside Clear sets `react-inp-blame` in `localStorage` to `hidden`, the key the
+`'query'` mode already reads, and takes the badge off the page. `overlayWanted` reads it before it
+reads the option, so `true`, an options object and `'query'` all show nothing in that browser, while
+reports, the track and the API run as before. `?inp-blame` in the URL removes the key and shows the
+badge, the same switch `'query'` uses, and the button's title says so. It is offered only on a badge
+the option showed, since a badge `mountOverlay()` shows is the app's own call and would come back at
+the next load whatever the key said. The press itself is left out like any other on the panel, though
+its host is off the page by the time its entries come, and Event Timing gives no target for a node
+that is no longer connected, so the input ring's target is what says it was the panel's.
+
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
 is large (50 components when a handler is named, 10 otherwise), and a named handler with a

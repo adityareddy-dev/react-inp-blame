@@ -528,6 +528,62 @@ test("the badge shows only where overlay: 'query' and the URL or localStorage as
   }
 });
 
+test("a stored 'hidden' keeps the badge off for that person whatever overlay says, until ?inp-blame clears it", async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
+    else delete (globalThis as Record<string, unknown>).localStorage;
+  });
+  const THROWS = 'throws';
+  const cases: [overlay: InstallOptions['overlay'], url: string, stored: string | null, shown: boolean, after: string | null][] = [
+    [true, PAGE_URL, null, true, null],
+    [true, PAGE_URL, 'overlay', true, 'overlay'],
+    [true, PAGE_URL, 'hidden', false, 'hidden'],
+    [true, `${PAGE_URL}?inp-blame`, 'hidden', true, null],
+    [true, PAGE_URL, THROWS, true, THROWS],
+    [{ position: 'top-left' }, PAGE_URL, 'hidden', false, 'hidden'],
+    [{ position: 'top-left' }, `${PAGE_URL}#inp-blame`, 'hidden', true, null],
+    ['query', PAGE_URL, null, false, null],
+    ['query', PAGE_URL, 'overlay', true, 'overlay'],
+    ['query', PAGE_URL, 'hidden', false, 'hidden'],
+    ['query', `${PAGE_URL}?inp-blame`, 'hidden', true, null],
+    ['query', PAGE_URL, THROWS, false, THROWS],
+    [false, PAGE_URL, null, false, null],
+    [false, PAGE_URL, 'overlay', false, 'overlay'],
+    [false, `${PAGE_URL}?inp-blame`, 'hidden', false, 'hidden'],
+    [false, PAGE_URL, THROWS, false, THROWS],
+  ];
+  for (const [overlay, url, stored, shown, after] of cases) {
+    await inBrowser(async () => {
+      const { search, hash } = new URL(url);
+      Object.defineProperty(globalThis, 'location', { value: { href: url, search, hash }, configurable: true, writable: true });
+      let value = stored;
+      const fail = () => {
+        throw new Error('SecurityError');
+      };
+      const storage =
+        stored === THROWS
+          ? { getItem: fail, setItem: fail, removeItem: fail }
+          : {
+              getItem: (key: string) => (key === 'react-inp-blame' ? value : null),
+              setItem() {},
+              removeItem: (key: string) => {
+                if (key === 'react-inp-blame') value = null;
+              },
+            };
+      Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true, writable: true });
+      const { hosts } = badgeDocument();
+      const api = install({ overlay });
+      await installState.overlay;
+      const what = `overlay: ${JSON.stringify(overlay)} on ${url} with ${stored} in localStorage`;
+      assert.equal(hosts(), shown ? 1 : 0, what);
+      assert.equal(stored === THROWS ? THROWS : value, after, what);
+      api.dispose();
+    });
+  }
+});
+
 test("a browser without Event Timing shows the badge that says so only where it was asked for, and install() or 'query' alone never loads it", async (t) => {
   t.mock.method(console, 'warn', () => {});
   const cases: [overlay: InstallOptions['overlay'], shown: boolean][] = [

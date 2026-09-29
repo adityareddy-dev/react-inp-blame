@@ -16,12 +16,25 @@ export function inOverlay(node: Node | null): boolean {
   return false;
 }
 
+const inUrl = () => /[?&#]inp-blame(?:[=&#]|$)/.test(location.search + location.hash);
+
 /** True when the URL or localStorage asks for the overlay; the `'query'` mode of the option. */
 export function overlayRequested(): boolean {
   try {
-    if (/[?&#]inp-blame(?:[=&#]|$)/.test(location.search + location.hash)) return true;
-    return localStorage.getItem('react-inp-blame') === 'overlay';
+    return inUrl() || localStorage.getItem('react-inp-blame') === 'overlay';
   } catch {
     return false;
   }
+}
+
+/** True when this person pressed Hide for me in the panel. `?inp-blame` in the URL clears it. */
+export function overlayHidden(): boolean {
+  try {
+    if (localStorage.getItem('react-inp-blame') !== 'hidden') return false;
+    if (!inUrl()) return true;
+    localStorage.removeItem('react-inp-blame');
+  } catch {
+    // ignore
+  }
+  return false;
 }

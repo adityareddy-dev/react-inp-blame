@@ -8,7 +8,7 @@ import { createLifecycle, MAX_REPORTS } from './lifecycle.js';
 import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
 import { NOT_OBSERVING, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
-import { overlayRequested } from './overlay-host.js';
+import { overlayHidden, overlayRequested } from './overlay-host.js';
 import { incompatibleCopy, shared } from './session.js';
 import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, ReactStatus, RendererInfo } from './types.js';
 import { dropped, errorText, guarded, warnOnce } from './warn.js';
@@ -133,7 +133,7 @@ function installNow(opts: InstallOptions): Api {
     // Exposed anyway, so stats() on the page says why nothing is reported. A badge that was asked for says
     // it too, rather than leaving someone looking for one that never comes.
     const api = inertApi('unsupported', { unsupportedReason: { kind: 'browser', message }, installMs: installTime, dispose: hideOverlay });
-    if (overlayWanted(opts.overlay) && !page.overlay) showOverlay(api, typeof opts.overlay === 'object' ? opts.overlay : {});
+    if (overlayWanted(opts.overlay) && !page.overlay) showOverlay(api, typeof opts.overlay === 'object' ? opts.overlay : {}, true);
     return expose(api, opts.debugGlobal);
   }
   if (!(Math.random() < (opts.sampleRate ?? 1))) {
@@ -427,7 +427,7 @@ function installNow(opts: InstallOptions): Api {
   const applyOverlay = (option: InstallOptions['overlay']) => {
     if (option === undefined) return;
     hideOverlay();
-    if (overlayWanted(option)) showOverlay(api, typeof option === 'object' ? option : {});
+    if (overlayWanted(option)) showOverlay(api, typeof option === 'object' ? option : {}, true);
   };
   page.installed = {
     api,
@@ -510,11 +510,15 @@ export function onInteraction(fn: Listener): () => void {
  * page that never shows them never downloads that code, and install() returns before any of it
  * is requested, evaluated or mounted.
  */
-function showOverlay(api: Api, opts: OverlayOptions): Promise<OverlayHandle | null> {
+function showOverlay(api: Api, opts: OverlayOptions, hideable = false): Promise<OverlayHandle | null> {
+  // Hide for me is offered only on a badge the overlay option shows, the one a stored 'hidden' keeps off.
+  const hidden = () => {
+    if (page.overlay === shown) page.overlay = null;
+  };
   const shown: Promise<OverlayHandle | null> = new Promise<void>((resolve) => setTimeout(resolve, 0))
     .then(() => (page.overlay === shown ? import('./overlay.js') : null))
     // Asked again on arrival: hidden or replaced while the code was on its way.
-    .then((code) => (code && page.overlay === shown ? code.createOverlay(api, opts) : null))
+    .then((code) => (code && page.overlay === shown ? code.createOverlay(api, opts, hideable ? hidden : undefined) : null))
     .catch((error: unknown) => {
       warnOnce('overlay-failed', `the badge and panel could not be shown (${errorText(error)}).`);
       // The next mountOverlay() tries again, rather than getting this null for as long as the page is open.
@@ -525,9 +529,9 @@ function showOverlay(api: Api, opts: OverlayOptions): Promise<OverlayHandle | nu
   return shown;
 }
 
-/** Whether the `overlay` option asks for the badge on this page. */
+/** Whether the `overlay` option asks for the badge on this page, and this person has not hidden it. */
 function overlayWanted(option: InstallOptions['overlay']): boolean {
-  return option === true || (option === 'query' && overlayRequested()) || (!!option && typeof option === 'object');
+  return !!option && !overlayHidden() && (option !== 'query' || overlayRequested());
 }
 
 function hideOverlay(): void {

@@ -78,7 +78,9 @@ demo's sign-in page, in development:
 
 `overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
-production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
+production page) or `{ position, open, max }`. In a shared repo each developer can press Hide for me in
+the panel, which keeps the badge off in that browser until the page is opened with `?inp-blame`, or the
+repo can use `'query'` and each developer opts in with the `localStorage` line. Both snippets above are development-only: `enabled`
 defaults to `'development'`, so a production build carries nothing from either plugin until you say
 `enabled: true` or `enabled: 'production'`. So `vite preview` and `next start`, which serve a
 production build, show no badge by default, and the build prints a line saying it left the library
