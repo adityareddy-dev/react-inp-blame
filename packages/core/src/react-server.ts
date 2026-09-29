@@ -24,6 +24,8 @@ export function onInteraction(): () => void {
 
 export function onRouterTransitionStart(): void {}
 
+export function announceNavigation(): void {}
+
 export function generateTarget(): undefined {
   return undefined;
 }
