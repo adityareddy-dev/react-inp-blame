@@ -126,7 +126,7 @@ export function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | nu
  * A LogRecordProcessor for an OpenTelemetry LoggerProvider: adds `inpBlameAttributes` to each
  * `browser.web_vital` INP record and leaves every other record as it is.
  *
- *     new LoggerProvider({ processors: [new InpBlameLogRecordProcessor(), new BatchLogRecordProcessor(exporter)] });
+ *     new LoggerProvider({ processors: [new InpBlameLogRecordProcessor(), new BatchLogRecordProcessor({ exporter })] });
  *
  * Put it first in `processors`: a processor that exports as the record is emitted, like
  * `SimpleLogRecordProcessor`, has sent it by the time a later one runs. It never throws, since a throw
