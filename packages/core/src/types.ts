@@ -660,7 +660,7 @@ export interface OverlayOptions {
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
   /** Start with the panel open. Default false. */
   open?: boolean;
-  /** How many interactions the panel keeps, newest first. Default 20. */
+  /** How many interactions the panel keeps, newest first, and as many again in its fold of quick ones. Default 20. */
   max?: number;
 }
 
