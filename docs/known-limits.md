@@ -67,6 +67,15 @@
   holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
   it, `name` is `null` and the cause names the largest with the share it holds. The milliseconds are the
   browser's either way, so `confidence` is about them alone and is never lowered to cover a doubtful name.
+- **The next press's work is told from the interaction's own by a listener of that press the browser
+  recorded.** Typing or clicking fast, the frame an interaction paints in can hold the next press's handlers
+  too, and Long Animation Frames lists only scripts over 5 ms, which in a React app often leaves out the next
+  press's `onkeydown` or `onpointerdown`. Where none of its listeners was recorded, under a screen update of
+  100 ms or less every script is ranked as the interaction's own, so the next press's handler can be named as
+  its script, and over that, one of its own that started a millisecond or more after its handlers ended is
+  taken for the next press's work. Rollover typing, the next key down before this one is up, is read the same
+  way even with the next key's `oninput` on record: where this key's keyup was handled in a later frame, its
+  own `oninput` runs right after its handlers, and nothing on record tells the next key's from it.
 - **Reports name the nearest component with a readable name, not always the innermost one.** A component
   whose real name is one or two characters (`Td`, `Li`), or lowercase in any part of it (`header`,
   `motion.div`, `UI.list`), or that a styling library named after what it wraps (`styled.li`, `Styled(span)`),

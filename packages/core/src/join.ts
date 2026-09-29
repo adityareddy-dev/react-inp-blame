@@ -247,9 +247,9 @@ const PRESSES: readonly string[] = ['pointerdown', 'keydown'];
 /**
  * A listener, as Long Animation Frames names it (`DIV#root.onkeydown`), for a press, or for an event the press
  * dispatches in the same task, right after its own handlers: a key's (the second group), whose `input` is where
- * React's onChange runs, or a pointer's (the third).
+ * React's onChange runs, or a pointer's (the third), or for a pointer's release and its click (the fourth).
  */
-const PRESS_LISTENER = /\.on(keydown|pointerdown|(keypress|beforeinput|input)|(mousedown|touchstart))$/;
+const PRESS_LISTENER = /\.on(keydown|pointerdown|(keypress|beforeinput|input)|(mousedown|touchstart)|(pointerup|mouseup|click))$/;
 
 /** Whether `a` comes after `b`, compared element by element. */
 function isAfter(a: readonly number[], b: readonly number[]): boolean {
@@ -1455,25 +1455,29 @@ function explain(r: InteractionReport): Explanation {
    * after the handlers is then usually the next press's handler, whose work is the next report's.
    *
    * The press's handlers began where the browser recorded a listener of its (`DIV#root.onkeydown`, or the `oninput`
-   * a key dispatches right after, or a pointer's `onmousedown`), and nothing that started before that ran for it.
-   * One of those two kinds is the press's only for a press of its kind, and only where this interaction could not
-   * have dispatched it. A key's is where the last event this frame handled was this interaction's keyup: a keydown
-   * with no keyup, or whose keyup was handled in a later frame, runs its own `oninput` in its task, right after its
-   * handlers, as a checkbox's click does, and taken for the next press's, a keydown's 60 ms `oninput` went to
-   * waiting and painting. A pointer's is where that event was not a pointerdown, which can still dispatch its own
-   * `mousedown` or `touchstart`: a key dispatches neither, and where its keyup was not handled in this frame, the
-   * next click's 56 ms `onmousedown` was named as this key's script. Where no listener was recorded, as for one
-   * under 5 ms, a script that started on the tick this interaction's handlers ended on ran ahead of them too, and
-   * what came after it is ranked with the rest under PRESENTATION_NOTE_MS, where the note and the painting blame go
-   * on the press's render alone, and is the press's work over it (`ownScript` says why). Nor is a script that holds
-   * a render of this report's the press's work, wherever it started, though it holds one only from its start: the
-   * next key's capture listener puts that key in the ring before its handler runs, so a render stamped with this
-   * key a moment before that handler began came before it. Held by it, the next key's 44 ms handler was this key's
-   * script. Taken for the next key's, React's own task that committed a key's render, and a timer as its handlers
-   * ended or before the next key's listener, went to waiting and painting, and from half of the screen update the
-   * note said the frame waited on that key. The next key's handler on the tick after this key's was named as this
-   * key's script. A render joined by overlap alone says too little to keep a script: in the next key's handler, one
-   * kept that handler as this key's verdict.
+   * a key dispatches right after, or a pointer's `onmousedown` or its `onclick`), and nothing that started before
+   * that ran for it. One of the kinds a press dispatches is the press's only for a press of its kind, and only
+   * where this interaction could not have dispatched it. A key's is where the last event this frame handled was
+   * this interaction's keyup: a keydown with no keyup, or whose keyup was handled in a later frame, runs its own
+   * `oninput` in its task, right after its handlers, as a checkbox's click does, and taken for the next press's, a
+   * keydown's 60 ms `oninput` went to waiting and painting. A pointer's is where that event was not a pointerdown,
+   * which can still dispatch its own `mousedown` or `touchstart`: a key dispatches neither, and where its keyup was
+   * not handled in this frame, the next click's 56 ms `onmousedown` was named as this key's script. A pointer's
+   * `onpointerup`, `onmouseup` and `onclick` are the next press's where that event was this interaction's click or
+   * a key's: a pointerdown, or a pointerup whose click was too quick for an entry, still has its own to dispatch,
+   * and after a key's handlers the next click's 44 ms `onclick`, its press's listeners too short to be recorded,
+   * was named as this key's script. Where no listener was recorded, as for one under 5 ms, a script that started on
+   * the tick this interaction's handlers ended on ran ahead of them too, and what came after it is ranked with the
+   * rest under PRESENTATION_NOTE_MS, where the note and the painting blame go on the press's render alone, and is
+   * the press's work over it (`ownScript` says why). Nor is a script that holds a render of this report's the
+   * press's work, wherever it started, though it holds one only from its start: the next key's capture listener
+   * puts that key in the ring before its handler runs, so a render stamped with this key a moment before that
+   * handler began came before it. Held by it, the next key's 44 ms handler was this key's script. Taken for the
+   * next key's, React's own task that committed a key's render, and a timer as its handlers ended or before the
+   * next key's listener, went to waiting and painting, and from half of the screen update the note said the frame
+   * waited on that key. The next key's handler on the tick after this key's was named as this key's script. A
+   * render joined by overlap alone says too little to keep a script: in the next key's handler, one kept that
+   * handler as this key's verdict.
    */
   const next = r.nextInput;
   const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
@@ -1482,7 +1486,7 @@ function explain(r: InteractionReport): Explanation {
     next &&
     scriptsRun.find((s) => {
       const on = s.start >= nextFrom - STAMP_TOLERANCE && PRESS_LISTENER.exec(s.invoker);
-      return on && (on[2] ? next.type === 'keydown' && last === 'keyup' : !on[3] || (next.type === 'pointerdown' && last !== 'pointerdown'));
+      return on && (on[2] ? next.type === 'keydown' && last === 'keyup' : !(on[3] || on[4]) || (next.type === 'pointerdown' && (on[3] ? last !== 'pointerdown' : /^(click|key)/.test(last))));
     });
   const nextsWork = (s: ScriptSummary) =>
     !!next &&

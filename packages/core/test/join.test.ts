@@ -1090,11 +1090,11 @@ test("where the working time was longer, the screen update's note says the frame
   // checkbox's click runs its own `oninput` in its task, right after its handlers, a pointer runs no `onbeforeinput`,
   // and a key no `onmousedown`. Taken for the next press's, each went to waiting and painting in the same way.
   const clicks = Array.from({ length: 6 }, (_, i) => script('DIV#root.onclick', 13 + i * 15, 15));
-  const checkbox = (ms: number, nexts: InputRecord[]) =>
+  const checkbox = (ms: number, nexts: InputRecord[], invoker = 'INPUT#agree.oninput', at = 104.5) =>
     report(
       [entry('pointerdown', 0, 24, 1, 2), entry('pointerup', 10, 184, 11, 12), entry('click', 10, 184, 12, 104)],
       [commit(102, 10, { ...counted(3), inputType: 'click', roots: ['List'], hotPath: ['List'] })],
-      [frame(0, 194, [...clicks, script('INPUT#agree.oninput', 104.5, ms)], 184)],
+      [frame(0, 194, [...clicks, script(invoker, at, ms)], 184)],
       [input(0, 'pointerdown', { pointerType: 'mouse' }), input(10, 'pointerup', { gestureTs: 0, pointerType: 'mouse' }), input(10, 'click', { gestureTs: 0, pointerType: 'mouse' }), ...nexts],
     ).explanation;
   for (const ms of [44, 60]) {
@@ -1102,11 +1102,11 @@ test("where the working time was longer, the screen update's note says the frame
     assert.deepEqual(own.blame, { kind: 'script', name: 'INPUT#agree.oninput', detail: null, ms, confidence: 'measured' }, `${ms} ms`);
     for (const next of [input(60, 'pointerdown', { pointerType: 'mouse' }), input(60, 'keydown')]) assert.deepEqual(checkbox(ms, [next]), own, `${ms} ms, ${next.type}`);
   }
-  const dispatched = (invoker: string, nexts: InputRecord[]) =>
+  const dispatched = (invoker: string, nexts: InputRecord[], ms = 56) =>
     report(
       [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
       [three],
-      [frame(1000, 272, [...keys, script(invoker, 1183, 56)], 1262)],
+      [frame(1000, 272, [...keys, script(invoker, 1183, ms)], 1262)],
       [...ring.slice(0, 2), ...nexts],
     ).explanation;
   const mouse = input(1121, 'pointerdown', { pointerType: 'mouse' });
@@ -1147,6 +1147,42 @@ test("where the working time was longer, the screen update's note says the frame
     const own = pointer([]);
     assert.deepEqual(own.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, invoker);
     assert.deepEqual(pointer([mouse]), own, invoker);
+  }
+  // A pointer's `pointerup`, `mouseup` and `click` listeners are the next click's only where this interaction has none
+  // of its own still to come, after a key's handlers or a click's. In a React app the next click's listeners on its
+  // press are usually under 5 ms and not recorded, and its `onclick` was ranked with a key's scripts: under half of a
+  // 90 ms screen update, a 44 ms one was named as the key's script after its handler, and so was a 56 ms one, with no
+  // note that the frame waited on that click.
+  for (const invoker of ['DIV#root.onclick', 'DIV#root.onpointerup', 'DIV#root.onmouseup']) {
+    const unpressed = dispatched(invoker, []);
+    assert.deepEqual(unpressed.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' });
+    assert.deepEqual(dispatched(invoker, [input(1121, 'keydown')]), unpressed, invoker);
+    const next = dispatched(invoker, [mouse]);
+    assert.deepEqual([next.blame, next.cause], [held.blame, held.cause], invoker);
+    assert.deepEqual(next.notes, [
+      `After the handler finished, the screen took another 90 ms to update: the frame waited on the next click, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), 56 ms.`,
+    ], invoker);
+    const under = dispatched(invoker, [mouse], 44);
+    assert.deepEqual([under.blame, under.cause], [held.blame, held.cause], invoker);
+    assert.deepEqual(under.notes, [
+      `After the handler finished, the screen took another 90 ms to update: 46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was ${invoker} (app.js), 44 ms.`,
+    ], invoker);
+    const clicked = checkbox(56, [], invoker, 106);
+    assert.deepEqual(clicked.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, invoker);
+    assert.deepEqual(checkbox(56, [input(60, 'keydown')], invoker, 106), clicked, invoker);
+    assert.match(checkbox(56, [input(60, 'pointerdown', { pointerType: 'mouse' })], invoker, 106).notes[0]!, /: the frame waited on the next click, which the page handled first\./, invoker);
+    // A pointerdown's own are still to come, and so are a pointerup's whose click was too quick for an entry.
+    for (const [entries, pressed] of [
+      [[entry('pointerdown', 1000, 272, 1001, 1180)], [input(1000, 'pointerdown', { pointerType: 'mouse' })]],
+      [
+        [entry('pointerdown', 1000, 24, 1001, 1002), entry('pointerup', 1010, 262, 1011, 1180)],
+        [input(1000, 'pointerdown', { pointerType: 'mouse' }), input(1010, 'pointerup', { gestureTs: 1000, pointerType: 'mouse' })],
+      ],
+    ]) {
+      const own = unreleased(invoker, entries, pointers, [{ ...three, inputType: 'pointerdown' }], pressed);
+      assert.deepEqual(own.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, `${invoker}, ${entries.length} entries`);
+      assert.deepEqual(unreleased(invoker, entries, pointers, [{ ...three, inputType: 'pointerdown' }], [...pressed, mouse]), own, `${invoker}, ${entries.length} entries`);
+    }
   }
 });
 
