@@ -83,9 +83,11 @@ export function createTimeline(renderers: () => RendererInfo[]): Timeline {
  */
 function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void {
   const x = r.explanation;
-  // The commit the verdict's blame names, so the entry's name never contradicts its tooltip.
+  // The commit the verdict's blame names, so the entry's name never contradicts its tooltip: where a layout
+  // blame is named after the component that commit's render started at, that one.
   const main = r.commits.length ? heaviest(r.commits) : null;
-  const leaf = main ? (leafName(main) ?? '') : '';
+  const started = x.blame.kind === 'layout' && x.blame.name && main?.hotPath[0] === x.blame.name ? x.blame.name : null;
+  const leaf = started ?? (main ? (leafName(main) ?? '') : '');
   const properties: [string, string][] = [
     ['Total', ms(r.duration)],
     ['Waiting before the handler', ms(r.inputDelay)],
