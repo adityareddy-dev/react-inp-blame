@@ -76,7 +76,8 @@ not confirmed. A production build, or another dev server, is where to measure la
 <a id="another-copy"></a>
 ### A copy from an incompatible version is already on this page
 
-Two versions of react-inp-blame were loaded, and the second one installed nothing. Run
+Another copy or entry of react-inp-blame already owns this page and this one cannot share it, so this one
+installed nothing. Where the warning says a copy from an incompatible version, two versions were loaded. Run
 `npm ls react-inp-blame` to find them, and dedupe to one version.
 
 <a id="unsupported-browser"></a>

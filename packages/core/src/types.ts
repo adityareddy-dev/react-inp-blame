@@ -220,8 +220,9 @@ export type ReactStatus = 'reading' | 'waiting' | 'installed-late' | 'unreadable
 export interface UnsupportedReason {
   /**
    * 'browser': no Event Timing `interactionId` (Chrome 96, Firefox 144, Safari 26.2), so nothing was
-   * installed. 'another-copy': a copy of this library from an incompatible version is already on the
-   * page, so this one installed nothing. 'hook-disabled': the page's DevTools hook has `isDisabled` set
+   * installed. 'another-copy': another copy or entry of this library already owns the page and this one
+   * cannot share it, so this one installed nothing, as when a copy from an incompatible version got there
+   * first. 'hook-disabled': the page's DevTools hook has `isDisabled` set
    * or no `supportsFiber`, or the global is empty and read-only, so React registers with no hook;
    * or the page turned the hook in use off that way after install(), before react-dom registered or with
    * its methods made no-ops, or emptied the global over the shim before react-dom registered, which the
