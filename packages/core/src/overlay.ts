@@ -111,7 +111,7 @@ const CSS = `
 .r1 .t { flex: 1; font-weight: 600; font-size: 12.5px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .r1 .ms { font-weight: 700; font-size: 13px; color: var(--rating); }
 .meta { color: #9aa0ad; margin: 3px 0 0 16px; font-size: 11px; }
-.blame { color: #c3c7d1; margin: 4px 0 0 16px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blame { color: #c3c7d1; margin: 4px 0 0 16px; font-size: 12px; overflow-wrap: anywhere; }
 .blame b { color: #fff; font-weight: 600; }
 .blame.later { color: #9aa0ad; }
 .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,.08); margin: 9px 0 0 16px; }
