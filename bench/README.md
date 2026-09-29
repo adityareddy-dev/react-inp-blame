@@ -184,7 +184,8 @@ Always run `tt-virtual-fix` with `--no-build`. Without it, `run.mjs` builds F ag
 patch off, so F comes out the same as B.
 
 Two scripts read a results file and nothing else. `node steps.mjs results/<file>.json [app,app] [--verdicts]`
-prints each scripted step's slowest interaction and what configuration B blamed for it.
+prints each scripted step's slowest interaction and what configuration B blamed for it (F too, labelled apart,
+for `tt-virtual-fix`), then the library's own accounting with one line per configuration it was in.
 `node before-after.mjs results/<file>.json` compares F with B for `tt-virtual-fix`, bootstrapped as
 `report.mjs` does. That app has no A, so its part of the report has no A/B/C table and points there.
 

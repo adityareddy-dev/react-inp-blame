@@ -241,6 +241,37 @@ test('an app with no A and no F gets no pointer to before-after.mjs', () => {
   assert.doesNotMatch(md, /before-after/);
 });
 
+test('steps.mjs labels B and F blames apart, and gives each configuration its own stats line', () => {
+  const fix = node(
+    'steps.mjs',
+    results({
+      app: 'tt-virtual-fix',
+      configs: ['B', 'F'],
+      each: (r) => {
+        if (r.config === 'F') r.lib.reports[0].blame = { kind: 'handler', name: 'onClick', detail: 'sort', ms: 50, confidence: 'high' };
+      },
+    }),
+  );
+  assert.match(fix, /^- sort-lastName-asc: B 190, F 190 \| B: 10x component Table render \[high\]; F: 10x handler onClick sort \[high\]$/m);
+  assert.match(fix, /^  B stats \(median over 10 runs\): /m);
+  assert.match(fix, /^  F stats \(median over 10 runs\): /m);
+  assert.doesNotMatch(fix, /over 20 runs/);
+
+  const abc = node(
+    'steps.mjs',
+    results({
+      app: 'tt-fuzzy',
+      configs: ['A', 'B', 'C'],
+      each: (r) => {
+        if (r.config === 'C') r.lib.overheadTotalMs = 30;
+      },
+    }),
+  );
+  assert.match(abc, /^- sort-lastName-asc: A 190, B 190, C 190 \| B: 10x component Table render \[high\]$/m);
+  assert.match(abc, /^  B stats \(median over 10 runs\): .*overheadTotalMs 1,/m);
+  assert.match(abc, /^  C stats \(median over 10 runs\): .*overheadTotalMs 30,/m);
+});
+
 test("shadcn's next start listens on 127.0.0.1 only, as cal-diy's does", () => {
   // Swaps the harness's own spawn for one that throws its arguments, so nothing starts. Only the
   // shadcn entries: cal-diy's startServer runs its backend before it gets to next start.

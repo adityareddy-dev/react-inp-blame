@@ -1,6 +1,7 @@
 // Each scripted step's slowest interaction and its blame: per app and pass, the slowest
-// interaction (from the harness's own observer), what the library blamed for it in config B,
-// and the library's own accounting. Reads one results JSON.
+// interaction (from the harness's own observer), what the library blamed for it in config B (and
+// in F, labelled apart, for tt-virtual-fix), and the library's own accounting for each
+// configuration it was in. Reads one results JSON.
 //   node steps.mjs results/<file>.json [app,app] [--verdicts]
 import { readFileSync } from 'node:fs';
 
@@ -45,36 +46,40 @@ for (const [k, rs] of groups) {
         });
       row[c] = median(per);
     }
-    // What config B's library said about the slowest report in the step, run by run.
-    const blames = new Map();
+    // What config B's library said about the slowest report in the step, run by run, and F's apart.
+    const blames = new Map(configs.filter((c) => c === 'B' || c === 'F').map((c) => [c, new Map()]));
     const verdicts = new Map();
-    for (const r of rs.filter((x) => x.config === 'B' || x.config === 'F')) {
+    for (const r of rs.filter((x) => blames.has(x.config))) {
+      const tally = blames.get(r.config);
       const s = r.steps.find((x) => x.name === name);
       const reps = (r.lib?.reports ?? []).filter((p) => inStep(p.start, s));
       if (!reps.length) {
-        blames.set('(no report)', (blames.get('(no report)') ?? 0) + 1);
+        tally.set('(no report)', (tally.get('(no report)') ?? 0) + 1);
         continue;
       }
       const top = reps.reduce((a, b) => (b.duration > a.duration ? b : a));
       const b = top.blame;
       const key = b ? `${b.kind} ${b.name ?? ''} ${b.detail ?? ''} [${b.confidence ?? ''}]`.replace(/\s+/g, ' ') : 'null';
-      blames.set(key, (blames.get(key) ?? 0) + 1);
+      tally.set(key, (tally.get(key) ?? 0) + 1);
       const v = `${top.duration} ms: ${top.where} | ${top.cause}`;
-      if (!verdicts.has(key)) verdicts.set(key, v);
+      if (!verdicts.has(`${r.config}: ${key}`)) verdicts.set(`${r.config}: ${key}`, v);
     }
-    row.blames = [...blames].sort((a, b) => b[1] - a[1]);
+    row.blames = blames;
     row.verdicts = verdicts;
     rows.push(row);
   }
   for (const row of rows.sort((a, b) => (b.A ?? b.B ?? 0) - (a.A ?? a.B ?? 0))) {
-    console.log(`- ${row.name}: ${configs.map((c) => `${c} ${r1(row[c])}`).join(', ')} | ${row.blames.map(([b, n]) => `${n}x ${b}`).join('; ')}`);
+    const blamed = [...row.blames].map(([c, tally]) => `${c}: ${[...tally].sort((a, b) => b[1] - a[1]).map(([b, n]) => `${n}x ${b}`).join('; ')}`);
+    console.log(`- ${row.name}: ${configs.map((c) => `${c} ${r1(row[c])}`).join(', ')} | ${blamed.join('; ')}`);
     if (showVerdicts) for (const [b, v] of row.verdicts) console.log(`    [${b}] ${v}`);
   }
-  const libRuns = rs.filter((r) => r.lib?.stats);
-  if (libRuns.length) {
+  // One line per configuration. B, C and F are different builds, and a median across them is none of theirs.
+  for (const c of configs) {
+    const libRuns = rs.filter((r) => r.config === c && r.lib?.stats);
+    if (!libRuns.length) continue;
     const st = (f) => r1(median(libRuns.map((r) => f(r.lib.stats))));
     console.log(
-      `  stats (median over ${libRuns.length} runs): walks ${st((s) => s.walks)}, walkTotalMs ${st((s) => s.walkTotalMs)}, reportTotalMs ${st((s) => s.reportTotalMs)}, installMs ${st((s) => s.installMs)}, overheadTotalMs ${r1(median(libRuns.map((r) => r.lib.overheadTotalMs)))}, reports ${r1(median(libRuns.map((r) => r.lib.reportCount)))}, react ${[...new Set(libRuns.map((r) => r.lib.stats.react))].join('/')}`,
+      `  ${c} stats (median over ${libRuns.length} runs): walks ${st((s) => s.walks)}, walkTotalMs ${st((s) => s.walkTotalMs)}, reportTotalMs ${st((s) => s.reportTotalMs)}, installMs ${st((s) => s.installMs)}, overheadTotalMs ${r1(median(libRuns.map((r) => r.lib.overheadTotalMs)))}, reports ${r1(median(libRuns.map((r) => r.lib.reportCount)))}, react ${[...new Set(libRuns.map((r) => r.lib.stats.react))].join('/')}`,
     );
   }
   for (const c of configs) {
