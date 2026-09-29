@@ -1558,9 +1558,9 @@ function explain(r: InteractionReport): Explanation {
    */
   const next = r.nextInput;
   // A next click whose pointerdown the ring does not have after this interaction, pressed before it or not recorded,
-  // is weighed as in 0.18.0, every script from the click on its work: nothing here tells its listeners from this
-  // interaction's, and weighed on the rules below, its 36 ms `onclick` was a key's script where 0.18.0 said the
-  // frame waited on that click.
+  // is weighed as in 0.18.0, every script from the click on its work but one holding a render of this report's, as
+  // for any next press: nothing here tells its listeners from this interaction's, and weighed on the rules below,
+  // its 36 ms `onclick` was a key's script where 0.18.0 said the frame waited on that click.
   const clickOnly = next?.type === 'click';
   const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
   const last = r.entries.reduce((a: EventEntrySummary | null, e) => (e.processingStart <= processingEnd && (!a || e.processingStart >= a.processingStart) ? e : a), null)?.name ?? '';
@@ -1575,8 +1575,10 @@ function explain(r: InteractionReport): Explanation {
     !!next &&
     (clickOnly
       ? s.start >= next.start - STAMP_TOLERANCE
-      : (nextListener ? s.start >= nextListener.start : s.start >= nextFrom - STAMP_TOLERANCE && s.start > processingEnd + STAMP_TOLERANCE) &&
-        !r.commits.some((x) => x.joinedBy === 'exact' && holds(s, x, s.start)));
+      : nextListener
+        ? s.start >= nextListener.start
+        : s.start >= nextFrom - STAMP_TOLERANCE && s.start > processingEnd + STAMP_TOLERANCE) &&
+    !r.commits.some((x) => x.joinedBy === 'exact' && holds(s, x, s.start));
   const nextScriptMs = scriptParts(frames, nextFrom, r.end).reduce((a, p) => (nextsWork(p.script) ? Math.max(a, p.ms) : a), 0);
   // The paint time is rounded to 8 ms. A render that ended later than that ran after the frame, which did not wait on it.
   const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;

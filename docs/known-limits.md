@@ -103,7 +103,8 @@
   its script, and over that, one of its own that started a millisecond or more after its handlers ended is
   taken for the next press's work. A next click whose button went down before the interaction, or whose
   pointerdown was not recorded, has no listener to go by, since nothing tells its `onclick` or `onpointerup`
-  from the interaction's own, so it is weighed as in 0.18.0: every script from that click on is its work.
+  from the interaction's own, so it is weighed as in 0.18.0: every script from that click on is its work,
+  except one that holds a render of the interaction's own.
   Rollover typing, where the next key goes down before this one comes up, can still put the next key's work on
   this one.
 - **Reports name the nearest component with a readable name, not always the innermost one.** A component

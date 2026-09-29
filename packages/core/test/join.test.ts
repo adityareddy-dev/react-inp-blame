@@ -1271,6 +1271,18 @@ test("a next click whose pointerdown came before this press, or is not in the ri
     const early = clicked(invoker, 40, 36, [input(940, 'pointerdown', { pointerType: 'mouse' }), key, input(1019, 'click', { gestureTs: 940, pointerType: 'mouse' })], 1020);
     assert.deepEqual(said(early), waited(invoker, 40, 36), invoker);
   }
+  // A script that holds a render of the key's own is not that click's work, as it is no next press's anywhere else:
+  // React's task committing the key's 400 rows after the click came was said as the frame waiting on that click.
+  const rows = commit(1060, 1000, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 400, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 400, self: null, total: null }] });
+  const deferred = report(
+    [entry('keydown', 1000, 96, 1002, 1020)],
+    [three, rows],
+    [frame(1000, 96, [script('DIV#root.onkeydown', 1002, 18), script('MessagePort.onmessage', 1022, 56)])],
+    [key, input(1021, 'click', { pointerType: 'mouse' })],
+  ).explanation;
+  assert.doesNotMatch(deferred.cause, /waited on the next click/);
+  assert.equal(deferred.blame.kind, 'painting');
+  assert.equal(deferred.blame.name, 'Editor');
 });
 
 test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {
