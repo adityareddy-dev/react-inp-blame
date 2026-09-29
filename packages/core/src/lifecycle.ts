@@ -75,8 +75,12 @@ export interface Lifecycle {
   onCommit(c: CommitSummary): void;
   /** A long animation frame arrived; `frames` already holds it. */
   onFrame(): void;
-  /** A navigation began at `start` (`performance.now()`); `navigations` already holds it. */
-  onNavigation(start: number): void;
+  /**
+   * A navigation began at `start` (`performance.now()`); `navigations` already holds it. `afterCommit` where a
+   * router announced it with no input being dispatched: the quiet interactions are let go of after the task's
+   * microtasks, so the commit it was announced in can still join the click that started it.
+   */
+  onNavigation(start: number, afterCommit?: boolean): void;
   /**
    * The page was hidden: the INP estimate is chosen again at the interaction count by then, as web-vitals
    * chooses when it reports on hide, and a later render stops waiting on an entry (`awaitsEntry`).
@@ -300,13 +304,22 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       }
     },
 
-    onNavigation(start) {
+    onNavigation(start, afterCommit = false) {
       navigationStart = start;
       countFrom = now();
       inp.reset('navigation');
       // Renders of the page it moves to, stamped with an input from before it, would otherwise publish
-      // quiet interactions from the page it left as if they had caused them.
-      quiet.length = 0;
+      // quiet interactions from the page it left as if they had caused them. React runs a layout effect's
+      // announcement before it hands the hook that commit, which holds the render of the new route: the
+      // quick link click that started it is still there to join.
+      if (!afterCommit) {
+        quiet.length = 0;
+        return;
+      }
+      const left = quiet.slice();
+      queueMicrotask(() => {
+        for (const held of left) if (quiet.includes(held)) quiet.splice(quiet.indexOf(held), 1);
+      });
     },
 
     onHidden() {

@@ -1735,7 +1735,11 @@ effects of siblings in order, so after it a slow route's own would run first, an
 them would start before the announcement and be placed on the page it left.
 At each soft navigation and back/forward cache restore the INP estimate starts over from the
 interactions that began after it, and quiet interactions held so far are let go, so renders of the
-new page stamped with an input from before it cannot publish them. The App Router announces a push
+new page stamped with an input from before it cannot publish them. An announcement with no input
+being dispatched lets go of them after its task's microtasks instead. React runs the React Router
+layout effect before it hands the hook that commit, and the commit holds the new route's render, so
+a quick link click whose route renders slowly would otherwise be let go of just before the render
+that joins it, and never be reported. The App Router announces a push
 or replace without `basePath`, so `withInpBlame` hands the module the app's `basePath` to put back.
 Next.js calls the hook only for the App Router. The Pages Router's client entry imports the injected
 modules too, which gives it attribution but no navigation join. Its production entry, `next.js`, imports
