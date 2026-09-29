@@ -1,7 +1,7 @@
 {
-  "auto": 32.4,
-  "overlay": 6.0,
-  "before": 11.1,
+  "auto": 34.1,
+  "overlay": 7.1,
+  "before": 11.5,
   "web-vitals": 1.2,
-  "otel": 1.2
+  "otel": 1.5
 }

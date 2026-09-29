@@ -34,8 +34,8 @@ With Vite, the same two options go to `inpBlame()` in `vite.config.ts`. A page t
 Running it in production costs something. In 0.12.0 that was about 209 ms of page load on the shadcn/ui docs
 site, and about 5 ms inside each interaction on the twenty CRM, with INP flat on every app measured
 ([What it costs](../README.md#what-it-costs), [the runs](benchmarks/real-apps.md)). What loads with the page
-is `react-inp-blame/auto`, about 34 KB gzip by `scripts/size.mjs` when this page was written, and this entry
-adds 1.5 KB on top. So a telemetry path held to about 10 KB is not met at 1.0.
+is `react-inp-blame/auto`, 34.1 KB gzip by `scripts/size.mjs` in 0.20.0, and this entry adds 1.5 KB on
+top. So a telemetry path held to about 10 KB is not met at 1.0.
 
 There is a cheaper step short of that. `runtime: false` keeps only the `displayName` transform, so
 `generateTarget` from [react-inp-blame/web-vitals](web-vitals.md) can name components in production with no
