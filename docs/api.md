@@ -40,15 +40,14 @@ goes, but never one of the ten slowest or one INP can still point at), `last()`,
 taps and key presses on [the badge and panel](#the-badge-and-panel) left out of it and of its count,
 though Chrome's own INP and web-vitals count them), `onInteraction(fn)`, `clear()` (drops reports and
 commits, and starts the INP estimate over, though in WebKit a key press on the panel's Clear stays in the new
-count, since WebKit counts it at the keyup, after the clear), `dispose()` and `stats()`: `mode` (`'shim'`, `'chained'`,
-`'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `react` (`'reading'`, `'waiting'`
-while React has not rendered on the page, `'installed-late'` when it has and no react-dom registered
-because install() ran after react-dom loaded, or `'unreadable'`), `walks`, and the
-library's own time in `walkTotalMs`, `reportTotalMs` and `installMs`. `debug.commits()` and `debug.hook()` are
-for debugging and may change in any version. Also exported: [`mountOverlay`](#the-badge-and-panel) and
-[`announceNavigation`](#announcenavigationurl). Under
-the `react-server` condition every export does nothing, here and on
-[`react-inp-blame/web-vitals`](web-vitals.md): `generateTarget` returns `undefined` and
+count, since WebKit counts it at the keyup, after the clear), `dispose()` and `stats()`: `mode` (`'shim'`,
+`'chained'`, `'none'`, `'unsupported'` or `'sampled-out'`), `unsupportedReason`, `react` (`'reading'`,
+`'waiting'` while React has not rendered on the page, `'installed-late'` when it has and no react-dom
+registered because install() ran after react-dom loaded, or `'unreadable'`), `walks`, and the library's own
+time in `walkTotalMs`, `reportTotalMs` and `installMs`. `debug.commits()` and `debug.hook()` are for debugging
+and may change in any version. Also exported: [`mountOverlay`](#the-badge-and-panel) and
+[`announceNavigation`](#announcenavigationurl). Under the `react-server` condition every export does nothing,
+here and on [`react-inp-blame/web-vitals`](web-vitals.md): `generateTarget` returns `undefined` and
 `attributeINP` returns `{ react: null }`.
 
 ## announceNavigation(url)
@@ -181,19 +180,21 @@ verdict.
 red. Click it for the recent slow interactions, newest first, each with what to blame and a bar split into
 waiting, working and updating the screen; a row opens into the full explanation and the components that
 rendered before and after the paint. Rows under 200 ms that blame nothing fold into one line, "12 quick
-interactions, nothing to fix", that opens on a click. `overlay: 'query'` shows it only when the URL has `?inp-blame` or
-`#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`: that is how to open it on a production
-page. `{ position, open, max }` sets the corner, whether the panel starts open and how many rows it keeps
-(20). Without `position` the badge starts bottom right, and moves to the next free corner (bottom left, top
-right, top left) when the app's own fixed or sticky element, a chat button say, sits there when the badge
-mounts or when the first report comes. `position` keeps it where you put it. It is plain DOM in a shadow root, so it never causes a React render, and its code is a chunk loaded
-after `install()` returns, only when shown. A click, tap or key press on it is not the page's: it gets no
-report, and `inp()` and the badge leave it out. Hide for me, beside Clear in the panel's footer, sets
-`react-inp-blame` in `localStorage` to `hidden`: from then on `overlay: true` or an options object shows no
-badge in that browser, and reports, the DevTools track and the rest of the API go on as before. `?inp-blame`
-or `#inp-blame` in the URL clears it and shows the badge again. A badge `mountOverlay()` shows is shown
-regardless, and has no Hide for me. `mountOverlay(options)` shows it after an `/auto` import. The
-shadow root is an open one on `#react-inp-blame`, but a test that wants the reports should read them through
+interactions, nothing to fix", that opens on a click. `overlay: 'query'` shows it only when the URL has
+`?inp-blame` or `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`: that is how to open it
+on a production page. `{ position, open, max }` sets the corner, whether the panel starts open and how many
+rows it keeps (20), and as many again in the fold. Without `position` the badge starts bottom right, and moves
+to the next free corner (bottom left, top right, top left) when the app's own fixed or sticky element, a chat
+button say, sits there when the badge mounts or when the first report comes. Where all four are taken, as
+under a dialog's backdrop, it stays where it is. `position` keeps it where you put it. It is plain DOM in a
+shadow root, so it never causes a React render, and its code is a chunk loaded after `install()` returns, only
+when shown. A click, tap or key press on it is not the page's: it gets no report, and `inp()` and the badge
+leave it out. Hide for me, beside Clear in the panel's footer, sets `react-inp-blame` in `localStorage` to
+`hidden`: from then on `overlay: true` or an options object shows no badge in that browser, and reports, the
+DevTools track and the rest of the API go on as before. `?inp-blame` or `#inp-blame` in the URL clears it and
+shows the badge again. A badge `mountOverlay()` shows is shown regardless, and has no Hide for me.
+`mountOverlay(options)` shows it after an `/auto` import. The shadow root is an open one on
+`#react-inp-blame`, but a test that wants the reports should read them through
 [`debugGlobal`](#installoptions) rather than from the panel's DOM, which may change between versions.
 
 **Content Security Policy.** The badge and panel need nothing in `style-src`: their stylesheet is a
