@@ -1698,8 +1698,10 @@ send an entry, under 16 ms, stays in the count, since nothing says where it land
 and opens the panel on the Pixel 7 project, and checks that INP stays on the tap and that the
 count is the browser's less the panel's taps that sent an entry. WebKit on the iPhone project
 paints all of those taps under 16 ms, so there is nothing to leave out and the check is skipped.
-The panel's `backdrop-filter` went at the same time: its background is 97% opaque, so the blur
-showed nothing, and on a phone's GPU it is a cost at every open.
+The panel's `backdrop-filter` went at the same time, a cost on a phone's GPU at every open, and
+the panel and its sticky header became opaque. The blur had been hiding the 3% of the page that a
+97% background let through, and without it the page's buttons could be read behind the rows, as
+the rows could behind the header's 98% as they scrolled under it.
 
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
