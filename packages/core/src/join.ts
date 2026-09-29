@@ -1671,14 +1671,21 @@ function explain(r: InteractionReport): Explanation {
    * and so is the clause where a render it would be about committed after the handlers, which is weighed whole, or
    * fits the time from their start to its commit. That one is longer than the working time only by the durations'
    * rounding: a 62.5 ms render that began as a click's handlers did and committed as they ended read "The render
-   * was longer than the 61 ms of working time, so it began before the handlers."
+   * was longer than the 61 ms of working time, so it began before the handlers." Several renders fit where each
+   * fits the time to its own commit and together they fit the time to the last: a 120 ms render committed 17 ms
+   * into the handlers, beside a 10 ms one near their end, fit the time to that end together, and the clause was
+   * left out.
    */
   const heldSaid = (named: CommitSummary, when = '') => {
     const several = severalRenders(named);
     const said = several ? renders : [named];
     const withThem = said.filter(withTheHandlers);
     if (withThem.length < said.length) return '';
-    if (said.reduce((a, x) => a + x.total, 0) <= roomTo(Math.max(...said.map((x) => x.at))) + STAMP_TOLERANCE) return '';
+    if (
+      said.every((x) => x.total <= roomTo(x.at) + STAMP_TOLERANCE) &&
+      said.reduce((a, x) => a + x.total, 0) <= roomTo(Math.max(...said.map((x) => x.at))) + STAMP_TOLERANCE
+    )
+      return '';
     const inWork = Math.min(r.processing, withThem.reduce((a, x) => a + held(x), 0));
     if (Math.round(inWork) >= Math.round(said.reduce((a, x) => a + x.total, 0))) return '';
     const within = `the ${ms(r.processing)} of working time${when ? ` ${when}` : ''}`;

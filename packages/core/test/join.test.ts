@@ -3680,6 +3680,32 @@ test("a render committed at the end of the handlers, past the paint the duration
     assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 61, confidence: 'measured' });
     assert.equal(r.explanation.cause, 'React spent 63 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
   }
+  // Several renders fit that time only where each fits the time to its own commit as well. A 120 ms render that began
+  // before 147 ms of handlers and committed 17 ms into them, beside a 10 ms one near their end, fit the time to that
+  // end together, and the clause was left out: 120 ms outside React and 130 ms of rendering in those 147 ms.
+  const handled = [entry('click', 1000, 200, 1003, 1150)];
+  const late = commit(1140, 1000, { startedAt: 1130, total: 10, ...sidebarRender });
+  const together = [commit(1020, 1000, { startedAt: 880, total: 120 }), commit(1020, 1000, { total: 120 })].map((x) => report(handled, [x, late], [], [input(1000, 'click')]));
+  for (const r of together) {
+    assert.equal(
+      r.explanation.cause,
+      'Code outside React (the click handler or other scripts) ran for about 120 ms; React spent 130 ms rendering across 2 commits, 120 ms of it re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). Some of that rendering began before the handlers, so at most 27 ms of it was in the 147 ms of working time.',
+    );
+  }
+  // The same under the render verdict, where a key's 140 ms render began before its keydown and committed 99 ms into
+  // the working time, beside a 25 ms one in the keyup's handlers. It was blamed for 99 ms, and the 165 ms were said
+  // with nothing on where they ran.
+  const pressed = report(
+    [entry('keydown', 0, 200, 1, 3), entry('keyup', 120, 80, 150, 190)],
+    [commit(100, 0, { inputType: 'keydown', startedAt: -50, total: 140 }), commit(185, 0, { inputType: 'keydown', startedAt: 160, total: 25, ...sidebarRender })],
+    [],
+    [input(0, 'keydown')],
+  );
+  assert.deepEqual(pressed.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 99, confidence: 'measured' });
+  assert.equal(
+    pressed.explanation.cause,
+    'React spent 165 ms rendering across 2 commits, 140 ms of it re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). Some of that rendering began before the handlers, so at most 124 ms of it was in the 189 ms of working time.',
+  );
   // And one too small for the verdict, in 4 ms of working time whose handlers ran 2 ms past it, is too.
   const small = report([entry('click', 0, 8, 4, 10)], [commit(9.5, 0, { startedAt: -100, total: 104 })], [], [input(0, 'click')]);
   assert.match(small.explanation.cause, /^At most 4 ms of the 4 ms of working time went to React's render, which began before the handlers \(104 ms /);
@@ -3711,7 +3737,9 @@ test("a render committed at the end of the handlers, past the paint the duration
   assert.equal(longer.explanation.blame.ms, 61);
   assert.deepEqual(longer.explanation.phases[1]?.parts?.map((p) => p.ms), [61]);
   assert.match(longer.explanation.cause, /: all 61 ms of working time, in a hydration that took 75 ms in all\.$/);
-  for (const r of [framed, unframed, unstarted, begun, ...through, small, rounded, filling, partial, production, hydrated, longer]) saysWithinTheWorkingTime(r);
+  for (const r of [framed, unframed, unstarted, begun, ...through, ...together, pressed, small, rounded, filling, partial, production, hydrated, longer]) {
+    saysWithinTheWorkingTime(r);
+  }
 });
 
 test("a render with no start kept is weighed on the time from the handlers' start to its commit, and a bound that is all the working time is left out", () => {
