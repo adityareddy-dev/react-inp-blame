@@ -248,17 +248,21 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?
 
   /**
    * Moves the badge off a corner the page's own fixed or sticky element holds, a chat button say, to the first
-   * free one of bottom right, bottom left, top right and top left, or leaves it bottom right where all four are
-   * taken. Asked only while the panel is closed, which would move with it.
+   * free one of bottom right, bottom left, top right and top left, or leaves it where it is where all four are
+   * taken, as under a dialog's backdrop. One drawn inside another shadow root counts too, as Next.js draws its dev
+   * indicator. Asked only while the panel is closed, which would move with it.
    */
   function place() {
     if (!('elementsFromPoint' in document)) return;
     const { width, height } = badge.getBoundingClientRect();
-    const taken = (c: string) =>
-      document
-        .elementsFromPoint(c[1] === 'r' ? innerWidth - 16 - width / 2 : 16 + width / 2, c[0] === 'b' ? innerHeight - 16 - height / 2 : 16 + height / 2)
-        .some((el) => el !== host && /^(fixed|sticky)$/.test(getComputedStyle(el).position));
-    wrap.className = `wrap ${['br', 'bl', 'tr', 'tl'].find((c) => !taken(c)) ?? 'br'}`;
+    const widget = (el: Element) => el !== host && /^(fixed|sticky)$/.test(getComputedStyle(el).position);
+    const taken = (c: string) => {
+      const x = c[1] === 'r' ? innerWidth - 16 - width / 2 : 16 + width / 2;
+      const y = c[0] === 'b' ? innerHeight - 16 - height / 2 : 16 + height / 2;
+      return document.elementsFromPoint(x, y).some((el) => widget(el) || (el !== host && !!el.shadowRoot?.elementsFromPoint(x, y).some(widget)));
+    };
+    const free = ['br', 'bl', 'tr', 'tl'].find((c) => !taken(c));
+    if (free) wrap.className = `wrap ${free}`;
   }
 
   /**
