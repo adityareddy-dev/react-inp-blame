@@ -376,10 +376,10 @@ On Next.js the body of either `onINP` callback goes in the `useReportWebVitals` 
 `interactionTarget` and `navigationURL` are undefined there.
 Neither recipe sends a label or a sentence: a report's `target.label`, `verdict` and other sentences
 can hold text the page shows, under `labels: 'text'` and by default in a development build, so forward
-those only from an app installed with `labels: 'attributes'`. The label it then gives, and the id and
-test id in `generateTarget`'s string, go out as your code wrote them, so check none is built from user
-data. `page_location` keeps its query string. `blame.name` can be a script's URL, or the page's for an
-inline script, and never has a password, query or fragment.
+those only from an app installed with `labels: 'attributes'`. The label that setting gives, and the id
+and test id in `generateTarget`'s string, go out as your code wrote them, so check none is built from
+user data. `page_location` keeps its query string. `blame.name` can be a script's URL, or the page's
+for an inline script, and never has a password, query or fragment.
 
 ## API
 
