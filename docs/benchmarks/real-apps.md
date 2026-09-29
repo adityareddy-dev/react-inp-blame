@@ -8,7 +8,8 @@ on apps nobody wrote for it, and whether what it blames is right.
 **INP did not move on any of them, at either speed.** Every INP interval holds zero, the phone Sheet's at 4x
 only just. The cost shows at page load on the shadcn site, as it did last time, and inside interactions only
 where the library's own read of a commit gets big: about 5 ms an interaction on twenty unthrottled and 10 ms
-at 4x, where a commit is close to 5,000 components.
+at 4x, where a commit runs past the 5,000 components the walk reads before it stops (how far past wasn't
+measured).
 
 **The blame was right in 11 of the 43 verdicts checked against the source, misleading in 18 and wrong in
 13**, and one couldn't be settled. Most of the misses get the kind of work and its milliseconds right, then

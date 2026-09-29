@@ -292,8 +292,8 @@ with thousands of components, page load took about 75 ms longer unthrottled, mos
 name stamps. A second run on five apps with 0.12.0 from npm,
 [docs/benchmarks/real-apps.md](docs/benchmarks/real-apps.md), found INP flat again. Page load on that
 same site was about 209 ms longer unthrottled that time (the interval runs from 73 to 254), and on
-twenty, where a commit is close to 5,000 components, reading them cost about 5 ms inside each
-interaction, 10 at 4x.
+twenty, whose commits run past the 5,000 components the walk reads before it stops, reading them cost
+about 5 ms inside each interaction, 10 at 4x.
 
 ## Labels and personal data
 
