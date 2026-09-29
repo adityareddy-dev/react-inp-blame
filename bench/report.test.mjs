@@ -1,0 +1,135 @@
+// report.test.mjs: report.mjs over a small results file in the shape bench.mjs writes, and the
+// failure text a run can leave in it. Nothing installed, no browser, the file is made up in a temp
+// folder.
+//
+//   node --test report.test.mjs      # or npm test
+
+import { after, test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const temps = [];
+after(() => {
+  for (const dir of temps) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+/** One run as bench.mjs records it, with the library in for every configuration but A. */
+function run(app, config, runIndex, inp) {
+  return {
+    app,
+    config,
+    throttle: 1,
+    runIndex,
+    warmup: false,
+    inp,
+    totalInteractionMs: inp,
+    interactions: [{ startTime: 10, duration: inp }],
+    firstInput: null,
+    loafBlockingMs: 0,
+    loafCount: 0,
+    readyMs: 500,
+    heap: null,
+    steps: [{ name: 'sort-lastName-asc', pageStart: 0, pageEnd: 1000 }],
+    lib:
+      config === 'A'
+        ? null
+        : {
+            stats: { installMs: 1, walkTotalMs: 1, reportTotalMs: 1, walks: 1, mode: 'hook' },
+            overheadTotalMs: 1,
+            reportCount: 1,
+            inp: { value: inp },
+            reports: [
+              {
+                type: 'click',
+                target: { label: 'Last Name' },
+                blame: { kind: 'component', name: 'Table', detail: 'render', ms: inp / 2, confidence: 'high' },
+                verdict: 'Table rendered',
+                duration: inp,
+                start: 10,
+              },
+            ],
+          },
+    console: [],
+    pageErrors: [],
+  };
+}
+
+/**
+ * Writes a results file for `app` with `configs` and ten runs each, `inp(config, i)` for run i, and
+ * returns its path. `skip` holds the `config:i` runs that failed and so are left out of the runs.
+ */
+function results({ app, configs, inp = (c, i) => 100 + 20 * i, skip = [], failures = [], libCheck = null }) {
+  const runs = [];
+  for (let i = 0; i < 10; i++) {
+    for (const c of configs) if (!skip.includes(`${c}:${i}`)) runs.push(run(app, c, i, inp(c, i)));
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-report-'));
+  temps.push(dir);
+  const file = path.join(dir, 'results', '2026-09-29T00-00-00-000Z.json');
+  fs.mkdirSync(path.dirname(file));
+  const data = {
+    started: '2026-09-29T00:00:00.000Z',
+    finished: '2026-09-29T01:00:00.000Z',
+    args: { runs: 10, app, throttles: [1] },
+    versions: {
+      node: 'v24.0.0',
+      chromium: '1',
+      playwright: '1.59.1',
+      os: 'test',
+      tarball: null,
+      npm: null,
+      libCheck,
+      apps: { [app]: { commit: 'c', react: '19.0.0', 'react-inp-blame': '0.12.0' } },
+    },
+    runs,
+    failures,
+  };
+  fs.writeFileSync(file, JSON.stringify(data));
+  return file;
+}
+
+function node(script, file) {
+  const r = spawnSync(process.execPath, [path.join(HERE, script), file], { cwd: HERE, encoding: 'utf8', timeout: 60000 });
+  assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+  return r.stdout;
+}
+
+test('tt-virtual-fix gets B and F, no A/B/C table and a pointer to before-after.mjs', () => {
+  const md = node('report.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'] }));
+  assert.doesNotMatch(md, /\| Metric \| A median/);
+  assert.match(md, /\n\| \| B \| F \|\n/);
+  assert.match(md, /node before-after\.mjs results\/2026-09-29T00-00-00-000Z\.json/);
+});
+
+test('the Source line names the results file without its folder', () => {
+  const file = results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'] });
+  const md = node('report.mjs', file);
+  assert.match(md, /^Source: `2026-09-29T00-00-00-000Z\.json`$/m);
+  assert.ok(!md.includes(path.dirname(file)));
+});
+
+test('a failure keeps its text with the home folder cut to ~, in both slash forms', () => {
+  const home = os.homedir();
+  const error = `ENOENT ${home}${path.sep}bench${path.sep}a.json, then ${home.replaceAll('\\', '/')}/bench/b.json`;
+  const md = node(
+    'report.mjs',
+    results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], skip: ['C:4'], failures: [{ app: 'tt-fuzzy', config: 'C', throttle: 1, runIndex: 4, error }] }),
+  );
+  const line = md.split('\n').find((l) => l.startsWith('- `tt-fuzzy` C x1 run 4:'));
+  assert.ok(line, md);
+  assert.ok(!line.includes(home) && !line.includes(home.replaceAll('\\', '/')), line);
+  assert.match(line, /ENOENT ~.bench.a\.json, then ~\/bench\/b\.json$/);
+});
+
+test('twenty with no saved sign-in names the state file relative to bench/', async () => {
+  const { apps } = await import('./apps-twenty.mjs');
+  assert.throws(
+    () => apps.twenty.contextOptions('never-built'),
+    (err) => err.message.includes(`at ${path.join('state', 'twenty-never-built.json')};`) && !err.message.includes(HERE),
+  );
+});

@@ -5,7 +5,7 @@
   "scripts": {
     "bench": "node bench.mjs",
     "report": "node report.mjs",
-    "test": "node --test configs.test.mjs"
+    "test": "node --test configs.test.mjs report.test.mjs"
   },
   "devDependencies": {
     "playwright": "1.59.1"
