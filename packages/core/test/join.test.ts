@@ -3739,6 +3739,14 @@ test("React's render time across several commits is said as their total with the
   const three = report([entry('click', 0, 72, 2, 30)], [commit(10, 0, small), commit(15, 0, small), commit(20, 0, small)], [], [input(0, 'click')]).explanation;
   assert.deepEqual(three.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 3, confidence: 'measured' });
   assert.equal(three.cause, 'React spent 9 ms rendering across 3 commits, 3 ms of it re-rendering 30 components inside List, mostly Row (30 of them, 2 ms).');
+  // Beside a handler the three are weighed together as well, not on the one commit's 3 ms: "React's own render took
+  // only 3 ms".
+  const handledThree = report([entry('click', 0, 216, 2, 200)], [commit(10, 0, small), commit(15, 0, small), commit(20, 0, small)], [], [input(0, 'click')]).explanation;
+  assert.equal(handledThree.blame.kind, 'handler');
+  assert.equal(
+    handledThree.cause,
+    'Code outside React (the click handler or other scripts) ran for about 189 ms; React spent 9 ms rendering across 3 commits, 3 ms of it re-rendering 30 components inside List, mostly Row (30 of them, 2 ms).',
+  );
   // One render beside a commit whose render rounds to nothing is said as it was.
   const alone = report([entry('click', 0, 72, 2, 40)], [commit(20, 0, { total: 0.2, rendered: 1 }), list], [], [input(0, 'click')]).explanation;
   assert.equal(alone.blame.kind, 'render');
