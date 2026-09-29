@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-28
+
 ### Changed
 
 - **`inp()` and its `interactionCount` leave out the badge and panel's own clicks, taps and key presses.** They
@@ -1685,7 +1687,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.15.0...v0.16.0
