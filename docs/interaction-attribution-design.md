@@ -1111,9 +1111,14 @@ is worth saying, so none of it goes unsaid under the wrong name. The handler, fo
 to outrun all of React's time to be the blame, committing and effects included, not only the render
 durations it was held against before spans existed. A render blame's milliseconds are the commit's in
 all, render, committing and effects, since that is what it accounts for. The render time is said the
-same way. Where more than one commit in the working time rendered, a sentence gives their total and the
-share of the commit it names: "React spent 55 ms rendering across 2 commits, 30 ms of it re-rendering 30
-components inside List". The share is not called the heaviest, since the commit a render blame names can
+same way. Where the effects are over half of the milliseconds, since 2026-09-28 the sentence leads with
+them and the detail is "useEffect callbacks": a chart that draws in its useEffect after the Chart button
+mounts it read as its parent's own render, 60 ms beside 361 ms of effects, with the note that memoising the
+components under it would not help. That note is left out there. Which component's effects ran is not
+recorded, so the detail names none. Where more than one commit in the working time rendered, a
+sentence gives their total and the share of the commit it names: "React spent 55 ms rendering across 2
+commits, 30 ms of it re-rendering 30 components inside List". The share is not called the heaviest,
+since the commit a render blame names can
 be a lighter render chosen for its committing. Every commit that rendered at all is counted, or six
 renders of under 1 ms each put their 2 ms on List. A hedged render sentence, and a note standing in for
 a closed render branch, keep the named render against the working time first and add the total after it,

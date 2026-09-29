@@ -2297,6 +2297,8 @@ function explain(r: InteractionReport): Explanation {
   // The commit a sentence set React's render time across several commits beside, where the count it gave has the
   // note on how many times React rendered count the same renders.
   let saidAcross: CommitSummary | null = null;
+  // The render blame's commit spent most of its time in useEffect callbacks, which the sentence and detail lead with.
+  let effectsLed = false;
   if (hydrationTook) {
     const { boundary, commit } = hydrationTook;
     const confidence = measuredFrom(commit);
@@ -2477,20 +2479,26 @@ function explain(r: InteractionReport): Explanation {
       : `React was ${HEDGE} ${renderPhrase(rc)}${placed(', ', `in the ${ms(r.processing)} of working time`)}. This React build records no render durations, so that is read from the component counts, not measured.`;
     // A list is the render's at any length, but past 2 ms a row the handler could hold the time as well.
     const listByCount = countOnly && !effectsThen && rc.rendered > 0 && r.processing > RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * rc.rendered;
+    // Where the commit's useEffect callbacks took over half of it, they lead too, and are its detail: a chart that
+    // draws in its useEffect after mounting read as its parent's own render, 60 ms against 361 ms of effects, with
+    // advice about memoising. Which component's effects they were is not recorded, so the detail names none.
+    effectsLed = hasDurations && rcEffects * 2 > own(rc);
+    const effectsFirst = `The commit's useEffect callbacks ${say(confidence, '', `${HEDGE} `)}ran for about ${ms(rcEffects)}${included(rc)} before the screen could update, after React spent ${renderAcross(rc, ms(rc.total))}.`;
     // A production build times the effects but not the render, so there the effects lead.
-    cause =
-      !hasDurations && effectsThen
+    cause = effectsLed
+      ? `${effectsFirst}${say(confidence, '', profiling)}`
+      : !hasDurations && effectsThen
         ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}`
         : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.`, `${likely}${listByCount ? ` It could have been ${handler} instead.${tellApart}` : profiling}`);
     if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
-    if (sayEffects && hasDurations) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
+    if (sayEffects && hasDurations && !effectsLed) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
     if (acrossCommits && hasDurations) cause += ` React also spent ${acrossCommits}.`;
     if (hasDurations) cause += alsoOthers;
     if (outsideMatters) cause += unlisted ? unaccounted : ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
-    blame = { kind: 'render', name: leafOf(rc), detail: mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
+    blame = { kind: 'render', name: leafOf(rc), detail: effectsLed ? 'useEffect callbacks' : mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
   } else if (untimedHandler && !waitingWins) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list
     // among the components, and more of the working time than a tree accounts for.
@@ -2656,7 +2664,7 @@ function explain(r: InteractionReport): Explanation {
   // in the components under it. Said of the render the blame names, where it is the advice worth having.
   // Not where more time than it went unaccounted for beside it, which may not have been the render's at all.
   const ownBlamed = blame.kind === 'render' && rc ? ownRender(rc) : undefined;
-  if (ownBlamed && !(unlisted && outsideMatters && outside > ownBlamed.self)) {
+  if (ownBlamed && !effectsLed && !(unlisted && outsideMatters && outside > ownBlamed.self)) {
     notes.push(`Time in ${ownBlamed.name}'s own render is usually work it does as it renders, like a sort or a filter, which memoising the components under it does not speed up.`);
   }
   // A wait between the handlers is `waiting` too, with where it came as its detail, and the wait before them is
