@@ -62,9 +62,10 @@
   time is invisible to the browser's own record. Nothing records *which* read forced the
   layout, so a `'layout'` blame's `name` and `detail` say where it happened instead: the joined commit's subtree and
   what it was mostly made of. Where the render started from a component that holds the whole commit (the
-  cause's "56 components from Dialog down"), that is the subtree named, with the whole count, since the
-  component a render is named after holds only part of it and the read can be anywhere in what React
-  rendered. That name is dropped for the browser's own invoker where no commit joined,
+  cause's "56 components from Dialog down"), that is the subtree named, since the component a render is
+  named after holds only part of it and the read can be anywhere in what React rendered. Its `detail` is
+  then what a render's would be, many of one component or one component's own render, and where it is a
+  count, the whole commit's ("56 components"), not "15 of 56". That name is dropped for the browser's own invoker where no commit joined,
   or where the one that did only overlapped the interaction in time, was walked short of the end, or sat
   beside commits that could not be tied to the interaction. The invoker itself is named only while one script
   holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
