@@ -1602,13 +1602,14 @@ Under the Next.js App Router the root is the document (`hydrateRoot(document)`),
 tag manager's both read `#document.onclick` there, so on that page with minified names nothing tells them
 apart.
 
-The rule names a render inside React's own listener after its component where the screen update is the
-verdict, and times one between the handlers as React's scheduler task is timed. It does not go the other way:
-a listener it does not know as React's is not known to be anyone else's. A page that wraps every listener
-before React creates its root, as Sentry's default integration and New Relic's agent do, hides both marks in
-a development build, and React's root listener then reads as `sentryWrapped` or as no name at all. So a tag
-manager's click listener that took most of a click beside a React handler still leaves the verdict with the
-handler, and the browser's scripts are read in the handler branch only where the target has no React handler.
+The rule times a render inside React's own listener between the handlers as React's scheduler task is
+timed. Where the screen update is the verdict, the listener keeps its own name: it runs the page's handlers
+too, so a render inside it need not be most of its time. It does not go the other way: a listener it does not
+know as React's is not known to be anyone else's. A page that wraps every listener before React creates its
+root, as Sentry's default integration and New Relic's agent do, hides both marks in a development build, and
+React's root listener then reads as `sentryWrapped` or as no name at all. So a tag manager's click listener
+that took most of a click beside a React handler still leaves the verdict with the handler, and the
+browser's scripts are read in the handler branch only where the target has no React handler.
 
 ## The demo
 
