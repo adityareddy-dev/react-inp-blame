@@ -656,6 +656,38 @@ export function readingReactDom(): boolean {
   return false;
 }
 
+/**
+ * What tells React's own listener from another in a report's scripts. `roots` are the containers of the roots
+ * committed so far, as Long Animation Frames names a listener's target ("DIV#root", "#document"), where that
+ * names one node: a container with an id, the body, or the document. `named` is every react-dom read being a
+ * development build, whose listener keeps its name (`dispatchDiscreteEvent`), so that a listener by any other
+ * name is not React's.
+ */
+export interface ReactPage {
+  readonly roots: readonly string[];
+  readonly named: boolean;
+}
+
+/** The `ReactPage` a report is built with, read as it is built. */
+export function reactPage(): ReactPage {
+  const roots = new Set<string>();
+  for (const ref of state.roots) {
+    const container = ref.deref()?.containerInfo as { nodeName?: unknown; id?: unknown } | null | undefined;
+    if (typeof container?.nodeName !== 'string') continue;
+    const id = typeof container.id === 'string' ? container.id : '';
+    if (id || container.nodeName === 'BODY' || container.nodeName === '#document') roots.add(`${container.nodeName}${id ? `#${id}` : ''}`);
+  }
+  let named = false;
+  if (state.attached) {
+    for (const renderer of registryOf(state.attached).values()) {
+      if (!renderer.isReactDom || renderer.devToolsOnly || renderer.problem) continue;
+      if (renderer.info.bundleType !== 1) return { roots: [...roots], named: false };
+      named = true;
+    }
+  }
+  return { roots: [...roots], named };
+}
+
 /** `api.debug.hook()`. */
 export function hookInfo(): HookInfo {
   return { owner: owner(), renderers: knownRenderers(), devtoolsLockedOut: state.devtoolsLockedOut };

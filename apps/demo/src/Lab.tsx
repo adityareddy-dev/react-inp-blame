@@ -11,6 +11,7 @@ import { LayoutThrash } from './scenarios/LayoutThrash';
 import { LiftedState } from './scenarios/LiftedState';
 import { RestyleStorm } from './scenarios/RestyleStorm';
 import { SlowRender } from './scenarios/SlowRender';
+import { TagManager } from './scenarios/TagManager';
 
 interface Scenario {
   title: string;
@@ -86,6 +87,14 @@ export const labScenarios: Record<string, Scenario> = {
     fix: 'Render fewer cells (virtualise the grid), or keep them out of layout with content-visibility or contain.',
     el: RestyleStorm,
   },
+  'tag-manager': {
+    title: 'Tag manager',
+    short: 'A listener React did not attach',
+    what: 'Click "Add to cart". The button sets one number; a tracking listener on the document burns 150 ms.',
+    problem: 'A click listener added outside React, the way tag managers and analytics add theirs, runs on every click on the page.',
+    fix: 'Defer the tracking work until after the paint, or send it from an idle callback.',
+    el: TagManager,
+  },
   fine: {
     title: 'Done right',
     short: 'Same shapes, memoised',
@@ -103,7 +112,7 @@ export function Lab({ scenario }: { scenario: string }) {
     <>
       <div className="topbar">
         <span>
-          <b>Anti-pattern lab</b> · eight slow interactions, each a named mistake
+          <b>Anti-pattern lab</b> · nine slow interactions, each a named mistake
         </span>
         <a href="#">← Sign-in demo</a>
       </div>
