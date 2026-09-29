@@ -10,7 +10,7 @@ import type { CommitSummary, NavigationType, StartedNavigation } from './types.j
 
 /** One navigation of the page. */
 export interface PageNavigation {
-  /** Its URL, absolute. */
+  /** Its URL, absolute, as `pageURL` leaves it. */
   readonly url: string;
   readonly type: NavigationType;
   /** `performance.now()` when it began: 0 for the document's own load. */
@@ -40,6 +40,20 @@ export interface RouterNavigation {
  */
 const router = shared<{ listener: ((navigation: RouterNavigation) => void) | null }>('router', () => ({ listener: null }));
 
+/**
+ * A URL as a report keeps it: its origin and path, without a query, a fragment or a password, since a
+ * report is made to be forwarded. One that does not parse is cut at its first `?` or `#`.
+ */
+export function pageURL(href: string): string {
+  try {
+    const url = new URL(href);
+    url.username = url.password = url.search = url.hash = '';
+    return url.href;
+  } catch {
+    return href.split(/[?#]/, 1)[0]!;
+  }
+}
+
 /** Tells the installation that a router started a soft navigation. Does nothing while nothing is installed. */
 export function routerNavigated(navigation: RouterNavigation): void {
   router.listener?.(navigation);
@@ -50,8 +64,9 @@ export function routerNavigated(navigation: RouterNavigation): void {
  * the page's URL, so include any base path. Reports of the interactions that begin after it carry the
  * URL, with `navigationType: 'soft-navigation'`, and the INP estimate starts over. Called while a click
  * or key press is being dispatched, that interaction's report names it in `startedNavigation`, as a
- * 'push'. Does nothing before install(), on a page the sample left out and on the server, and never
- * throws. The Next.js App Router needs no call: `withInpBlame` announces its navigations.
+ * 'push'. Reports keep its origin and path. Does nothing before install(), on a page the sample left
+ * out and on the server, and never throws. The Next.js App Router needs no call: `withInpBlame`
+ * announces its navigations.
  */
 export function announceNavigation(url: string | URL): void {
   if (typeof window === 'undefined' || !router.listener) return;

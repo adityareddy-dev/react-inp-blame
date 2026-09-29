@@ -536,7 +536,7 @@ export type NavigationType = 'navigate' | 'reload' | 'back-forward' | 'back-forw
 
 /** A soft navigation an interaction started, as the router announced it. */
 export interface StartedNavigation {
-  /** Where it went, as an absolute URL. */
+  /** Where it went: an absolute URL without its query, fragment or password. */
   readonly url: string;
   /** The router's word for it: 'push' or 'replace' for a link or `router.push()` / `router.replace()`, 'traverse' for back and forward. `announceNavigation` always records 'push'. */
   readonly type: 'push' | 'replace' | 'traverse';
@@ -558,7 +558,7 @@ export interface EventEntrySummary {
  */
 export interface InteractionReport {
   /** The version of this shape. It changes when a field is removed or changes meaning; a field added beside the others leaves it as it is. */
-  readonly schemaVersion: 3;
+  readonly schemaVersion: 4;
   readonly interactionId: number;
   /** The event the headline is named after: the best-known one in the headline entry's paint group. */
   readonly type: string;
@@ -632,9 +632,10 @@ export interface InteractionReport {
    */
   readonly hydration: Hydration | null;
   /**
-   * The URL of the page the interaction happened on: the document's, or that of the latest soft
-   * navigation that had begun when the interaction did. web-vitals' `Metric.navigationURL`, so a
-   * report lines up with the INP web-vitals reports for that URL.
+   * The origin and path of the page the interaction happened on: the document's, or that of the latest
+   * soft navigation that had begun when the interaction did. A query, a fragment and a password are left
+   * out, since a report is made to be forwarded. web-vitals' `Metric.navigationURL` keeps them, so match
+   * the two on the path.
    */
   readonly navigationURL: string;
   /** How the page came to be at `navigationURL`: web-vitals' `Metric.navigationType`. */
