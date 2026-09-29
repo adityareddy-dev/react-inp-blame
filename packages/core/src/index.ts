@@ -296,7 +296,7 @@ function installNow(opts: InstallOptions): Api {
   const navigated = (navigation: PageNavigation) => {
     navigations.push(navigation);
     if (navigations.length > MAX_NAVIGATIONS) navigations.shift();
-    lifecycle.onNavigation(navigation.start, !!navigation.router && !navigation.router.input);
+    lifecycle.onNavigation(navigation.start);
     // The badge shows the INP of the navigation the page is on, which has just started over.
     page.overlay?.then((handle) => handle?.refresh());
   };

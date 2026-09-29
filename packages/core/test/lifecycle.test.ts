@@ -582,18 +582,6 @@ test('a navigation starts the INP estimate over from the interactions that begin
   assert.equal(life.inp()?.interactionId, 28);
 });
 
-test('a navigation announced in a commit lets go of quiet ones after it, so the render that commit holds still joins the click that started it', async () => {
-  for (const handedOver of [false, true]) {
-    const { life, published, render } = lifecycle();
-    life.onEntries([entry(14, 'click', 24)]);
-    life.onNavigation(14_500, true);
-    // Once the commit is handed over, the page it left keeps no quiet click for a later render to publish.
-    if (handedOver) await Promise.resolve();
-    render(commit(14_600, 14_000));
-    assert.deepEqual(published.map((r) => r.interactionId), handedOver ? [] : [14]);
-  }
-});
-
 test('hiding the page chooses INP again at the interaction count by then', () => {
   let count = 0;
   const { life } = lifecycle({ interactionCount: () => count });

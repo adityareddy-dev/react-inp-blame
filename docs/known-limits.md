@@ -17,6 +17,11 @@
 - **An interaction after the page's first input that paints in under 16 ms gets no report**, however heavy the
   render after it: the browser sends no Event Timing entry for it. The first input still arrives as a
   `first-input` entry. See "Quiet interactions" in the [design notes](interaction-attribution-design.md).
+- **A quick React Router link click whose new route renders in a later task gets no report**, however slow
+  that render, where `announceNavigation` is called from a layout effect as
+  [Install](install.md#install-with-react-router) shows: the announcement lets go of quiet interactions before
+  React hands over the commit that holds the route. Keeping them past it would make the route Back or Forward
+  goes back to a quiet click's later render.
 - React 18 and 19 development builds print "Download the React DevTools" on pages where the library created the
   hook: it has no `checkDCE`, which react-dom takes to mean React DevTools is there.
 - **Hydration is joined to an input only when React hydrated inside that input's dispatch**, which is what
