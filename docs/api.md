@@ -53,14 +53,14 @@ here and on [`react-inp-blame/web-vitals`](web-vitals.md): `generateTarget` retu
 ## announceNavigation(url)
 
 Tells the library that your router changed the route in the page, to `url`. Reports of the interactions that
-begin after it carry that URL in `navigationURL`, with `navigationType: 'soft-navigation'`, and `inp()` and
-the badge start over. Called while a click or key press is being dispatched, it is named on that interaction's
-report in `startedNavigation`, always with `type: 'push'`. The URL may be relative to the page, and should
-include any base path. From a React effect, call it in `useLayoutEffect`: a `useEffect` can run later, inside
-the next click, and name that click as the one that started the navigation. It does nothing before
-`install()`, on a page the sample left out, in a production build the plugin left the library out of, on the
-server and under `react-server`, and it never throws. Under the Next.js App Router `withInpBlame` already
-announces each navigation, so do not call it there.
+begin after it carry that URL's origin and path in `navigationURL`, with `navigationType: 'soft-navigation'`,
+and `inp()` and the badge start over. Called while a click or key press is being dispatched, it is named on
+that interaction's report in `startedNavigation`, always with `type: 'push'`. The URL may be relative to the
+page, and should include any base path. From a React effect, call it in `useLayoutEffect`: a `useEffect` can
+run later, inside the next click, and name that click as the one that started the navigation. It does nothing
+before `install()`, on a page the sample left out, in a production build the plugin left the library out of,
+on the server and under `react-server`, and it never throws. Under the Next.js App Router `withInpBlame`
+already announces each navigation, so do not call it there.
 [Install with React Router](install.md#install-with-react-router) and
 [Install with TanStack Start](install.md#install-with-tanstack-start) show where to call it.
 
@@ -68,7 +68,7 @@ announces each navigation, so do not call it there.
 
 ```ts
 interface InteractionReport {
-  schemaVersion: 3; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
+  schemaVersion: 4; interactionId: number; revision: number; type: string; // 'click', 'keydown', ...
   pointerType: string | null;                            // 'mouse', 'pen' or 'touch' for a pointer's event
   reactStatus: 'reading' | 'waiting' | 'installed-late' | 'unreadable'; // stats().react as it was built
   reactBuild: 'development' | 'production' | 'profiling' | null; // development numbers run high: drop or label them
@@ -181,11 +181,12 @@ as Monaco does, cannot be told from the rest of the page, so a click on that tex
 Development builds use text by default. What each `labels` value may read is fixed for 1.x, though the words a
 label comes out with, and which source wins, can change in a minor. Whatever `labels` says, `target.selector`
 has the tag, the `id` if there is one, and `data-test` or `data-testid` or else two classes, and
-`navigationURL` and `startedNavigation.url` are full URLs, query string included. A script the browser names
-by its URL, or by the page's for an inline script, loses any password, query or fragment in a blame's `name`,
-the sentences and `frames`. What your code wrote goes out as written, though: an `aria-label`, `data-testid`
-or `id` built from user data, such as `` aria-label={`Message ${user.name}`} ``, lands in `target.label` or
-`target.selector`, and the label in the verdict.
+`navigationURL` and `startedNavigation.url` keep a URL's origin and path, never its query, fragment or
+password. A script the browser names by its URL, or by the page's for an inline script, loses any password,
+query or fragment in a blame's `name`, the sentences and `frames`. What your code wrote goes out as written,
+though: an `aria-label`, `data-testid` or `id` built from user data, such as
+`` aria-label={`Message ${user.name}`} ``, lands in `target.label` or `target.selector`, and the label in the
+verdict.
 
 ## The badge and panel
 

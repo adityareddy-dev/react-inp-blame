@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { announceNavigation, install, mountOverlay, onInteraction } from '../src/index.ts';
 import { page as installState } from '../src/install-state.ts';
 import { MAX_REPORTS } from '../src/lifecycle.ts';
-import { routerNavigated } from '../src/navigation.ts';
+import { pageURL, routerNavigated } from '../src/navigation.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 import { attributeINP } from '../src/web-vitals.ts';
 
@@ -2076,10 +2076,10 @@ test('announceNavigation resolves a relative URL against the page, takes a URL o
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false });
     clock.now = 1000;
-    announceNavigation('?page=2');
+    announceNavigation('../cart');
     clock.now = 2000;
     page.paint([click(7, 2000, 64)]);
-    assert.equal(api.last()?.navigationURL, 'https://shop.example/products?page=2');
+    assert.equal(api.last()?.navigationURL, 'https://shop.example/cart');
 
     clock.now = 3000;
     const clickedAt = page.duringClick(() => announceNavigation(new URL('https://shop.example/cart')));
@@ -2087,6 +2087,51 @@ test('announceNavigation resolves a relative URL against the page, takes a URL o
     assert.deepEqual(api.last()?.startedNavigation, { url: 'https://shop.example/cart', type: 'push' });
     api.dispose();
   });
+});
+
+test('a URL in a report keeps its origin and path, never its query, fragment or password', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    Object.defineProperty(globalThis, 'location', { value: { href: 'https://ann:s3cret@shop.example/products?token=s3cret-abc#access_token=xyz', search: '?token=s3cret-abc', hash: '#access_token=xyz' }, configurable: true, writable: true });
+    const api = install({ devtoolsTrack: false });
+    clock.now = 1000;
+    page.paint([click(7, 1000, 64)]);
+    assert.equal(api.last()?.navigationURL, PAGE_URL);
+
+    // Announced from a click, with a query and a fragment of its own.
+    clock.now = 2000;
+    const clickedAt = page.duringClick(() => {
+      clock.now = 2004;
+      announceNavigation('/cart?utm_source=mail#top');
+    });
+    page.paint([click(14, clickedAt, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: { url: 'https://shop.example/cart', type: 'push' } });
+    clock.now = 3000;
+    page.paint([click(21, 3000, 64)]);
+    assert.equal(api.last()?.navigationURL, 'https://shop.example/cart');
+
+    // A router integration, from this copy or an older one, hands the whole URL over.
+    routerNavigated({ url: 'https://shop.example/search?q=boots#results', type: 'replace', at: 4000 });
+    clock.now = 5000;
+    page.paint([click(28, 5000, 64)]);
+    assert.equal(api.last()?.navigationURL, 'https://shop.example/search');
+
+    page.fire('pageshow', { persisted: true, timeStamp: 6000 });
+    clock.now = 7000;
+    page.paint([click(35, 7000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: 'https://shop.example/search', navigationType: 'back-forward-cache', startedNavigation: null });
+    api.dispose();
+  });
+});
+
+test('pageURL keeps the origin and path of any URL, and cuts one that does not parse at its query or fragment', () => {
+  assert.equal(pageURL('https://ann:s3cret@shop.example:8443/a/b?c=1#d'), 'https://shop.example:8443/a/b');
+  assert.equal(pageURL('https://shop.example/products'), 'https://shop.example/products');
+  assert.equal(pageURL('https://shop.example#/cart?id=4'), 'https://shop.example/');
+  assert.equal(pageURL('about:blank'), 'about:blank');
+  assert.equal(pageURL('file:///C:/app/index.html?x=1'), 'file:///C:/app/index.html');
+  assert.equal(pageURL('/cart?token=1#top'), '/cart');
+  assert.equal(pageURL('cart#top?x'), 'cart');
 });
 
 test('announceNavigation does nothing and does not throw before install(), after dispose(), or for a URL that does not parse', async () => {

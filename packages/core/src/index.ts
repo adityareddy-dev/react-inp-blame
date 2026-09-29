@@ -5,7 +5,7 @@ import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
 import { labelOf, scriptsUnlisted, type LabelSource } from './join.js';
 import { createLifecycle, MAX_REPORTS } from './lifecycle.js';
-import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
+import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, pageURL, type PageNavigation } from './navigation.js';
 import { NOT_OBSERVING, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
 import { overlayHidden, overlayRequested } from './overlay-host.js';
@@ -240,8 +240,10 @@ function installNow(opts: InstallOptions): Api {
   });
 
   // Where reports happened: the document's own navigation, then each soft navigation a router
-  // announces and each restore from the back/forward cache, oldest first.
-  const navigations: PageNavigation[] = [documentNavigation()];
+  // announces and each restore from the back/forward cache, oldest first. Each keeps only its URL's
+  // origin and path (`pageURL`), whichever router or copy of the library announced it.
+  const load = documentNavigation();
+  const navigations: PageNavigation[] = [{ ...load, url: pageURL(load.url) }];
   // Whether React has rendered on the page: sticky once seen, and looked for at most once a second and at
   // most REACT_LOOKS times while no react-dom has registered, since each look reads the page's elements.
   // Input the page has seen since the last look makes the next one due, so while looks remain a report never
@@ -294,7 +296,7 @@ function installNow(opts: InstallOptions): Api {
   });
 
   const navigated = (navigation: PageNavigation) => {
-    navigations.push(navigation);
+    navigations.push({ ...navigation, url: pageURL(navigation.url) });
     if (navigations.length > MAX_NAVIGATIONS) navigations.shift();
     lifecycle.onNavigation(navigation.start);
     // The badge shows the INP of the navigation the page is on, which has just started over.

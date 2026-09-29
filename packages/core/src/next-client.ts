@@ -73,7 +73,7 @@ interface RouterTransitionStartEvent {
 /**
  * Called by the App Router as each navigation starts. A navigation started while an input was being
  * dispatched (a Link click, `router.push()` in a click handler) is named on that input's report, and
- * every report after it carries its URL.
+ * every report after it carries its URL's origin and path.
  */
 export function onRouterTransitionStart(url: string, navigationType: StartedNavigation['type'], event?: RouterTransitionStartEvent | null): void {
   if (process.env.REACT_INP_BLAME_NEXT && settings) {
