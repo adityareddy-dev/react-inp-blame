@@ -53,7 +53,7 @@ for (const id of noBuild ? [] : appIds) {
     else run(NPM, ['install', '--no-audit', '--no-fund'], { cwd: app.dir });
   }
   // An app whose build needs something generated first (shadcn-ui/ui generates its whole
-  // component registry from source) does that once, before the three configuration builds.
+  // component registry from source) does that once, before the configuration builds.
   if (app.prepare) {
     console.log(`\n== prepare ${id}`);
     app.prepare(run);

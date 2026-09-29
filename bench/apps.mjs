@@ -1,9 +1,9 @@
 // App definitions for the benchmark.
 //
-// Each app declares where its three builds live, which ports they are served on, and a scripted
-// interaction sequence. Every step must assert that the DOM actually changed: a step whose assert
-// fails aborts the run loudly rather than quietly contributing a fast "interaction" that never
-// happened.
+// Each app declares where its builds live, one per configuration it has, which ports they are
+// served on, and a scripted interaction sequence. Every step must assert that the DOM actually
+// changed: a step whose assert fails aborts the run loudly rather than quietly contributing a fast
+// "interaction" that never happened.
 //
 // Ports are confined to 5310-5334.
 //
@@ -427,9 +427,9 @@ apps['excalidraw'] = {
 //
 // It is here because of the project's own open issue #6879, "Low INP score on mobile devices".
 //
-// Three `next build` outputs of the same source (.next-a/b/c) served by three `next start`
-// processes, not a static directory: the App Router needs its server for RSC payloads, soft
-// navigation and the search route the command menu calls.
+// Three `next build` outputs of the same source (.next-a, .next-b-new, .next-c) served by three
+// `next start` processes, not a static directory: the App Router needs its server for RSC payloads,
+// soft navigation and the search route the command menu calls.
 
 const V4 = path.join(HERE, 'clones', 'ui', 'apps', 'v4');
 const NEXT_BIN = path.join(V4, 'node_modules', 'next', 'dist', 'bin', 'next');
