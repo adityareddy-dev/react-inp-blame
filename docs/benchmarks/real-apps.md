@@ -361,4 +361,5 @@ to take: TanStack's row compare still reads each value twice per comparison unle
 - **The blame check read source, not traces, except where a trace is named.** A second reader tried to refute
   every finding, and six grades moved. It is still a reading of the code, and one verdict stays unsettled.
 
-The harness is not in this repository yet.
+The harness is in [bench/](../../bench/README.md), with the commands for this run. twenty and cal.diy need a
+local account on your own seeded copy of each, as its README says.
