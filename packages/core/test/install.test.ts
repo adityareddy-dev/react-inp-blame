@@ -5072,6 +5072,39 @@ test('a build whose component names look minified says so in the report and once
   });
 });
 
+test('a development build is warned once, at the second interaction whose long frames listed no scripts', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const unlisted = () => warn.mock.calls.filter((c) => /#frames-without-scripts$/.test(String(c.arguments[0])));
+  const script = { invoker: 'BUTTON.onclick', sourceFunctionName: 'save', sourceURL: 'https://shop.example/app.js', startTime: 1010, duration: 250, forcedStyleAndLayoutDuration: 0 };
+  await inBuild('development', () =>
+    inBrowser(
+      (page) => {
+        const api = install({ devtoolsTrack: false });
+        try {
+          // One frame that names its script, then the same click twice more with none named.
+          page.queue([click(7, 1000, 300), longFrame(1010, [script])]);
+          page.paint([]);
+          page.queue([click(8, 2000, 300), longFrame(2010, [])]);
+          page.paint([]);
+          // The same interaction revised is still one.
+          page.queue([longFrame(2100, [])]);
+          page.paint([]);
+          assert.equal(unlisted().length, 0);
+          page.queue([click(9, 3000, 300), longFrame(3010, [])]);
+          page.paint([]);
+          page.queue([click(10, 4000, 300), longFrame(4010, [])]);
+          page.paint([]);
+          assert.equal(unlisted().length, 1);
+          assert.match(String(unlisted()[0]!.arguments[0]), /Long Animation Frames on this page list no scripts, so forced layout cannot be measured here/);
+        } finally {
+          api.dispose();
+        }
+      },
+      { entryTypes: ['event', 'first-input', 'long-animation-frame'] },
+    ),
+  );
+});
+
 test('stats().react says whether React can be seen, and a report built while it cannot says React\'s work is unknown', async (t) => {
   t.mock.method(console, 'warn', () => {});
   const clock = useClock(t);

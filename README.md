@@ -299,6 +299,7 @@ with the warning text.
 - <a id="late-install"></a>[install() ran after a React root had already rendered](docs/troubleshooting.md#late-install)
 - <a id="no-renderer"></a>[React has rendered, but no react-dom has registered](docs/troubleshooting.md#no-renderer)
 - <a id="minified-names"></a>[Most component names are one or two characters](docs/troubleshooting.md#minified-names)
+- <a id="frames-without-scripts"></a>[Long Animation Frames on this page list no scripts](docs/troubleshooting.md#frames-without-scripts)
 - <a id="another-copy"></a>[A copy from an incompatible version is already on this page](docs/troubleshooting.md#another-copy)
 - <a id="unsupported-browser"></a>[This browser has no Event Timing interactionId](docs/troubleshooting.md#unsupported-browser)
 - <a id="reinstall"></a>[install() had already run](docs/troubleshooting.md#reinstall)

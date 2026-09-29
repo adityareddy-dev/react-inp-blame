@@ -697,6 +697,18 @@ export interface VerdictCounts {
   readonly whereBetween: string;
 }
 
+/** Whether the long frames over a report's handlers, from `start` to `end`, list no script at all, where one of them is long. */
+function listsNoScripts(frames: readonly FrameSummary[], start: number, end: number): boolean {
+  const over = frames.filter((f) => f.start < end && f.start + f.duration > start);
+  return over.length > 0 && over.every((f) => f.scripts.length === 0) && over.some((f) => f.duration >= LONG_TASK_MS);
+}
+
+/** Whether the report's verdict could not say what its handlers' time went on, since the frames over them listed no scripts. */
+export function scriptsUnlisted(r: InteractionReport): boolean {
+  const start = r.start + r.inputDelay;
+  return listsNoScripts(r.frames ?? [], start, start + r.processing + r.walkMs);
+}
+
 /** Counts by report, kept as each is explained. */
 const countsByReport = new WeakMap<InteractionReport, VerdictCounts>();
 
@@ -2104,7 +2116,13 @@ function explain(r: InteractionReport): Explanation {
   const profilingRender = profiling ? ' A profiling build of React would time the render too.' : '';
   // The handler is the blame where it outruns all of React's time, or where React's time, whatever it
   // is, would not be the blame anyway: a 28 ms handler beside a 4 ms render and 24 ms of effects.
-  const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
+  // Where the long frames over the handlers list no script at all, nothing says the time outside React was the
+  // handler's: a modal that forced layout in a layout effect read "the onClick handler ran for about 151 ms" for
+  // a handler that is one setState, under a dev server whose frames listed no scripts. It is said as unaccounted
+  // for instead, and never takes the verdict from a render that would have had it.
+  const unlisted = listsNoScripts(frames, processingStart, processingEnd);
+  const unaccounted = ` ${ms(outside)} outside React's render is not accounted for: the browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.`;
+  const handlerWins = outsideMatters && (outside > reactTime || !renderMatters) && !(unlisted && renderMatters);
   // A listener React did not attach (a shortcut bound on the document, a tag manager's, a library's own) is what
   // the handler's time went on where it holds most of it and is known not to be React's own listener, which runs
   // the handler and renders: it names the blame, as a script, by its function where the browser gives one. A tag
@@ -2458,7 +2476,7 @@ function explain(r: InteractionReport): Explanation {
     if (sayEffects && hasDurations) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
     if (acrossCommits && hasDurations) cause += ` React also spent ${acrossCommits}.`;
     if (hasDurations) cause += alsoOthers;
-    if (outsideMatters) cause += ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
+    if (outsideMatters) cause += unlisted ? unaccounted : ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
@@ -2625,8 +2643,9 @@ function explain(r: InteractionReport): Explanation {
   }
   // What the sentence put on one component's own render: the fix is in what that component computes, not
   // in the components under it. Said of the render the blame names, where it is the advice worth having.
+  // Not where more time than it went unaccounted for beside it, which may not have been the render's at all.
   const ownBlamed = blame.kind === 'render' && rc ? ownRender(rc) : undefined;
-  if (ownBlamed) {
+  if (ownBlamed && !(unlisted && outsideMatters && outside > ownBlamed.self)) {
     notes.push(`Time in ${ownBlamed.name}'s own render is usually work it does as it renders, like a sort or a filter, which memoising the components under it does not speed up.`);
   }
   // A wait between the handlers is `waiting` too, with where it came as its detail, and the wait before them is

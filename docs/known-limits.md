@@ -71,6 +71,14 @@
   holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
   it, `name` is `null` and the cause names the largest with the share it holds. The milliseconds are the
   browser's either way, so `confidence` is about them alone and is never lowered to cover a doubtful name.
+- **A long animation frame that lists no scripts says nothing about what the time outside React went on.**
+  Under `next dev --webpack` a modal whose layout effect forced layout came back as a 365 ms frame with no
+  scripts in it, and the verdict read "On top of that, the onClick handler ran for about 151 ms" for a
+  handler that is one setState. The same click under Turbopack measured the layout. Why webpack's dev frames
+  list no scripts is not verified (its eval'd modules are the guess). Where every frame over the handlers lists
+  none and one of them is 50 ms or longer, the time outside React's render is said to be not accounted for,
+  the handler does not take the verdict from a render on it, and a development build warns once, at the second
+  such interaction ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
 - **A listener React did not attach is blamed only where it is known not to be React's own.** A tag
   manager's click listener on the document that took most of a click is a `'script'` blame named by its
   function ("trackClick") where a development build keeps React's listener named, or where React's listener

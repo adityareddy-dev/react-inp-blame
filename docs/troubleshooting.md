@@ -63,6 +63,15 @@ and only the component a report names is short, the note says that one is most l
 React DevTools shows the same short name, but selecting it there shows its props and what rendered it, which
 usually says whose it is.
 
+<a id="frames-without-scripts"></a>
+### Long Animation Frames on this page list no scripts
+
+The browser timed long frames on this page but named no script inside them, so the library cannot tell a
+slow handler from a forced layout in an effect, and cannot measure the layout at all. Reports say the time
+outside React's render is not accounted for instead of putting it on a handler. It has been seen under
+`next dev --webpack`, where the same page under Turbopack (`next dev`) lists its scripts, though the cause is
+not confirmed. A production build, or another dev server, is where to measure layout on such a page.
+
 <a id="another-copy"></a>
 ### A copy from an incompatible version is already on this page
 

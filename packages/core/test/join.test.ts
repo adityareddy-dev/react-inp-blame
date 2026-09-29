@@ -3269,6 +3269,38 @@ test('with long animation frames, React time and forced layout are not added tog
   assert.match(r.explanation.cause, /On top of that, .* ran for about 150 ms./);
 });
 
+test('where a long frame lists no scripts, the time outside React is said to be unaccounted for, not the handler\'s', () => {
+  // A modal whose layout effect forces layout, under a dev server whose long animation frames list no scripts: the
+  // onClick is one setState, and 151 ms of the 365 went nowhere the browser said.
+  const openModal = (render: number, scripts: ScriptSummary[], duration = 365) =>
+    report(
+      [entry('click', 1000, 368, 1001, 1366)],
+      [commit(1360, 1000, { total: render, rendered: 3, roots: ['TeamModal'], hotPath: ['TeamModal'], components: [{ name: 'TeamModal', count: 1, self: render - 4, total: render }, { name: 'Avatar', count: 2, self: 2, total: 2 }], startedAt: 1360 - render })],
+      [frame(1000, duration, scripts)],
+      [input(1000, 'click', { target: element('button', [text('Team')]) as unknown as Node, owners: ['TeamPage'], handler: 'onClick' })],
+    );
+  const unaccounted = "151 ms outside React's render is not accounted for: the browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.";
+  const r = openModal(214, []);
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['render', 'TeamModal']);
+  assert.doesNotMatch(r.explanation.cause, /On top of that|onClick/);
+  assert.ok(r.explanation.cause.endsWith(` ${unaccounted}`), r.explanation.cause);
+  // The render outruns the time nothing accounts for, so the note on its own render still stands.
+  assert.ok(r.explanation.notes.some((n) => n.startsWith("Time in TeamModal's own render")));
+
+  // Where that time outruns the render, the handler does not take the verdict on it, and the note on the render's
+  // own work is left out, since most of the time may not be the render's at all.
+  const larger = openModal(100, []);
+  assert.deepEqual([larger.explanation.blame.kind, larger.explanation.blame.name], ['render', 'TeamModal']);
+  assert.match(larger.explanation.cause, / 265 ms outside React's render is not accounted for: /);
+  assert.ok(!larger.explanation.notes.some((n) => n.startsWith("Time in TeamModal's own render")), larger.explanation.notes.join('\n'));
+
+  // With a script listed, or no frame long enough to have listed one, the handler is said as before.
+  const listed = openModal(214, [script('DIV#root.onclick', 1002, 10)]);
+  assert.match(listed.explanation.cause, /On top of that, the onClick handler ran for about 151 ms\./);
+  const short = openModal(100, [], 40);
+  assert.equal(short.explanation.blame.kind, 'handler');
+});
+
 test('a few milliseconds of committing do not make a small render outrank a wait', () => {
   // A click that waited 300 ms behind another task, then rendered for 2 ms and committed for 4. Every
   // development build commits for a few milliseconds; that is no reason to blame a 2 ms render.

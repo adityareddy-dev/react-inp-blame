@@ -1384,6 +1384,18 @@ before this, in the verdict that names a long animation frame's script and in th
 to waiting and painting, and looking again for every report would bring back the cost the looks are
 capped to save.
 
+**A long frame that lists no scripts says nothing of the handler.** The working time outside React's own
+time is the handler's figure, but a frame the browser timed without naming a script in it could have spent
+that time anywhere: under `next dev --webpack` a modal that forced layout in a layout effect came back as one
+365 ms frame with no scripts, a 214 ms render of TeamModal, and "On top of that, the onClick handler ran for
+about 151 ms" for a handler that is one setState, with the note on TeamModal's own render after it. Where
+every frame over the handlers lists no scripts and one of them is 50 ms or longer, the sentence says instead
+that the 151 ms outside React's render is not accounted for, since a forced layout in an effect cannot be told
+apart from a slow handler there, and the handler does not take the verdict from a render on that time. The
+own-render note is left out where more time went unaccounted for than the render it would describe. A frame
+under 50 ms, or one that names any script, is read as before, and a development build warns once, at the
+second interaction whose frames listed none. Why webpack's dev frames list nothing is not verified.
+
 **How sure the blame is.** The cause is chosen by named thresholds, each with its reason beside
 it in `join.ts`: the handler is blamed from 25 ms of working time outside React's own time (the
 larger of two figures: each render's start to its commit's end, where the build keeps the start, and

@@ -3,7 +3,7 @@ import { createTimeline } from './devtools.js';
 import { checkHookReplaced, clearCommits, CLOSER_TYPES, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteCloser, noteInput, noteKeypress, noteResize, reactPage, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
-import { labelOf, type LabelSource } from './join.js';
+import { labelOf, scriptsUnlisted, type LabelSource } from './join.js';
 import { createLifecycle, MAX_REPORTS } from './lifecycle.js';
 import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
 import { NOT_OBSERVING, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
@@ -212,6 +212,8 @@ function installNow(opts: InstallOptions): Api {
   // exception is the page being hidden, below.
   const undelivered: InteractionReport[] = [];
   let delivery: ReturnType<typeof setTimeout> | null = null;
+  // Interactions whose long frames listed no scripts, up to the second, which is when the page is warned.
+  const unlisted = new Set<number>();
   const deliver = guarded(() => {
     delivery = null;
     const reports = undelivered.splice(0);
@@ -283,6 +285,9 @@ function installNow(opts: InstallOptions): Api {
       undelivered.push(r);
       delivery ??= setTimeout(deliver, 0);
       if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', MINIFIED_NAMES_CONSOLE);
+      if (unlisted.size < 2 && scriptsUnlisted(r) && unlisted.add(r.interactionId).size === 2) {
+        warnOnce('frames-without-scripts', "Long Animation Frames on this page list no scripts, so forced layout cannot be measured here. A verdict says the time outside React's render is not accounted for rather than put it on a handler.", 'frames-without-scripts', developmentBuild);
+      }
       drawWhenIdle(r);
     },
   });
