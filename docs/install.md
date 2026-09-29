@@ -307,11 +307,12 @@ placed on the page it left. From a plain `useEffect` the call would come later, 
 as the one that started the navigation. The click that did start it is not named in `startedNavigation` though,
 since React Router renders the new route in a transition, after the click. The same component works in data and
 declarative mode, inside the router and ahead of the routes. It announces when the URL changes, so a change of
-query string alone counts as a navigation, as under the App Router, and a link to the page it is on does not,
-though React Router gives that a new `location.key` too. The import stays in every build, so a production build
-the plugin leaves the library out of still carries `announceNavigation`, about 0.3 KB gzipped, and there it does
-nothing. CI's copies of this app render it and check where each report is placed, under `react-router dev` and
-on the production build.
+query string alone counts as a navigation, as under the App Router, though the reports after it carry the same
+`navigationURL`, which keeps no query. A link to the page it is on does not count, even with the new
+`location.key` React Router gives it. The import stays in every build, so a production build the plugin leaves
+the library out of still carries `announceNavigation`, about 0.3 KB gzipped, and there it does nothing. CI's
+copies of this app render it and check where each report is placed, under `react-router dev` and on the
+production build.
 
 ## Install with Remix
 
@@ -465,13 +466,13 @@ TanStack Router takes from the last route that finished loading: going back befo
 `beforeLoad` that redirects to the page it was on, would leave reports on a URL the page had left. It still
 waits for `fromLocation`, which stays unset until the first load finishes: a route whose `validateSearch` fills
 in a default the URL lacks rewrites the address as it first loads, and that is still the document's own
-navigation. A change of query string alone counts as a navigation here too. In a TanStack Router app without
-Start, put the same `router.subscribe` call after `createRouter`. That is for browser history, the default.
-Under `createHashHistory`, `router.history.location.href` is the path inside the hash, so a report would carry
-it as a path from the site's root, `https://shop.example/second` for `https://shop.example/app/#/second`, and
-not the URL the address bar shows. As under React Router, a production build the plugin leaves the library out
-of still carries `announceNavigation`, about 0.3 KB gzipped, where it does nothing. CI's copy of this app runs
-these lines too.
+navigation. A change of query string alone counts as a navigation here too, with the same `navigationURL` as
+before it. In a TanStack Router app without Start, put the same `router.subscribe` call after `createRouter`.
+That is for browser history, the default. Under `createHashHistory`, `router.history.location.href` is the path
+inside the hash, so a report would carry it as a path from the site's root, `https://shop.example/second` for
+`https://shop.example/app/#/second`, and not the URL the address bar shows. As under React Router, a production
+build the plugin leaves the library out of still carries `announceNavigation`, about 0.3 KB gzipped, where it
+does nothing. CI's copy of this app runs these lines too.
 
 ## Install with Astro
 
