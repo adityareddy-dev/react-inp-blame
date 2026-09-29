@@ -2508,9 +2508,16 @@ function explain(r: InteractionReport): Explanation {
     const listByCount = countOnly && !effectsThen && rc.rendered > 0 && r.processing > RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * rc.rendered;
     // Where the commit's useEffect callbacks took over half of it, they lead too, and are its detail: a chart that
     // draws in its useEffect after mounting read as its parent's own render, 60 ms against 361 ms of effects, with
-    // advice about memoising. Which component's effects they were is not recorded, so the detail names none.
+    // advice about memoising. The component that mounted with one is named, where the commit mounted one.
     effectsLed = hasDurations && rcEffects * 2 > own(rc);
-    const effectsFirst = `The commit's useEffect callbacks ${say(confidence, '', `${HEDGE} `)}ran for about ${ms(rcEffects)}${included(rc)} before the screen could update, after React spent ${renderAcross(rc, ms(rc.total))}.`;
+    const effectMounts = rc.effectMounts ?? 0;
+    const mountedWith =
+      effectMounts === 1 && rc.effectMountName
+        ? ` ${rc.effectMountName} mounted in that commit with a useEffect of its own.`
+        : effectMounts > 1
+          ? ` ${effectMounts} components mounted in that commit, each with a useEffect of its own.`
+          : '';
+    const effectsFirst = `The commit's useEffect callbacks ${say(confidence, '', `${HEDGE} `)}ran for about ${ms(rcEffects)}${included(rc)} before the screen could update, after React spent ${renderAcross(rc, ms(rc.total))}.${mountedWith}`;
     // A production build times the effects but not the render, so there the effects lead.
     cause = effectsLed
       ? `${effectsFirst}${say(confidence, '', profiling)}`
@@ -2525,7 +2532,7 @@ function explain(r: InteractionReport): Explanation {
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
-    blame = { kind: 'render', name: leafOf(rc), detail: effectsLed ? 'useEffect callbacks' : mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
+    blame = { kind: 'render', name: leafOf(rc), detail: effectsLed ? `useEffect callbacks${effectMounts === 1 && rc.effectMountName ? ` after mounting ${rc.effectMountName}` : effectMounts > 1 ? ` in ${effectMounts} mounted components` : ''}` : mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
   } else if (untimedHandler && !waitingWins) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list
     // among the components, and more of the working time than a tree accounts for.

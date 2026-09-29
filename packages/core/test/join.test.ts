@@ -3892,12 +3892,19 @@ test("a click's useEffect callbacks are React's time, not the handler's, where R
 test("where a render's useEffect callbacks took most of its commit, the cause leads with them and the detail says so, not the parent's own render", () => {
   // The Chart button on a reports page: Reports renders for 60 ms, most of it its own, and mounts RevenueChart,
   // whose useEffect draws for 361 ms. The detail said Reports's own render, with advice about sorts and filters.
-  const reports = (effectsEndedAt: number) =>
-    commit(1070, 1000, { startedAt: 1008, total: 60, rendered: 2, mounted: 1, roots: ['Reports'], hotPath: ['Reports'], components: [{ name: 'Reports', count: 1, self: 55, total: 60 }, { name: 'RevenueChart', count: 1, self: 5, total: 5 }], effectsStartedAt: 1070, effectsEndedAt });
+  const reports = (effectsEndedAt: number, effectMounts = 1, effectMountName: string | null = 'RevenueChart') =>
+    commit(1070, 1000, { startedAt: 1008, total: 60, rendered: 2, mounted: 1, effectMounts, effectMountName, roots: ['Reports'], hotPath: ['Reports'], components: [{ name: 'Reports', count: 1, self: 55, total: 60 }, { name: 'RevenueChart', count: 1, self: 5, total: 5 }], effectsStartedAt: 1070, effectsEndedAt });
   const click = (end: number) => [entry('click', 1000, end - 1000 + 10, 1003, end)];
   const heavy = report(click(1435), [reports(1431)], null, draw({ owners: ['Reports'] })).explanation;
-  assert.deepEqual(heavy.blame, { kind: 'render', name: 'Reports', detail: 'useEffect callbacks', ms: 423, confidence: 'measured' });
-  assert.match(heavy.cause, /^The commit's useEffect callbacks ran for about 361 ms before the screen could update, after React spent 60 ms re-rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\.$/);
+  assert.deepEqual(heavy.blame, { kind: 'render', name: 'Reports', detail: 'useEffect callbacks after mounting RevenueChart', ms: 423, confidence: 'measured' });
+  assert.match(heavy.cause, /^The commit's useEffect callbacks ran for about 361 ms before the screen could update, after React spent 60 ms re-rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. RevenueChart mounted in that commit with a useEffect of its own\.$/);
+  // Several mounted with one are counted, and where none did, an update's effects are only said to be the commit's.
+  const several = report(click(1435), [reports(1431, 3, null)], null, draw({ owners: ['Reports'] })).explanation;
+  assert.equal(several.blame.detail, 'useEffect callbacks in 3 mounted components');
+  assert.match(several.cause, /\. 3 components mounted in that commit, each with a useEffect of its own\.$/);
+  const updated = report(click(1435), [reports(1431, 0, null)], null, draw({ owners: ['Reports'] })).explanation;
+  assert.equal(updated.blame.detail, 'useEffect callbacks');
+  assert.match(updated.cause, /own render\)\.$/);
   assert.doesNotMatch(heavy.cause, /then ran for about/);
   assert.ok(!heavy.notes.some((n) => n.includes('own render')), heavy.notes.join(' | '));
   // Effects that are a third of the commit leave it as it was.

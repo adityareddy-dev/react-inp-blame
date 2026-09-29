@@ -255,6 +255,23 @@ test('a commit counts the components rendering for the first time, and those ins
   assert.equal(walkCommit(root(rendered(App, rendered(Sidebar, element('nav', text())))) as any, 5000, 100, click, development).mounted, 2);
 });
 
+test('a commit counts the components that mounted with a useEffect to run, and names the one where there is one', () => {
+  function Reports() {}
+  function RevenueChart() {}
+  function Row() {}
+  // React flags a fiber whose useEffect is to run after the commit with Passive, from React 18.
+  const withEffect = (f: Record<string, unknown>) => Object.assign(f, { flags: (f.flags as number) | 0b100000000000 });
+  const again = (f: Record<string, unknown>) => Object.assign(f, { alternate: { tag: f.tag, child: {} } });
+  const chart = walkCommit(root(again(rendered(Reports, withEffect(rendered(RevenueChart, element('canvas')))))) as any, 5000, 100, click, development);
+  assert.deepEqual([chart.mounted, chart.effectMounts, chart.effectMountName], [1, 1, 'RevenueChart']);
+  // Several are counted and none is named. One that rendered again runs an update's effects, not a mount's.
+  const rows = walkCommit(root(withEffect(again(rendered(Reports, ...Array.from({ length: 3 }, () => withEffect(rendered(Row, element('li')))))))) as any, 5000, 100, click, development);
+  assert.deepEqual([rows.mounted, rows.effectMounts, rows.effectMountName], [3, 3, null]);
+  // React 17 gives that bit another meaning.
+  const react17 = walkCommit(root(again(rendered(Reports, withEffect(rendered(RevenueChart, element('canvas')))))) as any, 5000, 100, click, { ...development, profileMode: 0b1000 });
+  assert.deepEqual([react17.effectMounts, react17.effectMountName], [0, null]);
+});
+
 test('a walk cut short under several roots names the component above a styling wrapper they share', () => {
   function RecordIndexContainer() {}
   function Orders() {}

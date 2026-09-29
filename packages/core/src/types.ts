@@ -48,6 +48,14 @@ export interface CommitSummary {
    */
   readonly mounted?: number;
   /**
+   * Of `mounted`, the components with a useEffect to run after this commit, as a chart or a map that sets
+   * itself up in one has (a `useSyncExternalStore` subscription is run the same way, and counts too). Always
+   * 0 on React 17. Absent on a report stored by an earlier release.
+   */
+  readonly effectMounts?: number;
+  /** The name of the one component `effectMounts` counts, where it counts one; null otherwise. Absent on a report stored by an earlier release. */
+  readonly effectMountName?: string | null;
+  /**
    * The commit hydrated server-rendered HTML, a root's or a Suspense boundary's. Hydrating is the page
    * starting up rather than an input's work, so such a commit is kept only when React ran it inside an
    * input's dispatch, hydrating so that it could handle that input.
@@ -429,7 +437,9 @@ export interface Blame {
    * how many components rendered ("637 components"). For a render, of which how many inside the component
    * `name` gives, where that is fewer ("812 of 1216 components"); a hydration is named after a boundary or
    * the page, which holds them all, so it carries the whole count. Null where it rendered one. A render whose
-   * commit spent over half of `ms` in its useEffect callbacks has "useEffect callbacks" instead. For a
+   * commit spent over half of `ms` in its useEffect callbacks has "useEffect callbacks" instead, "useEffect
+   * callbacks after mounting RevenueChart" where one component mounted in it with one (`effectMountName`), or
+   * "useEffect callbacks in 3 mounted components" where several did. For a
    * handler, its component, or null where the name is a listener the browser recorded rather than a React
    * handler. For a 'layout', what that same commit was mostly made of, as a render's, where a count is the
    * whole commit's ("56 components", not "15 of 56") when `name` is the component the render started from
