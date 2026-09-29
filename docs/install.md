@@ -439,9 +439,9 @@ export function getRouter() {
 
   // Tells react-inp-blame each time the route changes, with the URL the address bar shows. Not on the first load, which is the document's own.
   let last = router.history.location.href
-  router.subscribe('onBeforeNavigate', () => {
+  router.subscribe('onBeforeNavigate', ({ fromLocation }) => {
     const href = router.history.location.href
-    if (href !== last) announceNavigation(href)
+    if (fromLocation && href !== last) announceNavigation(href)
     last = href
   })
 
@@ -462,14 +462,16 @@ address bar shows, base path included. `toLocation.publicHref` is not, since Tan
 string back in its own form (a bare `?inp-blame` becomes `?inp-blame=`), and `window.location.href` still holds
 the old URL at that moment. It is checked against the URL last announced, not the event's `hrefChanged`, which
 TanStack Router takes from the last route that finished loading: going back before a slow loader finished, or a
-`beforeLoad` that redirects to the page it was on, would leave reports on a URL the page had left. A change of
-query string alone counts as a navigation here too. In a TanStack Router app without Start, put the same
-`router.subscribe` call after `createRouter`. That is for browser history, the default. Under
-`createHashHistory`, `router.history.location.href` is the path inside the hash, so a report would carry it as
-a path from the site's root, `https://shop.example/second` for `https://shop.example/app/#/second`, and not the
-URL the address bar shows. As under React Router, a production build the plugin leaves the library out of still
-carries `announceNavigation`, about 0.3 KB gzipped, where it does nothing. CI's copy of this app runs these
-lines too.
+`beforeLoad` that redirects to the page it was on, would leave reports on a URL the page had left. It still
+waits for `fromLocation`, which stays unset until the first load finishes: a route whose `validateSearch` fills
+in a default the URL lacks rewrites the address as it first loads, and that is still the document's own
+navigation. A change of query string alone counts as a navigation here too. In a TanStack Router app without
+Start, put the same `router.subscribe` call after `createRouter`. That is for browser history, the default.
+Under `createHashHistory`, `router.history.location.href` is the path inside the hash, so a report would carry
+it as a path from the site's root, `https://shop.example/second` for `https://shop.example/app/#/second`, and
+not the URL the address bar shows. As under React Router, a production build the plugin leaves the library out
+of still carries `announceNavigation`, about 0.3 KB gzipped, where it does nothing. CI's copy of this app runs
+these lines too.
 
 ## Install with Astro
 
