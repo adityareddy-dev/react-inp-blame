@@ -2523,7 +2523,9 @@ function explain(r: InteractionReport): Explanation {
     // draws in its useEffect after mounting read as its parent's own render, 60 ms against 361 ms of effects, with
     // advice about memoising. The component that mounted with one is named, where the commit mounted one.
     effectsLed = hasDurations && rcEffects * 2 > own(rc);
-    const effectMounts = rc.effectMounts ?? 0;
+    // The ones that mounted are counted only where no component that rendered again had one to run too: a chart
+    // drawing again beside two tooltips that mounted read as the tooltips' doing.
+    const effectMounts = (rc.effectRuns ?? rc.effectMounts) === rc.effectMounts ? (rc.effectMounts ?? 0) : 0;
     const mountedWith =
       effectMounts === 1 && rc.effectMountName
         ? ` ${rc.effectMountName} mounted in that commit with a useEffect of its own.`

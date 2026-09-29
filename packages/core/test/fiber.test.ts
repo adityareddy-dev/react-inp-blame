@@ -263,18 +263,21 @@ test('a commit counts the components that mounted with a useEffect to run, and n
   const withEffect = (f: Record<string, unknown>) => Object.assign(f, { flags: (f.flags as number) | 0b100000000000 });
   const again = (f: Record<string, unknown>) => Object.assign(f, { alternate: { tag: f.tag, child: {} } });
   const chart = walkCommit(root(again(rendered(Reports, withEffect(rendered(RevenueChart, element('canvas')))))) as any, 5000, 100, click, development);
-  assert.deepEqual([chart.mounted, chart.effectMounts, chart.effectMountName], [1, 1, 'RevenueChart']);
+  assert.deepEqual([chart.mounted, chart.effectMounts, chart.effectRuns, chart.effectMountName], [1, 1, 1, 'RevenueChart']);
   // Several are counted and none is named. One that rendered again runs an update's effects, not a mount's.
   const rows = walkCommit(root(withEffect(again(rendered(Reports, ...Array.from({ length: 3 }, () => withEffect(rendered(Row, element('li')))))))) as any, 5000, 100, click, development);
-  assert.deepEqual([rows.mounted, rows.effectMounts, rows.effectMountName], [3, 3, null]);
+  assert.deepEqual([rows.mounted, rows.effectMounts, rows.effectRuns, rows.effectMountName], [3, 3, 4, null]);
   // Nor is the one that mounted named where a component that rendered again has a useEffect to run too: which
   // of them took the time is not known.
   function Tooltip() {}
   const beside = walkCommit(root(again(rendered(Reports, withEffect(again(rendered(RevenueChart, element('canvas')))), withEffect(rendered(Tooltip, element('div')))))) as any, 5000, 100, click, development);
-  assert.deepEqual([beside.mounted, beside.effectMounts, beside.effectMountName], [1, 1, null]);
+  assert.deepEqual([beside.mounted, beside.effectMounts, beside.effectRuns, beside.effectMountName], [1, 1, 2, null]);
+  // Every component that rendered with one is counted, mounted or not, so two tooltips beside the chart are not said to be all of it.
+  const pair = walkCommit(root(again(rendered(Reports, withEffect(again(rendered(RevenueChart, element('canvas')))), withEffect(rendered(Tooltip, element('div'))), withEffect(rendered(Tooltip, element('div')))))) as any, 5000, 100, click, development);
+  assert.deepEqual([pair.mounted, pair.effectMounts, pair.effectRuns, pair.effectMountName], [2, 2, 3, null]);
   // React 17 gives that bit another meaning.
   const react17 = walkCommit(root(again(rendered(Reports, withEffect(rendered(RevenueChart, element('canvas')))))) as any, 5000, 100, click, { ...development, profileMode: 0b1000 });
-  assert.deepEqual([react17.effectMounts, react17.effectMountName], [0, null]);
+  assert.deepEqual([react17.effectMounts, react17.effectRuns, react17.effectMountName], [0, 0, null]);
 });
 
 test('a walk cut short under several roots names the component above a styling wrapper they share', () => {

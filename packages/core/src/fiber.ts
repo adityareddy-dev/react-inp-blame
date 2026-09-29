@@ -988,6 +988,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // flags otherwise, and says nothing of when its effects ran anyway (`reportsPassiveEffects`). `effectRuns`
   // counts every component that rendered with one to run, mounted or not, so a name is given only where it
   // is the one: a chart running its effect again beside a tooltip that mounted with one named the tooltip.
+  // The join counts the mounts only where they are all of them, for the same reason.
   const effectFlag = context.profileMode === profileModeBit(17) ? 0 : PassiveFlags;
   let effectMounts = 0;
   let effectRuns = 0;
@@ -1155,6 +1156,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     rendered,
     mounted,
     effectMounts,
+    effectRuns,
     effectMountName: effectMounts === 1 && effectRuns === 1 ? effectMountName : null,
     hydrated: hydrated || hydratedTarget != null,
     hydratedTarget: hydratedTarget && Object.freeze(hydratedTarget),

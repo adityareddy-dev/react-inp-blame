@@ -4002,8 +4002,8 @@ test("a click's useEffect callbacks are React's time, not the handler's, where R
 test("where a render's useEffect callbacks took most of its commit, the cause leads with them and the detail says so, not the parent's own render", () => {
   // The Chart button on a reports page: Reports renders for 60 ms, most of it its own, and mounts RevenueChart,
   // whose useEffect draws for 361 ms. The detail said Reports's own render, with advice about sorts and filters.
-  const reports = (effectsEndedAt: number, effectMounts = 1, effectMountName: string | null = 'RevenueChart') =>
-    commit(1070, 1000, { startedAt: 1008, total: 60, rendered: 2, mounted: 1, effectMounts, effectMountName, roots: ['Reports'], hotPath: ['Reports'], components: [{ name: 'Reports', count: 1, self: 55, total: 60 }, { name: 'RevenueChart', count: 1, self: 5, total: 5 }], effectsStartedAt: 1070, effectsEndedAt });
+  const reports = (effectsEndedAt: number, effectMounts = 1, effectMountName: string | null = 'RevenueChart', effectRuns = effectMounts) =>
+    commit(1070, 1000, { startedAt: 1008, total: 60, rendered: 2, mounted: 1, effectMounts, effectRuns, effectMountName, roots: ['Reports'], hotPath: ['Reports'], components: [{ name: 'Reports', count: 1, self: 55, total: 60 }, { name: 'RevenueChart', count: 1, self: 5, total: 5 }], effectsStartedAt: 1070, effectsEndedAt });
   const click = (end: number) => [entry('click', 1000, end - 1000 + 10, 1003, end)];
   const heavy = report(click(1435), [reports(1431)], null, draw({ owners: ['Reports'] })).explanation;
   assert.deepEqual(heavy.blame, { kind: 'render', name: 'Reports', detail: 'useEffect callbacks after mounting RevenueChart', ms: 423, confidence: 'measured' });
@@ -4015,6 +4015,11 @@ test("where a render's useEffect callbacks took most of its commit, the cause le
   const updated = report(click(1435), [reports(1431, 0, null)], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(updated.blame.detail, 'useEffect callbacks');
   assert.match(updated.cause, /own render\)\.$/);
+  // Nor are the ones that mounted counted where a component that rendered again had one to run too: a chart drawing
+  // again beside two tooltips that mounted is not the tooltips' doing.
+  const beside = report(click(1435), [reports(1431, 2, null, 3)], null, draw({ owners: ['Reports'] })).explanation;
+  assert.equal(beside.blame.detail, 'useEffect callbacks');
+  assert.match(beside.cause, /own render\)\.$/);
   assert.doesNotMatch(heavy.cause, /then ran for about/);
   assert.ok(!heavy.notes.some((n) => n.includes('own render')), heavy.notes.join(' | '));
   // Effects that are a third of the commit leave it as it was.
