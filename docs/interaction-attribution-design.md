@@ -1157,7 +1157,8 @@ mounted with a useEffect to run, React's Passive flag on a fiber with no alterna
 `effectMountName` where it is one and no component that rendered again has the flag too, since a chart
 running its effect again beside a tooltip that mounted named the tooltip), so the detail is "useEffect
 callbacks after mounting RevenueChart", or "useEffect callbacks in 3 mounted components", and the sentence
-says so after the effects. The blame's name stays the render's. Where more than one commit in the working time rendered, a
+says so after the effects. The blame's name stays the render's. Where more than one commit in the working
+time rendered, a
 sentence gives their total and the share of the commit it names: "React spent 55 ms rendering across 2
 commits, 30 ms of it re-rendering 30 components inside List". The share is not called the heaviest,
 since the commit a render blame names can
