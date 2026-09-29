@@ -336,6 +336,41 @@ test('quick rows with nothing to fix fold into one line that opens on a click, a
   }
 });
 
+test('Hide for me in the footer stores hidden, takes the badge off the page and tells the host, and a badge the page mounted itself has no such button', (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const stored = new Map<string, string>();
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { value: { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => stored.set(k, v) }, configurable: true, writable: true });
+  const { body, restore } = panelDocument();
+  try {
+    const source = {
+      reports: () => [],
+      inp: () => null,
+      onInteraction: () => () => {},
+      clear() {},
+      stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
+      debug: { hook: () => ({ devtoolsLockedOut: false }) },
+    };
+    let hidden = 0;
+    const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true }, () => hidden++);
+    const panel = byClass(body.childNodes[0].shadowRoot, 'panel')!;
+    const button = byClass(panel, 'hide')!;
+    assert.equal(button.textContent, 'Hide for me');
+    panel.listeners.click({ target: button });
+    assert.equal(stored.get('react-inp-blame'), 'hidden');
+    assert.equal(body.childNodes.length, 0);
+    assert.equal(hidden, 1);
+    overlay.dispose();
+    const mounted = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true });
+    assert.equal(byClass(byClass(body.childNodes[0].shadowRoot, 'panel')!, 'hide'), null);
+    mounted.dispose();
+  } finally {
+    restore();
+    if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
+    else delete (globalThis as Record<string, unknown>).localStorage;
+  }
+});
+
 test("the panel's row and its open section say a key press's render before the slower keyup came after the press painted", () => {
   // The keydown painted at 24 and set off a render of 400 components at 150, before the key came up at 300.
   // The keyup's entry was the slower one and painted at 348.
