@@ -2433,20 +2433,8 @@ function explain(r: InteractionReport): Explanation {
     // Not for the document's listener or a listener that ran as the handler, though: that is the one
     // React dispatched the event from, "charged to #document.onclick" is all the browser alone can
     // say, and it sends nobody anywhere. An observer's callback in the same window is still said. The
-    // frames keep the listener.
-    const invokedBy = charged?.script.invoker ?? '';
-    const dispatchedFrom = invokedBy.startsWith('#document.') || (/\.on[a-z]+$/.test(invokedBy) && !!charged && ranAsHandler(charged.script));
-    const chargedTo = charged && invoker && !dispatchedFrom ? ` ${holdsMostOfIt ? 'It' : `${ms(charged.forcedLayout)} of it`} was charged to ${invoker}.` : '';
-    // The clause about React is hedged on the same evidence the name is: a commit this interaction
-    // cannot claim, and, where the clause prints a duration, a duration that is not a measurement.
-    // A production build's component counts are measured by the walk, so they are not hedged here.
-    const reactSure = !!named && (!hasDurations || measuredFrom(named) === 'measured');
-    const maybe = reactSure ? '' : `${HEDGE} `;
-    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(c, underOr(renderSpent(c)))}` : `React was ${maybe}${renderPhrase(c)}`}.` : '';
+    // frames keep the listener. Unless the blame is named after it, which the sentence then says.
     const read = whereRead(whileHandling);
-    // What forces a layout is said straight after the layout, and React's clause after that: put after the
-    // clause, its "That happens" read as about the re-render.
-    cause = `Of the ${window}, ${say(confidence, `the browser spent ${spent}.`, `the browser ${HEDGE} spent ${spent}.`)}${chargedTo} ${read.said}${rendered}`;
     // Nothing names the read that forced the layout. What is held is where it happened: the subtree
     // of the commit this interaction joined, or, failing that, the script the browser charged it to
     // — and that only while one script holds nearly all of it, since `ms` is the whole total and a
@@ -2462,9 +2450,22 @@ function explain(r: InteractionReport): Explanation {
     // Only where the forcing script's commit is the one the sentence describes: another commit's start is
     // never said, so the blame would name a component the cause does not.
     const whole = own && own === c ? fromName(own) : null;
+    const name = inTheSubtree ? (whole ?? leafOf(own)) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null;
+    const invokedBy = charged?.script.invoker ?? '';
+    const dispatchedFrom = invokedBy.startsWith('#document.') || (/\.on[a-z]+$/.test(invokedBy) && !!charged && ranAsHandler(charged.script));
+    const chargedTo = charged && invoker && (!dispatchedFrom || name === invoker) ? ` ${holdsMostOfIt ? 'It' : `${ms(charged.forcedLayout)} of it`} was charged to ${invoker}.` : '';
+    // The clause about React is hedged on the same evidence the name is: a commit this interaction
+    // cannot claim, and, where the clause prints a duration, a duration that is not a measurement.
+    // A production build's component counts are measured by the walk, so they are not hedged here.
+    const reactSure = !!named && (!hasDurations || measuredFrom(named) === 'measured');
+    const maybe = reactSure ? '' : `${HEDGE} `;
+    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(c, underOr(renderSpent(c)))}` : `React was ${maybe}${renderPhrase(c)}`}.` : '';
+    // What forces a layout is said straight after the layout, and React's clause after that: put after the
+    // clause, its "That happens" read as about the re-render.
+    cause = `Of the ${window}, ${say(confidence, `the browser spent ${spent}.`, `the browser ${HEDGE} spent ${spent}.`)}${chargedTo} ${read.said}${rendered}`;
     blame = {
       kind: 'layout',
-      name: inTheSubtree ? (whole ?? leafOf(own)) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null,
+      name,
       detail: inTheSubtree ? mostlyOf(own, !whole) : null,
       ms: forcedWhileHandling,
       confidence,

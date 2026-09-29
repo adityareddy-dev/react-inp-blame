@@ -1033,7 +1033,9 @@ The frames keep the invoker either way, and the sentences after it say "the scri
 **Decided not to change the name on that basis**: the only held signal is the invoker string, and
 `ranAsHandler` is a time-window test an observer callback inside the window passes. The field that
 would settle it, LoAF's `invokerType`, is not captured, and adding it changes a published type on a
-guess about what Chromium reports for React's own dispatch. The sentence carries the doubt instead.
+guess about what Chromium reports for React's own dispatch. So where the blame is named after the
+listener, with no subtree of a commit to name it by, the sentence still says it was charged there,
+and the name is never one the cause leaves out.
 
 The demo's layout-thrash scenario is the case: 400 layout effects writing a style and reading a size,
 about 190 ms of layout against a 48 ms render, named `LayoutThrash` with `PriceTicker ×400` beside

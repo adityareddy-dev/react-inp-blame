@@ -2094,6 +2094,13 @@ test("a layout's sentence does not say it was charged to the listener React disp
   assert.doesNotMatch(layoutIn('#document.onclick', 125).cause, /charged to/);
   // A script that is not the listener is still said, an observer's callback in the same window: it is where to look.
   assert.match(layoutIn('IntersectionObserver.callback', 25).cause, /It was charged to IntersectionObserver\.callback\./);
+  // Where the blame is named after the listener, with no commit to name a subtree, the sentence says it, so the name
+  // is never one the cause does not hold.
+  for (const invoker of ['#document.onclick', 'DIV#root.onmousedown']) {
+    const alone = report([entry('click', 0, 128, 2, 118)], [], [frame(0, 128, [script(invoker, 2, 116, 108)])], [input(0, 'click')]).explanation;
+    assert.deepEqual([alone.blame.kind, alone.blame.name], ['layout', invoker]);
+    assert.ok(alone.cause.includes(` It was charged to ${invoker}.`), alone.cause);
+  }
 });
 
 test('a forced layout several scripts share is not credited to the largest of them', () => {
@@ -2359,8 +2366,8 @@ test('the forced layout sentence says a layout effect only where a commit ran in
     ] as const) {
       const e = explain([c], beside, ring);
       assert.equal(e.blame.kind, 'layout');
-      // The document's listener ran as the handler, so the sentence does not say it was charged to it. The blame names it.
-      assert.doesNotMatch(e.cause, /charged to/);
+      // The document's listener ran as the handler, and the blame is named after it, so the sentence says it too.
+      assert.match(e.cause, / It was charged to DOCUMENT\.onclick\./);
       assert.ok(readOf(e.cause).endsWith(`${reads}. No React commit ran in the script that forced it, so it was not in a layout effect but in ${where}`), e.cause);
       assert.deepEqual([e.blame.name, e.blame.detail], ['DOCUMENT.onclick', null]);
     }
