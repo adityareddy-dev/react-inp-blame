@@ -2423,10 +2423,10 @@ function explain(r: InteractionReport): Explanation {
     // sentence says it whatever the blame is named after, because the cause is read on its own; and
     // it prints the script's own share whenever the script does not hold nearly all of the total,
     // since the total is several scripts' and the name beside it would claim all of it for one.
-    // Not for the document's listener or a listener that ran as the handler, though: that is the one
-    // React dispatched the event from, "charged to #document.onclick" is all the browser alone can
-    // say, and it sends nobody anywhere. An observer's callback in the same window is still said. The
-    // frames keep the listener. Unless the blame is named after it, which the sentence then says.
+    // Not for the document's listener or React's own (`reactsOwn`), though: that is the one React
+    // dispatched the event from, "charged to #document.onclick" is all the browser alone can say, and
+    // it sends nobody anywhere. An observer's callback in the same window is still said. The frames
+    // keep the listener. Unless the blame is named after it, which the sentence then says.
     const read = whereRead(whileHandling);
     // Nothing names the read that forced the layout. What is held is where it happened: the subtree
     // of the commit this interaction joined, or, failing that, the script the browser charged it to
@@ -2444,8 +2444,7 @@ function explain(r: InteractionReport): Explanation {
     // never said, so the blame would name a component the cause does not.
     const whole = own && own === c ? fromName(own) : null;
     const name = inTheSubtree ? (whole ?? leafOf(own)) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null;
-    const invokedBy = charged?.script.invoker ?? '';
-    const dispatchedFrom = invokedBy.startsWith('#document.') || (/\.on[a-z]+$/.test(invokedBy) && !!charged && ranAsHandler(charged.script));
+    const dispatchedFrom = !!charged && (charged.script.invoker.startsWith('#document.') || reactsOwn(charged.script));
     const chargedTo = charged && invoker && (!dispatchedFrom || name === invoker) ? ` ${holdsMostOfIt ? 'It' : `${ms(charged.forcedLayout)} of it`} was charged to ${invoker}.` : '';
     // The clause about React is hedged on the same evidence the name is: a commit this interaction
     // cannot claim, and, where the clause prints a duration, a duration that is not a measurement.

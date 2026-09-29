@@ -1020,21 +1020,23 @@ browser charges forced layout per script, so a window holding three of them hold
 the nine tenths there is no name — `name` is null — and nothing is claimed that the evidence does
 not carry.
 
-The invoker goes in the sentence ("It was charged to `IntersectionObserver.callback`", or
-"80 ms of it was charged to …" where it holds less), because a script that merely ran inside the
-same window is charged separately and looks identical from the React side, so the subtree alone can
-send a reader to a file with nothing to do with it. Up to 0.19.0 it went in either way. Since 0.20.0
-it does not for the document's listener, or for a listener (`DIV#root.onclick`) that ran as the
-handler: that is the listener React dispatched the event from, and "It was charged to
-#document.onclick" is the answer the browser gives on its own, true and no help. Nothing in a report
-says which element is a React root, so a root's listener is told only by having run as the handler.
-The frames keep the invoker either way, and the sentences after it say "the script that forced it".
-**Decided not to change the name on that basis**: the only held signal is the invoker string, and
-`ranAsHandler` is a time-window test an observer callback inside the window passes. The field that
-would settle it, LoAF's `invokerType`, is not captured, and adding it changes a published type on a
-guess about what Chromium reports for React's own dispatch. So where the blame is named after the
-listener, with no subtree of a commit to name it by, the sentence still says it was charged there,
-and the name is never one the cause leaves out.
+The invoker goes in the sentence ("It was charged to `IntersectionObserver.callback`", or "80 ms of
+it was charged to …" where it holds less), because a script that merely ran inside the same window
+is charged separately and looks identical from the React side, so the subtree alone can send a
+reader to a file with nothing to do with it. Up to 0.19.0 it went in either way. Since 0.20.0 it
+does not for the document's listener, or for React's own listener, told as the time between handlers
+tells it: its file is react-dom's, its function is dispatchDiscreteEvent or dispatchContinuousEvent,
+or, in a minified build, it listens on the container of a root the hook saw (`DIV#root.onclick`).
+That is the listener React dispatched the event from, and "It was charged to #document.onclick" is
+the answer the browser gives on its own, true and no help. A root's listener nothing marks as
+React's is still said, as it was up to 0.19.0. The frames keep the invoker either way, and the
+sentences after it say "the script that forced it". **Decided not to change the name on that
+basis**: in a minified build the only held signal is the invoker string against the roots the hook
+saw, and a library's listener wrapped around React's on the same container reads the same. The field
+that would settle it, LoAF's `invokerType`, is not captured, and adding it changes a published type
+on a guess about what Chromium reports for React's own dispatch. So where the blame is named after
+the listener, with no subtree of a commit to name it by, the sentence still says it was charged
+there, and the name is never one the cause leaves out.
 
 The demo's layout-thrash scenario is the case: 400 layout effects writing a style and reading a size,
 about 190 ms of layout against a 48 ms render, named `LayoutThrash` with `PriceTicker ×400` beside

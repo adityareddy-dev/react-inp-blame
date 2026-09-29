@@ -1873,7 +1873,8 @@ test('forced layout the browser measured outranks a render no build timed', () =
     hotPath: ['Tabs', 'RovingFocusGroupCollectionSlot.SlotClone'],
     components: [{ name: 'TabsTrigger', count: 16, self: null, total: null }],
   });
-  const r = report(tabs, [rerender], thrash, [input(0, 'click')]);
+  // A production build, where React's listener is known by the root container it listens on.
+  const r = report(tabs, [rerender], thrash, [input(0, 'click')], 'attributes', [], undefined, undefined, { roots: ['DIV#root'], named: false });
 
   // Nothing names the read that forced the layout, but the subtree it happened in is held and is the
   // only thing here a reader can open a file on, so it is what the blame carries. Radix's SlotClone at
@@ -1890,7 +1891,7 @@ test('forced layout the browser measured outranks a render no build timed', () =
     'Of the 116 ms it took to handle the click, the browser spent 108 ms recalculating styles and layout, leaving 8 ms for' +
       " React's render and commit, its layout effects and the click handler together." +
       // The root's listener React dispatched the press from is not said to be what it was charged to: that is all
-      // the browser alone says of it, and the frames keep it.
+      // the browser alone says of it, and the frames keep it. Told as React's the way a wait's listener is.
       // What forces a layout comes straight after the layout, before React's clause: after it, "That happens" read
       // as about the re-render.
       " That happens when code reads an element's size right after changing styles, often in a layout effect." +
@@ -2080,17 +2081,28 @@ test('a layout blame says which script the browser charged the layout to, whatev
 
 test("a layout's sentence does not say it was charged to the listener React dispatched the event from, which the browser alone says", () => {
   // The root's click listener ran as the handler, and the browser charged it the layout, as it does for every click.
-  const layoutIn = (invoker: string, start = 2) =>
+  // A production build's root container the hook saw is how React's listener is told there.
+  const rootPage = { roots: ['DIV#root'], named: false };
+  const layoutIn = (invoker: string, start = 2, page = rootPage, own: Partial<ScriptSummary> = {}) =>
     report(
       [entry('click', 0, 200, 2, 122)],
       [commit(60, 0, { total: 10, rendered: 4, roots: ['Header'], hotPath: ['Header', 'ThemeToggle'], components: [{ name: 'Icon', count: 4, self: 2, total: 2 }] })],
-      [frame(0, 130, [script(invoker, start, 110, 90)])],
+      [frame(0, 130, [{ ...script(invoker, start, 110, 90), ...own }])],
       [input(0, 'click')],
+      'attributes',
+      [],
+      undefined,
+      undefined,
+      page,
     ).explanation;
   const root = layoutIn('DIV#root.onclick');
   assert.equal(root.blame.kind, 'layout');
   assert.doesNotMatch(root.cause, /charged to/);
   assert.match(root.cause, /the click handler together\. That happens when code reads an element's size/);
+  // A development build's listener is known by its function, whatever element it listens on.
+  assert.doesNotMatch(layoutIn('DIV#app.onclick', 2, { roots: [], named: true }, { name: 'dispatchDiscreteEvent', source: 'deps/react-dom_client.js' }).cause, /charged to/);
+  // A root's listener nothing says is React's is said, as in 0.19.0: a listener that ran as the handler can be anyone's.
+  assert.match(layoutIn('DIV#root.onclick', 2, { roots: [], named: false }).cause, /It was charged to DIV#root\.onclick\./);
   // Nor the document's listener, wherever it ran.
   assert.doesNotMatch(layoutIn('#document.onclick').cause, /charged to/);
   assert.doesNotMatch(layoutIn('#document.onclick', 125).cause, /charged to/);
