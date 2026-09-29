@@ -1364,6 +1364,13 @@ test("a render a key press set off after it painted is still a later render once
   // The keyup's working time is what the cause is about, and the render was not in it. Said bare, the cause
   // told the reader React didn't render anything and the next sentence that it did.
   assert.match(next.explanation.cause, /; React didn't render anything in the working time\.$/);
+  // Only while it lands inside the window from that paint, though: Shift held for 2 s, which macOS does not repeat, and
+  // a render stamped with its keydown 1576 ms after the keydown painted, past the 1500 ms window. Measured from the
+  // keyup instead, it would be kept.
+  const shift = [input(0, 'keydown', { press: 'ShiftLeft' }), input(2000, 'keyup', { press: 'ShiftLeft', gestureTs: 0 })];
+  const heldLong = [keydown, entry('keyup', 2000, 48, 2001, 2040)];
+  assert.deepEqual(buildReport(heldLong, [{ ...render, at: 1600, sinceInput: 1600 }], [], shift).followUps, []);
+  assert.deepEqual(buildReport(heldLong, [render], [], shift).followUps.map((c) => c.at), [150]);
 });
 
 test("a verdict that names no render says so of the working time where a press rendered before the release, whichever rung says it", () => {
