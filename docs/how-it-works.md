@@ -100,10 +100,11 @@ its own React does not switch off the app's own. Reports carry on without compon
   such as `onClick`, on an element with no `__reactProps$` and on one read once the event is over, the
   handlers a clicked icon was handed, to name what it belongs to, and, for an icon with no fiber of its own,
   `dangerouslySetInnerHTML`, whether the element holding it had its markup set that way, `children`, whether
-  React wrote the element's text straight into it, and `role`, on the element and on the components that
-  handed it its handler, whether the role was handed down), `memoizedState` (whether a root or a boundary was
-  still server-rendered HTML: `isDehydrated` and `dehydrated`), and `stateNode` (the root fiber's, the
-  FiberRoot, to reach its `current`, and a DOM element's fiber's, the element).
+  React wrote the element's text straight into it or left a lone `false` or `null` there, and `role`, on the
+  element and on the components that handed it its handler, whether the role was handed down), `memoizedState`
+  (whether a root or a boundary was still server-rendered HTML: `isDehydrated` and `dehydrated`), and
+  `stateNode` (the root fiber's, the FiberRoot, to reach its `current`, and a DOM element's fiber's, the
+  element).
 - On DOM nodes: React's `__reactFiber$` key, `__reactProps$` (the props React runs the element's handlers
   from, where the event's handler prop is read), and `__reactContainer$` on the element `createRoot` or
   `hydrateRoot` was given. In server-rendered HTML: the comments React puts around a boundary, `$`, `$?`,
