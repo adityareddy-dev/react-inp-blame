@@ -1,0 +1,25 @@
+{
+  "name": "otel-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The web SDKs whose INP hooks react-inp-blame/otel is documented with, at the versions docs/opentelemetry.md names. Run by scripts/otel-contract.mjs from a temp copy.",
+  "dependencies": {
+    "@elastic/opentelemetry-browser": "0.3.0",
+    "@embrace-io/web-sdk": "2.29.1",
+    "@grafana/faro-web-sdk": "2.12.1",
+    "@honeycombio/opentelemetry-web": "1.5.1",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api-logs": "0.222.0",
+    "@opentelemetry/browser-instrumentation": "0.8.1",
+    "@opentelemetry/exporter-logs-otlp-http": "0.222.0",
+    "@opentelemetry/instrumentation": "0.222.0",
+    "@opentelemetry/sdk-logs": "0.222.0",
+    "@opentelemetry/sdk-trace-base": "2.11.0",
+    "react-inp-blame": "^0.19.0",
+    "web-vitals": "6.2.2"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}
