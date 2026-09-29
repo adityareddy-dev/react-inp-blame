@@ -73,6 +73,7 @@ function element(tag: string, children: Record<string, unknown>[], attributes: R
     child.parentNode = el;
     child.parentElement = el;
     child.nextSibling = children[i + 1] ?? null;
+    child.previousSibling = children[i - 1] ?? null;
   });
   return el;
 }
@@ -363,12 +364,19 @@ test('with text allowed, a field is named by its <label>, and a control by its t
   const notes = element('textarea', [text('Hi Ada, the password is hunter2')]);
   Object.assign(notes, { labels: [element('label', [text('Notes '), notes])] });
   assert.equal(labelOf(notes, 'text'), 'textarea "Notes"');
+  // Nor its options inside a select, one of which is its value: a saved address.
+  const ship = element('select', [element('option', [text('Mrs Ada Lovelace, 12 Oak St')])]);
+  Object.assign(ship, { labels: [element('label', [ship, text(' Ship to')])] });
+  assert.equal(labelOf(ship, 'text'), 'select "Ship to"');
   const named = element('input', [], { 'aria-label': 'Search members' });
   Object.assign(named, { labels: [element('label', [text('Search')])] });
   assert.equal(labelOf(named, 'text'), 'input "Search members"');
   // A search result that highlights what matched: `<a><mark>Oak</mark> Chair 1</a>`.
   assert.equal(labelOf(element('a', [element('mark', [text('Oak')]), text(' Chair 1')]), 'text'), 'link "Oak Chair 1"');
   assert.equal(labelOf(element('button', [text('Save '), element('b', [text('3')]), text(' drafts')]), 'text'), 'button "Save 3 drafts"');
+  // An element straight after another ends it, a count badge or a price beside the name: nothing tells where one word ends.
+  assert.equal(labelOf(element('a', [element('span', [text('Notifications')]), element('span', [text('12')])]), 'text'), 'link "Notifications"');
+  assert.equal(labelOf(element('a', [element('span', [text('Oak Chair')]), element('span', [text('$120')])]), 'text'), 'link "Oak Chair"');
   // A block inside still ends the run.
   assert.equal(labelOf(element('div', [element('div', [text('Oak')]), element('div', [text('Chair 1')])]), 'text'), 'div "Oak"');
   assert.equal(labelOf(element('a', [element('mark', [text('Oak')]), text(' Chair 1')]), 'attributes'), 'link');
