@@ -502,6 +502,7 @@ export function buildReport(
   inputWindow = DEFAULT_INPUT_WINDOW,
   reactStatus: ReactStatus = 'reading',
   reactPage: ReactPage = NO_REACT_PAGE,
+  reactBuild: ReportData['reactBuild'] = null,
 ): ReportData {
   const longest = entries.reduce((a, e) => (e.duration > a.duration ? e : a));
   const group = paintGroupOf(entries, longest);
@@ -625,6 +626,8 @@ export function buildReport(
     interactionId: longest.interactionId,
     type: named.name,
     reactStatus,
+    reactBuild,
+    strictMode: strictModeOf(reactBuild, [...inWindow, ...followUps]),
     pointerType: inputs.find((i) => i.type === named.name && near(i.ts, named.startTime))?.pointerType || null,
     start,
     end,
@@ -776,10 +779,11 @@ export function refreshReport(
   inputWindow = DEFAULT_INPUT_WINDOW,
   reactStatus: ReactStatus = r.reactStatus,
   reactPage: ReactPage = reactPages.get(r.entries) ?? NO_REACT_PAGE,
+  reactBuild: ReportData['reactBuild'] = r.reactBuild,
 ): ReportData {
   // Time already spent building the report stays counted; the walks are recounted for the commits it now holds.
   const building = r.overheadMs - walked(r.commits) - walked(r.followUps);
-  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations, inputWindow, reactStatus, reactPage);
+  const fresh = buildReport(entries, commits, frames, inputs, labels, navigations, inputWindow, reactStatus, reactPage, reactBuild);
   return { ...fresh, revision: r.revision + 1, overheadMs: fresh.overheadMs + building };
 }
 
@@ -907,7 +911,13 @@ export function attachLaterRender(r: ReportData, c: CommitSummary, frames: reado
   if (r.followUps.includes(commit)) return null;
   const followUps = Object.freeze([...r.followUps, commit]);
   const laterFrames = frames && (withNewFrames(r.laterFrames, framesForLater(followUps, frames)) ?? r.laterFrames);
-  return { ...r, followUps, laterFrames, overheadMs: r.overheadMs + c.walkMs, revision: r.revision + 1 };
+  const strictMode = strictModeOf(r.reactBuild, [...r.commits, ...followUps]);
+  return { ...r, strictMode, followUps, laterFrames, overheadMs: r.overheadMs + c.walkMs, revision: r.revision + 1 };
+}
+
+/** `InteractionReport.strictMode`: said of a development build alone, and of a report holding a commit. */
+function strictModeOf(reactBuild: ReportData['reactBuild'], commits: readonly CommitSummary[]): boolean | null {
+  return reactBuild === 'development' && commits.length ? commits.some((c) => c.strictMode === true) : null;
 }
 
 // What counts as a readable name is `readableName`, in commits.ts, shared with everything that names a commit.

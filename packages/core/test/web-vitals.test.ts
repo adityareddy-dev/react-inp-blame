@@ -519,6 +519,22 @@ test('the attribution keeps every field web-vitals measured and adds one of its 
   assert.deepEqual(attribution.react?.followUps, { count: 0, rendered: 0, ms: null });
 });
 
+test('the attribution says which build of react-dom measured it, so development numbers can be told apart before they are sent', (t) => {
+  const reports = [
+    reportOf(CLICK, [commit({ strictMode: true })], [], [], 'attributes', [], undefined, 'reading', 'development'),
+    reportOf(CLICK, [commit({ strictMode: true })], [], [], 'attributes', [], undefined, 'reading', 'production'),
+  ];
+  const restore = installed(reports.slice(0, 1));
+  const development = attributeINP(metricWithAttribution).react;
+  restore();
+  t.after(installed(reports.slice(1)));
+  const production = attributeINP(metricWithAttribution).react;
+  assert.deepEqual({ reactBuild: development?.reactBuild, strictMode: development?.strictMode }, { reactBuild: 'development', strictMode: true });
+  assert.deepEqual({ reactBuild: production?.reactBuild, strictMode: production?.strictMode }, { reactBuild: 'production', strictMode: null });
+  // Two fields added beside the others leave the version as it was.
+  assert.equal(development?.schemaVersion, 3);
+});
+
 test('a metric from the build without attribution, as Next.js reports it, still gets the React side', (t) => {
   t.after(installed([reportOf(CLICK, [commit()], [])]));
   // useReportWebVitals imports the non-attribution build, so `attribution` is undefined there.

@@ -17,7 +17,7 @@ function without(key: string): Record<string, unknown> {
 }
 
 const click = { ts: 90, type: 'click', gestureTs: 90 };
-const development = { profileMode: 0b10, priority: 1, didError: false, hydratedTarget: null };
+const development = { profileMode: 0b10, strictMode: 0b1000, priority: 1, didError: false, hydratedTarget: null };
 
 /** A fiber of a freshly mounted tree, linked to its children. Tag 0 is a function component that rendered, 5 a DOM element, 6 a text node. */
 function fiber(tag: number, type: unknown, children: Record<string, unknown>[] = [], flags = tag === 0 ? 1 : 0): Record<string, unknown> {
@@ -910,4 +910,21 @@ test('time React measured under a root outside ProfileMode still counts, as unde
   assert.equal(c.hasDurations, true);
   assert.equal(c.total, 12);
   assert.deepEqual(c.components, [{ name: 'Chart', count: 1, self: 12, total: 12 }]);
+});
+
+test('a commit is in StrictMode where a component it rendered carries the bit, which <StrictMode> sets on the components under it', () => {
+  // StrictLegacyMode is 8 on React 18 and 19. React 17 calls it StrictMode and numbers it 1, and its 8 is ProfileMode.
+  function Page() {}
+  function Row() {}
+  const under = (mode: number) => {
+    const page = rendered(Page, rendered(Row));
+    page.mode = mode;
+    (page.child as Record<string, unknown>).mode = mode;
+    return root(page);
+  };
+  const react17 = { ...development, profileMode: 0b1000, strictMode: 0b1 };
+  assert.equal(walkCommit(under(0b1010) as any, 5000, 100, click, development).strictMode, true);
+  assert.equal(walkCommit(under(0b10) as any, 5000, 100, click, development).strictMode, false);
+  assert.equal(walkCommit(under(0b1001) as any, 5000, 100, click, react17).strictMode, true);
+  assert.equal(walkCommit(under(0b1000) as any, 5000, 100, click, react17).strictMode, false);
 });

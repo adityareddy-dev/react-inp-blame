@@ -400,6 +400,18 @@ evaluated; React 19.3 development builds set it on every root; production builds
 `actualDuration` at all. Measured time under a root outside ProfileMode, as under a
 `<Profiler>`, counts too.
 
+**Which build measured it.** A report carries `reactBuild`, since a development build's numbers run
+high: React's development build is slower, and StrictMode renders every component twice there (the same
+Vite app read 324 ms of render with StrictMode and 165 without, for the same 1,504 components). It says
+nothing about production, only which build measured, so a report can be dropped or labelled before it
+is forwarded. react-dom's `bundleType` 1 is 'development'. A production and a profiling build both hand
+`inject()` 0, and only a profiling build puts its roots in ProfileMode, so the hook reads that bit on
+every commit of a react-dom, walked or not: 'profiling' once a root carries it, 'production' once a
+commit came without it, and null before the page's first commit. `strictMode` is read in the walk, from
+the bit `<StrictMode>` sets on the fibers under it (1 on React 17, StrictLegacyMode 8 on 18 and 19, read
+in each version's react-dom), on any component that rendered. It is said only under a development build,
+the one build that renders twice, and only for a report holding a commit.
+
 **Coarse clocks.** React times each component with `performance.now()`, which Chromium steps in
 0.1 ms and Firefox 148 and WebKit 26.4 step in whole milliseconds on a page without cross-origin
 isolation (measured 2026-09-15 in Playwright's builds). After a context-storm click in a

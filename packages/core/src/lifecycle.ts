@@ -55,6 +55,8 @@ export interface LifecycleOptions {
   reactStatus?(): ReactStatus;
   /** What tells React's own listener in the next report's scripts; none where not given. */
   reactPage?(): ReactPage;
+  /** The build of react-dom the page renders with (`InteractionReport.reactBuild`); null where not given. */
+  reactBuild?(): InteractionReport['reactBuild'];
   /** The clock Event Timing and the commits use: `performance.now()`. */
   now(): number;
   /** Called with each report when it is published, and with every later revision of it: a new frozen report each time. */
@@ -207,7 +209,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
     if (existing) {
       // A late entry of the same interaction: the click after a held pointerdown, the keyup.
       const wasQuiet = quiet.includes(existing);
-      revise(existing, refreshReport(existing.data, entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow, options.reactStatus?.(), options.reactPage?.()), started);
+      revise(existing, refreshReport(existing.data, entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow, options.reactStatus?.(), options.reactPage?.(), options.reactBuild?.()), started);
       if (wasQuiet) {
         if (!worthPublishing(existing.data)) return;
         quiet.splice(quiet.indexOf(existing), 1);
@@ -220,7 +222,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       spend(started);
       return;
     }
-    const held = revise(null, buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow, options.reactStatus?.(), options.reactPage?.()), started);
+    const held = revise(null, buildReport(entries, options.commits(), frames, options.inputs(), options.labels(), options.navigations(), inputWindow, options.reactStatus?.(), options.reactPage?.(), options.reactBuild?.()), started);
     if (!worthPublishing(held.data)) return holdBack(held);
     keep(held);
     publish(held.report);

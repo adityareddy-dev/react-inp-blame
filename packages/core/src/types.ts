@@ -98,6 +98,12 @@ export interface CommitSummary {
    * Absent on a report stored by an earlier release.
    */
   readonly pathRendered?: number;
+  /**
+   * Whether a component that rendered in this commit is under `<StrictMode>`, as the mode React gave its fiber
+   * says. Only a development build renders such a component twice, which `InteractionReport.strictMode` is
+   * for. Absent on a report stored by an earlier release.
+   */
+  readonly strictMode?: boolean;
   /** Per-component aggregates, heaviest first, at most 12. */
   readonly components: readonly RenderedComponent[];
   /** Whether React measured render durations for this tree: its root is in ProfileMode, or part of it was measured anyway (under a `<Profiler>`). Only development and profiling builds measure. */
@@ -537,6 +543,21 @@ export interface InteractionReport {
    * through the interaction, the commits read before that stay, and a note says so.
    */
   readonly reactStatus: ReactStatus;
+  /**
+   * The build of react-dom the page renders with. A development build is slower than the others, and StrictMode
+   * renders twice there, so its numbers run higher than production's: this is what to drop or label reports by
+   * before they are forwarded. 'development' where react-dom says so to the DevTools hook. A production and a
+   * profiling build say the same there, and only a profiling build puts its roots in React's ProfileMode, so
+   * those two are told apart by the page's first commit. Null where react-dom did not say, where no react-dom
+   * registered, and for a production or profiling build before the page's first commit.
+   */
+  readonly reactBuild: 'development' | 'production' | 'profiling' | null;
+  /**
+   * Whether a component React rendered for this interaction was under `<StrictMode>`, which renders each
+   * component twice in a development build, so about half of the render time is the second pass. Null
+   * unless `reactBuild` is 'development' and the report holds a commit, since no other build renders twice.
+   */
+  readonly strictMode: boolean | null;
   /**
    * The pointer `type`'s event came from, 'mouse', 'pen' or 'touch', as the library saw it dispatched;
    * null for a key, for a click a key made, and when the library did not see the event.

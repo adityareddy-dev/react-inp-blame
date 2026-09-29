@@ -275,6 +275,29 @@ test('a late entry of a long press makes the next revision, rebuilt from every e
   assert.equal(third.revision, 2);
 });
 
+test('a report says whether StrictMode rendered it only under a development build, and its revisions keep the build', () => {
+  const strict = commit(140, 61, { strictMode: true });
+  const plain = commit(140, 61, { strictMode: false });
+  const built = (commits: CommitSummary[], build: InteractionReport['reactBuild']) => {
+    const r = buildReport(longPress, commits, [], [], 'attributes', [], undefined, 'reading', build);
+    return { reactBuild: r.reactBuild, strictMode: r.strictMode };
+  };
+  assert.deepEqual(built([strict], 'development'), { reactBuild: 'development', strictMode: true });
+  assert.deepEqual(built([plain], 'development'), { reactBuild: 'development', strictMode: false });
+  // Only a development build renders twice, and with no commit there is nothing to say it of.
+  assert.deepEqual(built([strict], 'production'), { reactBuild: 'production', strictMode: null });
+  assert.deepEqual(built([strict], 'profiling'), { reactBuild: 'profiling', strictMode: null });
+  assert.deepEqual(built([], 'development'), { reactBuild: 'development', strictMode: null });
+  assert.deepEqual(built([strict], null), { reactBuild: null, strictMode: null });
+  // A revision keeps the build the report was measured on, and reads StrictMode from the commits it holds now.
+  const first = buildReport(longPress.slice(0, 1), [], [], [], 'attributes', [], undefined, 'reading', 'development');
+  assert.equal(first.strictMode, null);
+  const second = refreshReport(first, longPress, [strict], []);
+  assert.deepEqual({ reactBuild: second.reactBuild, strictMode: second.strictMode }, { reactBuild: 'development', strictMode: true });
+  // A later render attached to a report that held none is a commit it holds as well.
+  assert.equal(attachLaterRender(first, commit(400, 0, { strictMode: true }), null)?.strictMode, true);
+});
+
 test("processing leaves out this library's own walk during the handlers, and the explanation says so", () => {
   // Handlers ran from 5 to 100 ms and the paint came at 120. Walking the click's commit at 50 ms
   // took 3 ms; the later render's 2 ms walk came after the paint, outside the interaction.

@@ -148,6 +148,14 @@ export function profileModeBit(reactMajor: number): number {
   return reactMajor === 17 ? 0b1000 : 0b10;
 }
 
+/**
+ * The bit of `fiber.mode` that `<StrictMode>` sets on the fibers under it: StrictMode, 1, on React 17, and
+ * StrictLegacyMode, 8, on 18 and 19.
+ */
+export function strictModeBit(reactMajor: number): number {
+  return reactMajor === 17 ? 0b1 : 0b1000;
+}
+
 // The flags that make React run a commit's passive phase, and so call `onPostCommitFiberRoot` after
 // it: effects to run (Passive), effects to clean up (ChildDeletion) and, from React 19, a hidden or
 // revealed Activity or Suspense tree (Visibility). The same bits in React 18 and 19.
@@ -893,6 +901,8 @@ export function handlerOf(fiber: Fiber | null, eventType: string, key?: string |
 export interface CommitContext {
   /** `profileModeBit` for the renderer's React major. */
   profileMode: number;
+  /** `strictModeBit` for the renderer's React major. */
+  strictMode: number;
   priority: number | undefined;
   didError: boolean;
   /**
@@ -982,6 +992,8 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // Rendered components with a time, and whether any time had a fraction of a millisecond.
   let timed = 0;
   let fractional = false;
+  // Whether a component that rendered is under <StrictMode>. The bit is inherited down the tree.
+  let strict = false;
   // A root hydrating is known from the root; a Suspense boundary hydrating, only by finding it.
   let hydrated = hydratesRoot(rootFiber);
   const { hydratedTarget } = context;
@@ -1026,6 +1038,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       return kids;
     }
     rendered++;
+    strict ||= (f.mode & context.strictMode) !== 0;
     const name = nameOf(f) || '(anonymous)';
     if (f.alternate === null) {
       mounted++;
@@ -1146,6 +1159,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     hotPath: Object.freeze(hotPath),
     startRendered,
     pathRendered,
+    strictMode: strict,
     components: Object.freeze(components),
     hasDurations,
     coarseClock,

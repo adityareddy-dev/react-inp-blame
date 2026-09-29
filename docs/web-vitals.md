@@ -38,7 +38,10 @@ above it, which is web-vitals' signal to fall back to its own selector, and it n
 
 `attributeINP(metric)` returns the metric's attribution (`{}` where there is none, as under
 `useReportWebVitals`) with a `react` field added: `{ schemaVersion, interactionId, blame, handler,
-hotPath, components, commits, followUps }`, frozen, from this library's own report for that interaction.
+hotPath, components, commits, followUps, reactBuild, strictMode }`, frozen, from this library's own
+report for that interaction. `reactBuild` is the build of react-dom that measured it, and a development
+build's numbers run high ([why](install.md#numbers-in-development)). `strictMode` says whether StrictMode
+rendered it twice there, and is `null` under any other build.
 It is `null` when nothing is installed on the page, and when there is no report for the interaction:
 one that stayed under `threshold` and set off no later render INP leaves out, one already pushed out
 of the 50 reports a page keeps, which the ten slowest and those INP can still point at never are, a click or

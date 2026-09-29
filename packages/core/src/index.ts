@@ -1,6 +1,6 @@
 import { MINIFIED_NAMES_CONSOLE, namesLookMinified } from './commits.js';
 import { createTimeline } from './devtools.js';
-import { checkHookReplaced, clearCommits, CLOSER_TYPES, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteCloser, noteInput, noteKeypress, noteResize, reactPage, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
+import { checkHookReplaced, clearCommits, CLOSER_TYPES, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteCloser, noteInput, noteKeypress, noteResize, reactBuild, reactPage, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
 import { labelOf, scriptsUnlisted, type LabelSource } from './join.js';
@@ -278,6 +278,7 @@ function installNow(opts: InstallOptions): Api {
     labels,
     reactStatus,
     reactPage,
+    reactBuild,
     now: () => performance.now(),
     dropped,
     publish: (r) => {

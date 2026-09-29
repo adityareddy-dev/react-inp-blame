@@ -84,6 +84,10 @@ export interface ReactAttribution {
   readonly commits: ReactRenderSummary;
   /** Commits that landed after that paint but still belong to the interaction, and any a key set off after its press painted, before a slower release that INP measured instead: those land before that paint. INP does not count them, except the release's render of a press held past the paint; people still wait for them. */
   readonly followUps: ReactRenderSummary;
+  /** The build of react-dom that measured it, as the report says (`InteractionReport.reactBuild`): a development build's numbers run high, so drop or label them before they are forwarded. */
+  readonly reactBuild: InteractionReport['reactBuild'];
+  /** Whether StrictMode rendered it twice, as the report says (`InteractionReport.strictMode`); null outside a development build. */
+  readonly strictMode: boolean | null;
 }
 
 export type { Blame, RenderedComponent } from './types.js';
@@ -226,6 +230,8 @@ function describe(r: InteractionReport): ReactAttribution | null {
     components: Object.freeze(main ? main.components.slice(0, MAX_COMPONENTS) : []),
     commits: summarize(r.commits),
     followUps: summarize(r.followUps),
+    reactBuild: r.reactBuild,
+    strictMode: r.strictMode,
   });
 }
 
