@@ -100,7 +100,8 @@ it rates that number on the same scale. The badge marks a development build `dev
 production, and each report carries `reactBuild` and `strictMode`, so a forwarded one can be told apart
 ([web-vitals.md](web-vitals.md)). Nothing is scaled down for you. To check a number in production, keep
 `enabled: true` and `runtime: { overlay: 'query' }` as in the config above, run `next build` and then
-`next start`, and open the page with `?inp-blame` in the URL.
+`next start`, and open the page with `?inp-blame` in the URL. With Vite, the same check is under
+[Numbers in development with Vite](#numbers-in-development-with-vite).
 
 ## Install with Vite
 
