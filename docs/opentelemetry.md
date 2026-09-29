@@ -192,7 +192,7 @@ build.
 | `react_inp_blame.blame.kind` | Where the time mostly went: `render`, `handler`, `hydration`, `layout`, `waiting`, `painting`, `script` or `none` | `render` | yes |
 | `react_inp_blame.blame.name` | The component, handler or script it went to | `OrderSummary` | yes |
 | `react_inp_blame.blame.detail` | What that was mostly made of | `LineItem ×800` | no, it is display text, whose wording can change in any minor |
-| `react_inp_blame.blame.ms` | How much of the interaction it accounts for, in ms. Left out where the build records no durations | `167.5999999998603` | no |
+| `react_inp_blame.blame.ms` | How much of the interaction it accounts for, in ms. Left out for `none`, and for a `render`, `hydration` or `handler` blame where the build records no durations and React committed inside the interaction | `167.5999999998603` | no |
 | `react_inp_blame.blame.confidence` | `measured` or `inferred` | `measured` | yes |
 | `react_inp_blame.handler` | The React handler that ran | `add` | yes |
 | `react_inp_blame.target.components` | Up to four components around the element, outermost first | `App > Lab > ContextStorm` | yes |
