@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { flushSync } from "react-dom";
 import type { Route } from "./+types/home";
 import { SlowList } from "../slow-list";
@@ -36,6 +37,16 @@ export default function Home() {
       >
         Save
       </button>
+      {/* The route change the navigation spec follows. The click takes 60 ms, so it is reported. */}
+      <Link
+        to="/second"
+        onClick={() => {
+          const end = performance.now() + 60;
+          while (performance.now() < end) {}
+        }}
+      >
+        Second page
+      </Link>
       <SlowList count={count} />
     </>
   );

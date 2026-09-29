@@ -2,7 +2,7 @@
   "name": "tanstack-start-fixture",
   "private": true,
   "type": "module",
-  "description": "What `npx @tanstack/cli@0.71.0 create --framework React --blank` makes, with the TanStack Start setup from docs/install.md and one slow component. Run by scripts/vite-app.mjs --fixture tanstack-start from a temp copy.",
+  "description": "What `npx @tanstack/cli@0.71.0 create --framework React --blank` makes, with the TanStack Start setup from docs/install.md, one slow component, and a second route a link opens, with the lines from docs/install.md that announce each route change. Run by scripts/vite-app.mjs --fixture tanstack-start from a temp copy.",
   "imports": {
     "#/*": "./src/*"
   },

@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import type { Api } from "react-inp-blame";
+import type { Api, InteractionReport } from "react-inp-blame";
 
 declare global {
   interface Window {
@@ -91,5 +91,39 @@ export function lastVerdict(page: Page): Promise<string | null> {
     type Session = { slots: { install?: { installed: { api: Api } | null } } };
     const session = (globalThis as unknown as Record<symbol, Session | undefined>)[Symbol.for("react-inp-blame")];
     return session?.slots.install?.installed?.api.last()?.verdict ?? null;
+  });
+}
+
+/** Where a report says its interaction happened, and the navigation it started. */
+export type Place = Pick<InteractionReport, "navigationURL" | "navigationType" | "startedNavigation">;
+
+/**
+ * Waits for a report of an interaction other than `seen` and returns its id and where it was placed, read
+ * from the library's page state as `lastVerdict` reads it, at its latest revision.
+ */
+export async function reportAfter(page: Page, seen: number | null): Promise<{ interactionId: number; place: Place }> {
+  const handle = await page.waitForFunction(
+    (id) => {
+      type Session = { slots: { install?: { installed: { api: Api } | null } } };
+      const session = (globalThis as unknown as Record<symbol, Session | undefined>)[Symbol.for("react-inp-blame")];
+      const last = session?.slots.install?.installed?.api.last();
+      if (!last || last.interactionId === id) return null;
+      const { interactionId, navigationURL, navigationType, startedNavigation } = last;
+      return { interactionId, place: { navigationURL, navigationType, startedNavigation } };
+    },
+    seen,
+    { timeout: 8_000 },
+  );
+  const report = await handle.jsonValue();
+  // waitForFunction only resolves on a truthy value, which its type does not say.
+  if (!report) throw new Error("waited for a report and got none");
+  return report;
+}
+
+/** The URL and type of the document's own navigation, named the way the library and web-vitals name it. */
+export function documentNavigation(page: Page): Promise<{ url: string; type: Place["navigationType"] }> {
+  return page.evaluate(() => {
+    const [entry] = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
+    return { url: entry.name, type: entry.type.replace(/_/g, "-") as Place["navigationType"] };
   });
 }

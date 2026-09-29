@@ -8,6 +8,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { AnnounceNavigations } from "./announce-navigations";
 import "./app.css";
 
 // The template's Google Fonts links are left out: a font request that fails logs a console error, and the
@@ -32,7 +33,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  return (
+    <>
+      <AnnounceNavigations />
+      <Outlet />
+    </>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
