@@ -1,9 +1,11 @@
 // bench.mjs: what react-inp-blame costs on real open-source React apps, and what it finds there.
 //
-//   node bench.mjs                      # every app, 15 runs per configuration, both throttle passes
-//   node bench.mjs --runs 3             # smoke run
-//   node bench.mjs --app tt-fuzzy       # one app
-//   node bench.mjs --dry-run            # print what a run would cover, then exit without a browser
+//   node bench.mjs --app tt-fuzzy               # one app, 15 runs per configuration, both throttle passes
+//   node bench.mjs --app tt-fuzzy --runs 3      # smoke run
+//   node bench.mjs --app tt-fuzzy --dry-run     # print what a run would cover, then exit without a browser
+//
+// README.md has the commands for the published runs. cal-diy has only A and B, and tt-virtual-fix
+// only B and F, so a run over every app in the default order is refused before it starts.
 //
 // Three configurations of the SAME production build per app:
 //   A  baseline, library absent from the bundle
@@ -22,7 +24,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { apps } from './apps.mjs';
+import { apps, checkConfigs } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // BENCH_ORDER reorders the interleaving (a check that a cost follows the build, not its slot).
@@ -466,7 +468,7 @@ async function collectVersions(browser, appIds) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const appIds = args.app ? args.app.split(',') : Object.keys(apps);
-  for (const id of appIds) if (!apps[id]) throw new Error(`no such app: ${id}`);
+  checkConfigs(appIds, CONFIGS);
   if (args.dryRun) {
     console.log(JSON.stringify({ runs: args.runs, throttles: args.throttles, apps: appIds, configs: CONFIGS }));
     return;

@@ -1,8 +1,10 @@
 // run.mjs: the whole benchmark in one command.
 //
-//   node run.mjs --runs 15          # the real run
-//   node run.mjs --runs 3           # smoke run
-//   node run.mjs --runs 15 --app tt-virtual
+//   node run.mjs --runs 15 --app tt-virtual     # one app
+//   node run.mjs --runs 3 --app tt-virtual      # smoke run
+//
+// README.md has the commands for the published runs. An app asked for a configuration it doesn't
+// have (cal-diy has only A and B, tt-virtual-fix only B and F) is refused before anything builds.
 //
 // Installs app dependencies if they are missing, builds each app three times (A, B, C) from the
 // same source, runs bench.mjs, then writes report.md next to the results JSON.
@@ -14,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { apps } from './apps.mjs';
+import { apps, checkConfigs } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -32,10 +34,10 @@ const argv = process.argv.slice(2).filter((a) => a !== '--no-build');
 const appArg = argv.includes('--app') ? argv[argv.indexOf('--app') + 1] : null;
 const appIds = appArg ? appArg.split(',') : Object.keys(apps);
 const CONFIGS = (process.env.BENCH_ORDER ?? 'A,B,C').split(',');
+checkConfigs(appIds, CONFIGS);
 
 for (const id of noBuild ? [] : appIds) {
   const app = apps[id];
-  if (!app) throw new Error(`no such app: ${id}`);
   if (!fs.existsSync(path.join(app.dir, 'node_modules'))) {
     console.log(`\n== install ${id}`);
     if (app.install) app.install(run);

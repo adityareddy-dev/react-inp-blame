@@ -684,3 +684,19 @@ export { settle };
 // with the library in. Run on its own: BENCH_ORDER=B,F node bench.mjs --app tt-virtual-fix. Build F with
 // BENCH_CONFIG=b BENCH_OUTDIR=dist-f npx vite build in a/vr, with the patch applied, then revert it.
 apps['tt-virtual-fix'] = { ...apps['tt-virtual'], id: 'tt-virtual-fix', dists: { B: 'dist-b', F: 'dist-f' }, ports: { B: 5333, F: 5334 } };
+
+/**
+ * Throws for an app that isn't here, or one asked for a configuration it has no build of, before
+ * anything is built or started. cal-diy has only A and B, and tt-virtual-fix only B and F, so a
+ * run over every app with the default A,B,C would get as far as either and fail there.
+ */
+export function checkConfigs(appIds, configs) {
+  for (const id of appIds) {
+    if (!apps[id]) throw new Error(`no such app: ${id}`);
+    const has = Object.keys(apps[id].ports);
+    const missing = configs.filter((c) => !has.includes(c));
+    if (missing.length) {
+      throw new Error(`${id} has no configuration ${missing.join(', ')} (it has ${has.join(', ')}): run it on its own with BENCH_ORDER=${has.join(',')}`);
+    }
+  }
+}

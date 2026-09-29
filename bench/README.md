@@ -139,6 +139,10 @@ node run.mjs --runs 3 --app tt-fuzzy                 # a smoke run of one app
 node bench.mjs --dry-run --app tt-fuzzy,twenty       # what a run would cover, no browser, then exit
 ```
 
+Name the apps with `--app`. cal-diy has only A and B, and tt-virtual-fix only B and F, so both scripts refuse
+a run over every app in the default `A,B,C` order before anything builds or starts, and the dry run refuses it
+the same way.
+
 The published five-app run in [real-apps.md](../docs/benchmarks/real-apps.md) used builds made beforehand:
 
 ```sh
