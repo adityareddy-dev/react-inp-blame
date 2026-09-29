@@ -85,6 +85,24 @@ test('layout thrash: the tap is blamed on LayoutThrash and its 400 PriceTicker r
   }
 });
 
+// The row's line under its title was cut to one line with an ellipsis, and in a panel 372 px wide the cut
+// came on the name the line is there to give: "browser recalculated styles and layout · 315 ms in LayoutT…".
+test("layout thrash: the row's blame line in the panel shows the name, with nothing cut off", async ({ page, browserName }) => {
+  await interact(page, 'layout-thrash', async () => {
+    await tap(page, '[data-test=trigger]');
+    if (browserName !== 'chromium') return;
+    // The forced layout's frame revises the report to its longer line.
+    await page
+      .waitForFunction(() => window.__REACT_INP_BLAME__.last()?.explanation.blame.kind === 'layout', null, { timeout: 5_000 })
+      .catch(() => {});
+  });
+  await page.locator('#react-inp-blame .badge').tap();
+  const line = page.locator('#react-inp-blame .panel .row .blame').first();
+  await expect(line).toContainText('LayoutThrash');
+  const lines = await page.locator('#react-inp-blame .panel .row').first().locator('.blame').evaluateAll((els) => els.map((el) => ({ text: el.textContent, cut: el.scrollWidth > el.clientWidth })));
+  for (const { text, cut } of lines) expect(cut, `"${text}" is cut off`).toBe(false);
+});
+
 test('handler hog: no React render, and the tap is the handler that ran', async ({ page, browserName }) => {
   const r = await interact(page, 'handler-hog', async () => {
     await tap(page, '[data-test=trigger]');

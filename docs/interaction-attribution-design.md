@@ -1629,7 +1629,10 @@ The badge goes when the last of those is disposed, handles from other copies of 
 or later included, so a component can show it from an effect under StrictMode, whose cleanup
 runs between two mounts, and a load that failed is tried again at the next call. The blame line
 comes from `explanation.blame`, a data twin of the cause sentence decided in the same
-branch, so the short and the long form never disagree. Page INP, on the badge, in the panel
+branch, so the short and the long form never disagree. Since 2026-09-28 it wraps: cut to one
+line with an ellipsis, in a panel 372 px wide, it lost the very name it is there to give,
+"browser recalculated styles and layout · 315 ms in LayoutT…" on a phone, and opening the row
+did not bring it back. Page INP, on the badge, in the panel
 head and from `api.inp()`, is the web-vitals estimate computed in-library, with no web-vitals
 dependency: the interaction count is `performance.interactionCount` where the browser has
 it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
