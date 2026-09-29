@@ -6,6 +6,173 @@ it changes when a field is removed or changes meaning, which a minor release may
 
 ## [Unreleased]
 
+### Changed
+
+- **`inp()` and its `interactionCount` leave out the badge and panel's own clicks, taps and key presses.** They
+  counted them, as web-vitals and Chrome's own INP do, though no report was ever made for them, and on a phone
+  opening the panel can take longer than the page's own taps. On a Pixel 7 emulator with the CPU slowed 4x, the
+  panel's tap took 104 ms after a single 56 ms tap on the page, so the badge and the panel head read "Page INP so
+  far 104 ms" with no "from click on" line, `inp()` pointed at the panel's tap with `report: null`, and
+  `interactionCount` said 3 for one real tap. The panel's Clear tap could do the same right after it cleared. This
+  departs from web-vitals on purpose: the library's INP and count can now differ from web-vitals' on a page where
+  the badge or panel was used, and the web-vitals page lists this among the cases where the two part. After Clear
+  the count starts at 0 and one tap on the page reads 1 interaction. A tap there too quick to send an Event Timing
+  entry, under 16 ms, is still counted, since nothing says where it landed. Since 0.1.0.
+- **A forced layout is named after the component the render started from where that holds the whole commit.**
+  Closing a shadcn/ui Sheet in a production build gave `blame` `{ kind: 'layout', name: 'DismissableLayer', detail:
+  '15 of 56 components' }`, a part of the commit that held none of the read: Radix's `Presence` reads
+  `animationName` in a layout effect, above DismissableLayer and beside it. It now gives `name: 'Dialog'` and
+  `detail: '56 components'`, the component the cause already said the render went "from ... down". Where the render
+  started at one root of several, or where the component rendered many times over is the one the render is named
+  after (a TreeNode in a tree of them), the name and detail are as before. A render blame on the same commit is
+  unchanged, so the two can now name different components, and a dashboard that groups layout blames by `name` sees
+  these under the new one. Since 0.13.0. The layout sentence also names its window once and says what forces a
+  layout before what React rendered: "Of the 116 ms it took to handle the click, the browser spent 108 ms
+  recalculating styles and layout, leaving 8 ms for ... That happens when code reads an element's size right after
+  changing styles, often in a layout effect. React was re-rendering 181 components inside Tabs." It said "spent"
+  twice, and "That happens" came after the re-render and read as being about it. Since 0.2.0.
+- **A screen update blamed on React's own task names the component React rendered inside it.** Where the screen
+  update outranked the working time and the script after the handlers was React's scheduler task, `blame.name` was
+  `'MessagePort.onmessage'`, and on a phone the row read "screen took 148 ms to update · MessagePort.onmessage", in
+  bold the name of a task no page ever writes. Now `blame.name` is the component that render is named after,
+  `'CascadingEffect'`, and the row reads "screen took 148 ms to update · CascadingEffect". The cause still says "a
+  script (MessagePort.onmessage, app.js) ran for 96 ms before the next frame, and React rendered inside it". Any
+  other script keeps its own name, as in `'DIV.onscroll'`.
+- **An icon a script drew in a control is put on the control's component.** feather.replace(), and Font Awesome's
+  autoReplaceSvg and searchPseudoElements, draw an `<svg>` React never saw, so it is read from the element holding
+  it. With `<IconButton onClick={close} />` rendering `<button onClick={onClick}><i data-feather="x" /></button>`,
+  the click was climbed past IconButton along with the handler it was handed, and `target.owners` and
+  `generateTarget` read "Page (svg.feather.feather-x)". They now read "Page > IconButton (svg.feather.feather-x)",
+  as they do for an svg React renders there. That covers a button, and a `<div role="button">` whose role
+  IconButton wrote itself, also on a styled component that renders the div, whatever else the control holds. In
+  React 18 and 19, since 0.6.0.
+- **React's render time across several commits is said as their total, with the named commit's share.** The
+  handler, layout and render sentences put all of it on the one commit they named: "React spent 55 ms re-rendering
+  30 components inside List" gave List a 500-component Sidebar's 25 ms, and a render verdict three 3 ms renders
+  earned together read "React spent 3 ms". Now it reads "React spent 55 ms rendering across 2 commits, 30 ms of it
+  re-rendering 30 components inside List". A hedged sentence, and a note standing in for a closed render verdict,
+  keep the named render against the working time and add ", and 55 ms of rendering in all across 2 commits" after
+  it. Renders under 1 ms count in the total too, where six of them beside List's 30 ms read as "React spent 32 ms
+  re-rendering 30 components inside List".
+- **"React rendered N times" counts a small render whose effects took the time, and the renders the sentences
+  count.** Take a click whose 3 ms render ran 100 ms of useEffect that set state, followed by a 200 ms re-render of
+  400 components. It had no note about the second render, and now `notes` adds "React rendered 2 times before the
+  screen updated, which usually means a state update inside an effect or a chain of updates." A render counts once
+  its committing or effects are worth a mention, and the render a verdict blames always counts. The note and a
+  cause's "rendering across 3 commits" count the same renders, where the note used to leave out one under 5 ms. A
+  hydration still isn't counted as a re-render, except where the sentence gave the render time across commits with
+  the hydration among them. Since 0.1.0.
+- **A key press no longer names the next click's listener as its own script, or says its own timer was the next
+  key's wait.** A keydown whose keyup was not handled in its frame, followed before the paint by a click whose
+  button went down after the key press, read "React's render was small (re-rendering 3 components inside Editor,
+  mostly Row (3 of them)); a script (DIV#root.onmousedown, app.js) ran for 56 ms after the handler finished." for
+  that click's 56 ms `onmousedown`, and any key press did the same for its `onclick`, `onpointerup` or `onmouseup`.
+  The blame is now `none`, and the note says "After the handler finished, the screen took another 92 ms to update:
+  the frame waited on the next click, which the page handled first. The longest script the browser recorded in that
+  time was DIV#root.onmousedown (app.js), 56 ms." The same goes after a click's handlers. A pointerdown still has
+  its own `onmousedown` and click listeners to dispatch, and a pointerup whose click was too quick for an entry its
+  click listeners, so each keeps them as its script. A click whose button went down before the key press, or whose
+  pointerdown was not recorded, is weighed as before, since nothing tells its listeners from the key's. So is a tap
+  whose finger went down before the key press, which dispatches its mousedown only once the finger lifts. Under a
+  screen update of 100 ms or less, where the next key went down before the paint but no listener of its was
+  recorded and nothing showed it held the frame, a keydown's own 86 ms timer read "After the key press was handled,
+  the screen took another 90 ms to update: the frame waited on the next key press, which the page handled first."
+  It now reads as it does without the next key, "..., mostly because a script (TimerHandler:setTimeout, app.js) ran
+  for 86 ms before the next frame.", and under a 40 ms screen update the blame moves from `painting` to `script`.
+  Where the next key's render ended by the paint, half the screen update or more after the handlers, the painting
+  blame stays and says "the frame most likely waited on the next key press". In React 18 and 19, the click's
+  `onclick` since 0.16.0 and the timer since 0.13.0.
+- **Where the handlers' own script decides an idle click's verdict, a longer timer after it goes in the note.** A
+  click that rendered nothing, whose handlers included a 22 ms script, followed by a 49 ms timer under a 100 ms
+  screen update, read "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 49 ms after
+  the handler finished." It now reads "React didn't render anything; the click handler handleSave ran for 22 ms.",
+  and the note says "After the handler finished, the screen took another 100 ms to update: 50 ms of it was the
+  browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest
+  script the browser recorded in that time was TimerHandler:setTimeout (app.js), 49 ms." In React 18 and 19, since
+  0.16.0.
+- **The READMEs call it a development tool first, production optional.** The comparison table's first row read
+  "Production-safe" with a yes for this library. It now reads "Runs in a production build" with "optional", and
+  both READMEs give what 0.12.0 cost where it was turned on: about 209 ms of page load on the shadcn/ui docs site,
+  and about 5 ms inside each interaction on the twenty CRM. The docs also say that under `labels: 'attributes'` an
+  `aria-label`, test id or `id` built from user data goes out as your code wrote it, in `target.label`,
+  `target.selector` and `generateTarget`'s string, that react-scan's `lite` and `all-environments` entries run on
+  production builds, and that each report goes out as a User Timing measure any `PerformanceObserver` on the page
+  can read.
+
+### Fixed
+
+- **A render is placed where it ran against the handlers, without another commit's effects.** In a production
+  build, 800 rows committed after 30 ms of handlers read "In 30 ms of working time, short of a long task, React was
+  re-rendering 800 components inside List". It now reads "After the 30 ms of working time, short of a long task,
+  React was re-rendering 800 components inside List, mostly Row (800 of them), before the next frame", and beside
+  150 rows committed in the handler, the sentence names those 150 and not the 800. A 28 ms handleSave in that
+  working time, named nowhere, now keeps the verdict: "...; the click handler handleSave ran for 28 ms." It still
+  stays out of the verdict where a count in the working time would have named a render too. Both since 0.13.0.
+  Where Event Timing's 8 ms rounding put the paint before a click handler ended, 800 rows committed inside it were
+  said to come "after the handlers, before the next frame", and now come "in the 55 ms of working time", in a
+  closed verdict's note too. Since 0.16.0. A render committed after the handlers is no longer said to be followed
+  by effects another commit ran inside them, as in "then ran useEffect callbacks for about 35 ms of the 100 ms of
+  working time in another commit", in a production render verdict since 0.12.0 and in a closed verdict's note since
+  0.16.0. Both now read "... after the handlers, before the next frame." In React 18 and 19.
+- **A report React stopped being read partway through no longer says nothing it rendered was seen.** With a render
+  read before the stop, the cause read "What React did is unknown: no react-dom on this page is being read, so
+  whatever it rendered for this click was not seen". It now reads "What React did after it stopped being read is
+  unknown, and the 190 ms of working time cannot be put on the click handler or on a render." Since 0.16.0. Where
+  that render ran in its own task after the handlers, the report gets the verdict it gets where React is read,
+  hedged: "React's render was small (re-rendering 3 components inside List, mostly Row (3 of them, 1 ms)); most
+  likely the click handler handleSave ran for 20 ms." Since 0.12.0. In React 18 and 19.
+- **A key press no longer takes the next key's handler for its own script, or its own work for the next key's.**
+  Under a screen update of 100 ms or less, a keydown with short handlers and a small render read "a script
+  (DIV#root.onkeydown, app.js) ran for 70 ms after the handler finished", with no note, though that was the next
+  key's handler. It is now `none`, and the note says "After the handler finished, the screen took another 90 ms to
+  update: the frame waited on the next key press, which the page handled first. The longest script the browser
+  recorded in that time was DIV#root.onkeydown (app.js), 70 ms." A 44 ms one in 90 ms is `none` too, and the note
+  names it beside 46 ms of the browser's own work. The same goes after a click's handlers, for the next key's
+  `onkeydown` or `onkeypress`. Since 0.16.0. Where the next key came during a key press's handlers, every script
+  after them counted as that key's work, so React's own task holding the press's render, or a timer on the tick its
+  handlers ended, could make the screen update read "the frame waited on the next key press", and over a 100 ms
+  screen update a 57 ms timer on that tick lost the verdict. The next key's work now starts at its own listener and
+  never takes in a script that holds the press's render, so the timer reads "...; a script
+  (TimerHandler:setTimeout, app.js) ran for 57 ms after the handler finished.", as it does without the next key.
+  Since 0.13.0, and over a 100 ms screen update since 0.16.0. A key's own `oninput` right after its handlers, or a
+  checkbox click's, is never taken for the next press's listener. Where no listener of the next key's was recorded,
+  the verdict is what it is without that key. In React 18 and 19.
+- **Timers around the handlers, and the wait before them, are said once and where they held the time.** A script
+  verdict on a timer the input waited behind read "a script (TimerHandler:setTimeout, app.js) ran for 60 ms of it."
+  and then "It also waited 60 ms before the handler could start", the same 60 ms twice. It now reads "ran for 60 ms
+  of it before the handler started." and the wait isn't said again, except where the timer held under half of it,
+  as 30 ms of 120, where "It also waited 120 ms before the handler could start, because the main thread was busy."
+  is kept. 110 ms of short click handlers that rendered nothing, then a 30 ms timer, read "a script
+  (TimerHandler:setTimeout, app.js) ran for 30 ms after the handler finished" under a 99 ms screen update and "The
+  click handler handleSave ran for about 110 ms" under a 104 ms one, and now read the latter under both. With a 25
+  ms timer before those handlers too, both read "React didn't render anything; a script (TimerHandler:setTimeout,
+  app.js) ran for 25 ms before the handler started.", and the screen update's note names the 30 ms timer. After a
+  200 ms wait, where a forced layout took 160 ms of the working time, the note no longer also says the handler or a
+  render most likely still took the 200 ms of working time, and only the forced layout's note is said, as under a
+  screen update that outranked the layout. In React 18 and 19, since 0.16.0.
+- **The Performance panel's Summary counts what the tooltip counts, and a render the build did not time has no
+  length.** Opening the shadcn/ui Sheet, the tooltip said "React rendered 3 times before the screen updated" while
+  the Summary's "React renders before the paint" said 6, counting an empty commit and two small ones. The row now
+  counts what the sentence counts and names the rest: "3, and 3 too small to count", "2, a hydration, and 1 too
+  small to count" for a click that hydrated server-rendered HTML first, or "1, and 1 forced by a script" where a
+  scroll listener after the handlers rendered. Every commit is still drawn in the React renders track. The
+  Summary's "Handlers and React rendering 469 ms" sat beside a tooltip's 474 ms, with the library's own 5 ms two
+  rows down, and now reads "469 ms, not counting react-inp-blame itself", or where a keydown and keyup painted
+  together, "146 ms, 30 ms of it between the keydown's handlers and the keyup's, not counting react-inp-blame
+  itself". The "react-inp-blame itself" row shows only from half a millisecond, so it no longer reads "0 ms". In a
+  production build each React renders entry started 0.5 ms before its commit and hovered as "0.50 ms React render ·
+  OrderSummary (801 components)" beside a tooltip that put about 170 ms on that render. It is now drawn with no
+  length where it committed and named "React render · OrderSummary (801 components, time not measured)", and before
+  Chrome 134, where it is a measure, its tooltip says so too. Since 0.1.0.
+- **The panel fits a phone.** The row's blame line was cut to one line with an ellipsis, and in the 372 px panel
+  the cut landed on the name, as in "browser recalculated styles and layout · 315 ms in LayoutT…". Now it wraps,
+  and a long script URL breaks across lines. On a touch screen, or a window 480 px wide or less, Clear (24 by 15
+  px) and the close button (40 by 40) are at least 44 px each way. The panel was 97% opaque with a 14 px backdrop
+  blur, which cost a phone's GPU every time it opened, and rows scrolling under the 98% sticky header showed
+  through. The blur is gone and both are solid. Since 0.1.0. The demo's sign-in and lab pages, laid out for a
+  desktop, made a phone's browser widen them to about 1,000 px, and now stack into one column below 720 px, and on
+  a touch screen no taller than 500 px, which is a phone on its side.
+
 ## [0.18.0] - 2026-09-27
 
 ### Changed
