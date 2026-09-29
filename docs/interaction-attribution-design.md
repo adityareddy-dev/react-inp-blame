@@ -942,11 +942,11 @@ sentence is printed against that same window, or it reads "110 ms of the 100 ms 
 So the sentence names that window rather than the working time ("the 116 ms it took to handle the
 click"), and its numbers add up to it. It says "it took" and not "spent", since what the browser
 spent is said inside it, and up to 0.18.0 the sentence said spent twice. Where the walk is worth a
-whole millisecond the remainder names it too, because the window it was taken from holds it. The sentence says what is left over —
-"of the 116 ms it took to handle the click, the browser spent 108 ms recalculating styles and layout, leaving 8 ms
-for React's render and commit, its layout effects and the click handler together" — which is what
-makes the demotion of the
-render a measurement rather than a preference. Where React's render is itself timed higher than that
+whole millisecond the remainder names it too, because the window it was taken from holds it. The
+sentence says what is left over ("of the 116 ms it took to handle the click, the browser spent 108 ms
+recalculating styles and layout, leaving 8 ms for React's render and commit, its layout effects and
+the click handler together"), which is what makes the demotion of the render a measurement rather
+than a preference. Where React's render is itself timed higher than that
 remainder the two overlap, because geometry read inside a render body is charged to the render and to
 the layout both, and the sentence says that instead of printing a remainder that bounds nothing. It
 is the one blame *about React's work* that keeps `measured` under a production build — `waiting` and
