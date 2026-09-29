@@ -1109,12 +1109,10 @@ export function renderedVerb(c: CommitSummary): string {
 }
 
 /**
- * The commit a report's render blame was built from, for the panel's row to take its verb from and the
- * DevTools entry and the panel's component list their render: the one whose name and detail the blame
- * carries, the heaviest of them where several do. It is not always the heaviest commit: a 5 ms render whose
- * layout effects ran for 60 ms is named over a 20 ms mount beside it, and an 8 ms render the handlers made
- * over a 43 ms one in the task the click waited behind. The heaviest where none matches, and null where the
- * report holds no commit.
+ * The commit a report's render blame was built from, for the panel's row to take its verb from: the one
+ * whose name and detail the blame carries, the heaviest of them where several do. It is not always the
+ * heaviest commit: a 5 ms render whose layout effects ran for 60 ms is named over a 20 ms mount beside it.
+ * The heaviest where none matches, and null where the report holds no commit.
  */
 export function blamedCommit(r: InteractionReport): CommitSummary | null {
   const { name, detail } = r.explanation.blame;
