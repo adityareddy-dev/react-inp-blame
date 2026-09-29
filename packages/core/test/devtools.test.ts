@@ -202,7 +202,7 @@ test('a render a key press set off before its slower keyup is drawn as a later r
   );
 });
 
-test('the interaction entry is named after the heaviest render before the paint, the one its tooltip blames', () => {
+test('the interaction entry is named after the render before the paint its tooltip blames, which is not always the heaviest', () => {
   // The click's own render touched 2 components; a layout effect then set state, and 801 re-rendered.
   const own = commit(20, { rendered: 2, roots: ['CartButton'], hotPath: ['CartButton'], components: [{ name: 'CartButton', count: 2, self: null, total: null }] });
   const r = report([own, commit(170)]);
@@ -214,6 +214,30 @@ test('the interaction entry is named after the heaviest render before the paint,
     ['Heaviest path', 'OrderSummary'],
   );
   assert.equal(r.explanation.blame.name, 'OrderSummary');
+  // A 43 ms render in the task a click waited behind, committed as its handlers began, is the heaviest, and the
+  // verdict blames the 8 ms render the handlers made. The entry was named after the 43 ms one.
+  const waited = { ...click, startTime: 1000, duration: 80, processingStart: 1040, processingEnd: 1050 };
+  const input: InputRecord = { ts: 1000, type: 'click', gestureTs: 1000, press: undefined, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: 1000, unjoined: [] } };
+  const behind = measured(1039.5, { inputTs: 800, gestureTs: 800, sinceInput: 239.5, startedAt: 996.5, total: 43, components: [{ name: 'LineItem', count: 800, self: 40, total: 0.1 }] });
+  const made = measured(1049, {
+    inputTs: 1000,
+    gestureTs: 1000,
+    sinceInput: 49,
+    startedAt: 1041,
+    total: 8,
+    rendered: 2,
+    roots: ['CartButton'],
+    hotPath: ['CartButton'],
+    components: [{ name: 'CartButton', count: 2, self: 8, total: 8 }],
+  });
+  const blamed = sealReport(buildReport([waited], [behind, made], null, [input]));
+  assert.equal(blamed.explanation.blame.name, 'CartButton');
+  const { drawn: named } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(blamed));
+  assert.equal(named[0]?.label, '80 ms click · CartButton');
+  assert.deepEqual(
+    named[0]?.properties?.find(([name]) => name === 'Heaviest path'),
+    ['Heaviest path', 'CartButton'],
+  );
 });
 
 test('before Chrome 134, and in other browsers, every entry is a performance.measure, taken out of the buffer once drawn', () => {

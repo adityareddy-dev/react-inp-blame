@@ -299,3 +299,40 @@ test("the panel's row and its open section say a key press's render before the s
   assert.equal(after.line, 'then List re-rendered after the paint · Row ×400 · 60 ms');
   assert.equal(after.heading, 'Rendered after the paint · 400 components');
 });
+
+test("the panel's open section lists the components of the render the verdict blames, which is not always the heaviest", () => {
+  // A 43 ms render in the task a click waited behind, committed as its handlers began, and the 8 ms render of 500
+  // components the handlers made, which the verdict blames. The section listed the 30 components of the first.
+  const click = { name: 'click', interactionId: 7, startTime: 1000, duration: 80, processingStart: 1040, processingEnd: 1050, target: null };
+  const input = { ts: 1000, type: 'click', gestureTs: 1000, press: undefined, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: 1000, unjoined: [] } };
+  const render = (at: number, inputTs: number, opts: Partial<CommitSummary>): CommitSummary => ({
+    at,
+    sinceInput: at - inputTs,
+    inputTs,
+    gestureTs: inputTs,
+    inputType: 'click',
+    rendered: 30,
+    hydrated: false,
+    hydratedTarget: null,
+    truncated: false,
+    roots: ['List'],
+    hotPath: ['List'],
+    components: [{ name: 'Row', count: 30, self: 20, total: 20 }],
+    hasDurations: true,
+    coarseClock: false,
+    total: 43,
+    startedAt: null,
+    effectsStartedAt: null,
+    effectsEndedAt: null,
+    walkMs: 0,
+    priority: 1,
+    didError: false,
+    ...opts,
+  });
+  const behind = render(1039.5, 800, { startedAt: 996.5 });
+  const made = render(1049, 1000, { startedAt: 1041, total: 8, rendered: 500, roots: ['Sidebar'], hotPath: ['Sidebar'], components: [{ name: 'Item', count: 500, self: 6, total: 6 }] });
+  const r = sealReport(buildReport([click], [behind, made], null, [input]));
+  assert.equal(r.explanation.blame.name, 'Sidebar');
+  const more = byClass(panelFor(r), 'more');
+  assert.equal(more && byClass(more, 'h')?.textContent, 'Rendered before the paint · 500 components');
+});
