@@ -304,6 +304,17 @@ test('a small render whose useEffect took the time is the render the tooltip bla
   assert.equal(row(spreadDrawn[0], 'React renders before the paint'), '2');
 });
 
+test('the small render a layout blame names is counted, as the tooltip blames it', () => {
+  // A production commit of 4 components from Popover, inside the root's click listener that forced 100 ms of layout
+  // over 178 ms of handlers. The tooltip blamed Popover, and the Summary said "0, and 1 too small to count".
+  const popover = commit(60, { rendered: 4, roots: ['Popover'], hotPath: ['Popover'], components: [{ name: 'PopoverContent', count: 4, self: null, total: null }] });
+  const frames = [{ start: 0, duration: 200, blocking: 150, forcedLayout: 100, scripts: [{ invoker: 'DIV#root.onclick', name: '', source: 'app.js', start: 2, duration: 178, forcedLayout: 100 }], styleAndLayoutStart: null }];
+  const r = sealReport(buildReport([click], [popover], frames));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'Popover']);
+  const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+  assert.equal(row(drawn[0], 'React renders before the paint'), '1');
+});
+
 test("the count of renders before the paint leaves out what the tooltip's count leaves out, and says what", () => {
   // A click on server-rendered HTML React had not hydrated yet, as on the Next.js App Router, that then rendered
   // twice. The tooltip said React rendered 2 times and the Summary 3.

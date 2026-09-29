@@ -3267,6 +3267,17 @@ test('the commit that hydrated is not counted as one of the renders before the s
   assert.ok(twice.explanation.notes.some((n) => n.includes('React rendered 2 times before the screen updated')));
 });
 
+test("the render a layout blame names counts as one of the renders before the screen updated, however small", () => {
+  // A production build: Popover's 4 components committed inside the listener that forced 160 ms of layout, and 400
+  // rows rendered in a later script. The blame is on Popover, and its commit was said to be too small to count.
+  const popover = commit(60, 0, { hasDurations: false, total: 0, rendered: 4, roots: ['Popover'], hotPath: ['Popover'], components: [{ name: 'PopoverContent', count: 4, self: null, total: null }] });
+  const rows = commit(200, 0, { hasDurations: false, total: 0, rendered: 400, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 400, self: null, total: null }] });
+  const frames = [frame(0, 300, [script('DIV#root.onclick', 2, 150, 160), script('BUTTON.onpointerup', 170, 60)])];
+  const r = report([entry('click', 0, 300, 2, 280)], [popover, rows], frames, [input(0, 'click')]);
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'Popover']);
+  assert.ok(r.explanation.notes.includes('React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.'), r.verdict);
+});
+
 test('a press before hydration and a click after it is not a click on HTML React never hydrated', () => {
   // The pointerdown landed on HTML that was waiting; by the click React had hydrated it and handled
   // it. Reading the newest input of the interaction, not the first, is what keeps the two apart.

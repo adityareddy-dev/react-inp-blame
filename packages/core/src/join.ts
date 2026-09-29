@@ -2311,6 +2311,8 @@ function explain(r: InteractionReport): Explanation {
   let saidAcross: CommitSummary | null = null;
   // The render blame's commit spent most of its time in useEffect callbacks, which the sentence and detail lead with.
   let effectsLed = false;
+  // The commit a layout blame's subtree is, which counts as a render however small, as a render blame's does.
+  let layoutOwn: CommitSummary | null = null;
   if (hydrationTook) {
     const { boundary, commit } = hydrationTook;
     const confidence = measuredFrom(commit);
@@ -2439,6 +2441,7 @@ function explain(r: InteractionReport): Explanation {
     // The subtree is the one the commit in the forcing scripts rendered, where the sentence found one.
     const own = read.commit ? (!unjoined && namesThisInteraction(read.commit) ? read.commit : null) : named;
     const inTheSubtree = !!own && read.inTheSubtree;
+    if (inTheSubtree) layoutOwn = own;
     // The hot path says where the render went, not where the read was, so where the sentence says it went
     // from a component that holds the whole commit (`fromName`) that is the subtree named, with the whole count.
     // Only where the forcing script's commit is the one the sentence describes: another commit's start is
@@ -2692,7 +2695,7 @@ function explain(r: InteractionReport): Explanation {
   // A note standing in for a closed render rung names the render that rung would have, and gives its total the same way.
   if (((closedByTheScreen && blame.kind === 'painting') || (closedByTheWait && waitIsTheVerdict)) && !handlerWins && c && rc && renderMatters) saidAcross = rc;
   // Said where two renders count and were not a hydration. A render with little in it counts where its committing or
-  // effects were worth saying, or the render blame names it: a 3 ms render whose useEffect ran for 100 ms and set
+  // effects were worth saying, or the render blame or the layout blame's subtree names it: a 3 ms render whose useEffect ran for 100 ms and set
   // state is the chain the note is about. A hydration is not a re-render: it is the first render of that HTML on
   // the client, and firing on it would tell every click that waited for one to go looking for an effect that
   // updates state. So it is not counted either, except where a sentence gave React's render time across commits
@@ -2700,7 +2703,8 @@ function explain(r: InteractionReport): Explanation {
   // beside "rendering across 3 commits", one of them the hydration, read as two counts of the same thing. Counted
   // everywhere, a click that waited for a boundary to hydrate and rendered twice read "React rendered 3 times", in a
   // production build too, where no sentence gives a count.
-  const counts = (x: CommitSummary) => carriesWork(x) || committingShows((committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0)) || (blame.kind === 'render' && x === rc);
+  const counts = (x: CommitSummary) =>
+    carriesWork(x) || committingShows((committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0)) || (blame.kind === 'render' && x === rc) || (blame.kind === 'layout' && x === layoutOwn);
   // The renders the sentences count, and one that counts though the build gave it no time.
   const counted = r.commits.filter((x) => rendersAll.includes(x) || (!forcedByScript.includes(x) && counts(x)));
   const reRenders = counted.filter((x) => x.hydratedTarget == null);

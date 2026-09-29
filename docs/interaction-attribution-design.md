@@ -1160,7 +1160,9 @@ a closed render branch, keep the named render against the working time first and
 handlers or began before them, more than the working time. The renders counted are the ones the note
 "React rendered 3 times before the screen updated" counts, so the two never disagree. The note, and the
 Performance panel's Summary, count one more kind of render, however little it rendered: one whose
-committing or effects were worth saying, or the one a render blame names. In a production build 5 rows
+committing or effects were worth saying, or the one a render blame names, or since 0.20.0 the one whose
+subtree a layout blame names (a Popover's 4 components under 100 ms of forced layout were blamed and
+too small to count). In a production build 5 rows
 whose useEffect ran for 35 ms, then 800 rows after the handlers, are two renders. The note also counts a
 render the screen update's clause says ran inside a script after the handlers, which the sentences about
 the working time leave to that clause. A hydration is not a re-render, so the note leaves it out, except
@@ -1779,7 +1781,7 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   says what that leaves out and why ("2, a hydration, and 3 too small to count"): on the
   shadcn/ui Sheet the tooltip said 3 and the Summary 6, for the six commits the renders track
   drew. A render whose committing or effects were worth saying, or the one a render blame names,
-  is never too small to count, or a 3 ms render whose useEffect ran for 300 ms was blamed in the
+  or a layout blame's subtree is, is never too small to count, or a 3 ms render whose useEffect ran for 300 ms was blamed in the
   tooltip and too small in the Summary. Its handlers and React rendering row is the working time,
   with this library's own read taken out and on a row of its own, and the row says what the
   layout sentence's window counts differently: the time between one event's handlers and the
