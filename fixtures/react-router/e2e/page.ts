@@ -98,26 +98,35 @@ export function lastVerdict(page: Page): Promise<string | null> {
 export type Place = Pick<InteractionReport, "navigationURL" | "navigationType" | "startedNavigation">;
 
 /**
- * Waits for a report of an interaction other than `seen` and returns its id and where it was placed, read
- * from the library's page state as `lastVerdict` reads it, at its latest revision.
+ * Waits until `count` reports of interactions after `seen` are published, and returns their ids and places
+ * in the order the interactions happened, each at its latest revision, read from the library's page state
+ * as `lastVerdict` reads it.
  */
-export async function reportAfter(page: Page, seen: number | null): Promise<{ interactionId: number; place: Place }> {
+export async function reportsAfter(
+  page: Page,
+  seen: number | null,
+  count: number,
+): Promise<{ interactionId: number; place: Place }[]> {
   const handle = await page.waitForFunction(
-    (id) => {
+    ({ seen, count }) => {
       type Session = { slots: { install?: { installed: { api: Api } | null } } };
       const session = (globalThis as unknown as Record<symbol, Session | undefined>)[Symbol.for("react-inp-blame")];
-      const last = session?.slots.install?.installed?.api.last();
-      if (!last || last.interactionId === id) return null;
-      const { interactionId, navigationURL, navigationType, startedNavigation } = last;
-      return { interactionId, place: { navigationURL, navigationType, startedNavigation } };
+      const reports = (session?.slots.install?.installed?.api.reports() ?? [])
+        .filter((report) => seen === null || report.interactionId > seen)
+        .sort((a, b) => a.interactionId - b.interactionId);
+      if (reports.length < count) return null;
+      return reports.map(({ interactionId, navigationURL, navigationType, startedNavigation }) => ({
+        interactionId,
+        place: { navigationURL, navigationType, startedNavigation },
+      }));
     },
-    seen,
+    { seen, count },
     { timeout: 8_000 },
   );
-  const report = await handle.jsonValue();
+  const reports = await handle.jsonValue();
   // waitForFunction only resolves on a truthy value, which its type does not say.
-  if (!report) throw new Error("waited for a report and got none");
-  return report;
+  if (!reports) throw new Error(`waited for ${count} reports and got fewer`);
+  return reports;
 }
 
 /** The URL and type of the document's own navigation, named the way the library and web-vitals name it. */

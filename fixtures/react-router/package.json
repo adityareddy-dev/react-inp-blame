@@ -2,7 +2,7 @@
   "name": "react-router-fixture",
   "private": true,
   "type": "module",
-  "description": "What `npx create-react-router@8.4.0` makes, with the React Router setup from docs/install.md, one slow component, a slow click handler in the route component, and a second route a link opens, with the lines from docs/install.md that announce each route change. Run by scripts/vite-app.mjs --fixture react-router from a temp copy.",
+  "description": "What `npx create-react-router@8.4.0` makes, with the React Router setup from docs/install.md, one slow component, a slow click handler in the route component, and a second route a link opens, slow to commit, with the lines from docs/install.md that announce each route change. Run by scripts/vite-app.mjs --fixture react-router from a temp copy.",
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev",
