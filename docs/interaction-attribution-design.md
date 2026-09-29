@@ -1088,29 +1088,28 @@ they are worth a mention, and a sentence that names one commit gives what the ot
 is worth saying, so none of it goes unsaid under the wrong name. The handler, for its part, now has
 to outrun all of React's time to be the blame, committing and effects included, not only the render
 durations it was held against before spans existed. A render blame's milliseconds are the commit's in
-all, render, committing and effects, since that is what it accounts for, with the render counted for
-what the working time could hold of it (below), so no render is blamed for more than the interaction.
-The render time is said the same way. Where more than one commit in the working time rendered, a
-sentence gives their total and the share of the commit it names: "React spent 55 ms rendering across 2
-commits, 30 ms of it re-rendering 30 components inside List". The share is not called the heaviest,
-since the commit a render blame names can be a lighter render chosen for its committing. Every commit
-that rendered at all is counted, or six renders of under 1 ms each put their 2 ms on List. A hedged
-render sentence, and a note standing in for a closed render branch, keep the named render against the
-working time first and add the total after it, "and 55 ms of rendering in all across 2 commits", since
-the total can hold renders that ran after the handlers or began before them, more than the working
-time. The renders counted are the ones the note "React rendered 3 times before the screen updated"
-counts, so the two never disagree; the note also counts a render the screen update's clause says ran
-inside a script after the handlers, which the sentences about the working time leave to that clause.
-A hydration is not a re-render, so the note leaves it out, except where a sentence gave React's render
-time across commits with the hydration among them: there it counts what that sentence counted, and
-"React rendered 2 times" never sits beside "rendering across 3 commits". In a production build no
-sentence gives a count, and the note leaves the hydration out there too. Until 2026-09-27 the note
-counted only renders of 5 ms or more, and counted one the working time held none of (below). The note
-that a component count is partial follows the commit the sentence names, not the longest one, and that
-holds where a verdict below the render's calls it small too. Until 2026-09-27 the handler and layout
-sentences put the total beside the one commit's phrase, which gave List a 500-component Sidebar's 25
-ms, and the render verdict said only the commit it named, so three 3 ms renders that earned it together
-read as 3 ms, under the 5 ms a render needs.
+all, render, committing and effects, since that is what it accounts for, with a render committed with
+the handlers counted for what the working time could hold of it (below). The render time is said the
+same way. Where more than one commit in the working time rendered, a sentence gives their total and the
+share of the commit it names: "React spent 55 ms rendering across 2 commits, 30 ms of it re-rendering 30
+components inside List". The share is not called the heaviest, since the commit a render blame names can
+be a lighter render chosen for its committing. Every commit that rendered at all is counted, or six
+renders of under 1 ms each put their 2 ms on List. A hedged render sentence, and a note standing in for
+a closed render branch, keep the named render against the working time first and add the total after it,
+"and 55 ms of rendering in all across 2 commits", since the total can hold renders that ran after the
+handlers or began before them, more than the working time. The renders counted are the ones the note
+"React rendered 3 times before the screen updated" counts, so the two never disagree. The note also
+counts a render the screen update's clause says ran inside a script after the handlers, which the
+sentences about the working time leave to that clause. A hydration is not a re-render, so the note
+leaves it out, except where a sentence gave React's render time across commits with the hydration among
+them: there it counts what that sentence counted, and "React rendered 2 times" never sits beside
+"rendering across 3 commits". In a production build no sentence gives a count, and the note leaves the
+hydration out there too. Until 2026-09-27 the note counted only renders of 5 ms or more, and counted one
+the working time held none of (below). The note that a component count is partial follows the commit the
+sentence names, not the longest one, and that holds where a verdict below the render's calls it small
+too. Until 2026-09-27 the handler and layout sentences put the total beside the one commit's phrase,
+which gave List a 500-component Sidebar's 25 ms, and the render verdict said only the commit it named,
+so three 3 ms renders that earned it together read as 3 ms, under the 5 ms a render needs.
 
 React commits some updates once a commit's effects are done and before it says they ran: one an
 effect made with `flushSync`, and one a layout effect made, the measure-then-`setState` a tooltip
@@ -1317,43 +1316,33 @@ them or the build kept no start. Their end, for this, is where the handlers them
 latest end of the entries painted in that frame, not where the working time ends: that comes from the
 durations' 8 ms rounding and can fall before the handlers' end (746.3 + 64 against 810.9, measured on
 Space). So a 40 ms render committed as 64 ms of handlers ended, 1.5 ms past that rounded end, is theirs
-and is weighed on its 40 ms, a hydration too; until 2026-09-27 a production build said it ran "after
-the handlers, before the next frame". One committed after them held none of the handlers' time. It ran
-in React's task after them, and is weighed on no more than the time from their end to its commit: a
-transition React picked up again 20 ms after 27 ms of handlers, begun 100 ms before the click, is
-weighed on 20 ms, not on the 27 ms of handlers or its 120 ms. The sentence gives the render whole and
-then that part: "The render began before the handlers, so at most 17 ms of it was in the 27 ms of
-working time", or for one after them, "The render began before the handlers and committed after them,
-so at most 20 ms of it was after them." Where it gave several commits' total, the part is of that
-total: "Some of that rendering began before the handlers, so at most 35 ms of it was in the 38 ms of
-working time", and where the total holds renders after the handlers as well, the part after them is
-said too, so the figures are never short of the render blamed: "... so at most 1 ms of it was in the 27
-ms of working time, and at most 24 ms after them." A part that is all the working time says nothing,
-and is left out: "at most 64 ms of it was in the 64 ms of working time". A render is placed, in the
-working time or after it, only where all of it can have run there. Below the render verdict, a render
+and is weighed on its 40 ms, a hydration too. Until 2026-09-27 a production build said it ran "after
+the handlers, before the next frame". One committed after them is the render they set off, in React's
+task after them, and is weighed whole. The sentence gives the render whole and then that part: "The
+render began before the handlers, so at most 17 ms of it was in the 27 ms of working time." Where it
+gave several commits' total, the part is of that total: "Some of that rendering began before the
+handlers, so at most 35 ms of it was in the 38 ms of working time." A part that is all the working time
+says nothing, and is left out: "at most 64 ms of it was in the 64 ms of working time". A render is
+placed in the working time only where all of it can have run there. Below the render verdict, a render
 the working time held too little of for it is said the same way, not called small: "At most 3 ms of the
 5 ms of working time went to React's render, which began before the handlers (120 ms re-rendering 3
-components inside ProductPage, ...)". The handler's figure is still the working time less the renders'
-parts, the part after the handlers included, as it was with the whole render. Where committing and
-effects choose no commit, the render a render verdict names is the one the working time held most of,
-not the longest, and so is the render the handler's and the layout's sentences name, and the one a
-verdict below them weighs or calls small. Until 2026-09-27 a 120 ms render that began 100 ms before a
-click's 27 ms of handlers was weighed whole and blamed for 120 ms of the 64 ms click, whether it
-committed in them or 20 ms after them, a 150 ms render kept with no start and committed 10 ms after 97
-ms of handlers was blamed for 150 ms of a 120 ms click, and a 100 ms render that held 7 ms of the
-handlers was named over one that ran all its 28 ms in them. A 43 ms render in the task the click waited
-behind, committed as its handlers began, was said as that wait and again as 43 ms in the 15 ms of
-working time after it. None of it was in there, so no note names it now, and no total counts it. Beside
-the 10 ms render a handler made, it took the handler's sentence too: "React spent 53 ms re-rendering 30
-components inside List". Where the screen update outranks the working time too, the working time is the
-smallest of the three phases, and no note is added. The wait itself is said in a note under every
-verdict but its own, whatever React rendered: "It also waited 70 ms before the handler could start,
-because the main thread was busy." Until 2026-09-26 that note needed a render big enough to be the
-verdict, so a 70 ms wait before a 98 ms handler went unsaid beside a 2 ms render, or none, and was said
-beside a 10 ms one. The one exception is a `script` verdict on a timer the input waited behind, said as
-before the handler started, where that timer held half of the wait: it is the wait, and the note would
-say it twice. A 62 ms timer in a 63 ms wait leaves the note out, and a 30 ms timer in a 120 ms wait
-keeps it.
+components inside ProductPage, ...)". Where committing and effects choose no commit, the render a
+render verdict names is the one the working time held most of, not the longest, and so is the render
+the handler's and the layout's sentences name, and the one a verdict below them weighs or calls small.
+Until 2026-09-27 a 120 ms render that began 100 ms before a click's 27 ms of handlers was weighed whole
+and blamed for 120 ms of the 64 ms click, and a 100 ms render that held 7 ms of the handlers was named
+over one that ran all its 28 ms in them. A 43 ms render in the task the click waited behind, committed
+as its handlers began, was said as that wait and again as 43 ms in the 15 ms of working time after it.
+None of it was in there, so no note names it now, and no total counts it. Beside the 10 ms render a
+handler made, it took the handler's sentence too: "React spent 53 ms re-rendering 30 components inside
+List". Where the screen update outranks the working time too, the working time is the smallest of the
+three phases, and no note is added. The wait itself is said in a note under every verdict but its own,
+whatever React rendered: "It also waited 70 ms before the handler could start, because the main thread
+was busy." Until 2026-09-26 that note needed a render big enough to be the verdict, so a 70 ms wait
+before a 98 ms handler went unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. The
+one exception is a `script` verdict on a timer the input waited behind, said as before the handler
+started, where that timer held half of the wait: it is the wait, and the note would say it twice. A 62
+ms timer in a 63 ms wait leaves the note out, and a 30 ms timer in a 120 ms wait keeps it.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click

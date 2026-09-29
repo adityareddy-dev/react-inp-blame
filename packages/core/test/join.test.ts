@@ -3091,10 +3091,9 @@ test('a render that waited or yielded across the handlers is not counted as Reac
   // handlers, a transition that began at 900 and committed at 1290 would have taken all 277 ms of them.
   const tap = [input(1000, 'click', { handler: 'onClick' })];
   const click = [entry('click', 1000, 300, 1003, 1280)];
-  // It is weighed on the 10 ms from their end to its commit, not on its 60 ms in all.
   const after = report(click, [commit(1290, 1000, { startedAt: 900, total: 60 })], null, tap);
   assert.equal(after.explanation.blame.kind, 'handler');
-  assert.equal(after.explanation.blame.ms, 267);
+  assert.equal(after.explanation.blame.ms, 217);
   assert.doesNotMatch(after.explanation.cause, /Committing/);
   const before = report(click, [commit(1100, 1000, { startedAt: 800, total: 20 })], null, tap);
   assert.equal(before.explanation.blame.kind, 'handler');
@@ -3427,15 +3426,10 @@ test('a render that began before the handlers is weighed and blamed on what the 
   assert.deepEqual(unkept.explanation.notes, ['React still spent 120 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.']);
   const kept = transition(commit(1140, 1000, { total: 90, startedAt: 1045 }), 1040);
   assert.deepEqual(kept.explanation.notes, ['React still spent 90 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.']);
-  // One after the handlers with no start kept is weighed on no more than the time from their end to its commit, where
-  // React's task after them ran: the handlers were not React's. It was blamed for all its 150 ms of a 120 ms click,
-  // and said whole with nothing about where it ran.
+  // One committed after the handlers, with no start kept, is the render they set off and is weighed whole.
   const longer = report([entry('click', 0, 120, 3, 100)], [commit(110, 0, { total: 150 })], null, [input(0, 'click')]);
-  assert.deepEqual(longer.explanation.blame, { kind: 'handler', name: null, detail: null, ms: 87, confidence: 'measured' });
-  assert.equal(
-    longer.explanation.cause,
-    'Code outside React (the click handler or other scripts) ran for about 87 ms; React spent 150 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). The render began before the handlers ended and committed after them, so at most 10 ms of it was after them.',
-  );
+  assert.deepEqual(longer.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 150, confidence: 'measured' });
+  assert.equal(longer.explanation.cause, 'React spent 150 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
   // With a second render beside it, the total follows the named render, and the part held is of the total.
   const beside = report(click, [{ ...begun, truncated: true }, commit(1026, 1000, { total: 6, ...sidebarRender })], [], [input(1000, 'click')]);
   assert.equal(
@@ -3470,7 +3464,7 @@ test('a render that began before the handlers is weighed and blamed on what the 
     layout.explanation.cause,
     / React spent 90 ms re-rendering 30 components inside List, mostly Row \(30 of them, 20 ms\)\. The render began before the handlers, so at most 18 ms of it was in the 178 ms of working time\. /,
   );
-  for (const r of [measured, partial, unstarted, painted, unkept, kept, longer, beside, two, handled, layout]) saysWithinTheWorkingTime(r);
+  for (const r of [measured, partial, unstarted, painted, unkept, kept, beside, two, handled, layout]) saysWithinTheWorkingTime(r);
 });
 
 test('a note standing in for a closed render rung sets only the named render against the working time, and the total of several after it', () => {
@@ -3499,9 +3493,9 @@ test('a note standing in for a closed render rung sets only the named render aga
     early.explanation.notes.at(-1),
     'React still spent 28 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) in the 40 ms of working time before that, and 53 ms of rendering in all across 2 commits. Some of that rendering began before the handlers, so at most 35 ms of it was in the 40 ms of working time before that.',
   );
-  // Only the renders that committed with the handlers are weighed against the working time, or with a 60 ms render
-  // after them in it, 77 ms "was longer than the 27 ms of working time", and some of it was said to have begun before
-  // them from that alone. The render after them is said after them, so the figures account for all they can.
+  // A total that holds a render after the handlers, which is the render they set off and weighed whole, is not set
+  // against the working time. With a 60 ms render after them in it, the total "was longer than the 27 ms of working
+  // time", and some of it was said to have begun before them from that alone.
   const around = report(
     [entry('click', 1000, 160, 1003, 1030)],
     [commit(1020, 1000, { startedAt: 990, total: 40 }), commit(1100, 1000, { startedAt: 1031, total: 60, ...sidebarRender })],
@@ -3510,22 +3504,16 @@ test('a note standing in for a closed render rung sets only the named render aga
   );
   assert.equal(
     around.explanation.notes.at(-1),
-    'React still spent 60 ms re-rendering 500 components inside Sidebar, mostly Item (500 of them, 10 ms) after the handlers, before the next frame, and 100 ms of rendering in all across 2 commits. Some of that rendering began before the handlers, so at most 17 ms of it was in the 27 ms of working time before that, and 60 ms after them.',
+    'React still spent 60 ms re-rendering 500 components inside Sidebar, mostly Item (500 of them, 10 ms) after the handlers, before the next frame, and 100 ms of rendering in all across 2 commits.',
   );
-  // Two renders of 20 ms committed in 27 ms of handlers, so some of the 40 ms began before them. The total is not said
-  // to be longer than the working time, since the render after them is part of what makes it longer. That no more
-  // than the 27 ms was in them says nothing, so it is left out: it read "at most 27 ms of it was in the 27 ms of
-  // working time".
+  // The same beside two renders of 20 ms committed in those 27 ms, so that some of their 40 ms began before them.
   const filled = report(
     [entry('click', 1000, 160, 1003, 1030)],
     [commit(1015, 1000, { total: 20 }), commit(1025, 1000, { total: 20 }), commit(1100, 1000, { startedAt: 1031, total: 60, ...sidebarRender })],
     null,
     click,
   );
-  assert.match(
-    filled.explanation.notes.at(-1) ?? '',
-    /, and 100 ms of rendering in all across 3 commits\. Some of that rendering began before the handlers, and 60 ms of it was after them\.$/,
-  );
+  assert.match(filled.explanation.notes.at(-1) ?? '', /, and 100 ms of rendering in all across 3 commits\.$/);
   // The total says what it totals, and comes after the committing too, or it read as further shares of it, or as
   // the sum of the render and the committing before it.
   const committed = (x: Partial<CommitSummary>) =>
@@ -3589,62 +3577,51 @@ test('a render in the task the click waited behind is in no total, and each sent
   for (const r of [alone, handled, layout, rendered, painted]) saysWithinTheWorkingTime(r);
 });
 
-test('a render that began before the handlers and committed after them is weighed on the time after them, and said to have run there', () => {
+test('a render that began before the handlers and committed after them is the render they set off, and is weighed whole', () => {
   // A transition React picked up again after a 27 ms click handler: it began at 900 and committed at 1050, 20 ms after
-  // the handlers, which held none of it. It was blamed for all 27 ms of them, and 0.16.0 blamed it for its 120 ms, on a
-  // 64 ms click, with nothing said about where it ran.
+  // the handlers. It ran in React's task after them, the render they set off, so it is weighed whole, as it was at
+  // 0.16.0, and no part of it is set against the working time.
   const click = [entry('click', 1000, 64, 1003, 1030)];
   const picked = commit(1050, 800, { startedAt: 900, total: 120, priority: 32 });
+  const said = 'React most likely spent about 120 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).';
   const framed = report(click, [picked], [frame(1000, 64, [script('BUTTON.onclick', 1003, 27), script('MessagePort.onmessage', 1031, 20)])], [input(1000, 'click')]);
-  assert.deepEqual(framed.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 20, confidence: 'inferred' });
-  assert.equal(
-    framed.explanation.cause,
-    'React most likely spent about 120 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). The render began before the handlers and committed after them, so at most 20 ms of it was after them.',
-  );
-  // Beside a handler on record for all 80 ms of the working time, the handler is the verdict. The render was blamed
-  // for all 80 ms, and handleSave went unsaid.
+  assert.deepEqual(framed.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 120, confidence: 'inferred' });
+  assert.equal(framed.explanation.cause, said);
+  // The same beside a handler on record for all 80 ms of the working time.
   const saved = report(
     [entry('click', 1000, 160, 1003, 1083)],
     [commit(1100, 800, { startedAt: 900, total: 120, priority: 32 })],
     [frame(1000, 160, [script('BUTTON.onclick', 1003, 80), script('MessagePort.onmessage', 1084, 16)])],
     loginClick('handleSave', 1000),
   );
-  assert.equal(saved.explanation.blame.kind, 'handler');
-  assert.equal(
-    saved.explanation.cause,
-    'The click handler handleSave most likely took about 63 ms; React spent 120 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). The render began before the handlers and committed after them, so at most 17 ms of it was after them.',
-  );
-  // A render that filled the 30 ms wait and ran on after 2 ms of handlers stays the verdict, as it was at 0.16.0, on
-  // the 24 ms after them. It was called small, and the rest put down to waiting and painting.
+  assert.deepEqual(saved.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 120, confidence: 'inferred' });
+  assert.equal(saved.explanation.cause, said);
+  // And for a render that filled the 30 ms wait and ran on after 2 ms of handlers.
   const waited = report([entry('click', 0, 77, 30, 32)], [commit(55.5, 0, { startedAt: -50, total: 105.5, priority: 3, ...productPage(10, 'Row', 14) })], [], [input(0, 'click')]);
-  assert.deepEqual(waited.explanation.blame, { kind: 'render', name: 'ProductPage', detail: 'Row ×10', ms: 23.5, confidence: 'measured' });
-  assert.equal(
-    waited.explanation.cause,
-    'React spent 106 ms re-rendering 10 components inside ProductPage, mostly Row (10 of them, 14 ms). The render began before the handlers and committed after them, so at most 24 ms of it was after them.',
-  );
-  // Where one of several renders committed after them, the part after them is said too, so the figures are never
-  // short of the render blamed. A 43 ms render that began inside 27 ms of handlers and committed 24 ms after them was
-  // blamed for 43 ms beside "at most 1 ms of it was in the 27 ms of working time".
+  assert.deepEqual(waited.explanation.blame, { kind: 'render', name: 'ProductPage', detail: 'Row ×10', ms: 105.5, confidence: 'measured' });
+  assert.equal(waited.explanation.cause, 'React spent 106 ms re-rendering 10 components inside ProductPage, mostly Row (10 of them, 14 ms).');
+  // Where one of several renders committed after them, the total is said with the named commit's share, and none of
+  // it is set against the working time.
   const across = report(
     [entry('click', 0, 58, 1, 28)],
     [commit(1.8, 0, { startedAt: -41.2, total: 43, ...productPage(3, 'Row', 26) }), commit(52, 0, { startedAt: 5, total: 43, ...productPage(30, 'Item', 26) })],
     null,
     [input(0, 'click')],
   );
-  assert.deepEqual(across.explanation.blame, { kind: 'render', name: 'ProductPage', detail: 'Item ×30', ms: 24, confidence: 'measured' });
+  assert.deepEqual(across.explanation.blame, { kind: 'render', name: 'ProductPage', detail: 'Item ×30', ms: 43, confidence: 'measured' });
   assert.equal(
     across.explanation.cause,
-    'React spent 86 ms rendering across 2 commits, 43 ms of it re-rendering 30 components inside ProductPage, mostly Item (30 of them, 26 ms). Some of that rendering began before the handlers ended, so at most 1 ms of it was in the 27 ms of working time, and at most 24 ms after them.',
+    'React spent 86 ms rendering across 2 commits, 43 ms of it re-rendering 30 components inside ProductPage, mostly Item (30 of them, 26 ms).',
   );
-  // One that began inside 7 ms of handlers and ran 50 ms after them is not said to have run after them, since not all
-  // of it can have. The note a screen update leaves for it read "57 ms ... after the handlers, before the next frame".
+  // One that began inside 7 ms of handlers and committed 50 ms after them is said to have run after them, in the note
+  // a screen update leaves for it.
   const painted = report([entry('click', 0, 200, 3, 10)], [commit(60, 0, { startedAt: 5, total: 57 })], null, [input(0, 'click')]);
   assert.equal(painted.explanation.blame.kind, 'painting');
   assert.equal(
     painted.explanation.notes.at(-1),
-    'React still spent 57 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). The render began before the handlers ended and committed after them, so at most 50 ms of it was after them.',
+    'React still spent 57 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms) after the handlers, before the next frame.',
   );
-  for (const r of [framed, saved, waited, across, painted]) saysWithinTheWorkingTime(r);
+  for (const r of [saved, across, painted]) saysWithinTheWorkingTime(r);
 });
 
 test("a render committed at the end of the handlers, past the paint the duration's rounding gives, is weighed as theirs", () => {
@@ -3702,8 +3679,9 @@ test("a render with no start kept is weighed on the time from the handlers' star
     early.explanation.cause,
     'Code outside React (the click handler or other scripts) ran for about 64 ms; React spent 90 ms re-rendering 400 components inside ProductPage, mostly Row (400 of them, 54 ms). The render ran before the handlers, not in the 64 ms of working time.',
   );
-  // Committed 19 ms into them, beside a 3 ms render after them, it held no more than those 19 ms. The sentence said
-  // "at most 64 ms of it was in the 64 ms of working time", and the render was blamed for all of it.
+  // Committed 19 ms into them, beside a 3 ms render after them, it held no more than those 19 ms. It was blamed for all
+  // 64. The total holds the render after them, so no part of it is set against the working time either, where it read
+  // "at most 64 ms of it was in the 64 ms of working time".
   const vacuous = report(
     [entry('click', 0, 134, 60, 124)],
     [commit(127, 0, { startedAt: 124, total: 3, ...productPage(3, 'Item', 2) }), commit(79.2, 0, { total: 90, ...productPage(3, 'Item', 54) })],
@@ -3711,9 +3689,9 @@ test("a render with no start kept is weighed on the time from the handlers' star
     [input(0, 'click')],
   );
   assert.deepEqual(vacuous.explanation.blame, { kind: 'handler', name: null, detail: null, ms: 41.8, confidence: 'measured' });
-  assert.match(
+  assert.equal(
     vacuous.explanation.cause,
-    /^Code outside React \(the click handler or other scripts\) ran for about 42 ms; React spent 93 ms rendering across 2 commits, 90 ms of it re-rendering 3 components inside ProductPage, mostly Item \(3 of them, 54 ms\)\. Some of that rendering began before the handlers, so at most 19 ms of it was in the 64 ms of working time, and 3 ms after them\./,
+    'Code outside React (the click handler or other scripts) ran for about 42 ms; React spent 93 ms rendering across 2 commits, 90 ms of it re-rendering 3 components inside ProductPage, mostly Item (3 of them, 54 ms).',
   );
   for (const r of [early, vacuous]) saysWithinTheWorkingTime(r);
 });
