@@ -13,9 +13,9 @@ export function getRouter() {
 
   // Tells react-inp-blame each time the route changes, with the URL the address bar shows. Not on the first load, which is the document's own.
   let last = router.history.location.href
-  router.subscribe('onBeforeNavigate', () => {
+  router.subscribe('onBeforeNavigate', ({ fromLocation }) => {
     const href = router.history.location.href
-    if (href !== last) announceNavigation(href)
+    if (fromLocation && href !== last) announceNavigation(href)
     last = href
   })
 
