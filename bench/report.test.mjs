@@ -120,10 +120,21 @@ test('a failure keeps its text with the home folder cut to ~, in both slash form
     'report.mjs',
     results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], skip: ['C:4'], failures: [{ app: 'tt-fuzzy', config: 'C', throttle: 1, runIndex: 4, error }] }),
   );
-  const line = md.split('\n').find((l) => l.startsWith('- `tt-fuzzy` C x1 run 4:'));
+  const line = md.split('\n').find((l) => l.startsWith('- `tt-fuzzy` C x1 run 5:'));
   assert.ok(line, md);
   assert.ok(!line.includes(home) && !line.includes(home.replaceAll('\\', '/')), line);
   assert.match(line, /ENOENT ~.bench.a\.json, then ~\/bench\/b\.json$/);
+});
+
+test('a failure is numbered as the console numbered it, from 1, and a warm-up is called one', () => {
+  const failures = [
+    { app: 'tt-fuzzy', config: 'B', throttle: 1, runIndex: -1, warmup: true, error: 'warm-up timed out' },
+    { app: 'tt-fuzzy', config: 'B', throttle: 1, runIndex: 2, error: 'step did nothing' },
+  ];
+  const md = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], skip: ['B:2'], failures }));
+  assert.match(md, /^- `tt-fuzzy` B x1 warmup: warm-up timed out$/m);
+  assert.match(md, /^- `tt-fuzzy` B x1 run 3: step did nothing$/m);
+  assert.doesNotMatch(md, /run -1/);
 });
 
 test('twenty with no saved sign-in names the state file relative to bench/', async () => {

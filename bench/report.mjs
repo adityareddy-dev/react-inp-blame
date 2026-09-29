@@ -260,7 +260,11 @@ function main() {
   if (failures?.length) {
     p(`## Failures`);
     p();
-    for (const f of failures) p(`- \`${f.app}\` ${f.config} x${f.throttle} run ${f.runIndex}: ${scrub(f.error)}`);
+    // Numbered from 1 as the console numbers them. A warm-up is recorded as run -1.
+    for (const f of failures) {
+      const which = f.warmup || f.runIndex < 0 ? 'warmup' : `run ${f.runIndex + 1}`;
+      p(`- \`${f.app}\` ${f.config} x${f.throttle} ${which}: ${scrub(f.error)}`);
+    }
     p();
   }
 
