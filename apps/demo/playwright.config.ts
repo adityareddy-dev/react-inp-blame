@@ -36,6 +36,9 @@ export default defineConfig({
     { name: `iphone-${mode}`, use: { ...devices['iPhone 15'] }, testMatch: phone },
     // The narrowest screen in common use, 360 px, for the panel alone: the other two are wider than it needs.
     { name: `galaxy-${mode}`, use: { ...devices['Galaxy S8'] }, testMatch: phone, grep: /the panel fits/ },
+    // The two phones on their side, wider than a phone upright and not as tall, for the pages' fit alone.
+    { name: `android-landscape-${mode}`, use: { ...devices['Pixel 7 landscape'] }, testMatch: phone, grep: /every lab page fit/ },
+    { name: `iphone-landscape-${mode}`, use: { ...devices['iPhone 15 landscape'] }, testMatch: phone, grep: /every lab page fit/ },
     // The headed walkthrough in ./tour is for a person to watch, so it is a project of its own that
     // only exists when INP_TOUR asks for it: a normal run neither collects it nor reports it skipped.
     ...(process.env.INP_TOUR ? [{ name: 'tour', testDir: './tour', use: { browserName: 'chromium' as const } }] : []),
