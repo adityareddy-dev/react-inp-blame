@@ -157,7 +157,7 @@ test("the panel's line for a press's render before a slower release says it came
 type Drawn = Record<string, any>;
 
 /**
- * Gives the test a document to draw the panel in: elements that keep their class, their `data-` attributes,
+ * Gives the test a document to draw the panel in: elements that keep their class, their attributes,
  * their children and one listener of each type, and read out their text. `closest` takes the one class a
  * selector names, which is all the panel's click listener asks it. `restore` puts the global back.
  */
@@ -171,6 +171,7 @@ function panelDocument(): { body: Drawn; restore(): void } {
       tagName,
       className: '',
       dataset: {},
+      attributes: {},
       style: {},
       hidden: false,
       parentNode: null,
@@ -188,6 +189,7 @@ function panelDocument(): { body: Drawn; restore(): void } {
       setAttribute(name: string, value: string) {
         if (name === 'class') el.className = value;
         else if (name.startsWith('data-')) el.dataset[name.slice(5)] = value;
+        else el.attributes[name] = value;
       },
       addEventListener(type: string, listener: (e: unknown) => void) {
         el.listeners[type] = listener;
@@ -243,7 +245,7 @@ function panelFor(r: InteractionReport): Drawn {
       onInteraction: () => () => {},
       clear() {},
       stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
-      debug: { hook: () => ({ devtoolsLockedOut: false }) },
+      debug: { hook: () => ({ devtoolsLockedOut: false, renderers: [] }) },
     };
     const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true });
     const panel = byClass(body.childNodes[0].shadowRoot, 'panel')!;
@@ -298,4 +300,38 @@ test("the panel's row and its open section say a key press's render before the s
   const after = drawn(600);
   assert.equal(after.line, 'then List re-rendered after the paint · Row ×400 · 60 ms');
   assert.equal(after.heading, 'Rendered after the paint · 400 components');
+});
+
+test('under a development build of react-dom the badge is marked dev, and the panel says why its colours can run high', () => {
+  // A 608 ms INP: the badge and the panel's head, drawn with react-dom of `bundleType` registered.
+  const drawnUnder = (bundleType: number) => {
+    const { body, restore } = panelDocument();
+    try {
+      const source = {
+        reports: () => [],
+        inp: () => ({ value: 608, rating: 'poor', report: null, interactionCount: 1 }),
+        onInteraction: () => () => {},
+        clear() {},
+        stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
+        debug: { hook: () => ({ devtoolsLockedOut: false, renderers: [{ id: 1, version: '19.3.0', bundleType, rendererPackageName: 'react-dom' }] }) },
+      };
+      const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true });
+      const shadow = body.childNodes[0].shadowRoot;
+      const badge = byClass(shadow, 'badge')!;
+      const note = byClass(shadow, 'devnote');
+      const link = note?.childNodes.find((node: string | Drawn) => typeof node !== 'string' && node.tagName === 'a');
+      overlay.dispose();
+      return { badge: badge.textContent, rating: badge.dataset.rating, note: note?.textContent ?? null, href: link?.attributes.href ?? null };
+    } finally {
+      restore();
+    }
+  };
+  assert.deepEqual(drawnUnder(1), {
+    badge: 'INP 608 msdev',
+    rating: 'poor',
+    note: 'Development build. React runs slower here than in production, and StrictMode renders twice, so check anything amber or red in a production build.',
+    href: 'https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#numbers-in-development',
+  });
+  // A production or profiling build gets neither, and the colour is the same either way.
+  assert.deepEqual(drawnUnder(0), { badge: 'INP 608 ms', rating: 'poor', note: null, href: null });
 });
