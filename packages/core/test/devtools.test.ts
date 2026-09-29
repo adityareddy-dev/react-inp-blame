@@ -262,6 +262,22 @@ test("the interaction's count of renders before the paint is the tooltip's, and 
   assert.equal(count(counted[0]), '2');
 });
 
+test("the Summary's handling time says it leaves out the library's own, which the tooltip's time to handle the click holds", () => {
+  // Opening the shadcn/ui Sheet, the tooltip said 401 ms "of the 474 ms spent handling the click" and the Summary
+  // said "Handlers and React rendering 469 ms", with react-inp-blame's own 5 ms two rows further down.
+  const forcing = { invoker: 'DIV#root.onclick', name: '', source: 'app.js', start: 0, duration: 118, forcedLayout: 110 };
+  const frames = [{ start: 0, duration: 130, blocking: 80, forcedLayout: 110, scripts: [forcing], styleAndLayoutStart: null }];
+  const r = sealReport(buildReport([{ ...click, processingStart: 0, processingEnd: 120 }], [commit(90, { walkMs: 20 })], frames));
+  assert.match(r.verdict, / Of the 120 ms it took to handle the click, the browser spent 110 ms recalculating styles and layout, leaving 10 ms for /);
+  const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+  const row = (name: string) => drawn[0]?.properties?.find(([n]) => n === name)?.[1];
+  assert.equal(row('Handlers and React rendering'), '100 ms, not counting react-inp-blame itself');
+  assert.equal(row('react-inp-blame itself'), '20 ms');
+  // With none of the library's time in it, the row is the time alone.
+  const { drawn: clean } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(report([commit(150, { walkMs: 0 })])));
+  assert.equal(clean[0]?.properties?.find(([n]) => n === 'Handlers and React rendering')?.[1], '178 ms');
+});
+
 test('before Chrome 134, and in other browsers, every entry is a performance.measure, taken out of the buffer once drawn', () => {
   for (const userAgent of [CHROME_133, FIREFOX]) {
     const r = report([measured(150, { priority: 1 })]);

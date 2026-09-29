@@ -1366,7 +1366,11 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   the trace as an empty field in Chromium 147. Its count of renders before the paint leaves out
   the commits too small to count, as the verdict's "React rendered 3 times" does, and says how
   many it left out ("3, and 3 too small to count"): on the shadcn/ui Sheet the tooltip said 3 and
-  the Summary 6, for the six commits the renders track drew.
+  the Summary 6, for the six commits the renders track drew. Its handlers and React rendering row
+  is the working time, with this library's own read taken out and on a row of its own, and where
+  there is one the row says so ("469 ms, not counting react-inp-blame itself"): the tooltip's
+  "of the 474 ms it took to handle the click" holds the read, and without the words the two read
+  as two figures for the same time.
 - Each commit joined to the report gets an entry in a "React renders" track, but only where
   React draws none itself. Development builds of React 19.2 and later draw every component in
   Components ⚛, and there the interaction's tooltip points to it instead; production and
