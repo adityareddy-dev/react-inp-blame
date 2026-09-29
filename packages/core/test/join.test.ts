@@ -3364,6 +3364,13 @@ test("a render the verdict keeps from React's task after the handlers is said to
   // One that began before the handlers is given no place, and one that ran in them is still said against them.
   const early = report([entry('click', 0, 70, 20, 60)], [commit(55, 0, { total: 30, startedAt: 10 })], [], save, 'attributes', [], undefined, 'unreadable');
   assert.equal(early.explanation.cause, 'React most likely spent about 30 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
+  // So is one kept with no start that ran longer than the time from their start to its commit, though not longer than
+  // the working time: a 50 ms render committed 40 ms into 60 ms of handlers.
+  const unkept = report([entry('click', 1000, 64, 1003, 1063)], [commit(1043, 1000, { total: 50, truncated: true })], [], [input(1000, 'click')]);
+  assert.equal(
+    unkept.explanation.cause,
+    'React most likely spent about 50 ms re-rendering at least 30 components inside List. The render began before the handlers, so at most 40 ms of it was in the 60 ms of working time.',
+  );
   const handled = [frame(0, 70, [script('BUTTON.onclick', 5, 45)])];
   const inside = report([entry('click', 0, 70, 5, 50)], [commit(45, 0, { total: 30, startedAt: 12 })], handled, save, 'attributes', [], undefined, 'unreadable');
   assert.equal(inside.explanation.cause, 'React most likely spent about 30 ms of the 45 ms of working time re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
@@ -3732,6 +3739,9 @@ test("a render committed at the end of the handlers, past the paint the duration
     report([entry('click', 1000, 64, 1003, 1064)], [commit(1064, 1000, { total: 62, coarseClock: true })], [], [input(1000, 'click')]),
   ];
   for (const r of past) assert.match(r.explanation.cause, /^React most likely spent about 62 ms re-rendering /);
+  // One that rounds to the working time is still placed in it.
+  const level = report([entry('click', 1000, 64, 1003, 1064)], [commit(1064, 1000, { total: 61.4, truncated: true })], [], [input(1000, 'click')]);
+  assert.equal(level.explanation.cause, 'React most likely spent about 61 ms of the 61 ms of working time re-rendering at least 30 components inside List.');
   // So does the note under a wait. It read "React still spent 62 ms ... in the 61 ms of working time after the wait."
   const waited = report([entry('click', 1000, 136, 1075, 1138)], [commit(1137.5, 1000, { startedAt: 1075.5, total: 61.8 })], [], [input(1000, 'click')]);
   assert.equal(waited.explanation.blame.kind, 'waiting');
@@ -3750,7 +3760,7 @@ test("a render committed at the end of the handlers, past the paint the duration
   assert.equal(longer.explanation.blame.ms, 61);
   assert.deepEqual(longer.explanation.phases[1]?.parts?.map((p) => p.ms), [61]);
   assert.match(longer.explanation.cause, /: all 61 ms of working time, in a hydration that took 75 ms in all\.$/);
-  for (const r of [framed, unframed, unstarted, begun, ...through, ...together, pressed, small, rounded, filling, partial, production, ...past, waited, hydrated, longer]) {
+  for (const r of [framed, unframed, unstarted, begun, ...through, ...together, pressed, small, rounded, filling, partial, production, ...past, level, waited, hydrated, longer]) {
     saysWithinTheWorkingTime(r);
   }
 });
