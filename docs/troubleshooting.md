@@ -169,7 +169,9 @@ issue with the warning text and your browser. Reports still come through `onInte
 <a id="left-out-of-a-production-build"></a>
 ### Left out of this production build
 
-`enabled` defaults to `'development'`, so a production build carries nothing from this library. The page it
+`enabled` defaults to `'development'`, so a production build carries nothing from this library but what your
+own code imports from it, such as `announceNavigation` from the lines that
+[announce route changes](install.md#install-with-react-router), which does nothing there. The page it
 serves (`vite preview`, `next start`, `astro preview` or your own server) shows no badge and makes no reports.
 That is on purpose, so real visitors get none of it until you choose. To include it, pass `enabled: true` or
 `enabled: 'production'`, and think about `runtime: { overlay: 'query' }`, which shows the badge only when the

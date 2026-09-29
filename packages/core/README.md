@@ -170,7 +170,8 @@ instead, and below 14.2 it warns and hands the config back as it was.
 On the App Router the client module also hears each navigation, meaning each route change the
 framework makes in the page with no new document: every report carries
 `navigationURL` and `navigationType`, a click that started a navigation names it in
-`startedNavigation`, and `inp()` starts over at each soft navigation. The Pages Router gets attribution
+`startedNavigation`, and `inp()` starts over at each soft navigation. Other routers announce theirs
+through `announceNavigation(url)`, below. The Pages Router gets attribution
 without the navigation join. On `next dev` from 15.3 its entry loads react-dom before
 `instrumentation-client` and the injected module, so there the wrapper also puts the install first in
 that entry, in webpack's `main` and, under Turbopack, through a loader on `next-dev-turbopack.js`.
@@ -211,7 +212,8 @@ in the URL.
 CI runs this on React Router 8.4, on React Router 7.18 with React 18.3, on Remix 2.17 and on
 TanStack Start 1.168, each under its dev server and a production build. The repository's
 [install page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router)
-has each app's whole config.
+has each app's whole config. React Router and TanStack Router apps add a few lines there too, so that
+reports follow route changes.
 
 A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put this library
 in that chunk with react-dom, so the install script ran after react-dom. When `manualChunks` is a
@@ -418,6 +420,12 @@ for an inline script, and never has a password, query or fragment.
   unsupported, what the library has cost), `dispose()`, and `debug.commits()` and `debug.hook()`,
   which are for debugging and may change in any version.
 - `mountOverlay(options?)` shows the on-page badge and panel; their code loads when shown.
+- `announceNavigation(url)` tells the library that your router changed the route in the page. Reports
+  of the interactions after it carry the URL, with `navigationType: 'soft-navigation'`, `inp()` starts
+  over, and a click it was called inside names it in `startedNavigation` as a `'push'`. It does
+  nothing before `install()` and never throws. The Next.js App Router needs no call. The
+  [install page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router)
+  shows where to call it under React Router and TanStack Router.
 
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when
 that function has no name worth printing. An inline `onClick={() => ...}` therefore reads as

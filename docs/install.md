@@ -212,15 +212,15 @@ This shows the badge under `react-router dev`. A production build leaves the lib
 make the overlay `'query'`, so a visitor sees the badge only with `?inp-blame` in the URL. CI's copy of this
 app does that.
 
-That is the whole setup: the plugin adds the import to the browser's copy of the module (never the server's),
-and nothing in your own files changes. Leave `entry` out and the plugin warns, when the dev server starts and
-when the app builds, that nothing will install and what to add; name a file that does not exist and both stop
-with an error naming the path. An import you write yourself first in the root route, or in the client
-entry, is not the same thing. On React 18, `react-dom` connects to React's DevTools hook as it loads, and a
-route, or a library a route uses, can load it before the client entry does. In a production build, a chunk a
-module imports is evaluated before the module's own body, so an install written in the root route runs after
-the shared chunk that holds react-dom whenever the root route imports anything that reaches react-dom. And an
-app whose `package.json` says `"sideEffects": false`, as Remix's template does, loses an import with no names
+That is the whole setup for attribution: the plugin adds the import to the browser's copy of the module
+(never the server's), and nothing in your own files changes. Leave `entry` out and the plugin warns, when the
+dev server starts and when the app builds, that nothing will install and what to add; name a file that does
+not exist and both stop with an error naming the path. An import you write yourself first in the root route, or
+in the client entry, is not the same thing. On React 18, `react-dom` connects to React's DevTools hook as it
+loads, and a route, or a library a route uses, can load it before the client entry does. In a production build,
+a chunk a module imports is evaluated before the module's own body, so an install written in the root route runs
+after the shared chunk that holds react-dom whenever the root route imports anything that reaches react-dom. And
+an app whose `package.json` says `"sideEffects": false`, as Remix's template does, loses an import with no names
 from the build altogether. With `entry` the install is a chunk of its own, marked as having side effects, and
 the import is added after the JSX is compiled, so that in the module it comes before the one the compiler adds
 for `react/jsx-runtime`. Rollup, which builds for Vite 7 and before, evaluates a module's chunk
@@ -247,6 +247,39 @@ checks that a click is blamed on the component that rendered slowly, under `reac
 production build served by `react-router-serve`. React Router 8 needs React 19.2.7 or later. In
 `vite.config.ts` only the `inpBlame` lines are the library's; `resolve.tsconfigPaths` is the template's, and
 needs Vite 8.
+
+**Route changes.** React Router changes the route in the page, and only the Next.js App Router tells the
+library of that by itself. So that reports follow route changes, with the new URL in `navigationURL` and
+`navigationType: 'soft-navigation'`, and `inp()` and the badge start over at each, add this component, which
+calls [`announceNavigation`](api.md#announcenavigationurl), and render `<AnnounceNavigations />` beside
+`<Outlet />` in the `App` of `app/root.tsx`:
+
+```tsx
+// app/announce-navigations.tsx
+import { useEffect, useRef } from "react";
+import { useLocation } from "react-router";
+import { announceNavigation } from "react-inp-blame";
+
+// Tells react-inp-blame each time React Router changes the route. Render it once, in the root route's App.
+export function AnnounceNavigations() {
+  const { key } = useLocation();
+  const last = useRef(key);
+  useEffect(() => {
+    if (key === last.current) return; // the first page is the document's own navigation
+    last.current = key;
+    announceNavigation(window.location.href);
+  }, [key]);
+  return null;
+}
+```
+
+Its effect runs once the new route has rendered, so the reports after it carry the new URL and `inp()` starts
+over, but the click that started the navigation is not named in `startedNavigation`: React Router renders the
+new route in a transition, after the click. The same component works in data and declarative mode, anywhere
+inside the router. A change of query string alone counts as a navigation, as under the App Router. The import
+stays in every build, so a production build the plugin leaves the library out of still carries
+`announceNavigation`, about 0.3 KB gzipped, and there it does nothing. CI's copies of this app render it and
+check where each report is placed, under `react-router dev` and on the production build.
 
 ## Install with Remix
 
@@ -352,6 +385,50 @@ app does that.
 
 CI builds this from `npx @tanstack/cli@0.71.0 create --framework React --blank` (TanStack Start 1.168, Vite
 8.3, React 19.3) and checks the same click under `vite dev` and on `vite preview` of the production build.
+
+**Route changes.** TanStack Router changes the route in the page too. So that reports follow route changes and
+`inp()` starts over at each, as under [React Router](#install-with-react-router), have the router call
+[`announceNavigation`](api.md#announcenavigationurl). This is the template's `src/router.tsx` with the lines
+that do it:
+
+```tsx
+// src/router.tsx, the template's, with the lines that announce each navigation
+import { createRouter as createTanStackRouter } from '@tanstack/react-router'
+import { announceNavigation } from 'react-inp-blame'
+import { routeTree } from './routeTree.gen'
+
+export function getRouter() {
+  const router = createTanStackRouter({
+    routeTree,
+    scrollRestoration: true,
+    defaultPreload: 'intent',
+    defaultPreloadStaleTime: 0,
+  })
+
+  // Tells react-inp-blame each time the route changes, with the URL the address bar shows. Not on the first load, which is the document's own.
+  router.subscribe('onBeforeNavigate', ({ fromLocation, hrefChanged }) => {
+    if (fromLocation && hrefChanged) announceNavigation(router.history.location.href)
+  })
+
+  return router
+}
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: ReturnType<typeof getRouter>
+  }
+}
+```
+
+TanStack Router's history tells the router of a Link click inside that click, so the click's report names the
+navigation in `startedNavigation`. Not while a navigation blocker from `useBlocker` is registered, though: the
+history waits for it first, and the click is then not named. `router.history.location.href` is the URL the
+address bar shows, base path included. `toLocation.publicHref` is not, since TanStack Router writes the search
+string back in its own form (a bare `?inp-blame` becomes `?inp-blame=`), and `window.location.href` still holds
+the old URL at that moment. A change of query string alone counts as a navigation here too. In a TanStack
+Router app without Start, put the same `router.subscribe` call after `createRouter`. As under React Router, a
+production build the plugin leaves the library out of still carries `announceNavigation`, about 0.3 KB
+gzipped, where it does nothing. CI's copy of this app runs these lines too.
 
 ## Install with Astro
 

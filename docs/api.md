@@ -44,10 +44,23 @@ commits, and starts the INP estimate over), `dispose()` and `stats()`: `mode` (`
 while React has not rendered on the page, `'installed-late'` when it has and no react-dom registered
 because install() ran after react-dom loaded, or `'unreadable'`), `walks`, and the
 library's own time in `walkTotalMs`, `reportTotalMs` and `installMs`. `debug.commits()` and `debug.hook()` are
-for debugging and may change in any version. Also exported: [`mountOverlay`](#the-badge-and-panel). Under
+for debugging and may change in any version. Also exported: [`mountOverlay`](#the-badge-and-panel) and
+[`announceNavigation`](#announcenavigationurl). Under
 the `react-server` condition every export does nothing, here and on
 [`react-inp-blame/web-vitals`](web-vitals.md): `generateTarget` returns `undefined` and
 `attributeINP` returns `{ react: null }`.
+
+## announceNavigation(url)
+
+Tells the library that your router changed the route in the page, to `url`. Reports of the interactions that
+begin after it carry that URL in `navigationURL`, with `navigationType: 'soft-navigation'`, and `inp()` and
+the badge start over. Called while a click or key press is being dispatched, it is named on that interaction's
+report in `startedNavigation`, always with `type: 'push'`. The URL may be relative to the page, and should
+include any base path. It does nothing before `install()`, on a page the sample left out, in a production
+build the plugin left the library out of, on the server and under `react-server`, and it never throws. Under
+the Next.js App Router `withInpBlame` already announces each navigation, so do not call it there.
+[Install with React Router](install.md#install-with-react-router) and
+[Install with TanStack Start](install.md#install-with-tanstack-start) show where to call it.
 
 ## InteractionReport
 

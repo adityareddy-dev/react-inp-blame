@@ -1638,6 +1638,19 @@ the same exact match commits use; the report names it in `startedNavigation`. Un
 performance.now()`); the library subtracts `timeOrigin` and takes it as the navigation's start, and
 without the flag reads `performance.now()` itself. A navigation started with no input being
 dispatched, a `router.push()` after an `await` or the browser's back button, is named on no report.
+Any other router announces through `announceNavigation(url)` from the package root, which takes the
+same path with `performance.now()` as the start and `'push'` as the type: neither router below says
+push or replace to the code that announces, and a second argument can be added later without breaking
+a caller, where taking one away would. TanStack Router emits `onBeforeNavigate` inside the click (read
+in @tanstack/router-core 1.171.32 and @tanstack/history 1.162.4: the Link's handler navigates, the
+history pushes and notifies with no await unless a blocker is registered, and the router's load emits
+the event before its first await), so the lines in docs/install.md name the click. They announce
+`router.history.location.href`, the URL the address bar shows, because `toLocation.publicHref` writes
+the search string back in TanStack's own form (`?inp-blame` as `?inp-blame=`) and `window.location`
+is still the old URL then. React Router updates its state in `startTransition` (read in react-router
+7.18.4 and 8.4.0), and framework mode hands app code no router object, so its lines are an effect on
+`location.key`. The effect runs after the new route commits, with no input being dispatched: the
+reports after it are placed at the new URL, and the click that started it is named on none.
 At each soft navigation and back/forward cache restore the INP estimate starts over from the
 interactions that began after it, and quiet interactions held so far are let go, so renders of the
 new page stamped with an input from before it cannot publish them. The App Router announces a push
