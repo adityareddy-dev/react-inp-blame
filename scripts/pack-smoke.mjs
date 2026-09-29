@@ -408,7 +408,8 @@ function typedConsumer(manifest) {
     const names = allowed.length ? allowed.map((name) => `'${name}'`).join(' | ') : 'never';
     return `export const only${index}: Only<typeof entry${index}, ${names}> = true;\n`;
   });
-  const types = 'type Callable = (...args: never[]) => unknown;\ntype Only<T, Names> = [Exclude<keyof T, Names>] extends [never] ? true : false;';
+  // A class, such as the otel entry's processor, is a function to typeof and is called with new.
+  const types = 'type Callable = ((...args: never[]) => unknown) | (abstract new (...args: never[]) => unknown);\ntype Only<T, Names> = [Exclude<keyof T, Names>] extends [never] ? true : false;';
   return `${imports.join('\n')}\n\n${types}\n\nexport const documented: Callable[] = [\n${uses.join('')}];\n${only.join('')}`;
 }
 
