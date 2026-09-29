@@ -405,7 +405,10 @@ export interface Blame {
    * one of them is where the layout happened and this is null. The cause sentence names the largest
    * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script
    * the input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that
-   * filled at least half of the wait, before the first handler or between them; null otherwise. A
+   * filled at least half of the wait, before the first handler or between them; null otherwise. Where
+   * the script before the first handler is React's own task or listener, by the rule a 'painting' goes
+   * by, and a render the library saw ended in it or within a frame after it, the component that render
+   * is named after takes its place ("Preview", typing fast into a useDeferredValue preview). A
    * 'painting' takes the invoker of the script after the handlers that ran for at least half of the
    * screen update ("DIV.onscroll"), or where that script is React's own task (`MessagePort.onmessage`)
    * or React's own listener, and React rendered inside it, the component that render is named after; null
