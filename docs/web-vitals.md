@@ -89,10 +89,11 @@ onINP((metric) => {
     unit: 'millisecond',
     attributes: {
       rating: metric.rating,
-      target: interactionTarget,                    // 'ProfilePage > PhotoTile (button.tile)'
-      'blame.kind': react?.blame.kind,              // 'render', 'handler', 'layout', 'waiting', ...
-      'blame.name': react?.blame.name ?? undefined, // Sentry sends a null as the string "null"
-      'blame.confidence': react?.blame.confidence,  // 'measured' or 'inferred'
+      target: interactionTarget,                     // 'ProfilePage > PhotoTile (button.tile)'
+      'blame.kind': react?.blame.kind,               // 'render', 'handler', 'layout', 'waiting', ...
+      'blame.name': react?.blame.name ?? undefined,  // Sentry sends a null as the string "null"
+      'blame.confidence': react?.blame.confidence,   // 'measured' or 'inferred'
+      'react.build': react?.reactBuild ?? undefined, // 'development' reads high, filter it out
     },
   });
 }, { generateTarget });
@@ -101,8 +102,8 @@ onINP((metric) => {
 ## Sending it to Google Analytics 4
 
 This is web-vitals' own [example for Google Analytics](https://github.com/GoogleChrome/web-vitals#send-attribution-data),
-`debug_target` and all, with the blame in two more parameters. `navigationURL` came in web-vitals 6, so on
-5.x leave out `page_location`:
+`debug_target` and all, with the blame in three more parameters and the build of react-dom in one.
+`navigationURL` came in web-vitals 6, so on 5.x leave out `page_location`:
 
 ```ts
 import { onINP } from 'web-vitals/attribution';
@@ -120,6 +121,8 @@ onINP((metric) => {
     debug_target: interactionTarget, // 'ProfilePage > PhotoTile (button.tile)'
     debug_blame_kind: react?.blame.kind,
     debug_blame_name: react?.blame.name ?? undefined,
+    debug_blame_confidence: react?.blame.confidence, // 'measured' or 'inferred'
+    debug_react_build: react?.reactBuild ?? undefined, // 'development' reads high, filter it out
   });
 }, { generateTarget });
 ```

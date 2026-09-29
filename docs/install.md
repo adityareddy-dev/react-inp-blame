@@ -91,6 +91,17 @@ App Router, reports follow soft navigations in `navigationURL` and `navigationTy
 started in `startedNavigation`, and the INP estimate starts over at each. The Pages Router gets attribution
 without navigations: Next.js announces none there.
 
+### Numbers in development
+
+`next dev` runs React's development build, which is slower than production, and the App Router turns on
+StrictMode by default, which renders every component twice there. So the badge reads higher in development
+than your users will see (one Vite app read 324 ms of React render with StrictMode and 165 ms without), and
+it rates that number on the same scale. The badge marks a development build `dev`, the panel says to check in
+production, and each report carries `reactBuild` and `strictMode`, so a forwarded one can be told apart
+([web-vitals.md](web-vitals.md)). Nothing is scaled down for you. To check a number in production, keep
+`enabled: true` and `runtime: { overlay: 'query' }` as in the config above, run `next build` and then
+`next start`, and open the page with `?inp-blame` in the URL.
+
 ## Install with Vite
 
 ```ts
@@ -119,6 +130,14 @@ it beside your React plugin, not instead of it.
 `false` adds no plugins), `runtime` is as for Next.js, and `pages(path)` picks the pages that get the script.
 `entry`, a module's path from the project root, is for a framework that writes its own HTML: that module gets
 the install as its first import instead, as the React Router, Remix and TanStack Start setups below show.
+
+### Numbers in development with Vite
+
+The dev server runs React's development build, slower than production, and create-vite's `src/main.tsx`
+wraps the app in `<StrictMode>`, which renders every component twice there. The badge marks that build `dev`
+and rates what it measured, as under Next.js ([Numbers in development](#numbers-in-development)). To check a
+number in production, keep `enabled: true` and `runtime: { overlay: 'query' }` as in the config above, run
+`vite build` and then `vite preview`, and open the page with `?inp-blame` in the URL.
 
 **A vendor chunk rule.** A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put
 this library in that chunk with react-dom, so the install script's import of the chunk ran react-dom before

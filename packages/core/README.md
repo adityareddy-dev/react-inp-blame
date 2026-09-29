@@ -85,6 +85,13 @@ production build, show no badge by default, and the build prints a line saying i
 out. The line on Next.js 15.3 to 16.2 stays in every build, but compiles to nothing in the ones
 `enabled` leaves out.
 
+**Numbers in development.** Most numbers you see come from React's development build, which is slower
+than production, and under `<StrictMode>` React renders every component twice there. The badge rates
+what it measured on the same scale, marks the build `dev`, and the panel says to check anything amber
+or red in a production build: add `enabled: true` and `runtime: { overlay: 'query' }`, run `next build`
+and `next start` or `vite build` and `vite preview`, and open the page with `?inp-blame`
+([Numbers in development](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#numbers-in-development)).
+
 It is a development tool first, and production is optional. Turned on there, 0.12.0 cost about
 209 ms of page load on the shadcn/ui docs site, and about 5 ms inside each interaction on the twenty
 CRM (10 with the CPU slowed 4x), while INP did not move on any of the five apps measured
@@ -342,17 +349,19 @@ later, and `@sentry/react` and `@sentry/nextjs` export the same `metrics`:
         unit: 'millisecond',
         attributes: {
           rating: metric.rating,
-          target: interactionTarget,                    // 'ProfilePage > PhotoTile (button.tile)'
-          'blame.kind': react?.blame.kind,              // 'render', 'handler', 'layout', 'waiting', ...
-          'blame.name': react?.blame.name ?? undefined, // Sentry sends a null as the string "null"
-          'blame.confidence': react?.blame.confidence,  // 'measured' or 'inferred'
+          target: interactionTarget,                     // 'ProfilePage > PhotoTile (button.tile)'
+          'blame.kind': react?.blame.kind,               // 'render', 'handler', 'layout', 'waiting', ...
+          'blame.name': react?.blame.name ?? undefined,  // Sentry sends a null as the string "null"
+          'blame.confidence': react?.blame.confidence,   // 'measured' or 'inferred'
+          'react.build': react?.reactBuild ?? undefined, // 'development' reads high, filter it out
         },
       });
     }, { generateTarget });
 
-For Google Analytics 4 it is web-vitals' own example, `debug_target` and all, with the blame in two
-more parameters. GA4 reports show a parameter once it is registered as an event-scoped custom
-dimension, and take at most 100 characters of its value, where `generateTarget` allows 120.
+For Google Analytics 4 it is web-vitals' own example, `debug_target` and all, with the blame in three
+more parameters and the build of react-dom in one. GA4 reports show a parameter once it is registered
+as an event-scoped custom dimension, and take at most 100 characters of its value, where
+`generateTarget` allows 120.
 `navigationURL` came in web-vitals 6, so on 5.x leave out `page_location`:
 
     import { onINP } from 'web-vitals/attribution';
@@ -370,6 +379,8 @@ dimension, and take at most 100 characters of its value, where `generateTarget` 
         debug_target: interactionTarget, // 'ProfilePage > PhotoTile (button.tile)'
         debug_blame_kind: react?.blame.kind,
         debug_blame_name: react?.blame.name ?? undefined,
+        debug_blame_confidence: react?.blame.confidence, // 'measured' or 'inferred'
+        debug_react_build: react?.reactBuild ?? undefined, // 'development' reads high, filter it out
       });
     }, { generateTarget });
 

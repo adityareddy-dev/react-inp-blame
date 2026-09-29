@@ -55,7 +55,7 @@ export interface LifecycleOptions {
   reactStatus?(): ReactStatus;
   /** What tells React's own listener in the next report's scripts; none where not given. */
   reactPage?(): ReactPage;
-  /** The build of react-dom the page renders with (`InteractionReport.reactBuild`); null where not given. */
+  /** The build of react-dom the page renders with (`InteractionReport.reactBuild`), or null where not given. */
   reactBuild?(): InteractionReport['reactBuild'];
   /** The clock Event Timing and the commits use: `performance.now()`. */
   now(): number;

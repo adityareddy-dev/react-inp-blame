@@ -149,3 +149,10 @@ test('headings are slugged the way GitHub does', () => {
   // A heading with brackets. README.md has an <a id> of this name, so the heading is read where it is, in docs/api.md.
   assert.ok(anchorsOf('../../docs/api.md').has('installoptions'), 'installoptions');
 });
+
+test("the panel's line about a development build links to a heading docs/install.md has", () => {
+  const links = [...read('src/overlay.ts').matchAll(/blob\/main\/docs\/install\.md#([a-z0-9-]+)/g)].map((m) => m[1]!);
+  assert.deepEqual(links, ['numbers-in-development']);
+  const install = anchorsOf('../../docs/install.md');
+  assert.deepEqual(links.filter((anchor) => !install.has(anchor)), [], 'overlay.ts links to anchors docs/install.md does not have');
+});
