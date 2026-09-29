@@ -1236,9 +1236,8 @@ test("where the working time was longer, the screen update's note says the frame
         `After the handler finished, the screen took another 92 ms to update: the frame waited on the next click, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), 56 ms.`,
       ], `${invoker}, ${last}`);
     }
-    // A next click pressed before this one and let go during it is weighed as in 0.18.0, so the script stays this press's.
-    const earlier = released([input(950, 'pointerdown', { pointerType: 'mouse' }), input(1150, 'pointerup', { gestureTs: 950, pointerType: 'mouse' }), input(1150, 'click', { gestureTs: 950, pointerType: 'mouse' })]);
-    assert.deepEqual(earlier.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, invoker);
+    // Only the next click's though: a next key press dispatches neither, so after that pointerup the script stays this press's.
+    assert.deepEqual(released([input(1121, 'keydown')]).blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, invoker);
     const pointer = (nexts: InputRecord[]) =>
       unreleased(invoker, [entry('pointerdown', 1000, 272, 1001, 1180)], pointers, [{ ...three, inputType: 'pointerdown' }], [input(1000, 'pointerdown', { pointerType: 'mouse' }), ...nexts]);
     const own = pointer([]);
