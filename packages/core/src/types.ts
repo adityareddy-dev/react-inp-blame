@@ -424,7 +424,8 @@ export interface Blame {
    * component's own render where React timed it at half the render or more ("TableBody's own render"), else
    * how many components rendered ("637 components"). For a render, of which how many inside the component
    * `name` gives, where that is fewer ("812 of 1216 components"); a hydration is named after a boundary or
-   * the page, which holds them all, so it carries the whole count. Null where it rendered one. For a
+   * the page, which holds them all, so it carries the whole count. Null where it rendered one. A render whose
+   * commit spent over half of `ms` in its useEffect callbacks has "useEffect callbacks" instead. For a
    * handler, its component, or null where the name is a listener the browser recorded rather than a React
    * handler. For a 'layout', what that same commit was mostly made of, as a render's, where a count is the
    * whole commit's ("56 components", not "15 of 56") when `name` is the component the render started from
