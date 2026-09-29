@@ -191,7 +191,8 @@ when shown. A click, tap or key press on it is not the page's: it gets no report
 leave it out. Hide for me, beside Clear in the panel's footer, sets `react-inp-blame` in `localStorage` to
 `hidden`: from then on `overlay: true` or an options object shows no badge in that browser, and reports, the
 DevTools track and the rest of the API go on as before. `?inp-blame` or `#inp-blame` in the URL clears it and
-shows the badge again. A badge `mountOverlay()` shows is shown regardless, and has no Hide for me.
+shows the badge again. A badge `mountOverlay()` shows is shown regardless, and has no Hide for me. Nor has
+one `'query'` shows: there the key already holds the `overlay` that opted in, and removing it is the way out.
 `mountOverlay(options)` shows it after an `/auto` import. The shadow root is an open one on
 `#react-inp-blame`, but a test that wants the reports should read them through
 [`debugGlobal`](#installoptions) rather than from the panel's DOM, which may change between versions.
