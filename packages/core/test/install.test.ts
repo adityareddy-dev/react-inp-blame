@@ -634,6 +634,7 @@ test('after Hide for me, mountOverlay() still shows the badge, with no Hide for 
 });
 
 test("overlay: 'query' offers no Hide for me, so a stored 'overlay' is never swapped for 'hidden' and lost", async (t) => {
+  t.mock.method(console, 'warn', () => {});
   const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   t.after(() => {
     if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
@@ -642,18 +643,25 @@ test("overlay: 'query' offers no Hide for me, so a stored 'overlay' is never swa
   const stored = new Map<string, string>([['react-inp-blame', 'overlay']]);
   const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value), removeItem: (key: string) => stored.delete(key) };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true, writable: true });
-  await inBrowser(async () => {
-    const { search, hash } = new URL(PAGE_URL);
-    Object.defineProperty(globalThis, 'location', { value: { href: PAGE_URL, search, hash }, configurable: true, writable: true });
-    const { hosts, drawn, badge } = badgeDocument();
-    const api = install({ overlay: 'query' });
-    await installState.overlay;
-    assert.equal(hosts(), 1);
-    badge().listeners.click();
-    assert.ok(!drawn('hide'), "overlay: 'query' drew Hide for me");
-    assert.equal(stored.get('react-inp-blame'), 'overlay');
-    api.dispose();
-  });
+  // A browser with Event Timing, then one without it, whose badge only says so.
+  for (const entryTypes of [['event', 'first-input'], ['first-input']]) {
+    await inBrowser(
+      async () => {
+        const { search, hash } = new URL(PAGE_URL);
+        Object.defineProperty(globalThis, 'location', { value: { href: PAGE_URL, search, hash }, configurable: true, writable: true });
+        const { hosts, drawn, badge } = badgeDocument();
+        const api = install({ overlay: 'query' });
+        await installState.overlay;
+        assert.equal(hosts(), 1, `entry types ${entryTypes}`);
+        badge().listeners.click();
+        assert.ok(!drawn('hide'), `overlay: 'query' drew Hide for me, entry types ${entryTypes}`);
+        assert.equal(stored.get('react-inp-blame'), 'overlay');
+        api.dispose();
+        await nextTask();
+      },
+      { entryTypes },
+    );
+  }
 });
 
 test("a browser without Event Timing shows the badge that says so only where it was asked for, and install() or 'query' alone never loads it", async (t) => {
