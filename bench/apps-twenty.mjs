@@ -493,7 +493,8 @@ export const apps = {
     },
     build(run, env) {
       const config = Object.keys(BENCH_CONFIG).find((c) => BENCH_CONFIG[c] === (env.BENCH_CONFIG || ''));
-      run('node', [path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js'), 'build'], {
+      // No shell, so a TWENTY_ROOT with a space in it reaches Node as one argument.
+      run(process.execPath, [path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js'), 'build'], {
         cwd: FRONT,
         env: {
           ...env,
@@ -501,6 +502,7 @@ export const apps = {
           NODE_OPTIONS: '--max-old-space-size=8192',
           BENCH_OUTDIR: DISTS[config],
         },
+        shell: false,
       });
     },
     async ready(page) {

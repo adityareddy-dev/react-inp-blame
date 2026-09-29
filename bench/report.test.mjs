@@ -300,6 +300,35 @@ test("cal.diy's prepare keeps a .env of the user's own as .env.before-bench, and
   assert.equal(fs.readFileSync(`${dotenv}.before-bench`, 'utf8'), mine);
 });
 
+test("twenty's build runs Vite when the clone's path has a space in it", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-twenty-'));
+  temps.push(dir);
+  const root = path.join(dir, 'with space', 'tw');
+  const vite = path.join(root, 'node_modules', 'vite', 'bin');
+  fs.mkdirSync(vite, { recursive: true });
+  fs.mkdirSync(path.join(root, 'packages', 'twenty-front'), { recursive: true });
+  fs.writeFileSync(path.join(vite, 'vite.js'), "require('node:fs').writeFileSync('built.txt', process.argv.slice(2).join(' '));\n");
+  // run.mjs's own run(), line for line, which turns the shell on for Windows.
+  const child = `
+    import { spawnSync } from 'node:child_process';
+    import { pathToFileURL } from 'node:url';
+    function run(cmd, args, opts = {}) {
+      const r = spawnSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32', ...opts });
+      if (r.status !== 0) throw new Error(\`\${cmd} \${args.join(' ')} failed with \${r.status}\`);
+    }
+    const { apps } = await import(pathToFileURL(${JSON.stringify(path.join(HERE, 'apps-twenty.mjs'))}).href);
+    apps.twenty.build(run, { ...process.env, BENCH_CONFIG: 'b' });
+  `;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', child], {
+    cwd: HERE,
+    encoding: 'utf8',
+    timeout: 60000,
+    env: { ...process.env, TWENTY_ROOT: root },
+  });
+  assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+  assert.equal(fs.readFileSync(path.join(root, 'packages', 'twenty-front', 'built.txt'), 'utf8'), 'build');
+});
+
 test("shadcn's next start listens on 127.0.0.1 only, as cal-diy's does", () => {
   // Swaps the harness's own spawn for one that throws its arguments, so nothing starts. Only the
   // shadcn entries: cal-diy's startServer runs its backend before it gets to next start.
