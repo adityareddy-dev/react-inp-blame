@@ -1456,10 +1456,13 @@ function explain(r: InteractionReport): Explanation {
    *
    * The press's handlers began where the browser recorded a listener of its (`DIV#root.onkeydown`, or the `oninput`
    * a key dispatches right after, or a pointer's `onmousedown`), and nothing that started before that ran for it.
-   * One of those two kinds is the press's only for a press of its kind, and where the last event this frame handled
-   * was this interaction's release: a keydown with no keyup, or whose keyup was handled in a later frame, runs its
-   * own `oninput` in its task, right after its handlers, as a checkbox's click does, and taken for the next
-   * press's, a keydown's 60 ms `oninput` went to waiting and painting. Where no listener was recorded, as for one
+   * One of those two kinds is the press's only for a press of its kind, and only where this interaction could not
+   * have dispatched it. A key's is where the last event this frame handled was this interaction's keyup: a keydown
+   * with no keyup, or whose keyup was handled in a later frame, runs its own `oninput` in its task, right after its
+   * handlers, as a checkbox's click does, and taken for the next press's, a keydown's 60 ms `oninput` went to
+   * waiting and painting. A pointer's is where that event was not a pointerdown, which can still dispatch its own
+   * `mousedown` or `touchstart`: a key dispatches neither, and where its keyup was not handled in this frame, the
+   * next click's 56 ms `onmousedown` was named as this key's script. Where no listener was recorded, as for one
    * under 5 ms, a script that started on the tick this interaction's handlers ended on ran ahead of them too, and
    * what came after it is ranked with the rest under PRESENTATION_NOTE_MS, where the note and the painting blame go
    * on the press's render alone, and is the press's work over it (`ownScript` says why). Nor is a script that holds
@@ -1479,7 +1482,7 @@ function explain(r: InteractionReport): Explanation {
     next &&
     scriptsRun.find((s) => {
       const on = s.start >= nextFrom - STAMP_TOLERANCE && PRESS_LISTENER.exec(s.invoker);
-      return on && (on[2] ? next.type === 'keydown' && last === 'keyup' : !on[3] || (next.type === 'pointerdown' && /^(keyup|pointerup|mouseup|click)$/.test(last)));
+      return on && (on[2] ? next.type === 'keydown' && last === 'keyup' : !on[3] || (next.type === 'pointerdown' && last !== 'pointerdown'));
     });
   const nextsWork = (s: ScriptSummary) =>
     !!next &&

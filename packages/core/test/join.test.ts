@@ -1091,6 +1091,30 @@ test("where the working time was longer, the screen update's note says the frame
       `After the handler finished, the screen took another 90 ms to update: the frame waited on the next ${own.type === 'keydown' ? 'key press' : 'click'}, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), 56 ms.`,
     ], invoker);
   }
+  // A key dispatches no `mousedown` or `touchstart` whether or not this frame handled its keyup, though: with no keyup,
+  // or one handled in a later frame, the next click's 56 ms listener was ranked with this key's scripts and named as
+  // having run after its handler. Only a pointer press whose release this frame did not handle can still dispatch its
+  // own, and keeps it as its verdict with the next click as without it.
+  const unreleased = (invoker: string, entries: ReturnType<typeof entry>[], handlers: ScriptSummary[], commits: CommitSummary[], pressed: InputRecord[]) =>
+    report(entries, commits, [frame(1000, 272, [...handlers, script(invoker, 1183, 56)], 1262)], pressed).explanation;
+  const pointers = keys.map((s) => ({ ...s, invoker: 'DIV#root.onpointerdown' }));
+  for (const invoker of ['DIV#root.onmousedown', 'DIV#root.ontouchstart']) {
+    for (const [entries, pressed] of [
+      [[entry('keydown', 1000, 272, 1001, 1180)], [ring[0]!]],
+      [[entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1300, 16, 1301, 1302)], [ring[0]!, input(1300, 'keyup', { gestureTs: 1000 })]],
+    ]) {
+      const key = unreleased(invoker, entries, keys, [three], [...pressed, mouse]);
+      assert.deepEqual([key.blame, key.cause], [held.blame, held.cause], `${invoker}, ${entries.length} entries`);
+      assert.deepEqual(key.notes, [
+        `After the handler finished, the screen took another 92 ms to update: the frame waited on the next click, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), 56 ms.`,
+      ], `${invoker}, ${entries.length} entries`);
+    }
+    const pointer = (nexts: InputRecord[]) =>
+      unreleased(invoker, [entry('pointerdown', 1000, 272, 1001, 1180)], pointers, [{ ...three, inputType: 'pointerdown' }], [input(1000, 'pointerdown', { pointerType: 'mouse' }), ...nexts]);
+    const own = pointer([]);
+    assert.deepEqual(own.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, invoker);
+    assert.deepEqual(pointer([mouse]), own, invoker);
+  }
 });
 
 test("a click is not said to have waited on the second click of a double click that did nothing before the paint", () => {
