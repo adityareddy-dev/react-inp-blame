@@ -554,47 +554,48 @@ pointerup and click, only the events whose own processing ran longest are asked,
 the work; under 4 ms apart they tie and the click is asked first, and where none of them has a React
 handler, none is named (since 0.6.0). The element's label
 names it by its tag and a name of at most 40 characters, and its whole `textContent` is never read,
-because a click can land on a list of 3000 rows. It comes from what the page's code wrote on the element (its aria-label, a
-form field's placeholder, aria-placeholder or name, an input's type, or its data-testid or data-test),
-and, where text is allowed, from the text of a form field's first `<label>` (since 0.20.0, before its
-placeholder, where `input "checkbox"` said nothing a person could find it by) or the first run of text of
-an element with no aria-label that is not a form field. Anything a person types in is a form field here, since its text is what they typed: anything
-inside an element with the role textbox, searchbox, combobox or spinbutton, or inside a contenteditable
-editor, a mention chip it marks contenteditable="false" included. That is asked of `closest` rather than
-found by walking up, since a label is read at every key press. An editor built on Chromium's EditContext
-has nothing in its markup to find it by: the page's code attaches one to the element that takes the key
-presses, which draws what was typed inside itself, a word in a line. That element counts, and so does
-anything up to five elements inside it, looked for the way a control is, since no selector can ask for
-it. The search for the first run of text never goes inside one of those either, nor inside a textarea,
-whose text React keeps the same as its value, so a click beside a chat box is not named by the message in
-it. An editor that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco
-does, cannot be told from the page's own text: a key press lands on the hidden one, but a click on a line
-is named by the line. Only an input is named by its type: a select trigger with the role combobox is a
-button, and the type on a button is button, which names nothing. A run
-is the adjacent text nodes React renders an interpolated string as, `Add to cart ({n})` as three, and
-it takes in the `<!-- -->` the server renderer puts between them to keep hydration straight: without
-that, the same button would be labelled `Add to cart (` after hydration and `Add to cart (3)` after a
-client-only render. Since 0.20.0 a run also goes on through inline elements (`mark`, `b`, `span` and the
-like), so a search result that marks what matched, `<mark>Oak</mark> Chair 1`, is `Oak Chair 1` rather
-than `Oak`, and any other element ends it. A run stops after a fixed number of nodes, so skipping those
-separators is never a way to walk a whole element. The label is read by the capture listener as the input is
-dispatched, before React's handlers run, and kept with the input: read when the entry arrives, after the
-paint, a counter's button clicked as `Count is 0` was labelled `Count is 1`. Where the entry's target is
-not the node the listener saw, the label is read from the entry's target when the report is built.
-Text is allowed under a development build of React and wherever `install({ labels: 'text' })`
-asks for it, not by default under a production build: an element's text can be a person's name
-or email (a clicked table cell), and production reports are the ones forwarded to Sentry, Faro
-or an OpenTelemetry collector. Selectors still carry ids and classes, and name the test attribute they
-were built from with its value quoted. An id or a class is escaped as `CSS.escape` escapes it, by the
-same rules written out in `element.ts` so that the tests check the string a page gets: React 18's
-`:r1:` and Tailwind's `md:flex` or `w-1/2` made a selector `querySelector` throws on, and anything past
-ASCII, React 19.1's `«r1»` among it, is left as it is. The id is read from its attribute, since on a
-form with a field named "id" (a hidden one is common) the `id` property is that field. When the entry's
-target is null because the node left the DOM before the observer ran (a close button, a deleted row),
-the input ring below still holds the node, and the enclosing components and the handler prop read from
-its fiber at dispatch. Keeping the fiber itself was not enough: React 18 and 19 clear a deleted fiber's
-`return` and `memoizedProps` when the deletion's effects run, which is before the entry arrives, and a
-click that deleted its own row was reported with no component, no owners and no handler at all.
+because a click can land on a list of 3000 rows. It comes from what the page's code wrote on the element
+(its aria-label, a form field's placeholder, aria-placeholder or name, an input's type, or its
+data-testid or data-test), and, where text is allowed, from the text of a form field's first `<label>`
+(since 0.20.0, before its placeholder, where `input "checkbox"` said nothing a person could find it by)
+or the first run of text of an element with no aria-label that is not a form field. Anything a person
+types in is a form field here, since its text is what they typed: anything inside an element with the
+role textbox, searchbox, combobox or spinbutton, or inside a contenteditable editor, a mention chip it
+marks contenteditable="false" included. That is asked of `closest` rather than found by walking up,
+since a label is read at every key press. An editor built on Chromium's EditContext has nothing in its
+markup to find it by: the page's code attaches one to the element that takes the key presses, which
+draws what was typed inside itself, a word in a line. That element counts, and so does anything up to
+five elements inside it, looked for the way a control is, since no selector can ask for it. The search
+for the first run of text never goes inside one of those either, nor inside a textarea, whose text React
+keeps the same as its value, so a click beside a chat box is not named by the message in it. An editor
+that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco does, cannot
+be told from the page's own text: a key press lands on the hidden one, but a click on a line is named by
+the line. Only an input is named by its type: a select trigger with the role combobox is a button, and
+the type on a button is button, which names nothing. A run is the adjacent text nodes React renders an
+interpolated string as, `Add to cart ({n})` as three, and it takes in the `<!-- -->` the server renderer
+puts between them to keep hydration straight: without that, the same button would be labelled
+`Add to cart (` after hydration and `Add to cart (3)` after a client-only render. Since 0.20.0 a run
+also goes on through inline elements (`mark`, `b`, `span` and the like), so a search result that marks
+what matched, `<mark>Oak</mark> Chair 1`, is `Oak Chair 1` rather than `Oak`, and any other element ends
+it. A run stops after a fixed number of nodes, so skipping those separators is never a way to walk a
+whole element. The label is read by the capture listener as the input is dispatched, before React's
+handlers run, and kept with the input: read when the entry arrives, after the paint, a counter's button
+clicked as `Count is 0` was labelled `Count is 1`. Where the entry's target is not the node the listener
+saw, the label is read from the entry's target when the report is built. Text is allowed under a
+development build of React and wherever `install({ labels: 'text' })` asks for it, not by default under
+a production build: an element's text can be a person's name or email (a clicked table cell), and
+production reports are the ones forwarded to Sentry, Faro or an OpenTelemetry collector. Selectors still
+carry ids and classes, and name the test attribute they were built from with its value quoted. An id or
+a class is escaped as `CSS.escape` escapes it, by the same rules written out in `element.ts` so that the
+tests check the string a page gets: React 18's `:r1:` and Tailwind's `md:flex` or `w-1/2` made a
+selector `querySelector` throws on, and anything past ASCII, React 19.1's `«r1»` among it, is left as it
+is. The id is read from its attribute, since on a form with a field named "id" (a hidden one is common)
+the `id` property is that field. When the entry's target is null because the node left the DOM before
+the observer ran (a close button, a deleted row), the input ring below still holds the node, and the
+enclosing components and the handler prop read from its fiber at dispatch. Keeping the fiber itself was
+not enough: React 18 and 19 clear a deleted fiber's `return` and `memoizedProps` when the deletion's
+effects run, which is before the entry arrives, and a click that deleted its own row was reported with
+no component, no owners and no handler at all.
 
 **Which prop a native event maps to.** The table is in `fiber.ts`, and it is read off React's own event
 plugins in the installed react-dom 19.3.0 (`cjs/react-dom-client.development.js`): SimpleEventPlugin for
@@ -1836,43 +1837,46 @@ lists interactions newest first: title ("Click on Log in", or "Tap on Log in" fo
 pen's click since 0.20.0, the word the verdict uses too), duration, one blame line, and the
 waiting / working / updating bar. Consecutive key presses in one field collapse into a row
 that shows the slowest and the typical. Since 0.20.0 the rows under 200 ms that blame nothing,
-because nothing stood out, fold into one line where the newest of them was, "12 quick
-interactions, nothing to fix", which opens on a click. Typing at the reporting threshold made one
-such row per key and pushed the slow ones out of view. A row that blames nothing because the
-library cannot tell (React not read, or an error of its own) stays a row. A row opens into the
-cause sentence, the notes, and the components that rendered before and after the paint. It is plain DOM in a shadow root
-(no React, so it renders while React is busy and never adds a commit), about 3 ms of work per
-report, and the page's own clicks on it are dropped before they become reports and left out
-of the INP it shows (below). Its code arrives by dynamic `import()` after `install()` has
-returned, so a page that never shows it never downloads it, and `mountOverlay()` returns a
-promise of a handle of the caller's own. The badge goes when the last of those is disposed,
-handles from other copies of this version or later included, so a component can show it from an
-effect under StrictMode, whose cleanup runs between two mounts, and a load that failed is tried
-again at the next call. The blame line comes from `explanation.blame`, a data twin of the cause
-sentence decided in the same branch, so the short and the long form never disagree. The row says
-a component re-rendered only where its commit lists it among what rendered. A render is named after
-where it went, and that can be a list that bailed out while the context consumers inside it rendered,
-so since 0.20.0 that row leads with the commit's one root where there is one, "PrefsProvider updated ·
-ProductRow ×375 re-rendered inside ProductList", in place of "ProductList re-rendered", and the blame
-itself is unchanged. Since 2026-09-28 it wraps: cut to one line with an ellipsis, in a panel 372 px
-wide, it lost the very name it is there to give, "browser recalculated styles and layout · 315 ms in LayoutT…" on a
-phone, and opening the row did not bring it back. On a touch screen, or one 480 px wide or
-less, the close button and Clear are at least 44 px each way, which a finger needs. Clear was
-24 by 15 up to 0.18.0, the close button 40 by 40. Page INP, on the badge, in the panel
-head and from `api.inp()`, is the web-vitals estimate computed in-library, with no web-vitals
-dependency: the interaction count is `performance.interactionCount` where the browser has
-it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
-(Chrome steps ids by 7); the 10 longest interactions are kept by their longest single entry;
-INP is the one at index `min(floor(count / 50), n - 1)` among the `n` kept, longest first, chosen as
-entries arrive and again when the page is hidden, which are the two moments web-vitals chooses at. At
-hide both observers first hand over what the browser has queued for them and not delivered yet, as
-web-vitals takes its own observer's entries then, so the interaction it reports at hide has a report
-here too. Long animation frames go first, so a report built then already holds its frame. After
-a soft navigation or a back/forward cache restore, interactions the browser counted but sent no entry
-for read as the 8 ms
-web-vitals stands in for them, with `interactionId: null`. It counts every interaction
-the observer sees at its 16 ms floor, plus the page's first input at any duration. The demo's
-own "Page INP so far" line reads the same call, so the page never shows two INPs that disagree.
+because nothing stood out, fold into one line where the newest of them was, "12 quick interactions,
+nothing to fix", which opens on a click. Typing at the reporting threshold made one such row per key
+and pushed the slow ones out of view. `max` counts the rows and the fold's list apart, so twenty
+quick ones after a slow one leave the slow row in place. A row that blames nothing because the
+library cannot tell (React not read, or an error of its own) stays a row. A row opens into the cause
+sentence, the notes, and the components that rendered before and after the paint. It is plain DOM in
+a shadow root (no React, so it renders while React is busy and never adds a commit), about 3 ms of
+work per report, and the page's own clicks on it are dropped before they become reports and left out
+of the INP it shows (below). Its code arrives by dynamic `import()` after `install()` has returned,
+so a page that never shows it never downloads it, and `mountOverlay()` returns a promise of a handle
+of the caller's own. The badge goes when the last of those is disposed, handles from other copies of
+this version or later included, so a component can show it from an effect under StrictMode, whose
+cleanup runs between two mounts, and a load that failed is tried again at the next call. The blame
+line comes from `explanation.blame`, a data twin of the cause sentence decided in the same branch,
+so the short and the long form never disagree. The row says a component re-rendered only where its
+commit lists it among what rendered. A render is named after where it went, and that can be a list
+that bailed out while the context consumers inside it rendered, so since 0.20.0 that row leads with
+the commit's one root where there is one, "PrefsProvider updated · ProductRow ×375 re-rendered
+inside ProductList", in place of "ProductList re-rendered", and the blame itself is unchanged. With
+no one component most of the commit, the count is the ones inside, "120 of 351 components", as the
+cause has it. A root that is the component said to have re-rendered, rows that each update from a
+store they read, is not said a second time. Since 2026-09-28 it wraps: cut to one line with an
+ellipsis, in a panel 372 px wide, it lost the very name it is there to give, "browser recalculated
+styles and layout · 315 ms in LayoutT…" on a phone, and opening the row did not bring it back. On a
+touch screen, or one 480 px wide or less, the close button and Clear are at least 44 px each way,
+which a finger needs. Clear was 24 by 15 up to 0.18.0, the close button 40 by 40. Page INP, on the
+badge, in the panel head and from `api.inp()`, is the web-vitals estimate computed in-library, with
+no web-vitals dependency: the interaction count is `performance.interactionCount` where the browser
+has it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
+(Chrome steps ids by 7); the 10 longest interactions are kept by their longest single entry; INP is
+the one at index `min(floor(count / 50), n - 1)` among the `n` kept, longest first, chosen as
+entries arrive and again when the page is hidden, which are the two moments web-vitals chooses at.
+At hide both observers first hand over what the browser has queued for them and not delivered yet,
+as web-vitals takes its own observer's entries then, so the interaction it reports at hide has a
+report here too. Long animation frames go first, so a report built then already holds its frame.
+After a soft navigation or a back/forward cache restore, interactions the browser counted but sent
+no entry for read as the 8 ms web-vitals stands in for them, with `interactionId: null`. It counts
+every interaction the observer sees at its 16 ms floor, plus the page's first input at any duration.
+The demo's own "Page INP so far" line reads the same call, so the page never shows two INPs that
+disagree.
 
 Three details make it name the same interaction as web-vitals, not only the same number. Each
 observer batch is taken sorted by the time its entries were presented, the order web-vitals
@@ -1939,10 +1943,14 @@ as the rows could behind the header's 98% as they scrolled under it.
 bottom right like the badge, and a click meant for the button landed on the badge. With no `position`
 given, the badge now asks `document.elementsFromPoint` at its centre whether an element other than its
 own host, with a computed `position` of `fixed` or `sticky`, is there, and takes the first free corner of
-bottom right, bottom left, top right and top left, staying bottom right where all four are taken. It
-asks when it mounts and again at the first report, since such widgets often load late, and never while
-the panel is open, which would move with it. An element in the page's own flow is not asked about, so a
-long page's footer under the corner does not move it. A `position` that was given is used as given.
+bottom right, bottom left, top right and top left. Where all four are taken it stays where it is: a
+dialog's backdrop, fixed over the whole page, is often up at the first report, and going back to bottom
+right put the badge on the chat button again. It asks when it mounts and again at the first report,
+since such widgets often load late, and never while the panel is open, which would move with it. An
+element in the page's own flow is not asked about, so a long page's footer under the corner does not
+move it. The browser answers for another shadow root with its host, so a host that holds a shadow root
+is asked again through `shadowRoot.elementsFromPoint`: Next.js draws its dev indicator bottom left
+inside one whose host is `position: absolute`. A `position` that was given is used as given.
 
 **Hide for me** (0.20.0). In a team repo that commits `overlay: true`, the badge was everyone's or
 no one's. A button beside Clear sets `react-inp-blame` in `localStorage` to `hidden`, the key the
