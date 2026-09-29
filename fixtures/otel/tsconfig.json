@@ -1,0 +1,17 @@
+{
+  // The ts blocks of docs/opentelemetry.md, which scripts/otel-contract.mjs writes into src/ of the temp copy
+  // as each block's first line names them, and types.ts. Strict, as an app that pastes them may well be.
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "skipLibCheck": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "exactOptionalPropertyTypes": true
+  },
+  "include": ["src", "types.ts"]
+}
