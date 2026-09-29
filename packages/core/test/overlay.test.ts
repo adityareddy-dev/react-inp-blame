@@ -207,6 +207,7 @@ function panelDocument(): { body: Drawn; restore(): void } {
         el.listeners[type] = listener;
       },
       removeEventListener() {},
+      getBoundingClientRect: () => ({ width: 100, height: 32 }),
       attachShadow: () => (el.shadowRoot = element('#shadow-root')),
       append: (...nodes: unknown[]) => el.childNodes.push(...adopt(nodes)),
       prepend: (...nodes: unknown[]) => el.childNodes.unshift(...adopt(nodes)),
@@ -334,6 +335,68 @@ test('quick rows with nothing to fix fold into one line that opens on a click, a
   } finally {
     restore();
   }
+});
+
+test("with no position the badge leaves a corner the page's own fixed or sticky element holds, at mount and at the first report, and stays put when told a corner or with the panel open", (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const saved = ['innerWidth', 'innerHeight', 'getComputedStyle'].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)] as const);
+  t.after(() => {
+    for (const [k, d] of saved) {
+      if (d) Object.defineProperty(globalThis, k, d);
+      else delete (globalThis as Record<string, unknown>)[k];
+    }
+  });
+  Object.assign(globalThis, { innerWidth: 1000, innerHeight: 800, getComputedStyle: (el: Drawn) => ({ position: el.position ?? 'static' }) });
+  const page = { tagName: 'HTML', position: 'static' };
+  const corner = (x: number, y: number) => `${y > 400 ? 'b' : 't'}${x > 500 ? 'r' : 'l'}`;
+  const run = (opts: Parameters<typeof createOverlay>[1], held: Record<string, string>, later: Record<string, string> = held) => {
+    const { body, restore } = panelDocument();
+    try {
+      let now = held;
+      let listener: () => void = () => {};
+      let reports: InteractionReport[] = [];
+      Object.assign(globalThis.document, {
+        // The host is on top at its own corner, fixed like the page's widget, and never counts as one.
+        elementsFromPoint: (x: number, y: number) => [body.childNodes[0], ...(now[corner(x, y)] ? [{ position: now[corner(x, y)] }] : []), page],
+      });
+      const source = {
+        reports: () => reports,
+        inp: () => null,
+        onInteraction: (fn: () => void) => ((listener = fn), () => {}),
+        clear() {},
+        stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
+        debug: { hook: () => ({ devtoolsLockedOut: false }) },
+      };
+      body.childNodes[0]?.remove();
+      const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], opts);
+      body.childNodes[0].position = 'fixed';
+      const wrap = byClass(body.childNodes[0].shadowRoot, 'wrap')!;
+      const atMount = wrap.className.split(' ')[1];
+      // A widget that loads late is there by the first report.
+      now = later;
+      reports = [{ explanation: { blame: { kind: 'none' } }, duration: 300, reports: [] } as unknown as InteractionReport];
+      listener();
+      overlay.refresh();
+      const atReport = wrap.className.split(' ')[1];
+      overlay.dispose();
+      return [atMount, atReport];
+    } finally {
+      restore();
+    }
+  };
+  const chat = { br: 'fixed' };
+  assert.deepEqual(run({}, {}), ['br', 'br']);
+  assert.deepEqual(run({}, chat), ['bl', 'bl']);
+  assert.deepEqual(run({}, { br: 'fixed', bl: 'sticky' }), ['tr', 'tr']);
+  assert.deepEqual(run({}, { br: 'fixed', bl: 'fixed', tr: 'fixed', tl: 'fixed' }), ['br', 'br']);
+  // An element of the page's own flow in the corner is not a widget on top of it.
+  assert.deepEqual(run({}, { br: 'relative' }), ['br', 'br']);
+  assert.deepEqual(run({}, {}, chat), ['br', 'bl']);
+  // A corner that was asked for is used as given.
+  assert.deepEqual(run({ position: 'bottom-right' }, chat), ['br', 'br']);
+  assert.deepEqual(run({ position: 'top-left' }, {}), ['tl', 'tl']);
+  // Never moved with the panel open, where it would take the panel with it.
+  assert.deepEqual(run({ open: true }, {}, chat), ['br', 'br']);
 });
 
 test('Hide for me in the footer stores hidden, takes the badge off the page and tells the host, and a badge the page mounted itself has no such button', (t) => {

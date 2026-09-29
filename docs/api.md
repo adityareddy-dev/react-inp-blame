@@ -184,7 +184,9 @@ rendered before and after the paint. Rows under 200 ms that blame nothing fold i
 interactions, nothing to fix", that opens on a click. `overlay: 'query'` shows it only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`: that is how to open it on a production
 page. `{ position, open, max }` sets the corner, whether the panel starts open and how many rows it keeps
-(20). It is plain DOM in a shadow root, so it never causes a React render, and its code is a chunk loaded
+(20). Without `position` the badge starts bottom right, and moves to the next free corner (bottom left, top
+right, top left) when the app's own fixed or sticky element, a chat button say, sits there when the badge
+mounts or when the first report comes. `position` keeps it where you put it. It is plain DOM in a shadow root, so it never causes a React render, and its code is a chunk loaded
 after `install()` returns, only when shown. A click, tap or key press on it is not the page's: it gets no
 report, and `inp()` and the badge leave it out. Hide for me, beside Clear in the panel's footer, sets
 `react-inp-blame` in `localStorage` to `hidden`: from then on `overlay: true` or an options object shows no
