@@ -2682,6 +2682,13 @@ function explain(r: InteractionReport): Explanation {
   const forced = left.filter((x) => x.hydratedTarget == null && forcedByScript.includes(x)).length;
   countsByReport.set(r, { renders: rendersSaid.length, hydrations, forced, small: left.length - hydrations - forced, between, whereBetween });
   if (reRenders.filter(counts).length > 1) notes.push(`React rendered ${rendersSaid.length} times before the screen updated, which usually means a state update inside an effect or a chain of updates.`);
+  // StrictMode renders twice in a development build, so half of a render's time is the second pass. Said with
+  // React's render time as the cause gives it, the total across commits where it gives one. Only of a render
+  // blame: a handler does not run twice, though its cause gives React's render time too.
+  if (r.strictMode && blame.kind === 'render' && rc?.hasDurations) {
+    const rendering = severalRenders(rc) ? rendersMs : rc.total;
+    notes.push(`StrictMode renders each component twice in development, so about half of React's ${ms(rendering)} here is the second pass. A production build renders once.`);
+  }
   if (closedByTheWait && waitIsTheVerdict) notes.push(closedByTheWait);
   // Where the screen update did take the blame, the work it outranked is what this report would otherwise never
   // mention. Only where it took it, though: a rung above the comparison that won anyway had nothing closed off,

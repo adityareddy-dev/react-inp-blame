@@ -410,7 +410,12 @@ every commit of a react-dom, walked or not: 'profiling' once a root carries it, 
 commit came without it, and null before the page's first commit. `strictMode` is read in the walk, from
 the bit `<StrictMode>` sets on the fibers under it (1 on React 17, StrictLegacyMode 8 on 18 and 19, read
 in each version's react-dom), on any component that rendered. It is said only under a development build,
-the one build that renders twice, and only for a report holding a commit.
+the one build that renders twice, and only for a report holding a commit. Where it is true and the blame
+is a render the build timed, a note says about half of React's render time is the second pass, with the
+time the cause gives: the total across commits where the cause leads with one, never the named commit's
+share and never `blame.ms`, which holds committing and effects too. A handler is not run twice (a sort
+handler read 2784 ms in development and 2400 on a profiling build), so no other blame gets the note, though
+a handler's cause gives React's render time as well. No number changes.
 
 **Coarse clocks.** React times each component with `performance.now()`, which Chromium steps in
 0.1 ms and Firefox 148 and WebKit 26.4 step in whole milliseconds on a page without cross-origin

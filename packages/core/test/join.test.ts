@@ -4058,6 +4058,37 @@ test("React's render time across several commits is said as their total with the
   );
 });
 
+test("under StrictMode in a development build, a render blame says about half of React's render time is the second pass", () => {
+  // The commits above, rendered under <StrictMode>: List 30 components for 30 ms, Sidebar 500 for 25.
+  const list = commit(40, 0, { total: 30, strictMode: true });
+  const sidebar = commit(60, 0, { total: 25, rendered: 500, roots: ['Sidebar'], hotPath: ['Sidebar'], components: [{ name: 'Item', count: 500, self: 20, total: 20 }], strictMode: true });
+  const note = (ms: number) => `StrictMode renders each component twice in development, so about half of React's ${ms} ms here is the second pass. A production build renders once.`;
+  const click = [entry('click', 0, 72, 2, 64)];
+  const explained = (commits: CommitSummary[], build: InteractionReport['reactBuild'] = 'development', entries = click, inputs = [input(0, 'click')]) =>
+    report(entries, commits, [], inputs, 'attributes', [], undefined, 'reading', build).explanation;
+  const strictNotes = (x: { notes: readonly string[] }) => x.notes.filter((n) => n.startsWith('StrictMode'));
+  // Across two commits the note gives the total the cause leads with, never List's share or the blame's ms.
+  const across = explained([list, sidebar]);
+  assert.equal(across.blame.kind, 'render');
+  assert.match(across.cause, /^React spent 55 ms rendering across 2 commits, 30 ms of it/);
+  assert.deepEqual(strictNotes(across), [note(55)]);
+  // The hedged sentence gives the named render first and the total after it, and the note the total.
+  assert.deepEqual(strictNotes(explained([{ ...list, truncated: true }, sidebar])), [note(55)]);
+  // One render, or one beside a commit whose render rounds to nothing: that render's own figure.
+  assert.deepEqual(strictNotes(explained([list], 'development', [entry('click', 0, 72, 2, 40)])), [note(30)]);
+  const speck = commit(20, 0, { total: 0.2, rendered: 1, strictMode: true });
+  assert.deepEqual(strictNotes(explained([speck, list], 'development', [entry('click', 0, 72, 2, 40)])), [note(30)]);
+  // Outside StrictMode, and under any other build, there is no second pass to speak of.
+  assert.deepEqual(strictNotes(explained([{ ...list, strictMode: false }, { ...sidebar, strictMode: false }])), []);
+  assert.deepEqual(strictNotes(explained([list, sidebar], 'production')), []);
+  assert.deepEqual(strictNotes(explained([list, sidebar], 'profiling')), []);
+  // StrictMode does not run a handler twice, so a handler blame gets no note though its cause gives React's render time.
+  const handled = explained([list, sidebar], 'development', [entry('click', 0, 216, 2, 200)], loginClick('handleSave'));
+  assert.equal(handled.blame.kind, 'handler');
+  assert.match(handled.cause, /React spent 55 ms rendering across 2 commits/);
+  assert.deepEqual(strictNotes(handled), []);
+});
+
 test('effects too small to mention do not choose the commit a render blame names', () => {
   // List renders for 30 ms; Chart renders for 1 ms and runs 30 ms of effects, under a quarter of the 121 ms.
   const list = commit(1035, 1000, { startedAt: 1005, total: 30, rendered: 31, roots: ['List'], hotPath: ['List'] });
