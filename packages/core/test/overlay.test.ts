@@ -287,6 +287,18 @@ test("a row says a component re-rendered only where it did, and otherwise leads 
     assert.equal(line(c), 'PrefsProvider updated · ProductRow ×375 re-rendered inside ProductList · 151 ms');
     // With no one root, what rendered and where.
     assert.equal(line({ ...c, roots: ['PrefsProvider', 'Toaster'] }), 'ProductRow ×375 re-rendered inside ProductList · 151 ms');
+    // Consumers spread across the tree, no one of them most of it: the count is the ones inside, as the cause has it.
+    // The row said "351 components re-rendered inside ProductList" where 120 of them were.
+    const spread = [
+      { name: 'ProductRow', count: 120, self: 60, total: 60 },
+      { name: 'LinkComponent', count: 120, self: 40, total: 40 },
+      { name: 'Nav', count: 110, self: 40, total: 40 },
+      { name: 'PrefsProvider', count: 1, self: 1, total: 151 },
+    ];
+    assert.equal(line({ ...c, rendered: 351, pathRendered: 120, components: spread }), 'PrefsProvider updated · 120 of 351 components re-rendered inside ProductList · 151 ms');
+    // Each row updated from its own store, so the rows are the roots, and the row is not said to have started it.
+    const store = { ...c, rendered: 375, roots: ['ProductRow'], hotPath: ['Shop', 'ProductList'], components: [components[0]!] };
+    assert.equal(line(store), 'ProductRow ×375 re-rendered inside ProductList · 151 ms');
     // Where it did render, as before.
     const rendered = [...components, { name: 'ProductList', count: 1, self: 1, total: 141 }];
     assert.equal(line({ ...c, rendered: 382, components: rendered }), 'ProductList re-rendered · ProductRow ×375 · 151 ms');
