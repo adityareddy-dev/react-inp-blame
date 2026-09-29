@@ -93,10 +93,10 @@ const CSS = `
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--rating, ${IDLE}); box-shadow: 0 0 0 3px rgba(255,255,255,.07); flex: none; }
 .ms { font-variant-numeric: tabular-nums; }
 .badge .n { color: #9aa0ad; font-weight: 500; }
-.panel { position: absolute; width: min(372px, calc(100vw - 32px)); max-height: min(72vh, 660px); max-height: min(72dvh, 660px); overflow: auto; border-radius: 14px; background: rgba(17,19,24,.97); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 50px rgba(0,0,0,.42); }
+.panel { position: absolute; width: min(372px, calc(100vw - 32px)); max-height: min(72vh, 660px); max-height: min(72dvh, 660px); overflow: auto; border-radius: 14px; background: #111318; border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 50px rgba(0,0,0,.42); }
 .br .panel, .bl .panel { bottom: 42px; } .tr .panel, .tl .panel { top: 42px; }
 .br .panel, .tr .panel { right: 0; } .bl .panel, .tl .panel { left: 0; }
-.head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 12px; background: rgba(17,19,24,.98); border-bottom: 1px solid rgba(255,255,255,.08); }
+.head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 16px 12px; background: #111318; border-bottom: 1px solid rgba(255,255,255,.08); }
 .big { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; }
 .big small { font-size: 12px; font-weight: 500; color: #9aa0ad; margin-left: 4px; }
 .sub { color: #9aa0ad; margin-top: 7px; font-size: 11.5px; }
