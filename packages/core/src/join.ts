@@ -389,6 +389,16 @@ function ringInputs(inputs: readonly InputRecord[], stamps: readonly Stamp[]): I
 }
 
 /**
+ * The pointer that made the named entry, from its input in the ring. WebKit gives a tap's click the pointerType
+ * 'mouse', so a click takes a finger's or a pen's from the pointerdown of its own press.
+ */
+function pointerOf(inputs: readonly InputRecord[], named: { name: string; startTime: number }): string | null {
+  const i = inputs.find((x) => x.type === named.name && near(x.ts, named.startTime));
+  const down = i?.type === 'click' ? inputs.find((x) => x.type === 'pointerdown' && x.ts === i.gestureTs && (x.pointerType === 'touch' || x.pointerType === 'pen')) : undefined;
+  return down?.pointerType || i?.pointerType || null;
+}
+
+/**
  * The stamps a commit of this interaction can carry: its entries', and the press each of its inputs
  * released. Event Timing leaves out an entry under 16 ms, so a tap's pointerdown can be missing from
  * the entries while a render it set off, stamped with it, lands inside the click: a finger held a moment
@@ -632,7 +642,7 @@ export function buildReport(
     reactStatus,
     reactBuild,
     strictMode: strictModeOf(reactBuild, [...inWindow, ...followUps]),
-    pointerType: inputs.find((i) => i.type === named.name && near(i.ts, named.startTime))?.pointerType || null,
+    pointerType: pointerOf(inputs, named),
     start,
     end,
     duration,

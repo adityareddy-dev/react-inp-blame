@@ -560,8 +560,9 @@ export interface InteractionReport {
    */
   readonly strictMode: boolean | null;
   /**
-   * The pointer `type`'s event came from, 'mouse', 'pen' or 'touch', as the library saw it dispatched;
-   * null for a key, for a click a key made, and when the library did not see the event.
+   * The pointer `type`'s event came from, 'mouse', 'pen' or 'touch', as the library saw it dispatched. A click
+   * takes a finger's or a pen's from its press's pointerdown, since WebKit gives a tap's click 'mouse'. Null
+   * for a key, for a click a key made, and when the library did not see the event.
    */
   readonly pointerType: string | null;
   /** `startTime` of the headline entry. */

@@ -5048,6 +5048,13 @@ test("a mouse's pointerdown alone reads as a click, a finger's as a tap", () => 
   assert.match(clicked('touch').explanation.cause, /\bthe tap\b/);
   assert.match(clicked('pen').verdict, /^120 ms tap\b/);
   assert.match(clicked('mouse').verdict, /^120 ms click\b/);
+  // WebKit gives a tap's click the pointerType 'mouse', and its pointerdown 'touch'. It read as a click.
+  const webkit = report([entry('click', 0, 120, 2, 92)], [], [], [input(0, 'pointerdown', { pointerType: 'touch' }), input(1, 'click', { gestureTs: 0, pointerType: 'mouse' })]);
+  assert.equal(webkit.pointerType, 'touch');
+  assert.match(webkit.verdict, /^120 ms tap\b/);
+  // A mouse's click after an earlier tap is its own press, and a click.
+  const after = report([entry('click', 500, 120, 502, 592)], [], [], [input(0, 'pointerdown', { pointerType: 'touch' }), input(490, 'pointerdown', { pointerType: 'mouse' }), input(500, 'click', { gestureTs: 490, pointerType: 'mouse' })]);
+  assert.equal(after.pointerType, 'mouse');
 });
 
 test('a click inside a link or an option is named by the component it landed in; only an icon gives way to its control', () => {
