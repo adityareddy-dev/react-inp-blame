@@ -1879,6 +1879,36 @@ test('a blame says whether it was measured or inferred', () => {
   assert.equal(report([entry('click', 0, 40, 5, 10)], [], null).explanation.blame.confidence, 'inferred');
 });
 
+test('each line the design doc gives for naming a render, a later render, forced layout or a long press holds at the line and not under it', () => {
+  // A render known only by its counts, one component rendered `n` times: a list, so only the count decides.
+  const counted = (n: number): Partial<CommitSummary> => ({ hasDurations: false, total: 0, rendered: n, components: [{ name: 'Row', count: n, self: null, total: null }] });
+  const kindOf = (processing: number, n: number, ring: InputRecord[]) => report([entry('click', 0, 120, 3, 3 + processing)], [commit(50, 0, counted(n))], [], ring).explanation.blame.kind;
+  // From 10 components with no handler to name, and from 50 beside one.
+  assert.deepEqual([kindOf(97, 9, [input(0, 'click')]), kindOf(97, 10, [input(0, 'click')])], ['none', 'render']);
+  assert.deepEqual([kindOf(107, 49, loginClick('handleLogin')), kindOf(107, 50, loginClick('handleLogin'))], ['handler', 'render']);
+  // A later render from 10 ms, or from 25 components where the build timed none.
+  const r = buildReport([entry('click', 0, 120, 3, 100)], [], []);
+  assert.deepEqual([isLaterRender(r, commit(400, 0, { total: 9 })), isLaterRender(r, commit(400, 0, { total: 10 }))], [false, true]);
+  assert.deepEqual([isLaterRender(r, commit(400, 0, counted(24))), isLaterRender(r, commit(400, 0, counted(25)))], [false, true]);
+  // Forced layout gets its note from 4 ms.
+  const layoutNote = (forced: number) =>
+    report(
+      [entry('click', 0, 120, 2, 20)],
+      [commit(110, 0, { total: 10, startedAt: 30 })],
+      [frame(0, 120, [script('DIV#root.onclick', 2, 18), script('MessagePort.onmessage', 30, 80, forced)])],
+      [input(0, 'click')],
+    ).explanation.notes.find((n) => n.startsWith('The browser also spent'));
+  assert.equal(layoutNote(3.9), undefined);
+  assert.match(layoutNote(4) ?? '', /^The browser also spent 4 ms recalculating styles and layout in scripts before the paint\./);
+  // A press held around the interaction gets its note from 100 ms.
+  const held = (up: number) => report([entry('pointerdown', 0, 24, 1, 3), entry('pointerup', up, 120, up + 1, up + 100)], [], [], [input(0, 'pointerdown', { pointerType: 'mouse' }), input(up, 'pointerup', { gestureTs: 0, pointerType: 'mouse' })]);
+  const holdNote = (r: InteractionReport) => r.explanation.notes.find((n) => n.startsWith('The whole click, from press to release, spanned'));
+  assert.equal(held(99).holdMs, 99);
+  assert.equal(holdNote(held(99)), undefined);
+  assert.equal(held(100).holdMs, 100);
+  assert.match(holdNote(held(100)) ?? '', /^The whole click, from press to release, spanned 220 ms/);
+});
+
 test('forced layout the browser measured outranks a render no build timed', () => {
   // Switching a tabbed code block on a documentation site: a 128 ms click whose 116 ms of working
   // time was 108 ms of the browser recalculating layout, measured from a long animation frame,
