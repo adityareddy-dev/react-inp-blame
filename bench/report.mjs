@@ -190,7 +190,8 @@ function main() {
 
   p(`# react-inp-blame benchmark`);
   p();
-  p(`Source: \`${file}\``);
+  // The file name only: the full path has the user folder in it, and this report gets pasted around.
+  p(`Source: \`${path.basename(file)}\``);
   p(`Started ${data.started}, finished ${data.finished}. \`--runs ${data.args.runs}\`, throttle passes ${data.args.throttles.join(', ')}x.`);
   p();
   p(`## Configurations`);
