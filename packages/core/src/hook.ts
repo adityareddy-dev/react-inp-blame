@@ -657,11 +657,10 @@ export function readingReactDom(): boolean {
 }
 
 /**
- * What tells React's own listener from another in a report's scripts. `roots` are the containers of the roots
- * committed so far, as Long Animation Frames names a listener's target ("DIV#root", "#document"), where that
- * names one node: a container with an id, the body, or the document. `named` is every react-dom read being a
- * development build, whose listener keeps its name (`dispatchDiscreteEvent`), so that a listener by any other
- * name is not React's.
+ * What tells React's own listener in a report's scripts. `roots` are the containers of the roots committed so
+ * far, as Long Animation Frames names a listener's target ("DIV#root", "#document"), where that names one node:
+ * a container with an id, the body, or the document. `named` is every react-dom read being a development build,
+ * whose listener is known by its name (`dispatchDiscreteEvent`) rather than by the container it listens on.
  */
 export interface ReactPage {
   readonly roots: readonly string[];
