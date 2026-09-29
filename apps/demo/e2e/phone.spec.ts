@@ -299,6 +299,12 @@ test('the panel fits the phone screen, with its close button and the first row i
     return box;
   };
   await inside('the panel', '#react-inp-blame .panel');
+  // Nothing of the page shows through the panel, and no row through its header as it scrolls under it. At
+  // 97% the page's buttons and text could be read behind the rows on a phone.
+  for (const part of ['.panel', '.panel .head']) {
+    const color = await page.locator(`#react-inp-blame ${part}`).evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(color, `${part} is opaque`).toMatch(/^rgb\(/);
+  }
   // A finger needs about 44 px. The close button was 24 px across before phones got a larger one, and so do
   // the rows. Clear was 24 by 15 up to 0.18.0.
   for (const [what, selector] of [['the close button', '.x'], ['Clear', '.clear']]) {
