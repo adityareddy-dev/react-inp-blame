@@ -73,8 +73,9 @@ const SEPARATOR = ' > ';
  * not explain the report or could not read the source. Nothing else is added unless it matched.
  *
  * Only component, handler and script names and numbers: never the element's label, text or selector,
- * a sentence or a URL. A script's name is the browser's for its listener, element id included
- * (`DIV#root.onclick`), as the report gives it. It never throws.
+ * a sentence, or a URL's query. A script's name is the browser's for its listener, element id included
+ * (`DIV#root.onclick`), or a script's URL without its password, query and fragment, as the report
+ * gives it. It never throws.
  *
  * Experimental: the names can change in any minor release, 1.x included, until OpenTelemetry names
  * these fields.
