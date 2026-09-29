@@ -567,31 +567,34 @@ markup to find it by: the page's code attaches one to the element that takes the
 draws what was typed inside itself, a word in a line. That element counts, and so does anything up to
 five elements inside it, looked for the way a control is, since no selector can ask for it. The search
 for the first run of text never goes inside one of those either, nor inside a textarea, whose text React
-keeps the same as its value, so a click beside a chat box is not named by the message in it. An editor
-that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco does, cannot
-be told from the page's own text: a key press lands on the hidden one, but a click on a line is named by
-the line. Only an input is named by its type: a select trigger with the role combobox is a button, and
-the type on a button is button, which names nothing. A run is the adjacent text nodes React renders an
-interpolated string as, `Add to cart ({n})` as three, and it takes in the `<!-- -->` the server renderer
-puts between them to keep hydration straight: without that, the same button would be labelled
-`Add to cart (` after hydration and `Add to cart (3)` after a client-only render. Since 0.20.0 a run
-also goes on through inline elements (`mark`, `b`, `span` and the like), so a search result that marks
-what matched, `<mark>Oak</mark> Chair 1`, is `Oak Chair 1` rather than `Oak`, and any other element ends
-it. A run stops after a fixed number of nodes, so skipping those separators is never a way to walk a
-whole element. The label is read by the capture listener as the input is dispatched, before React's
-handlers run, and kept with the input: read when the entry arrives, after the paint, a counter's button
-clicked as `Count is 0` was labelled `Count is 1`. Where the entry's target is not the node the listener
-saw, the label is read from the entry's target when the report is built. Text is allowed under a
-development build of React and wherever `install({ labels: 'text' })` asks for it, not by default under
-a production build: an element's text can be a person's name or email (a clicked table cell), and
-production reports are the ones forwarded to Sentry, Faro or an OpenTelemetry collector. Selectors still
-carry ids and classes, and name the test attribute they were built from with its value quoted. An id or
-a class is escaped as `CSS.escape` escapes it, by the same rules written out in `element.ts` so that the
-tests check the string a page gets: React 18's `:r1:` and Tailwind's `md:flex` or `w-1/2` made a
-selector `querySelector` throws on, and anything past ASCII, React 19.1's `«r1»` among it, is left as it
-is. The id is read from its attribute, since on a form with a field named "id" (a hidden one is common)
-the `id` property is that field. When the entry's target is null because the node left the DOM before
-the observer ran (a close button, a deleted row), the input ring below still holds the node, and the
+keeps the same as its value, so a click beside a chat box is not named by the message in it, nor inside
+a select, whose options are its values: a select inside its `<label>` is named by the label's text, not
+a saved address in its first option. An editor that draws its text in ordinary elements and takes key
+presses in a hidden one, as Monaco does, cannot be told from the page's own text: a key press lands on
+the hidden one, but a click on a line is named by the line. Only an input is named by its type: a select
+trigger with the role combobox is a button, and the type on a button is button, which names nothing. A
+run is the adjacent text nodes React renders an interpolated string as, `Add to cart ({n})` as three,
+and it takes in the `<!-- -->` the server renderer puts between them to keep hydration straight: without
+that, the same button would be labelled `Add to cart (` after hydration and `Add to cart (3)` after a
+client-only render. Since 0.20.0 a run also goes on through inline elements (`mark`, `b`, `span` and the
+like), so a search result that marks what matched, `<mark>Oak</mark> Chair 1`, is `Oak Chair 1` rather
+than `Oak`, and any other element ends it, as does an element straight after another:
+`<span>Notifications</span><span>12</span>` is `Notifications`, not `Notifications12`. A run stops after
+a fixed number of nodes, so skipping those separators is never a way to walk a whole element. The label
+is read by the capture listener as the input is dispatched, before React's handlers run, and kept with
+the input: read when the entry arrives, after the paint, a counter's button clicked as `Count is 0` was
+labelled `Count is 1`. Where the entry's target is not the node the listener saw, the label is read from
+the entry's target when the report is built. Text is allowed under a development build of React and
+wherever `install({ labels: 'text' })` asks for it, not by default under a production build: an
+element's text can be a person's name or email (a clicked table cell), and production reports are the
+ones forwarded to Sentry, Faro or an OpenTelemetry collector. Selectors still carry ids and classes, and
+name the test attribute they were built from with its value quoted. An id or a class is escaped as
+`CSS.escape` escapes it, by the same rules written out in `element.ts` so that the tests check the
+string a page gets: React 18's `:r1:` and Tailwind's `md:flex` or `w-1/2` made a selector
+`querySelector` throws on, and anything past ASCII, React 19.1's `«r1»` among it, is left as it is. The
+id is read from its attribute, since on a form with a field named "id" (a hidden one is common) the `id`
+property is that field. When the entry's target is null because the node left the DOM before the
+observer ran (a close button, a deleted row), the input ring below still holds the node, and the
 enclosing components and the handler prop read from its fiber at dispatch. Keeping the fiber itself was
 not enough: React 18 and 19 clear a deleted fiber's `return` and `memoizedProps` when the deletion's
 effects run, which is before the entry arrives, and a click that deleted its own row was reported with

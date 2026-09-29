@@ -160,10 +160,11 @@ or `data-test`. An element's text can be a person's name or email, and reports a
 error trackers and analytics, so text is opt-in there: with `install({ labels: 'text' })` a form field with
 no `aria-label` is named by the text of its `<label>` before the attributes above, and any other element with
 no `aria-label` by its first run of text, read on through inline elements such as `mark`, `b` and `span`, so
-`<a><mark>Oak</mark> Chair 1</a>` reads `link "Oak Chair 1"`. An element inside a
-`contenteditable` editor, or inside one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`,
-counts as a form field, and so does an element an `EditContext` is attached to, or one up to five elements
-inside it. The search for that first run of text never goes into any of them, or into a `textarea`. An
+`<a><mark>Oak</mark> Chair 1</a>` reads `link "Oak Chair 1"`. An element straight after another ends the run,
+so a count badge is not glued to the name beside it. An element inside a `contenteditable` editor, or inside
+one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`, counts as a form field, and so does an
+element an `EditContext` is attached to, or one up to five elements inside it. The search for that first run
+of text never goes into any of them, or into a `textarea` or a `select`'s options. An
 editor that draws its text in ordinary elements and takes key presses in a hidden one, as Monaco does,
 cannot be told from the rest of the page, so a click on that text can be named by it. Development builds use
 text by default. Whatever `labels` says, `target.selector` has the tag, the `id` if there is one, and

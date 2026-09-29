@@ -140,6 +140,7 @@ const TYPED_IN = '[contenteditable]:not([contenteditable="false" i]),[role="text
 // it, a word in a line, and nothing in the markup says so, so it is looked for the way a control is, not
 // by a selector.
 const EDIT_CONTEXT_ANCESTORS = 5;
+const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
@@ -1032,8 +1033,8 @@ function clip(text: string): string {
 /**
  * The first run of text inside `el`: its first text node with more than whitespace, joined to
  * the text after it (React renders `Add to cart ({n})` as three nodes) through inline elements such
- * as a `<mark>` a search result puts round what matched, stopping at any other element or once 40
- * characters are in hand.
+ * as a `<mark>` a search result puts round what matched, stopping at any other element, at an element
+ * straight after another, or once 40 characters are in hand.
  */
 function firstText(el: Element): string {
   let node: Node | null = el.firstChild;
@@ -1051,7 +1052,8 @@ function firstText(el: Element): string {
         // the label read the same under Next.js as under a client-only render.
         if (next.nodeType === COMMENT_NODE) continue;
         if (next.nodeType === TEXT_NODE) text += next.nodeValue ?? '';
-        else if (!isInline(next)) break;
+        // An element straight after another is a piece of its own, a count badge or a price beside a name.
+        else if (!isInline(next) || next.previousSibling?.nodeType === ELEMENT_NODE) break;
       }
       return text;
     }
@@ -1066,9 +1068,10 @@ const isInline = (node: Node): boolean => INLINE_TAGS.includes((node as Element)
 function nextNode(node: Node, root: Node): Node | null {
   // Text nobody can see names nothing: a key press with nothing focused lands on the body, and the
   // first text in a Vite or CRA page's body is its noscript line, "You need to enable JavaScript".
-  // Nor is text a person typed read on the way: an editor's, or a textarea's, which React keeps the
-  // same as its value.
-  if (node.firstChild && !UNSEEN_TEXT_TAGS.includes((node as Element).tagName?.toLowerCase() ?? '') && !typedIn(node as Element)) return node.firstChild;
+  // Nor is text a person typed or picked read on the way: an editor's, a textarea's, which React keeps the
+  // same as its value, or a select's options, one of which is its value.
+  const tag = (node as Element).tagName?.toLowerCase() ?? '';
+  if (node.firstChild && !UNSEEN_TEXT_TAGS.includes(tag) && tag !== 'select' && !typedIn(node as Element)) return node.firstChild;
   for (let n: Node | null = node; n && n !== root; n = n.parentNode) if (n.nextSibling) return n.nextSibling;
   return null;
 }
