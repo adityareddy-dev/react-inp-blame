@@ -1,7 +1,7 @@
-import { dehydratedAround, ENTER_KEYS, fiberFromNode, handlerOf, hydratedSince, namingFiber, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, walkCommit, type FiberRoot } from './fiber.js';
+import { dehydratedAround, ENTER_KEYS, fiberFromNode, handlerOf, hydratedSince, namingFiber, nextDevToolsRoot, ownersOf, profileModeBit, reportsPassiveEffects, rootShapeProblem, strictModeBit, walkCommit, type FiberRoot } from './fiber.js';
 import { controlOf } from './element.js';
 import { shared } from './session.js';
-import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, RendererInfo, Stats, UnsupportedReason } from './types.js';
+import type { CommitSummary, HookInfo, HydrationBoundary, InstallOptions, InteractionReport, RendererInfo, Stats, UnsupportedReason } from './types.js';
 import { NEWEST_REACT_MAJOR, OLDEST_REACT_MAJOR, parseReactVersion } from './version.js';
 import { dropped, errorText, guarded, warnOnce } from './warn.js';
 
@@ -56,6 +56,13 @@ interface Renderer {
   lanePriority: boolean;
   /** `profileModeBit` for its React major. */
   profileMode: number;
+  /** `strictModeBit` for its React major. */
+  strictMode: number;
+  /**
+   * Whether a root of the app it has committed is in ProfileMode, which in a build that is not a development
+   * one only a profiling build sets. Null until its first commit of the app's.
+   */
+  profiled: boolean | null;
   /** Why its commits cannot be read (a React outside 17 to 19, a root of another shape, a walk that threw), or null. */
   problem: Problem | null;
   /** Its first commit has been checked. */
@@ -692,6 +699,18 @@ export function hookInfo(): HookInfo {
   return { owner: owner(), renderers: knownRenderers(), devtoolsLockedOut: state.devtoolsLockedOut };
 }
 
+/** `InteractionReport.reactBuild`: the build of the first react-dom that says which it is. */
+export function reactBuild(): InteractionReport['reactBuild'] {
+  const hook = state.attached ?? state.turnedOffHook;
+  if (!hook) return null;
+  for (const r of registryOf(hook).values()) {
+    if (!r.isReactDom) continue;
+    if (r.info.bundleType === 1) return 'development';
+    if (r.info.bundleType === 0 && r.profiled !== null) return r.profiled ? 'profiling' : 'production';
+  }
+  return null;
+}
+
 /** What each renderer known to the hook in use, or to the one the page turned off, handed `inject()`. */
 export function knownRenderers(): RendererInfo[] {
   const hook = state.attached ?? state.turnedOffHook;
@@ -949,6 +968,8 @@ function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer 
     major: supported ? version.major : 0,
     lanePriority: supported && (version.major > 19 || (version.major === 19 && version.minor >= 1)),
     profileMode: supported ? profileModeBit(version.major) : 0,
+    strictMode: supported ? strictModeBit(version.major) : 0,
+    profiled: null,
     problem: null,
     checked: false,
     devToolsOnly: false,
@@ -986,6 +1007,8 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
   }
   if (!renderer.checked) checkFirstCommit(renderer, root);
   if (renderer.problem) return;
+  // Every commit, walked or not, so that a report that joined none still says which build the page renders with.
+  renderer.profiled ||= (root.current.mode & renderer.profileMode) !== 0;
   // Every commit holds a place until React says its passive effects ran, walked or not, so that the
   // report is matched to the commit it belongs to (`onPostCommit`).
   const place: AwaitingEffects = { summary: null, reported: reportsPassiveEffects(root, renderer.major), returnedAt: performance.now() };
@@ -1046,7 +1069,7 @@ function onCommit(hook: DevtoolsHook, id: number, root: FiberRoot, priority: num
     input.handler = handlerOf(fiberFromNode(input.target), input.type, input.key);
     input.hydratedRead = true;
   }
-  const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, priority, didError: didError === true, hydratedTarget });
+  const walk = walkCommit(root.current, options.walkBudget, now, input, { profileMode: renderer.profileMode, strictMode: renderer.strictMode, priority, didError: didError === true, hydratedTarget });
   const summary: CommitSummary = Object.freeze({ ...walk, walkMs: performance.now() - t0, inDispatch });
   state.walkTotalMs += summary.walkMs;
   state.walks++;

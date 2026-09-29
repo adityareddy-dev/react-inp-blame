@@ -711,6 +711,70 @@ test('durations come from the ProfileMode bit of the React version that register
   });
 });
 
+test('a report says which build of react-dom measured it, and under a development build whether StrictMode rendered it', async (t) => {
+  // A production and a profiling build both say bundleType 0, and only a profiling build puts its roots in
+  // ProfileMode. StrictMode's bit is 8 on React 18 and 19, and 1 on React 17, where ProfileMode is 8.
+  const cases: Array<[version: string, bundleType: number, mode: number, reactBuild: InteractionReport['reactBuild'], strictMode: boolean | null]> = [
+    ['19.3.0', 1, 0b1011, 'development', true],
+    ['19.3.0', 1, 0b0011, 'development', false],
+    ['18.3.1', 1, 0b1011, 'development', true],
+    ['18.3.1', 1, 0b0011, 'development', false],
+    ['17.0.2', 1, 0b1001, 'development', true],
+    ['17.0.2', 1, 0b1000, 'development', false],
+    ['19.3.0', 0, 0b0011, 'profiling', null],
+    ['19.3.0', 0, 0b1001, 'production', null],
+  ];
+  const clock = useClock(t);
+  for (const [version, bundleType, mode, reactBuild, strictMode] of cases) {
+    await inBrowser((page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', devtoolsTrack: false });
+      const id = existing.inject(reactDom(version, bundleType));
+      clock.now = 500;
+      const root = mountedRoot(mode, 4);
+      existing.onCommitFiberRoot(id, root);
+      clock.now = 1000;
+      commitAgain(root, 4);
+      page.duringClick(() => existing.onCommitFiberRoot(id, root));
+      page.paint([slowClick(120)]);
+      const r = api.last();
+      assert.deepEqual({ commits: r?.commits.length, reactBuild: r?.reactBuild, strictMode: r?.strictMode }, { commits: 1, reactBuild, strictMode }, `React ${version}, bundleType ${bundleType}, mode ${mode}`);
+      api.dispose();
+    });
+  }
+});
+
+test("a report's build is the page's even where it joined no commit, and null until react-dom has said which it is", async (t) => {
+  const clock = useClock(t);
+  // The build a slow click with no render of its own reads, after a mount in `mode` where one is given.
+  const buildOf = async (renderer: Record<string, unknown> | null, mode: number | null) => {
+    let seen: Pick<InteractionReport, 'reactBuild' | 'strictMode'> | undefined;
+    await inBrowser((page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', devtoolsTrack: false });
+      const id = renderer && existing.inject(renderer);
+      clock.now = 500;
+      if (id !== null && mode !== null) existing.onCommitFiberRoot(id, mountedRoot(mode, 4));
+      clock.now = 1000;
+      page.paint([slowClick(120)]);
+      const r = api.last();
+      assert.equal(r?.commits.length, 0);
+      seen = r && { reactBuild: r.reactBuild, strictMode: r.strictMode };
+      api.dispose();
+    });
+    return seen;
+  };
+  assert.deepEqual(await buildOf(reactDom('19.3.0', 1), null), { reactBuild: 'development', strictMode: null });
+  assert.deepEqual(await buildOf(reactDom('19.3.0', 0), 0b0011), { reactBuild: 'profiling', strictMode: null });
+  assert.deepEqual(await buildOf(reactDom('19.3.0', 0), 0b0001), { reactBuild: 'production', strictMode: null });
+  // Before the page's first commit a production build and a profiling one look the same.
+  assert.deepEqual(await buildOf(reactDom('19.3.0', 0), null), { reactBuild: null, strictMode: null });
+  assert.deepEqual(await buildOf({ version: '19.3.0', rendererPackageName: 'react-dom' }, 0b0011), { reactBuild: null, strictMode: null });
+  assert.deepEqual(await buildOf(null, null), { reactBuild: null, strictMode: null });
+});
+
 test('a react-dom outside React 17 to 19 is not walked, and the page is unsupported only while no other react-dom can be read', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
