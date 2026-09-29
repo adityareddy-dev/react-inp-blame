@@ -127,11 +127,20 @@ puts the file back afterwards, so leave it alone. cal.diy builds A and B only, s
 ### Signing in
 
 twenty and cal.diy measure the signed-in app, so each needs a user on your own local copy. twenty's dev seed
-and cal.diy's seed each make one, and `prepare` runs those seeds. The sign-in scripts use the seed's own user
-unless `TWENTY_EMAIL` and `TWENTY_PASSWORD` (or `CALDIY_EMAIL` and `CALDIY_PASSWORD`) name another. They
-sign in only to the harness's own servers on 127.0.0.1 and throw for any other host. The session each one saves
-goes under `state/`, which git ignores. `bench.mjs` signs in again by itself when a saved session is missing
-or no longer valid, and `node twenty-login.mjs` or `node caldiy-login.mjs` does it up front.
+and cal.diy's seed each make one, and `prepare` runs those seeds. They are the upstream projects' own seed
+accounts, `tim@apple.dev` and `pro@example.com`, published in their repositories. The sign-in scripts use the
+seed's own user unless `TWENTY_EMAIL` and `TWENTY_PASSWORD` (or `CALDIY_EMAIL` and `CALDIY_PASSWORD`) name
+another. They sign in only to the harness's own servers on 127.0.0.1 and throw for any other host. The session
+each one saves goes under `state/`, which git ignores. `bench.mjs` signs in again by itself when a saved session
+is missing or no longer valid, and `node twenty-login.mjs` or `node caldiy-login.mjs` does it up front.
+
+### Licenses
+
+No code from twenty or cal.diy is in this repository, only the description of the changes above. As checked on
+2026-09-29, from the `LICENSE` at each repository's root, the same at the commits above as on their default
+branches: twenty is under the AGPLv3 with an added permission for applications built on its APIs, apart from
+files marked `@license Enterprise`, which are under its commercial license, and a few packages under MIT
+(`packages/twenty-front` isn't one of them). cal.diy is under the MIT license.
 
 ## Running it
 

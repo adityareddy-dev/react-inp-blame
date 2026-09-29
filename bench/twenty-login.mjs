@@ -24,6 +24,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 /**
  * The user to sign in as: the dev seed's own (twenty-e2e-testing/.env.example), unless TWENTY_EMAIL and
  * TWENTY_PASSWORD name another on your local twenty. Only ever sent to 127.0.0.1.
+ * tim@apple.dev is twenty's upstream seed account, published in its repository, not anyone's own sign-in.
  */
 export const user = () => ({
   email: process.env.TWENTY_EMAIL || 'tim@apple.dev',

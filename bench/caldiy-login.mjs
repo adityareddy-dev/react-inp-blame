@@ -26,6 +26,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 /**
  * The user to sign in as: the repository seed's own, with the event types the benchmark walks through,
  * unless CALDIY_EMAIL and CALDIY_PASSWORD name another on your local cal.diy. Only ever sent to 127.0.0.1.
+ * pro@example.com is cal.com's upstream seed account (scripts/seed.ts), not anyone's own sign-in.
  */
 export const user = () => ({
   email: process.env.CALDIY_EMAIL || 'pro@example.com',
