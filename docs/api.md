@@ -186,7 +186,9 @@ password. A script the browser names by its URL, or by the page's for an inline 
 query or fragment in a blame's `name`, the sentences and `frames`. What your code wrote goes out as written,
 though: an `aria-label`, `data-testid` or `id` built from user data, such as
 `` aria-label={`Message ${user.name}`} ``, lands in `target.label` or `target.selector`, and the label in the
-verdict.
+verdict. A listener the browser names by its element goes in a blame's `name` the same way, the `id` as
+written (`DIV#root.onclick`), or on an element with no id the path of its `src`
+(`IMG[src="/avatars/jane.png"].onload`), so an id or a path built from user data lands there too.
 
 ## The badge and panel
 
