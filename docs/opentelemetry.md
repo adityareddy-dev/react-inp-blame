@@ -247,8 +247,9 @@ The entry sends component, handler and script names and numbers, nothing else. N
 classes, never `target.selector` or `target.label`, never a verdict or a sentence, never a URL with its query.
 One thing goes out as the page wrote it though. For a `script`, `waiting`, `painting` or `layout` blame, and a
 handler React has no name for, `blame.name` can be the browser's name for the listener, the element's tag and
-id included (`DIV#root.onclick`), so an id built from user data lands there. A script URL in `blame.name` has
-lost its password, query and fragment.
+id included (`DIV#root.onclick`), or on an element with no id its `src` (`IMG[src="/avatars/jane.png"].onload`).
+So an id or a `src` path built from user data lands there. A URL in `blame.name` has lost its password, query
+and fragment, but its path stays as written.
 
 The rest of what the library does with labels is under
 [Labels and personal data](../README.md#labels-and-personal-data). One part of it matters here: each report also
