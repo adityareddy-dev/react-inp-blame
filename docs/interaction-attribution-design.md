@@ -1835,8 +1835,12 @@ A corner badge with the page's INP so far, coloured by the INP thresholds, and a
 lists interactions newest first: title ("Click on Log in", or "Tap on Log in" for a finger's or a
 pen's click since 0.20.0, the word the verdict uses too), duration, one blame line, and the
 waiting / working / updating bar. Consecutive key presses in one field collapse into a row
-that shows the slowest and the typical. A row opens into the cause sentence, the notes, and
-the components that rendered before and after the paint. It is plain DOM in a shadow root
+that shows the slowest and the typical. Since 0.20.0 the rows under 200 ms that blame nothing,
+because nothing stood out, fold into one line where the newest of them was, "12 quick
+interactions, nothing to fix", which opens on a click. Typing at the reporting threshold made one
+such row per key and pushed the slow ones out of view. A row that blames nothing because the
+library cannot tell (React not read, or an error of its own) stays a row. A row opens into the
+cause sentence, the notes, and the components that rendered before and after the paint. It is plain DOM in a shadow root
 (no React, so it renders while React is busy and never adds a commit), about 3 ms of work per
 report, and the page's own clicks on it are dropped before they become reports and left out
 of the INP it shows (below). Its code arrives by dynamic `import()` after `install()` has

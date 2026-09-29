@@ -82,6 +82,8 @@ const NONE = '\u2014';
 const DOT = ' · ';
 /** Where the panel's line under a development build sends the reader: how to check a number in production. */
 const DEVELOPMENT_DOCS = 'https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#numbers-in-development';
+/** A row with nothing to fix folds away under this, in ms: typing at the reporting threshold makes one per key. */
+const QUICK_MS = 200;
 
 // The phone sizes come after the rules they override, which have the same specificity.
 const CSS = `
@@ -156,6 +158,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   adoptStyles(root);
 
   const expanded = new Set<number>();
+  let foldOpen = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
@@ -220,7 +223,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       panel,
       h('div', 'head', head, h('button', { class: 'x', type: 'button', 'aria-label': 'Close' }, '×')),
       status && h('div', { class: `status ${status.level}`, 'data-status': status.key }, status.text),
-      ...(groups.length ? groups.map(row) : [h('div', 'empty', 'Click or type. Anything slow shows up here, with the component to blame.')]),
+      ...(groups.length ? rows(groups) : [h('div', 'empty', 'Click or type. Anything slow shows up here, with the component to blame.')]),
       h('div', 'foot', h('span', '', `react-inp-blame${DOT}measuring cost ${costText(cost)} per interaction`), h('button', { class: 'clear', type: 'button' }, 'Clear')),
     );
     if (focused) panel.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });
@@ -236,9 +239,32 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     if (!el || !panel.contains(el)) return null;
     const id = el.closest<HTMLElement>('.row')?.dataset.id;
     if (id) return `.row[data-id="${id}"] .toggle`;
+    if (el.closest('.fold')) return '.fold .toggle';
     if (el.closest('.x')) return '.x';
     if (el.closest('.clear')) return '.clear';
     return null;
+  }
+
+  /**
+   * The rows, newest first, with the quick ones that have nothing to fix folded into one line where the newest
+   * of them was, which opens on a click to show them under it. A row that blames nothing because the library
+   * cannot tell stays a row.
+   */
+  function rows(groups: Group[]): HTMLElement[] {
+    const quick = groups.filter((g) => nothingToFix(slowest(g.reports)));
+    if (!quick.length) return groups.map(row);
+    const n = quick.reduce((a, g) => a + g.reports.length, 0);
+    const fold = h(
+      'div',
+      'row fold',
+      h('div', { class: 'toggle', role: 'button', tabindex: '0', 'aria-expanded': String(foldOpen) }, h('div', 'meta', `${n} quick interaction${n === 1 ? '' : 's'}, nothing to fix`)),
+    );
+    const out: HTMLElement[] = [];
+    for (const g of groups) {
+      if (g === quick[0]) out.push(fold, ...(foldOpen ? quick.map(row) : []));
+      else if (!quick.includes(g)) out.push(row(g));
+    }
+    return out;
   }
 
   function row(g: Group): HTMLElement {
@@ -305,6 +331,10 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     else expanded.add(id);
     render();
   }
+  function toggleFold() {
+    foldOpen = !foldOpen;
+    render();
+  }
   function schedule() {
     if (timer == null) timer = setTimeout(render, 0);
   }
@@ -341,6 +371,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       return render();
     }
     if (el.closest('.more')) return;
+    if (el.closest('.fold')) return toggleFold();
     const r = el.closest<HTMLElement>('.row');
     if (r) toggleRow(r);
   });
@@ -352,7 +383,9 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     // Space would also scroll the panel, on a repeat as much as on the first press.
     e.preventDefault();
     // A held key repeats, and the row opens or closes once per press rather than once per repeat.
-    if (!e.repeat) toggleRow(r);
+    if (e.repeat) return;
+    if (r.closest('.fold')) toggleFold();
+    else toggleRow(r);
   });
   const onKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || panel.hidden) return;
@@ -527,14 +560,26 @@ export const laterWhen = (r: Pick<InteractionReport, 'end'>, c: CommitSummary): 
 /** How the panel's line for a later render opens: "earlier" for one before the release, "then" for one after the paint. */
 export const laterLead = (r: Pick<InteractionReport, 'end'>, c: CommitSummary): string => (c.at < r.end ? 'earlier, ' : 'then ');
 
+/** A quick row that blames nothing because nothing stood out, rather than because the library cannot tell. */
+function nothingToFix(r: InteractionReport): boolean {
+  return r.explanation.blame.kind === 'none' && r.duration < QUICK_MS && !cannotTell(r);
+}
+
+/** Why a report blames nothing where the library cannot tell what took the time, or null where it can. */
+function cannotTell(r: InteractionReport): string | null {
+  // A report the library could not explain blames nothing for an error of its own, not because nothing
+  // stood out or React is not being read. Asked after the read of its blame, which is where that error is met.
+  if (unexplainedReports.has(r)) return 'nothing is blamed: the library hit an error of its own';
+  // Nothing is blamed where React is not being read; the cause line under the row says why.
+  if (r.explanation.blame.kind === 'none' && (r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable')) return 'nothing is blamed: React is not being read';
+  return null;
+}
+
 /** The row's line under its title: what took the time, or why nothing is blamed. */
 export function blameLine(r: InteractionReport): Child[] {
   const blame = r.explanation.blame;
-  // A report the library could not explain blames nothing for an error of its own, not because nothing
-  // stood out or React is not being read. Asked after the read above, which is where that error is met.
-  if (unexplainedReports.has(r)) return ['nothing is blamed: the library hit an error of its own'];
-  // Nothing is blamed where React is not being read; the cause line under this says why.
-  if (blame.kind === 'none' && (r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable')) return ['nothing is blamed: React is not being read'];
+  const unknown = cannotTell(r);
+  if (unknown) return [unknown];
   // An inferred blame is the likeliest reading of component counts and phase times, not a measurement.
   // The row says so in two words; the cause sentence under it says what would make it exact.
   // "mounted" where the commit the blame names was mostly components rendering for the first time, as the
