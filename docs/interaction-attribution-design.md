@@ -1970,7 +1970,10 @@ listener is often too short for Long Animation Frames to list it (5 ms), which i
 count. A portal's container is not recorded, which is why no other listener is ruled out as React's by the
 roots alone. Then, in the handler branch, the longest script in the handlers that holds half the
 time outside React's render and is known not to be React's is the verdict, a `script` blame named by its
-function where the browser gives one and by its invoker otherwise, with its own milliseconds. The sentence
+function where the browser gives one and the build kept names (a development build, or React's listener
+beside it under its own name), and by its invoker otherwise: a minifier's `a` from one bundle and `a` from
+another say nothing on a dashboard, and the same listener on an element with no React handler goes by its
+invoker there too. It carries its own milliseconds. The sentence
 names it with its file and what ran it, and gives the rest to React's listener, which ran the handler, with that
 listener's time where it is listed. Where React's listener took the time, or nothing says whose the script is,
 the handler keeps the verdict as before. With no React handler on the target the same listener was a `handler`

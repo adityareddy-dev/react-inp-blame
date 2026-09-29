@@ -87,10 +87,11 @@
   the handler does not take the verdict from a render on it, and a development build warns once, at the second
   such interaction ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
 - **A listener React did not attach is blamed only where it is known not to be React's own.** A tag
-  manager's click listener on the document that took most of a click is a `'script'` blame named by its
-  function ("trackClick") where a development build keeps React's listener named, or where React's listener
-  is in the same frame, known by its react-dom file or its name, or in a production build by the root
-  container it listens on (`DIV#root`). A listener on the document is known not to be React's where no root
+  manager's click listener on the document that took most of a click is a `'script'` blame where a
+  development build keeps React's listener named, or where React's listener is in the same frame, known by
+  its react-dom file or its name, or in a production build by the root container it listens on (`DIV#root`).
+  It is named by its function ("trackClick") where the build kept names, and by what ran it
+  ("#document.onclick") in a minified one. A listener on the document is known not to be React's where no root
   is the document. A page whose root is the document, as the Next.js App Router's is, with names minified,
   has React's listener and the tag manager's both read `#document.onclick`, and nothing tells them apart:
   there the button's handler keeps the blame. A minified listener on an element, beside a React listener too

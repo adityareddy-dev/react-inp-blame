@@ -1299,8 +1299,11 @@ function longestPart(parts: readonly ScriptPart[]): ScriptPart | null {
 
 /** "DIV.onscroll (app.js)": a script by its name and file, and one the browser gave no name as "one with no name (app.js)". */
 const namedWithFile = (s: ScriptSummary): string => `${scriptName(s) ?? 'one with no name'}${s.source ? ` (${s.source})` : ''}`;
-/** "trackClick (src/analytics.ts, run as #document.onclick)": a listener by its function, where the browser gives one, else as `namedWithFile`. */
-const listenerWithFile = (s: ScriptSummary): string => (s.name && s.invoker ? `${s.name} (${s.source ? `${s.source}, ` : ''}run as ${s.invoker})` : namedWithFile(s));
+/**
+ * "trackClick (src/analytics.ts, run as #document.onclick)": a listener by its function, where the browser gives one
+ * and the build kept it (`named`), else as `namedWithFile`.
+ */
+const listenerWithFile = (s: ScriptSummary, named: boolean): string => (named && s.name && s.invoker ? `${s.name} (${s.source ? `${s.source}, ` : ''}run as ${s.invoker})` : namedWithFile(s));
 
 /**
  * A sentence naming the longest script the browser recorded, where it has a name, and `also` what it did.
@@ -1487,6 +1490,11 @@ function explain(r: InteractionReport): Explanation {
   // the document. A minified build with its root on the document knows none of that.
   const offRoots = (s: ScriptSummary) => targetOf(s) === 'Window' || (targetOf(s) === '#document' && page.roots.length > 0 && !page.roots.includes('#document'));
   const notReacts = (s: ScriptSummary) => !reactsOwn(s) && (page.named || offRoots(s) || whileHandling.some((p) => reactsOwn(p.script)));
+  // Such a listener is named by its function only where the build kept names: a development build, or React's own
+  // listener beside it under its name. A minifier's "a" says nothing, so there it is named by what ran it, as the
+  // same listener is where the element has no React handler.
+  const namesKept = page.named || whileHandling.some((p) => REACT_LISTENER.test(p.script.name));
+  const listenerName = (s: ScriptSummary) => (namesKept && s.name) || scriptName(s);
   const forcedWhileHandling = forcedLayoutOf(whileHandling);
   const forcedAfterInput = forcedLayoutOf(scriptParts(frames, processingStart, r.end));
   const lateScript = longestPart(scriptParts(frames, processingEnd, r.end));
@@ -2151,7 +2159,7 @@ function explain(r: InteractionReport): Explanation {
     // React's listener ran the handler, so its time is the handler's with React's dispatch around it.
     const dispatch = whileHandling.filter((x) => reactsOwn(x.script)).reduce<ScriptPart | null>((a, x) => (!a || x.ms > a.ms ? x : a), null);
     const theirs = dispatch ? `React's listener, which ran ${handler}, took ${ms(dispatch.ms)}` : `${cap(handler ?? 'the handler')} and React's listener took the other ${ms(outside - p.ms)}`;
-    const ranFor = `ran for about ${ms(p.ms)}: ${listenerWithFile(p.script)}`;
+    const ranFor = `ran for about ${ms(p.ms)}: ${listenerWithFile(p.script, namesKept)}`;
     return say(confidence, `A listener React did not attach ${ranFor}. ${theirs}; ${rest}.`, `A listener React did not attach ${HEDGE} ${ranFor}. ${theirs}; ${rest}.`);
   };
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
@@ -2460,17 +2468,17 @@ function explain(r: InteractionReport): Explanation {
     if (otherListener && handlerName) {
       const scriptConfidence = unsure ? 'inferred' : 'measured';
       cause = otherListenerCause(otherListener, scriptConfidence, rest) + also;
-      blame = { kind: 'script', name: otherListener.script.name || scriptName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence };
+      blame = { kind: 'script', name: listenerName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence };
     } else {
       cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
       // With no React name, "code outside React" sends nobody anywhere. The browser still says which listener
       // it ran and from which file, so the sentence passes that on as what the browser recorded. It is not
       // said to be the 190 ms: the script's time can hold React's render too.
-      if (!handlerName) cause += otherListener ? ` The longest script the browser recorded in that time was ${listenerWithFile(otherListener.script)}, ${ms(otherListener.ms)}.` : longestSaid(listener);
+      if (!handlerName) cause += otherListener ? ` The longest script the browser recorded in that time was ${listenerWithFile(otherListener.script, namesKept)}, ${ms(otherListener.ms)}.` : longestSaid(listener);
       // A listener names the blame only where it covers most of the time being blamed, and lives nowhere in the
       // tree, so it goes without the target's component.
       blame = otherListener
-        ? { kind: 'script', name: otherListener.script.name || scriptName(otherListener.script), detail: null, ms: otherListener.ms, confidence }
+        ? { kind: 'script', name: listenerName(otherListener.script), detail: null, ms: otherListener.ms, confidence }
         : { kind: 'handler', name: handlerName ?? (listenerHolds ? scriptName(listener.script) : null), detail: listenerHolds && !handlerName ? null : component, ms: outside, confidence };
     }
   } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
@@ -2528,7 +2536,7 @@ function explain(r: InteractionReport): Explanation {
     else if (countOnly) cause = `${cap(handler)} or React's render of ${leafOf(c)} (${plural(c.rendered, 'component')}) ${HEDGE} took ${untimedTook}, the handler the likelier: ${howLittle}${ranEffects}.${tellApart}`;
     else cause = `${cap(handler)} ${HEDGE} took ${untimedTook}: ${howLittle}${ranEffects}.${profiling}`;
     blame = otherListener
-      ? { kind: 'script', name: otherListener.script.name || scriptName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence }
+      ? { kind: 'script', name: listenerName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence }
       : { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (waitingWins) {
     // What the input waited behind is usually on record: the long animation frame that was open when

@@ -2999,18 +2999,25 @@ test("a listener React did not attach that took most of a click is blamed as a s
   const minified = clicked([reactListener('#document.onclick', 1002, 6, '_h', 'assets/index.js'), trackClick('#document.onclick', 1009, 155, 'a', 'assets/index.js')], { roots: ['#document'], named: false });
   assert.equal(minified.explanation.blame.kind, 'handler');
   assert.equal(minified.explanation.blame.name, 'onClick');
-  // Minified with the root on an element of its own: React's listener is the one on the root's container.
+  // Minified with the root on an element of its own: React's listener is the one on the root's container. The
+  // minifier's "a" says nothing, so the listener is named by what ran it.
   const onRoot = clicked([reactListener('DIV#root.onclick', 1002, 6, '_h', 'assets/index.js'), trackClick('#document.onclick', 1009, 155, 'a', 'assets/index.js')], { roots: ['DIV#root'], named: false });
-  assert.deepEqual(onRoot.explanation.blame, { kind: 'script', name: 'a', detail: null, ms: 155, confidence: 'measured' });
+  assert.deepEqual(onRoot.explanation.blame, { kind: 'script', name: '#document.onclick', detail: null, ms: 155, confidence: 'measured' });
+  assert.match(onRoot.explanation.cause, /^A listener React did not attach ran for about 155 ms: #document\.onclick \(assets\/index\.js\)\. /);
   // With React's listener under the 5 ms the browser lists, a listener on the document is still not React's, since
   // React listens on the document only where a root is on it.
   const unlistedOnRoot = clicked([trackClick('#document.onclick', 1005, 159, 'a', 'assets/index.js')], { roots: ['DIV#root'], named: false });
-  assert.deepEqual(unlistedOnRoot.explanation.blame, { kind: 'script', name: 'a', detail: null, ms: 159, confidence: 'measured' });
+  assert.deepEqual(unlistedOnRoot.explanation.blame, { kind: 'script', name: '#document.onclick', detail: null, ms: 159, confidence: 'measured' });
   // The render untimed, as a production build leaves it, where the count alone would have put it on the handler.
   const counted = commit(1004, 1000, { hasDurations: false, total: 0, rendered: 1, roots: ['AnalyticsPage'], hotPath: ['AnalyticsPage'], components: [{ name: 'AnalyticsPage', count: 1, self: null, total: null }] });
   const untimed = report([entry('click', 1000, 160, 1001, 1152)], [counted], [frame(1000, 160, [trackClick('#document.onclick', 1002, 150, 'a', 'assets/index.js')])], addToCart(), 'attributes', [], undefined, undefined, { roots: ['DIV#root'], named: false });
-  assert.deepEqual(untimed.explanation.blame, { kind: 'script', name: 'a', detail: null, ms: 150, confidence: 'measured' });
-  assert.match(untimed.explanation.cause, /^A listener React did not attach ran for about 150 ms: a \(assets\/index\.js, run as #document\.onclick\)\. The onClick handler and React's listener took the other \d+ ms; React re-rendered only 1 component\.$/);
+  assert.deepEqual(untimed.explanation.blame, { kind: 'script', name: '#document.onclick', detail: null, ms: 150, confidence: 'measured' });
+  assert.match(untimed.explanation.cause, /^A listener React did not attach ran for about 150 ms: #document\.onclick \(assets\/index\.js\)\. The onClick handler and React's listener took the other \d+ ms; React re-rendered only 1 component\.$/);
+  // The same listener on an element with no React handler goes by the same name.
+  const untimedUnhandled = report([entry('click', 1000, 160, 1001, 1152)], [counted], [frame(1000, 160, [trackClick('#document.onclick', 1002, 150, 'a', 'assets/index.js')])], addToCart(null), 'attributes', [], undefined, undefined, { roots: ['DIV#root'], named: false });
+  assert.equal(untimedUnhandled.explanation.blame.name, '#document.onclick');
+  // A development build keeps the listener's name, as React's listener beside it keeps its own.
+  assert.equal(clicked([trackClick('#document.onclick', 1005, 159)], { roots: ['DIV#root'], named: true }).explanation.blame.name, 'trackClick');
   // A minified listener on an element that is no root's container is unknown, with no listener of React's listed.
   const elsewhere = clicked([trackClick('DIV#menu.onclick', 1005, 159, 'a', 'assets/index.js')], { roots: ['DIV#root'], named: false });
   assert.equal(elsewhere.explanation.blame.kind, 'handler');
