@@ -139,12 +139,13 @@ const CSS = `
 .dev { padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.1); color: #c3c7d1; font-size: 10px; font-weight: 600; letter-spacing: .03em; }
 .devnote a { color: #c3c7d1; }
 .foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px 10px; color: #6f7582; font-size: 10.5px; }
+.foot .btns { display: flex; gap: 14px; }
 .foot button { background: none; border: 0; color: #9aa0ad; font: inherit; cursor: pointer; padding: 0; }
 .foot button:hover { color: #fff; }
 ${RATING_CSS}
 `;
 
-export function createOverlay(source: Source, opts: OverlayOptions = {}): OverlayHandle {
+export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?: () => void): OverlayHandle {
   const max = opts.max ?? 20;
   const host = document.createElement('div');
   host.id = OVERLAY_ID;
@@ -224,7 +225,17 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       h('div', 'head', head, h('button', { class: 'x', type: 'button', 'aria-label': 'Close' }, '×')),
       status && h('div', { class: `status ${status.level}`, 'data-status': status.key }, status.text),
       ...(groups.length ? rows(groups) : [h('div', 'empty', 'Click or type. Anything slow shows up here, with the component to blame.')]),
-      h('div', 'foot', h('span', '', `react-inp-blame${DOT}measuring cost ${costText(cost)} per interaction`), h('button', { class: 'clear', type: 'button' }, 'Clear')),
+      h(
+        'div',
+        'foot',
+        h('span', '', `react-inp-blame${DOT}measuring cost ${costText(cost)} per interaction`),
+        h(
+          'span',
+          'btns',
+          onHide && h('button', { class: 'hide', type: 'button', title: 'Hides the badge in this browser. Open the page with ?inp-blame to bring it back.' }, 'Hide for me'),
+          h('button', { class: 'clear', type: 'button' }, 'Clear'),
+        ),
+      ),
     );
     if (focused) panel.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });
   }
@@ -242,6 +253,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     if (el.closest('.fold')) return '.fold .toggle';
     if (el.closest('.x')) return '.x';
     if (el.closest('.clear')) return '.clear';
+    if (el.closest('.hide')) return '.hide';
     return null;
   }
 
@@ -365,6 +377,15 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   panel.addEventListener('click', (e) => {
     const el = e.target as HTMLElement;
     if (el.closest('.x')) return hide();
+    if (el.closest('.hide')) {
+      try {
+        localStorage.setItem('react-inp-blame', 'hidden');
+      } catch {
+        // ignore
+      }
+      handle.dispose();
+      return onHide?.();
+    }
     if (el.closest('.clear')) {
       source.clear();
       expanded.clear();
@@ -410,7 +431,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   if (document.body) attach();
   else document.addEventListener('DOMContentLoaded', attach, { once: true });
 
-  return {
+  const handle: OverlayHandle = {
     open: () => setOpen(true),
     close: () => setOpen(false),
     toggle: () => setOpen(panel.hidden),
@@ -422,6 +443,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       host.remove();
     },
   };
+  return handle;
 }
 
 interface Group {
