@@ -410,7 +410,8 @@ is forwarded. react-dom's `bundleType` 1 is 'development'. A production and a pr
 every commit of a react-dom, walked or not: 'profiling' once a root carries it, 'production' once a
 commit came without it, and null before the page's first commit. On a page with more than one react-dom,
 a development one makes the report 'development' whichever registered first, which is the rule the badge
-uses, and one this library cannot read is left out. `strictMode` is read in the walk, from the bit
+uses. One this library cannot read counts there too, since the page still renders with it, and is left
+out only of telling production from profiling. `strictMode` is read in the walk, from the bit
 `<StrictMode>` sets on the fibers under it (1 on React 17, StrictLegacyMode 8 on 18 and 19, read in each
 version's react-dom), on any component that rendered, and only in a development build's commits. It is
 said only under a development build, the one build that renders twice, and only for a report holding a

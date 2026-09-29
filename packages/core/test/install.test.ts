@@ -923,7 +923,9 @@ test("a development react-dom beside a production one is the page's build whiche
     assert.deepEqual({ commits: r?.commits.length, reactBuild: r?.reactBuild, strictMode: r?.strictMode }, { commits: 1, reactBuild: 'development', strictMode: false });
     api.dispose();
   });
-  // A react-dom this library cannot read did not measure anything, whatever build it is.
+  // A development react-dom this library cannot read still renders the page with a development build, so its
+  // numbers are development ones, as the badge says: React 16 beside a production React 19, and a React 19
+  // whose tree is not the shape read.
   t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {
     const existing = existingHook();
@@ -935,7 +937,21 @@ test("a development react-dom beside a production one is the page's build whiche
     existing.onCommitFiberRoot(id, mountedRoot(0b0001, undefined));
     clock.now = 1000;
     page.paint([slowClick(120)]);
-    assert.equal(api.last()?.reactBuild, 'production');
+    assert.equal(api.last()?.reactBuild, 'development');
+    api.dispose();
+  });
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0', 1));
+    const changed = mountedRoot(0b0001, undefined);
+    delete changed.current.flags;
+    clock.now = 500;
+    existing.onCommitFiberRoot(id, changed);
+    clock.now = 1000;
+    page.paint([slowClick(120)]);
+    assert.deepEqual({ reactStatus: api.last()?.reactStatus, reactBuild: api.last()?.reactBuild }, { reactStatus: 'unreadable', reactBuild: 'development' });
     api.dispose();
   });
 });
