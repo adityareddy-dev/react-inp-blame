@@ -332,6 +332,66 @@ test("the count of renders before the paint leaves out what the tooltip's count 
   assert.equal(row(forced[0], 'React renders before the paint'), '1, and 1 forced by a script');
 });
 
+test('the note, the sentences that count renders across commits and the Summary give the same count', () => {
+  // Each of these read one count of renders in the verdict and another beside it, in the verdict or in the Summary.
+  const at = (n: number) => `React rendered ${n} times`;
+  const handler = (name: string): InputRecord[] => [{ ts: 0, type: 'click', gestureTs: 0, press: undefined, target: null, owners: ['Chart'], handler: name, key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const chart = { rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 10, effectsEndedAt: 310, priority: 1 };
+  const small = { ...chart, startedAt: 6, total: 3, components: [{ name: 'Chart', count: 1, self: 3, total: 3 }] };
+  const handled = { ...click, duration: 330, processingStart: 3, processingEnd: 320 };
+  const hydrated = { hydrated: true, hydratedTarget: { scope: 'boundary' as const, owner: 'ProductPage' } };
+  const few = { rendered: 5, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 5, self: null, total: null }], effectsStartedAt: 330.2, effectsEndedAt: 365 };
+  const cases: [string, ReturnType<typeof report>, RendererInfo, number, string][] = [
+    // Renders of 30, 20 and 3 ms in 80 ms of handlers: "across 3 commits" beside "React rendered 2 times".
+    [
+      'three renders',
+      sealReport(buildReport([{ ...click, duration: 103, processingStart: 3, processingEnd: 83 }], [measured(40, { startedAt: 10, total: 30 }), measured(60, { startedAt: 45, total: 20 }), measured(70, { startedAt: 67, total: 3 })], null)),
+      reactDom('18.3.1', 1),
+      3,
+      '3',
+    ],
+    // A hydration the handler's sentence counts among its commits is counted by the note and the Summary too.
+    [
+      'a hydration the sentence counted',
+      sealReport(buildReport([{ ...click, duration: 216, processingStart: 2, processingEnd: 200 }], [measured(60, { total: 30, ...hydrated }), measured(120, { total: 30 }), measured(190, { total: 30 })], [], handler('handleSave'))),
+      reactDom('18.3.1', 1),
+      3,
+      '3',
+    ],
+    // A 3 ms render whose useEffect set state, and the render that made.
+    ['an effect that set state', sealReport(buildReport([handled], [measured(10, { ...small, effectsEndedAt: 110 }), measured(315, { startedAt: 115, total: 200, priority: 1 })], null, handler('onClick'))), reactDom('18.3.1', 1), 2, '2'],
+    // Effects spread over two small commits: "across 2 commits" beside "1, and 1 too small to count".
+    [
+      'effects over two small commits',
+      sealReport(
+        buildReport([{ ...handled, duration: 80, processingEnd: 60 }], [measured(10, { ...small, effectsEndedAt: 30 }), measured(35, { ...small, startedAt: 31, effectsStartedAt: 35, effectsEndedAt: 55 })], null, handler('onClick')),
+      ),
+      reactDom('18.3.1', 1),
+      2,
+      '2',
+    ],
+    // A production build's 5 rows whose effects took 35 ms, then 800 rows after the handlers.
+    [
+      'few rows with long effects',
+      sealReport(buildReport([{ ...click, duration: 500, processingStart: 300, processingEnd: 400 }], [commit(330, few), commit(450, { roots: ['List'], hotPath: ['List'] })], null, handler('handleSave'))),
+      reactDom('19.3.0', 0),
+      2,
+      '2',
+    ],
+  ];
+  for (const [name, r, dom, n, summary] of cases) {
+    const note = r.verdict.match(/React rendered (\d+) times/);
+    if (note) assert.equal(note[1], String(n), `${name}: ${r.verdict}`);
+    const across = r.verdict.match(/rendering (?:in all )?across (\d+) commits/);
+    if (across) assert.equal(across[1], String(n), `${name}: ${r.verdict}`);
+    assert.ok(note || across, `${name} gives no count: ${r.verdict}`);
+    const { drawn } = recording(CHROME_147, () => createTimeline(() => [dom]).draw(r));
+    assert.equal(row(drawn[0], 'React renders before the paint'), summary, name);
+  }
+  assert.match(cases[0][1].verdict, new RegExp(`${at(3)} before the screen updated`));
+  assert.match(cases[4][1].verdict, new RegExp(`${at(2)} before the screen updated`));
+});
+
 test("the Summary's handling time says what the tooltip's time to handle the click counts differently", () => {
   // Opening the shadcn/ui Sheet, the tooltip said 401 ms "of the 474 ms spent handling the click" and the Summary
   // said "Handlers and React rendering 469 ms", with react-inp-blame's own 5 ms two rows further down.
