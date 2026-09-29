@@ -2029,33 +2029,38 @@ test('announceNavigation from an effect, with no input being dispatched, names n
   });
 });
 
-test('announceNavigation from a layout effect keeps a quick click that is waiting for the new route, so its slow render still publishes it', async (t) => {
+test("the browser's Back button, announced from a layout effect, lets go of a quiet click at once, so the route it goes back to is not that click's later render", async (t) => {
   const clock = useClock(t);
-  await inBrowser(async (page) => {
-    const existing = existingHook();
-    page.window[HOOK] = existing;
-    const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
-    const id = existing.inject(reactDom('19.3.0'));
-    const root = mountedRoot(0b11, 4);
-    existing.onCommitFiberRoot(id, root);
-    // A React Router link click, quick enough to stay quiet: the route renders later, in a transition.
-    clock.now = 1000;
-    page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
-    page.duringClick(() => {});
-    page.paint([click(7, 1000, 24)]);
-    assert.deepEqual(api.reports(), []);
-    // The new route commits for 600 ms. React runs the announcing layout effect before it hands the commit to the hook.
-    clock.now = 1900;
-    commitAgain(root, 600);
-    announceNavigation('/second');
-    existing.onCommitFiberRoot(id, root, 1, false);
-    await nextTask();
-    assert.deepEqual(
-      api.reports().map((r) => ({ id: r.interactionId, laterRenders: r.followUps.map((c) => c.at), url: r.navigationURL })),
-      [{ id: 7, laterRenders: [1900], url: PAGE_URL }],
-    );
-    api.dispose();
-  });
+  // In the popstate, as React 19 renders it, and in a task after it.
+  for (const inPopstate of [true, false]) {
+    await inBrowser(async (page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
+      const id = existing.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      existing.onCommitFiberRoot(id, root);
+      // A quick click on a toggle, which renders in its own dispatch and stays quiet.
+      clock.now = 1000;
+      page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+      page.duringClick(() => {
+        commitAgain(root, 3);
+        existing.onCommitFiberRoot(id, root, 1, false);
+      });
+      page.paint([click(7, 1000, 24)]);
+      // Back, 900 ms later: a popstate, which is no input. The page it goes back to renders for 600 ms, and
+      // React runs the announcing layout effect before it hands the hook that commit.
+      clock.now = 1900;
+      if (inPopstate) page.window.event = { isTrusted: true, type: 'popstate', timeStamp: 1850 };
+      commitAgain(root, 600);
+      announceNavigation('/');
+      existing.onCommitFiberRoot(id, root, 1, false);
+      delete page.window.event;
+      await nextTask();
+      assert.deepEqual(api.reports(), [], `in the popstate: ${inPopstate}`);
+      api.dispose();
+    });
+  }
 });
 
 test('announceNavigation resolves a relative URL against the page, takes a URL object, and records a push', async (t) => {
