@@ -264,15 +264,16 @@ import { announceNavigation } from "react-inp-blame";
 // where React 18 warns about useLayoutEffect, it is useEffect, which never runs there either.
 const useCommitEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
-// Tells react-inp-blame each time React Router changes the route. Render it once, before the Outlet in the root
+// Tells react-inp-blame each time React Router changes the URL. Render it once, before the Outlet in the root
 // route's App, so that it announces before the new route's own layout effects run.
 export function AnnounceNavigations() {
   const { key } = useLocation();
-  const last = useRef(key);
+  const last = useRef<string | null>(null);
   useCommitEffect(() => {
-    if (key === last.current) return; // the first page is the document's own navigation
-    last.current = key;
-    announceNavigation(window.location.href);
+    const href = window.location.href;
+    // The first page is the document's own navigation, and a link to the page it is on changes no URL.
+    if (last.current !== null && href !== last.current) announceNavigation(href);
+    last.current = href;
   }, [key]);
   return null;
 }
@@ -285,11 +286,12 @@ siblings in order, so after it the new route's own would run first, and a click 
 placed on the page it left. From a plain `useEffect` the call would come later, inside that click, and name it
 as the one that started the navigation. The click that did start it is not named in `startedNavigation` though,
 since React Router renders the new route in a transition, after the click. The same component works in data and
-declarative mode, inside the router and ahead of the routes. A change of query string alone counts as a
-navigation, as under the App Router. The import stays in every build, so a production build the plugin leaves
-the library out of still carries `announceNavigation`, about 0.3 KB gzipped, and there it does nothing. CI's
-copies of this app render it and check where each report is placed, under `react-router dev` and on the
-production build.
+declarative mode, inside the router and ahead of the routes. It announces when the URL changes, so a change of
+query string alone counts as a navigation, as under the App Router, and a link to the page it is on does not,
+though React Router gives that a new `location.key` too. The import stays in every build, so a production build
+the plugin leaves the library out of still carries `announceNavigation`, about 0.3 KB gzipped, and there it does
+nothing. CI's copies of this app render it and check where each report is placed, under `react-router dev` and
+on the production build.
 
 ## Install with Remix
 

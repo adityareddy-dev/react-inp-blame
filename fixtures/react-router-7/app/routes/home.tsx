@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { flushSync } from "react-dom";
 import type { Route } from "./+types/home";
 import { SlowList } from "../slow-list";
@@ -14,10 +14,16 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Home() {
   const [count, setCount] = useState(0);
+  const { key } = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     // For the specs: from here on the counter's clicks reach React, rather than being queued for hydration.
     document.body.dataset.hydrated = "";
   }, []);
+  useEffect(() => {
+    // For the navigation spec: the route has committed this location.
+    document.body.dataset.location = key;
+  }, [key]);
   return (
     <>
       <Welcome />
@@ -47,6 +53,18 @@ export default function Home() {
       >
         Second page
       </Link>
+      {/* A navigation to the page it is on, as a link to it makes. React Router gives it a new key too, though
+          the URL stays the same. */}
+      <button
+        type="button"
+        onClick={() => {
+          const end = performance.now() + 60;
+          while (performance.now() < end) {}
+          navigate(window.location.pathname + window.location.search);
+        }}
+      >
+        This page
+      </button>
       <SlowList count={count} />
     </>
   );
