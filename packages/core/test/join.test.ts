@@ -3090,6 +3090,10 @@ test("React's own listener rendering a key's input between its handlers hands it
   // On a listener that is no root's container, the wait is still named after the script.
   const other = typed(false, [432, 424], [oninput('DIV#editor.oninput')], ['DIV#root']);
   assert.deepEqual([other.explanation.blame.kind, other.explanation.blame.name], ['waiting', 'DIV#editor.oninput']);
+  // Nor on the document where a root is the document, as under the Next.js App Router: a tag manager's listener
+  // there reads the same as React's, so its time is never handed to a render.
+  const onDocument = typed(false, [432, 424], [oninput('#document.oninput'), script('#document.onkeyup', 426.5, 0.3)], ['#document']);
+  assert.deepEqual([onDocument.explanation.blame.kind, onDocument.explanation.blame.name], ['waiting', '#document.oninput']);
 
   // The keyup after the paint: the screen update is the verdict, and React's listener keeps its own name, since it
   // runs the handlers too and a render inside it need not be most of its time.
