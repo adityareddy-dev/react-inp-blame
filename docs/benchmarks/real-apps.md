@@ -20,10 +20,10 @@ under "Where the blame was wrong".
 
 The harness is the one [the first benchmark](README.md) describes: production builds only, Playwright driving
 headless Chromium through a scripted sequence of real interactions per app, every step asserting that the page
-changed, a fresh browser context per run, one warm-up per app, 15 runs of each build interleaved A, B, A, B,
-unthrottled and then at 4x CPU throttling through the DevTools protocol. The measuring is a separate observer
-injected before any app script, the same bytes in both builds, and the deltas are paired by run index and
-bootstrapped (10,000 resamples, 95% percentile interval).
+changed, a fresh browser context per run, a thrown-away warm-up of each build at the start of each pass, 15
+runs of each build interleaved A, B, A, B, unthrottled and then at 4x CPU throttling through the DevTools
+protocol. The measuring is a separate observer injected before any app script, the same bytes in both builds,
+and the deltas are paired by run index and bootstrapped (10,000 resamples, 95% percentile interval).
 
 Two builds of each app this time. C, the overlay, was measured last time and is left out.
 
@@ -40,7 +40,7 @@ The apps:
 | `tt-virtual` | TanStack Table `examples/react/virtualized-rows`, 200,000 rows | 19.3.0, development build | sort up, sort down, scroll the list, tick a row |
 | `excalidraw` | excalidraw at `97c68dd` | 19.0.0 | draw 60 rectangles, select all, drag them, undo |
 | `shadcn-v4` | the shadcn/ui docs site, `apps/v4` at `a87a63b`, Next.js 16.3.3 App Router | 19.2.3 | sort a table, switch install tabs, search the command menu, follow a result, page a calendar, toggle the theme, open the mobile nav |
-| `shadcn-sheet` | the same site's Radix Sheet page, 1350x940 | 19.2.3 | open the Sheet, close it |
+| `shadcn-sheet` | the same site's Radix Sheet page, 1280x900 | 19.2.3 | open the Sheet, close it |
 | `shadcn-sheet-phone` | the same, at 390x844, DPR 3, touch | 19.2.3 | tap it open, tap it closed |
 | `twenty` | twenty CRM, `packages/twenty-front` at `2feb94c3128e`, Vite, signed in to a seeded workspace | 19.2.7 | select every row and unselect them, open a record from its chip and close it, open the command menu, type in it and close it, drag a column and drag it back, then go to Companies, Opportunities and People |
 | `cal-diy` | cal.diy `apps/web` at `54343aa`, Next.js 16.2.3, signed in with the seed's user | 19.3.0 canary, the one Next.js bundles for the App Router | hide and show an event type, search event types, open one, type in its title, the advanced tab, a switch on it, back |
@@ -356,8 +356,8 @@ to take: TanStack's row compare still reads each value twice per comparison unle
   says "most likely".
 - **twenty and cal.diy have backends.** Their times include waiting on their own servers on the same machine.
   A step that fetches is as fast as that server was.
-- **One warm-up per app.** The first measured run of each build can still pay for a cold cache the others
-  don't.
+- **One warm-up per build and pass.** The first measured run of each build can still pay for a cold cache
+  the others don't.
 - **The blame check read source, not traces, except where a trace is named.** A second reader tried to refute
   every finding, and six grades moved. It is still a reading of the code, and one verdict stays unsettled.
 
