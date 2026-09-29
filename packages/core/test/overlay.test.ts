@@ -334,7 +334,7 @@ test('quick rows with nothing to fix fold into one line that opens on a click, a
       onInteraction: () => () => {},
       clear() {},
       stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
-      debug: { hook: () => ({ devtoolsLockedOut: false }) },
+      debug: { hook: () => ({ devtoolsLockedOut: false, renderers: [] }) },
     };
     const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true });
     const panel = byClass(body.childNodes[0].shadowRoot, 'panel')!;
@@ -370,7 +370,7 @@ test('quick rows in the fold never push a row worth reading out of the panel', (
       onInteraction: () => () => {},
       clear() {},
       stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
-      debug: { hook: () => ({ devtoolsLockedOut: false }) },
+      debug: { hook: () => ({ devtoolsLockedOut: false, renderers: [] }) },
     };
     const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true });
     const panel = byClass(body.childNodes[0].shadowRoot, 'panel')!;
@@ -425,7 +425,7 @@ test("with no position the badge leaves a corner the page's own fixed or sticky 
         onInteraction: (fn: () => void) => ((listener = fn), () => {}),
         clear() {},
         stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
-        debug: { hook: () => ({ devtoolsLockedOut: false }) },
+        debug: { hook: () => ({ devtoolsLockedOut: false, renderers: [] }) },
       };
       body.childNodes[0]?.remove();
       const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], opts);
@@ -478,7 +478,7 @@ test('Hide for me in the footer stores hidden, takes the badge off the page and 
       onInteraction: () => () => {},
       clear() {},
       stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
-      debug: { hook: () => ({ devtoolsLockedOut: false }) },
+      debug: { hook: () => ({ devtoolsLockedOut: false, renderers: [] }) },
     };
     let hidden = 0;
     const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true }, () => hidden++);
