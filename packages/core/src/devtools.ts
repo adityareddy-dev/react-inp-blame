@@ -98,7 +98,7 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
     ['Later React renders', String(r.followUps.length)],
   ];
   if (main && main.hotPath.length) properties.push(['Heaviest path', main.hotPath.join(' > ')]);
-  // From half a millisecond, where the verdict starts naming it: under that the row read "0 ms".
+  // From half a millisecond, where it rounds to 1 ms: under that the row read "0 ms".
   if (r.walkMs >= 0.5) properties.push(['react-inp-blame itself', ms(r.walkMs)]);
   measure(`${x.headline}${leaf ? ' · ' + leaf : ''}`, r.start, Math.max(r.end, r.start + 0.1), {
     track: INTERACTION_TRACK,

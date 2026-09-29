@@ -303,10 +303,12 @@ test("the panel's row and its open section say a key press's render before the s
     assert.deepEqual(r.followUps.map((c) => c.at), [at]);
     const panel = panelFor(r);
     const more = byClass(panel, 'more');
-    return { line: byClass(panel, 'later')?.textContent, heading: more && byClass(more, 'h')?.textContent };
+    return { line: byClass(panel, 'later')?.textContent, heading: more && byClass(more, 'h')?.textContent, cost: more && byClass(more, 'cost') };
   };
   const earlier = drawn(150);
   assert.equal(earlier.line, 'earlier, List re-rendered after the press painted · Row ×400 · 60 ms');
+  // The library's own cost is the footer's, once for the page, not a line in every open row.
+  assert.equal(earlier.cost, null);
   assert.equal(earlier.heading, 'Rendered after the press painted · 400 components');
   // One after the keyup painted is said as before.
   const after = drawn(600);

@@ -219,7 +219,8 @@ was not kept; its "install()" was the `/auto` import and then `install({ overlay
   1.6 in the busy one.
 - **Inside the interaction**, the walk's time is taken out of `processing` (`walkMs` in production:
   0.8 / 0.9 on the context storm and 1.2 / 1.4 on the big list in the idle run, 1.3 / 1.8 and 1.6 / 2.1 in
-  the busy one) and named in the explanation.
+  the busy one). Up to 0.19.0 the explanation named it in a note, and since 0.20.0 `walkMs`,
+  `overheadMs` and the panel's footer carry it.
 - **The Event Timing callback** includes the demo's own listeners, and the lab page copies each report
   with a spread, which runs the explanation's getters inside it. The getters are not what costs:
   defining them takes under 1 µs per report once warm (Node 24, 200,000 reports), about 30 µs on first
@@ -1015,10 +1016,15 @@ browser charges forced layout per script, so a window holding three of them hold
 the nine tenths there is no name — `name` is null — and nothing is claimed that the evidence does
 not carry.
 
-The invoker goes in the sentence either way ("It was charged to `IntersectionObserver.callback`", or
+The invoker goes in the sentence ("It was charged to `IntersectionObserver.callback`", or
 "80 ms of it was charged to …" where it holds less), because a script that merely ran inside the
 same window is charged separately and looks identical from the React side, so the subtree alone can
-send a reader to a file with nothing to do with it.
+send a reader to a file with nothing to do with it. Up to 0.19.0 it went in either way. Since 0.20.0
+it does not for the document's listener, or for a listener (`DIV#root.onclick`) that ran as the
+handler: that is the listener React dispatched the event from, and "It was charged to
+#document.onclick" is the answer the browser gives on its own, true and no help. Nothing in a report
+says which element is a React root, so a root's listener is told only by having run as the handler.
+The frames keep the invoker either way, and the sentences after it say "the script that forced it".
 **Decided not to change the name on that basis**: the only held signal is the invoker string, and
 `ranAsHandler` is a time-window test an observer callback inside the window passes. The field that
 would settle it, LoAF's `invokerType`, is not captured, and adding it changes a published type on a
@@ -1072,10 +1078,10 @@ commit is not in the report. The note about forced layout under another verdict 
 outside the handlers comes to under half a millisecond, and says the usual line where there was more, since a
 sentence about the part inside would be read as about all of it.
 
-What React rendered comes last, after the size read and the script the layout was charged to. Up to 0.18.0 it
-came before the size read, and on the shadcn/ui Sheet "That happens when code reads an element's size" came
-straight after "React was re-rendering 59 components inside DismissableLayer", where it read as about the
-re-render rather than the layout two sentences back.
+What React rendered comes last, after the script the layout was charged to, where that is said, and the
+size read. Up to 0.18.0 it came before the size read, and on the shadcn/ui Sheet "That happens when code
+reads an element's size" came straight after "React was re-rendering 59 components inside
+DismissableLayer", where it read as about the re-render rather than the layout two sentences back.
 
 Without Long Animation Frames that layout is not measured at all, and until 2026-09-23 it went to the
 handler. A render duration stops where committing starts, so 400 layout effects reading geometry are
@@ -1613,9 +1619,11 @@ would show.
 
 The working time leaves out this library's own walk. A commit during the handlers is walked
 inside that commit, so the browser counts the walk as processing; the report takes it back out
-as `walkMs` (`inputDelay + processing + walkMs + presentation` is the duration), and the
-explanation says how much once it rounds to 1 ms or more. The headline stays the browser's
-number, so it still equals what web-vitals reports for the interaction.
+as `walkMs` (`inputDelay + processing + walkMs + presentation` is the duration). Up to 0.19.0
+the explanation said how much in a note once it rounded to 1 ms or more, and it was in 18 of 26
+verdicts in a day's use, the same words each time, so since 0.20.0 the figures carry it and the
+note is gone. The headline stays the browser's number, so it still equals what web-vitals reports
+for the interaction.
 
 **Quiet interactions.** The observer runs at the browser's 16 ms floor; interactions under
 the reporting threshold (40 ms by default) are held back, not dropped, and surface only if a
@@ -1772,7 +1780,7 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   with this library's own read taken out and on a row of its own, and the row says what the
   layout sentence's window counts differently: the time between one event's handlers and the
   next's, which the window leaves out, and the read, which it holds, from half a millisecond,
-  where the verdict starts naming it ("146 ms, 30 ms of it between the keydown's handlers and the
+  where it rounds to 1 ms ("146 ms, 30 ms of it between the keydown's handlers and the
   keyup's, not counting react-inp-blame itself"). Without the words, the tooltip's "of the 118 ms
   it took to handle the key press" and the Summary read as two figures for the same time.
 - Each commit joined to the report gets an entry in a "React renders" track, but only where

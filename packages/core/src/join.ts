@@ -1944,10 +1944,10 @@ function explain(r: InteractionReport): Explanation {
       const scripts = outside.length === 1 ? 'a script' : 'scripts';
       const lead =
         outside.length === forcing.length
-          ? `No React commit ran in the ${outside.length === 1 ? 'script' : 'scripts'} it was charged to, so it was`
+          ? `No React commit ran in the ${outside.length === 1 ? 'script' : 'scripts'} that forced it, so it was`
           : Math.round(forcedOutside) >= Math.round(forced) || forced - forcedOutside < 0.5
-            ? `All but under 1 ms of it was charged to ${scripts} no React commit ran in, so that was`
-            : `${cap(ms(forcedOutside))} of it was charged to ${scripts} no React commit ran in, so that was`;
+            ? `All but under 1 ms of it was forced in ${scripts} no React commit ran in, so that was`
+            : `${cap(ms(forcedOutside))} of it was forced in ${scripts} no React commit ran in, so that was`;
       return { said: `${READS_SIZE}. ${lead} not in a layout effect but in ${handlerOrListener}.`, inTheSubtree: false, commit: null };
     }
     // The commits that ran in the scripts that forced it. Each has to be timed whole inside one event's
@@ -2387,7 +2387,7 @@ function explain(r: InteractionReport): Explanation {
      * this library's read of what React rendered. That is the window the browser counted the forced
      * layout across, so it is the only one the layout can be subtracted from and leave a true
      * remainder. It is deliberately not `processing`, which has the library's own read taken back
-     * out of it and is what the Working phase and the walk note both report. It is said as the time it
+     * out of it and is what the Working phase reports, with `walkMs` beside it. It is said as the time it
      * took to handle the input, since what the browser spent is said inside it: "401 ms of the 474 ms
      * spent handling the click" said spent twice.
      */
@@ -2413,7 +2413,13 @@ function explain(r: InteractionReport): Explanation {
     // sentence says it whatever the blame is named after, because the cause is read on its own; and
     // it prints the script's own share whenever the script does not hold nearly all of the total,
     // since the total is several scripts' and the name beside it would claim all of it for one.
-    const chargedTo = charged && invoker ? ` ${holdsMostOfIt ? 'It' : `${ms(charged.forcedLayout)} of it`} was charged to ${invoker}.` : '';
+    // Not for the document's listener or a listener that ran as the handler, though: that is the one
+    // React dispatched the event from, "charged to #document.onclick" is all the browser alone can
+    // say, and it sends nobody anywhere. An observer's callback in the same window is still said. The
+    // frames keep the listener.
+    const invokedBy = charged?.script.invoker ?? '';
+    const dispatchedFrom = invokedBy.startsWith('#document.') || (/\.on[a-z]+$/.test(invokedBy) && !!charged && ranAsHandler(charged.script));
+    const chargedTo = charged && invoker && !dispatchedFrom ? ` ${holdsMostOfIt ? 'It' : `${ms(charged.forcedLayout)} of it`} was charged to ${invoker}.` : '';
     // The clause about React is hedged on the same evidence the name is: a commit this interaction
     // cannot claim, and, where the clause prints a duration, a duration that is not a measurement.
     // A production build's component counts are measured by the walk, so they are not hedged here.
@@ -2761,10 +2767,6 @@ function explain(r: InteractionReport): Explanation {
   }
   if (r.commits.some((x) => x.coarseClock) || r.followUps.some((x) => x.coarseClock)) {
     notes.push("This browser's clock steps in whole milliseconds, too coarse to time each component, so no component's time is shown and React's total is a sum of whole-millisecond readings.");
-  }
-  // Rounded to whole milliseconds like every other number here, so anything under half of one is not worth the sentence.
-  if (r.walkMs >= 0.5) {
-    notes.push(`The ${ms(r.duration)} includes ${ms(r.walkMs)} that react-inp-blame itself spent reading what React rendered; it is not counted as working time.`);
   }
   // One minifier's name among readable ones is most likely a dependency's component that sets no
   // displayName, which no build step in the app can name: on Twenty, React Router's RouterProvider read "hl".
