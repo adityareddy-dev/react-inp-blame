@@ -1500,7 +1500,7 @@ function explain(r: InteractionReport): Explanation {
     carriesWork(x) &&
     x.hydratedTarget == null &&
     x.at > processingEnd + STAMP_TOLERANCE &&
-    holds(s, x, nextsWork(s) ? s.start : undefined) &&
+    holds(s, x) &&
     (x.startedAt === null || x.startedAt >= s.start - STAMP_TOLERANCE) &&
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
   const ranInLate = lateScript && !heldByNext ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
