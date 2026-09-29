@@ -349,6 +349,46 @@ test('quick rows with nothing to fix fold into one line that opens on a click, a
   }
 });
 
+test('quick rows in the fold never push a row worth reading out of the panel', (t) => {
+  t.mock.method(console, 'warn', () => {});
+  // A 300 ms click, then as many quiet ones as the panel keeps. It showed the fold alone, and the slow row was gone.
+  const click = (id: number, duration: number, processingEnd: number) =>
+    sealReport(buildReport([{ name: 'click', interactionId: id, startTime: id * 1000, duration, processingStart: id * 1000 + 5, processingEnd: id * 1000 + processingEnd, target: null }], [], [], []));
+  const slow = click(1, 300, 290);
+  const quiet = Array.from({ length: 25 }, (_, i) => click(i + 2, 45, 10));
+  const { body, restore } = panelDocument();
+  try {
+    const source = {
+      reports: () => [slow, ...quiet],
+      inp: () => null,
+      onInteraction: () => () => {},
+      clear() {},
+      stats: () => ({ mode: 'shim', unsupportedReason: null, react: 'reading' }),
+      debug: { hook: () => ({ devtoolsLockedOut: false }) },
+    };
+    const overlay = createOverlay(source as unknown as Parameters<typeof createOverlay>[0], { open: true });
+    const panel = byClass(body.childNodes[0].shadowRoot, 'panel')!;
+    const rows = () => panel.childNodes.filter((node: Drawn) => typeof node !== 'string' && node.className.split(' ').includes('row'));
+    assert.deepEqual(rows().map((row: Drawn) => row.dataset.id ?? 'fold'), ['fold', '1']);
+    // The fold keeps as many as the panel does, the newest.
+    assert.equal(byClass(panel, 'fold')?.textContent, '20 quick interactions, nothing to fix');
+    panel.listeners.click({ target: byClass(byClass(panel, 'fold')!, 'toggle') });
+    assert.equal(rows().length, 22);
+    assert.equal(rows()[1].dataset.id, '26');
+    overlay.dispose();
+    // `max` still keeps the rows worth reading to the newest that many.
+    const slower = [slow, click(30, 300, 290), click(31, 300, 290), ...quiet.slice(0, 3)];
+    const few = createOverlay({ ...source, reports: () => slower } as unknown as Parameters<typeof createOverlay>[0], { open: true, max: 2 });
+    const fewPanel = byClass(body.childNodes[0].shadowRoot, 'panel')!;
+    const fewRows = fewPanel.childNodes.filter((node: Drawn) => typeof node !== 'string' && node.className.split(' ').includes('row'));
+    assert.deepEqual(fewRows.map((row: Drawn) => row.dataset.id ?? 'fold'), ['fold', '31', '30']);
+    assert.equal(byClass(fewPanel, 'fold')?.textContent, '2 quick interactions, nothing to fix');
+    few.dispose();
+  } finally {
+    restore();
+  }
+});
+
 test("with no position the badge leaves a corner the page's own fixed or sticky element holds, at mount and at the first report, and stays put when told a corner or with the panel open", (t) => {
   t.mock.method(console, 'warn', () => {});
   const saved = ['innerWidth', 'innerHeight', 'getComputedStyle'].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)] as const);

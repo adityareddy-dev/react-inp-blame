@@ -206,7 +206,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?
     if (panel.hidden) return;
     // The panel is rebuilt below, so the control that has the focus is given it back afterwards.
     const focused = focusedControl();
-    const groups = groupRows(all).slice(-max).reverse();
+    const groups = groupRows(all).reverse();
     const cost = all.length ? all.reduce((a, r) => a + r.overheadMs, 0) / all.length : 0;
     const developmentLine =
       development &&
@@ -285,11 +285,13 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?
   /**
    * The rows, newest first, with the quick ones that have nothing to fix folded into one line where the newest
    * of them was, which opens on a click to show them under it. A row that blames nothing because the library
-   * cannot tell stays a row.
+   * cannot tell stays a row. `max` counts the rows and the fold's list apart, so quick ones never push a row out.
    */
   function rows(groups: Group[]): HTMLElement[] {
-    const quick = groups.filter((g) => nothingToFix(slowest(g.reports)));
-    if (!quick.length) return groups.map(row);
+    const folded = groups.filter((g) => nothingToFix(slowest(g.reports)));
+    const kept = groups.filter((g) => !folded.includes(g)).slice(0, max);
+    const quick = folded.slice(0, max);
+    if (!quick.length) return kept.map(row);
     const n = quick.reduce((a, g) => a + g.reports.length, 0);
     const fold = h(
       'div',
@@ -299,7 +301,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?
     const out: HTMLElement[] = [];
     for (const g of groups) {
       if (g === quick[0]) out.push(fold, ...(foldOpen ? quick.map(row) : []));
-      else if (!quick.includes(g)) out.push(row(g));
+      else if (kept.includes(g)) out.push(row(g));
     }
     return out;
   }
