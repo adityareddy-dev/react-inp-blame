@@ -133,3 +133,13 @@ test('twenty with no saved sign-in names the state file relative to bench/', asy
     (err) => err.message.includes(`at ${path.join('state', 'twenty-never-built.json')};`) && !err.message.includes(HERE),
   );
 });
+
+test('the run count names each configuration when a failed run leaves them uneven', () => {
+  const even = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'] }));
+  assert.match(even, /^10 runs per configuration \(A, B, C\)\.$/m);
+  const uneven = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], skip: ['C:4'] }));
+  assert.match(uneven, /^A 10, B 10, C 9 runs\.$/m);
+  assert.doesNotMatch(uneven, /runs per configuration/);
+  const fix = node('report.mjs', results({ app: 'tt-virtual-fix', configs: ['B', 'F'], skip: ['B:2'] }));
+  assert.match(fix, /^B 9, F 10 runs\.$/m);
+});

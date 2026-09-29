@@ -261,8 +261,10 @@ function main() {
       p();
       // The configurations this app actually ran: cal-diy has no C, and tt-virtual-fix has B and F only.
       const configs = ['A', 'B', 'C', 'F'].filter((c) => pick(runs, app, c, throttle).length);
-      const n = configs.length ? pick(runs, app, configs[0], throttle).length : 0;
-      p(`${n} runs per configuration (${configs.join(', ')}).`);
+      // A failed run is left out of runs, so the counts can differ. Then each one is named.
+      const counts = configs.map((c) => pick(runs, app, c, throttle).length);
+      if (new Set(counts).size <= 1) p(`${counts[0] ?? 0} runs per configuration (${configs.join(', ')}).`);
+      else p(`${configs.map((c, i) => `${c} ${counts[i]}`).join(', ')} runs.`);
       p();
       if (configs.includes('A')) {
         p(`| Metric | A median | A p90 | B median | B p90 | C median | C p90 | B − A (95% CI) | C − A (95% CI) |`);
