@@ -8,8 +8,8 @@ on:
   # Called by publish.yml, so a release runs the whole suite before it publishes.
   workflow_call:
   # Daily as well, so the next@canary job fails the run the day a Next.js or React canary breaks
-  # something, not at the next push. vite-app-fresh gets its daily run from this too. This run is the only
-  # one either of them can fail: on a push or a pull request they are allowed to.
+  # something, not at the next push. vite-app-fresh and otel-fresh get their daily run from this too. This
+  # run is the only one any of them can fail: on a push or a pull request they are allowed to.
   schedule:
     - cron: '23 5 * * *'
 
@@ -115,6 +115,47 @@ jobs:
       - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
       - run: npx playwright install --with-deps chromium
       - run: node scripts/vite-app.mjs --fresh --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
+
+  # react-inp-blame/otel through each web SDK docs/opentelemetry.md has a setup for, from fixtures/otel's
+  # lockfile, with the packed tarball: each SDK's own web-vitals fed one slow click in Node, and the page's
+  # setup blocks compiled against the SDKs' types. Node only, no browser.
+  otel:
+    name: OpenTelemetry hooks from the packed tarball
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/otel/package-lock.json
+      - run: npm ci
+      - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
+      - run: node scripts/otel-contract.mjs --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
+
+  # The same with every SDK at its latest release. They are 0.x, with their web vitals code under
+  # experimental paths, so this is the job that fails the first day a release moves a hook or the time an INP
+  # record is stamped with. It can fail only the daily run, as vite-app-fresh.
+  otel-fresh:
+    name: OpenTelemetry hooks, packages resolved today
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: ${{ github.event_name != 'schedule' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/otel/package-lock.json
+      - run: npm ci
+      - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
+      - run: node scripts/otel-contract.mjs --fresh --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
   # The frameworks that write their own HTML, each an app from its own template with the setup docs/install.md
   # gives it, installed and tested the same way. The Vite plugin's script never runs there, so the install is
