@@ -700,16 +700,18 @@ export function hookInfo(): HookInfo {
 }
 
 /**
- * `InteractionReport.reactBuild`: 'development' where any react-dom read is a development build, as the badge
- * says, whichever registered first. Otherwise what the others' commits showed, a profiling build over a production one.
+ * `InteractionReport.reactBuild`: 'development' where any react-dom is a development build, as the badge says,
+ * whichever registered first, and one this library cannot read too: the page still renders with it. Otherwise
+ * what the readable ones' commits showed, a profiling build over a production one.
  */
 export function reactBuild(): InteractionReport['reactBuild'] {
   const hook = state.attached ?? state.turnedOffHook;
   if (!hook) return null;
   let build: InteractionReport['reactBuild'] = null;
   for (const r of registryOf(hook).values()) {
-    if (!r.isReactDom || r.devToolsOnly || r.problem) continue;
+    if (!r.isReactDom || r.devToolsOnly) continue;
     if (r.info.bundleType === 1) return 'development';
+    if (r.problem) continue;
     if (r.info.bundleType === 0 && r.profiled !== null && build !== 'profiling') build = r.profiled ? 'profiling' : 'production';
   }
   return build;
