@@ -31,6 +31,8 @@ we can agree on the approach before you spend time on it.
   `fixtures/component-libraries` is `fixtures/vite-react-ts` with styled-components, @emotion/styled,
   lucide-react and Radix's DropdownMenu, each in the case where its own components used to be what a
   report named.
+- `api/`: the types every entry point publishes, as `scripts/api-snapshot.mjs` prints them. A unit test
+  fails when they change.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
 
 ## Setup
@@ -65,6 +67,7 @@ From the repository root:
     npm run build                                 # packages/core, with tsc
     npm run typecheck                             # the library, the Vite demo, its specs and the walkthrough
     npm run test:unit                             # node --test on packages/core/test
+    node scripts/api-snapshot.mjs --write         # after a change to the published types, into api/
     npm test                                      # Vite demo on the dev server
     npm run test:prod                             # Vite demo, production build
     npm test -w apps/next-demo                    # Next.js, next dev
@@ -202,6 +205,7 @@ Two things the demo's suite leaves out of a normal run:
   README anchor. Only a major removes it.
 - Never remove or rename a troubleshooting anchor, even for a warning that is gone.
 - An export added to a browser entry gets its inert twin in `src/react-server.ts`.
+- A pull request that changes the API updates `api/` and says why.
 
 ## Security
 
