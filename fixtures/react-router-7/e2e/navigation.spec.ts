@@ -35,3 +35,28 @@ test("reports follow route changes, and the link click is placed on the page it 
 
   expect(problems).toEqual([]);
 });
+
+// A navigation to the page it is on, as a link to it makes, gets a key of its own from React Router, but the
+// URL does not change, so the block announces nothing, and the reports after it stay on the document's
+// navigation.
+test("a navigation to the page it is on is not a route change", async ({ page }) => {
+  const { problems } = await open(page);
+  const home = await documentNavigation(page);
+  const here = page.getByRole("button", { name: "This page", exact: true });
+
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const [saved] = await reportsAfter(page, null, 1);
+  const body = page.locator("body");
+  const key = await body.getAttribute("data-location");
+  await here.click();
+  await expect(body).not.toHaveAttribute("data-location", key ?? "");
+  expect(await page.evaluate(() => location.href)).toBe(home.url);
+  // The navigation changes nothing the page shows, and headless Chrome reports an interaction at the next
+  // paint, so the click after it is the counter's, which paints.
+  await counter(page, 0).click();
+  const [navigated, counted] = await reportsAfter(page, saved.interactionId, 2);
+  expect(navigated.place).toEqual({ navigationURL: home.url, navigationType: home.type, startedNavigation: null });
+  expect(counted.place).toEqual({ navigationURL: home.url, navigationType: home.type, startedNavigation: null });
+
+  expect(problems).toEqual([]);
+});
