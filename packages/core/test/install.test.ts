@@ -775,6 +775,66 @@ test("a report's build is the page's even where it joined no commit, and null un
   assert.deepEqual(await buildOf(null, null), { reactBuild: null, strictMode: null });
 });
 
+test("a development react-dom beside a production one is the page's build whichever registered first, as the badge says", async (t) => {
+  const clock = useClock(t);
+  for (const widgetFirst of [true, false]) {
+    await inBrowser((page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', devtoolsTrack: false });
+      // A production widget's react-dom, and the app's development one under <StrictMode>.
+      const widget = widgetFirst ? existing.inject(reactDom('19.3.0', 0)) : 0;
+      const app = existing.inject(reactDom('19.3.0', 1));
+      const other = widgetFirst ? widget : existing.inject(reactDom('19.3.0', 0));
+      clock.now = 400;
+      existing.onCommitFiberRoot(other, mountedRoot(0b0001, undefined));
+      clock.now = 500;
+      const root = mountedRoot(0b1011, 4);
+      existing.onCommitFiberRoot(app, root);
+      clock.now = 1000;
+      commitAgain(root, 4);
+      page.duringClick(() => existing.onCommitFiberRoot(app, root));
+      page.paint([slowClick(120)]);
+      const r = api.last();
+      assert.deepEqual({ commits: r?.commits.length, reactBuild: r?.reactBuild, strictMode: r?.strictMode }, { commits: 1, reactBuild: 'development', strictMode: true }, `widget first: ${widgetFirst}`);
+      api.dispose();
+    });
+  }
+  // A production root created with unstable_strictMode carries the bit too, but renders once.
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const widget = existing.inject(reactDom('19.3.0', 0));
+    existing.inject(reactDom('19.3.0', 1));
+    clock.now = 500;
+    const root = mountedRoot(0b1001, undefined);
+    existing.onCommitFiberRoot(widget, root);
+    clock.now = 1000;
+    commitAgain(root, undefined);
+    page.duringClick(() => existing.onCommitFiberRoot(widget, root));
+    page.paint([slowClick(120)]);
+    const r = api.last();
+    assert.deepEqual({ commits: r?.commits.length, reactBuild: r?.reactBuild, strictMode: r?.strictMode }, { commits: 1, reactBuild: 'development', strictMode: false });
+    api.dispose();
+  });
+  // A react-dom this library cannot read did not measure anything, whatever build it is.
+  t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    existing.inject(reactDom('16.14.0', 1));
+    const id = existing.inject(reactDom('19.3.0', 0));
+    clock.now = 500;
+    existing.onCommitFiberRoot(id, mountedRoot(0b0001, undefined));
+    clock.now = 1000;
+    page.paint([slowClick(120)]);
+    assert.equal(api.last()?.reactBuild, 'production');
+    api.dispose();
+  });
+});
+
 test('a react-dom outside React 17 to 19 is not walked, and the page is unsupported only while no other react-dom can be read', async (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   await inBrowser((page) => {

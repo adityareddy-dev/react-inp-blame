@@ -56,7 +56,7 @@ interface Renderer {
   lanePriority: boolean;
   /** `profileModeBit` for its React major. */
   profileMode: number;
-  /** `strictModeBit` for its React major. */
+  /** `strictModeBit` for its React major, or 0 outside a development build, the only one that renders twice. */
   strictMode: number;
   /**
    * Whether a root of the app it has committed is in ProfileMode, which in a build that is not a development
@@ -699,16 +699,20 @@ export function hookInfo(): HookInfo {
   return { owner: owner(), renderers: knownRenderers(), devtoolsLockedOut: state.devtoolsLockedOut };
 }
 
-/** `InteractionReport.reactBuild`: the build of the first react-dom that says which it is. */
+/**
+ * `InteractionReport.reactBuild`: 'development' where any react-dom read is a development build, as the badge
+ * says, whichever registered first. Otherwise what the others' commits showed, a profiling build over a production one.
+ */
 export function reactBuild(): InteractionReport['reactBuild'] {
   const hook = state.attached ?? state.turnedOffHook;
   if (!hook) return null;
+  let build: InteractionReport['reactBuild'] = null;
   for (const r of registryOf(hook).values()) {
-    if (!r.isReactDom) continue;
+    if (!r.isReactDom || r.devToolsOnly || r.problem) continue;
     if (r.info.bundleType === 1) return 'development';
-    if (r.info.bundleType === 0 && r.profiled !== null) return r.profiled ? 'profiling' : 'production';
+    if (r.info.bundleType === 0 && r.profiled !== null && build !== 'profiling') build = r.profiled ? 'profiling' : 'production';
   }
-  return null;
+  return build;
 }
 
 /** What each renderer known to the hook in use, or to the one the page turned off, handed `inject()`. */
@@ -968,7 +972,7 @@ function register(hook: DevtoolsHook, id: number, internals: unknown): Renderer 
     major: supported ? version.major : 0,
     lanePriority: supported && (version.major > 19 || (version.major === 19 && version.minor >= 1)),
     profileMode: supported ? profileModeBit(version.major) : 0,
-    strictMode: supported ? strictModeBit(version.major) : 0,
+    strictMode: supported && info.bundleType === 1 ? strictModeBit(version.major) : 0,
     profiled: null,
     problem: null,
     checked: false,
