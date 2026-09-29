@@ -2,7 +2,7 @@
 
 ```ts
 import { onInteraction } from 'react-inp-blame';
-// explanation.blame and explanation.rating are data; verdict is display text.
+// explanation.blame.kind and explanation.rating are data, verdict is display text.
 const stop = onInteraction((report) => console.log(report.explanation.blame, report.verdict));
 ```
 
@@ -79,7 +79,7 @@ interface InteractionReport {
   target: TargetInfo | null; entries: EventEntrySummary[]; // target: selector, label, component, owners, handler
   hydration: { kind: 'waited' | 'not-hydrated'; scope: 'root' | 'boundary';   // server-rendered HTML the click
                owner: string | null; ms: number | null } | null;            // landed on before React hydrated it
-  navigationURL: string; navigationType: NavigationType; // web-vitals' names and values
+  navigationURL: string; navigationType: NavigationType; // web-vitals' names, the URL's origin and path only
   startedNavigation: { url: string; type: 'push' | 'replace' | 'traverse' } | null;
   commits: CommitSummary[]; followUps: CommitSummary[];   // before the paint; after it, or after a key press's paint, within inputWindow
   unjoinedCommits: number;                               // commits in its handlers that could not be tied to it
