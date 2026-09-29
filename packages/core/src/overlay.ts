@@ -130,7 +130,6 @@ const CSS = `
 .comp b { color: #e7e9ee; font-weight: 500; }
 .comp .tr { grid-column: 1 / -1; height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; }
 .comp .fl { height: 100%; background: #818cf8; border-radius: 2px; }
-.cost { color: #6f7582; font-size: 11px; margin-top: 8px; }
 .empty { padding: 26px 16px; color: #9aa0ad; text-align: center; }
 .status { padding: 10px 16px; font-size: 11.5px; border-bottom: 1px solid rgba(255,255,255,.08); color: #c3c7d1; }
 .status.warn { background: rgba(251,191,36,.1); color: #fde68a; }
@@ -279,7 +278,6 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       ...x.notes.map((note) => h('p', 'note', note)),
       ...(before ? comps('Rendered before the paint', before) : []),
       ...(later ? comps(`Rendered ${laterWhen(r, later)}`, later) : []),
-      h('p', 'cost', `Measuring this cost ${costText(r.overheadMs)}.`),
     );
   }
 
