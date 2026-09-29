@@ -6,8 +6,8 @@
 // - The clone lives in clones/twenty unless TWENTY_ROOT points elsewhere. On Windows, point it at a
 //   short path such as C:\tw: under bench\clones the deepest tracked paths pass the 260-character limit.
 // - The server runs in Docker, from the image twenty's own Dockerfile builds out of the pristine
-//   commit (`git archive HEAD`, so the bench patch is not in it). Its dev seed does not run natively
-//   on Windows (it builds storage keys with path.join). The container reaches bench-pg and
+//   commit (`git archive HEAD`, so the changes made by hand are not in it). Its dev seed does not
+//   run natively on Windows (it builds storage keys with path.join). The container reaches bench-pg and
 //   bench-redis through host.docker.internal, uses the database twenty_bench and Redis logical
 //   database 7, and listens on 127.0.0.1:3100. startServer starts it and close() removes it, so
 //   the harness owns it; A and B share it through a reference count.

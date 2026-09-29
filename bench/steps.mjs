@@ -1,5 +1,6 @@
-// Each step's slowest interaction and its blame: per app and pass, each scripted step's slowest interaction (from the harness's own observer), what the
-// library blamed for it in config B, and the library's own accounting. Reads one results JSON.
+// Each scripted step's slowest interaction and its blame: per app and pass, the slowest
+// interaction (from the harness's own observer), what the library blamed for it in config B,
+// and the library's own accounting. Reads one results JSON.
 //   node steps.mjs results/<file>.json [app,app] [--verdicts]
 import { readFileSync } from 'node:fs';
 
