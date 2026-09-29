@@ -278,6 +278,20 @@ test("the badge and panel's own taps are not the page's: INP stays on the tap in
   expect(inp?.report?.target?.selector).toContain(testAttribute('trigger'));
   // The browser counts every tap, and those on the overlay come off its count.
   expect(inp?.interactionCount, entries).toBe(count - own.length);
+
+  // Clear starts INP over from the browser's count, which took the Clear tap at its release, before its
+  // handler cleared. Taken off again when its entries came, one tap in the lab after it read "0 interactions".
+  await page.locator('#react-inp-blame .panel .clear').tap();
+  await page.locator('[data-test=trigger]').tap();
+  await page.waitForTimeout(1_000);
+  const after = await page.evaluate(() => ({
+    seen: [...(window as unknown as { seen: Map<number, { ms: number; overlay: boolean }> }).seen],
+    inp: window.__REACT_INP_BLAME__.inp(),
+  }));
+  const since = `entries by interaction: ${JSON.stringify(after.seen)}`;
+  const again = after.seen.filter(([id]) => !seen.some(([was]) => was === id));
+  expect(again.map(([, x]) => x.overlay), since).toEqual([true, false]);
+  expect(after.inp, since).toMatchObject({ interactionId: again[1][0], interactionCount: 1 });
 });
 
 test('the panel fits the phone screen, with its close button and the first row in reach', async ({ page }) => {
