@@ -104,8 +104,9 @@ pre { font-size: 10px; white-space: pre-wrap; max-height: 260px; overflow: auto;
 .hosted-header code { padding: 1px 6px; border-radius: 4px; background: #232836; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; user-select: all; }
 
 /* A phone: one column, with the lab's links in rows above the scenario and "What took time" under it. A page
-   wider than the screen is widened by the phone's browser to fit, and the badge then starts off the screen. */
-@media (max-width: 720px) {
+   wider than the screen is widened by the phone's browser to fit, and the badge then starts off the screen.
+   On its side a phone is wider than 720 px (863 for a Pixel 7) but never taller than 500, so that goes too. */
+@media (max-width: 720px), (pointer: coarse) and (max-height: 500px) {
   .topbar { gap: 4px 12px; padding: 10px 16px; }
   .topbar a { white-space: nowrap; }
   .shell { grid-template-columns: minmax(0, 1fr); }
