@@ -93,27 +93,28 @@ export function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | nu
     // The same frozen summary react-inp-blame/web-vitals gives, found again by the id just matched.
     const react = attributeINP({ entries: [{ interactionId: report.interactionId }] }).react;
     if (!react) return status('library-error');
+    const { blame, commits, followUps } = react;
+    const all: Record<string, string | number | null> = {
+      status: 'matched',
+      'blame.kind': blame.kind,
+      'blame.name': blame.name,
+      'blame.detail': blame.detail,
+      'blame.ms': blame.ms,
+      'blame.confidence': blame.confidence,
+      handler: react.handler,
+      'target.components': capped(componentPath(report.target?.owners ?? [])),
+      hot_path: capped([...react.hotPath]),
+      react_status: report.reactStatus,
+      react_build: react.reactBuild,
+      'commits.count': commits.count,
+      'commits.rendered': commits.rendered,
+      'commits.ms': commits.ms,
+      'follow_ups.count': followUps.count,
+      'follow_ups.ms': followUps.ms,
+    };
     const out: Record<string, string | number> = {};
     // A null is left out rather than sent, since some backends store it as the text "null".
-    const put = (name: string, value: string | number | null | undefined) => {
-      if (value !== null && value !== undefined && value !== '') out[PREFIX + name] = value;
-    };
-    put('status', 'matched');
-    put('blame.kind', react.blame.kind);
-    put('blame.name', react.blame.name);
-    put('blame.detail', react.blame.detail);
-    put('blame.ms', react.blame.ms);
-    put('blame.confidence', react.blame.confidence);
-    put('handler', react.handler);
-    put('target.components', capped(componentPath(report.target?.owners ?? [])));
-    put('hot_path', capped([...react.hotPath]));
-    put('react_status', report.reactStatus);
-    put('react_build', react.reactBuild);
-    put('commits.count', react.commits.count);
-    put('commits.rendered', react.commits.rendered);
-    put('commits.ms', react.commits.ms);
-    put('follow_ups.count', react.followUps.count);
-    put('follow_ups.ms', react.followUps.ms);
+    for (const name in all) if (all[name] != null && all[name] !== '') out[PREFIX + name] = all[name]!;
     return Object.freeze(out);
   } catch {
     // A hook inside someone else's telemetry pipeline is never worth breaking it over.
@@ -167,18 +168,13 @@ function isInp(source: unknown): boolean {
   return typeof vital === 'string' && vital.toLowerCase() === 'inp';
 }
 
-/** Newest first, as react-inp-blame/web-vitals matches: an id comes back only after a reload. */
-function byId(reports: readonly InteractionReport[], entries: readonly object[]): InteractionReport | null {
-  const ids = new Set<number>();
-  for (const e of entries) {
-    const id = (e as { interactionId?: unknown } | null)?.interactionId;
-    if (typeof id === 'number' && id > 0) ids.add(id);
-  }
-  for (let i = reports.length - 1; i >= 0; i--) {
-    const r = reports[i];
-    if (r && ids.has(r.interactionId)) return r;
-  }
-  return null;
+/** The newest report that passes, as react-inp-blame/web-vitals matches: an id comes back only after a reload. */
+const newest = (reports: readonly InteractionReport[], passes: (r: InteractionReport) => boolean): InteractionReport | undefined =>
+  [...reports].reverse().find((r) => r && passes(r));
+
+function byId(reports: readonly InteractionReport[], entries: readonly object[]): InteractionReport | undefined {
+  const ids = new Set(entries.map((e) => (e as { interactionId?: unknown } | null)?.interactionId));
+  return newest(reports, (r) => ids.has(r.interactionId));
 }
 
 /**
@@ -186,30 +182,19 @@ function byId(reports: readonly InteractionReport[], entries: readonly object[])
  * start, and its value the entry's duration. The report's headline entry first, then any of its
  * entries, for two entries of one interaction that paint in one frame at the same duration.
  */
-function byTime(reports: readonly InteractionReport[], source: InpLogRecordLike | number): InteractionReport | null {
+function byTime(reports: readonly InteractionReport[], source: InpLogRecordLike | number): InteractionReport | undefined {
   const time = typeof source === 'number' ? relative(source) : timeOf(source);
-  if (time === null) return null;
   const value = typeof source === 'number' ? undefined : source.attributes?.['browser.web_vital.value'];
   const fits = (start: number, duration: number) => Math.abs(start - time) < MATCH_MS && (typeof value !== 'number' || Math.abs(duration - value) < MATCH_MS);
-  for (let i = reports.length - 1; i >= 0; i--) {
-    const r = reports[i];
-    if (r && fits(r.start, r.duration)) return r;
-  }
-  for (let i = reports.length - 1; i >= 0; i--) {
-    const r = reports[i];
-    if (r && r.entries.some((e) => fits(e.startTime, e.duration))) return r;
-  }
-  return null;
+  return newest(reports, (r) => fits(r.start, r.duration)) ?? newest(reports, (r) => r.entries.some((e) => fits(e.startTime, e.duration)));
 }
 
-/** A record's time on the `performance.now()` clock, from the shape it came in; null for none. */
-function timeOf(record: InpLogRecordLike): number | null {
-  const { hrTime, timestamp } = record;
-  const hr = Array.isArray(hrTime) ? hrTime : Array.isArray(timestamp) ? (timestamp as readonly unknown[]) : null;
-  if (hr) return typeof hr[0] === 'number' && typeof hr[1] === 'number' ? hr[0] * 1e3 + hr[1] / 1e6 - performance.timeOrigin : null;
+/** A record's time on the `performance.now()` clock, from the shape it came in, or NaN, which matches nothing. */
+function timeOf({ hrTime, timestamp }: InpLogRecordLike): number {
+  const hr = (Array.isArray(hrTime) ? hrTime : timestamp) as readonly number[];
+  if (Array.isArray(hr)) return hr[0]! * 1e3 + hr[1]! / 1e6 - performance.timeOrigin;
   if (typeof timestamp === 'number') return relative(timestamp);
-  if (timestamp instanceof Date) return timestamp.getTime() - performance.timeOrigin;
-  return null;
+  return timestamp instanceof Date ? timestamp.getTime() - performance.timeOrigin : NaN;
 }
 
 /** Ms since the page's time origin, as a hook sees `interactionTime`, or epoch ms, which is far larger. */

@@ -223,6 +223,8 @@ test('the processor uses setAttributes where the record has it, and assigns to a
   const lcp = record({ timestamp: 100 }, 240, 'lcp');
   processor.onEmit(lcp);
   assert.deepEqual(Object.keys(lcp.attributes ?? {}), ['browser.web_vital.name', 'browser.web_vital.value', 'browser.web_vital.rating']);
+  processor.onEmit({ ...record({ hrTime: hrTime(100) }, 240, 'lcp'), setAttributes: (attributes: InpBlameAttributes) => set.push(attributes) });
+  assert.equal(set.length, 1);
   await processor.forceFlush();
   await processor.shutdown();
 });
