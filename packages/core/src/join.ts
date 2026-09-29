@@ -1461,16 +1461,16 @@ function explain(r: InteractionReport): Explanation {
    * own `oninput` in its task, right after its handlers, as a checkbox's click does, and taken for the next
    * press's, a keydown's 60 ms `oninput` went to waiting and painting. Where no listener was recorded, as for one
    * under 5 ms, a script that started on the tick this interaction's handlers ended on ran ahead of them too, and
-   * what came after it is ranked with the rest under PRESENTATION_NOTE_MS, where the note goes on the press's
-   * render alone, and is the press's work over it (`ownScript` says why). Nor is a script that holds a render of
-   * this report's the press's work, wherever it started, though it holds one only from its start: the next key's
-   * capture listener puts that key in the ring before its handler runs, so a render stamped with this key a moment
-   * before that handler began came before it. Held by it, the next key's 44 ms handler was this key's script. Taken
-   * for the next key's, React's own task that committed a key's render, and a timer as its handlers ended or before
-   * the next key's listener, went to waiting and painting, and from half of the screen update the note said the
-   * frame waited on that key. The next key's handler on the tick after this key's was named as this key's script. A
-   * render joined by overlap alone says too little to keep a script: in the next key's handler, one kept that
-   * handler as this key's verdict.
+   * what came after it is ranked with the rest under PRESENTATION_NOTE_MS, where the note and the painting blame go
+   * on the press's render alone, and is the press's work over it (`ownScript` says why). Nor is a script that holds
+   * a render of this report's the press's work, wherever it started, though it holds one only from its start: the
+   * next key's capture listener puts that key in the ring before its handler runs, so a render stamped with this
+   * key a moment before that handler began came before it. Held by it, the next key's 44 ms handler was this key's
+   * script. Taken for the next key's, React's own task that committed a key's render, and a timer as its handlers
+   * ended or before the next key's listener, went to waiting and painting, and from half of the screen update the
+   * note said the frame waited on that key. The next key's handler on the tick after this key's was named as this
+   * key's script. A render joined by overlap alone says too little to keep a script: in the next key's handler, one
+   * kept that handler as this key's verdict.
    */
   const next = r.nextInput;
   const nextFrom = next ? Math.max(next.start, processingEnd) : 0;
@@ -1490,17 +1490,19 @@ function explain(r: InteractionReport): Explanation {
   const nextRenderMs = next?.endedAt != null && next.endedAt <= r.end + RENDER_GROUP_MS ? Math.min(next.endedAt, r.end) - nextFrom : 0;
   const nextShare = WAITED_BEHIND_MIN_SHARE * r.presentation;
   const heldByNext = next && Math.max(nextScriptMs, nextRenderMs) >= nextShare ? next : null;
-  const waitedOnNext = heldByNext && r.presentation > r.processing && r.presentation >= r.inputDelay ? heldByNext : null;
   // The screen update's clause where the frame waited on that press, as the blame or in the note. The
   // clause about the press is hedged where only its render's end says so.
   const nextClause = (sure: boolean) =>
     `: the frame ${sure ? '' : `${HEDGE} `}waited on the next ${kindOf(next!.type, next!.pointerType)}, which the page handled first.${longestSaid(lateScript)}`;
   // Under PRESENTATION_NOTE_MS the verdict ranks the scripts after the handlers with the rest, every one of them
-  // where no listener of that press is on record (`ownScript`), so there the note goes on the press's render
-  // alone, hedged as the render's end is: counted from the tick after the handlers, a keydown's own 38 ms timer
-  // was its verdict, and the note said in the same report that the frame waited on the next key, naming that timer.
+  // where no listener of that press is on record (`ownScript`), so there the note, and the blame where the screen
+  // update outranks the working time, go on the press's render alone, hedged as the render's end is: counted from
+  // the tick after the handlers, a keydown's own 38 ms timer was its verdict, and the note said in the same report
+  // that the frame waited on the next key, naming that timer. Its own 50 ms timer, the painting blame's script
+  // without the next key, was said as the next key's wait.
   const byRender = !nextListener && r.presentation <= PRESENTATION_NOTE_MS;
   const nextNoted = byRender ? next && nextRenderMs >= nextShare : heldByNext;
+  const waitedOnNext = nextNoted && r.presentation > r.processing && r.presentation >= r.inputDelay ? next : null;
   /**
    * React's renders that committed inside that script, after the handlers, however long the screen update
    * and whichever phase was the longer: the screen update's clause says them, as its blame or in the note
@@ -2339,7 +2341,7 @@ function explain(r: InteractionReport): Explanation {
     // name as any painting blame does, only where the script ran for half of the screen update: where only
     // the press's render says the frame waited, a 20 ms timer is the longest script the sentence gives,
     // with its own figure, and is not the blame.
-    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${nextClause(nextScriptMs >= nextShare)}`;
+    cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${nextClause(!byRender && nextScriptMs >= nextShare)}`;
     blame = { kind: 'painting', name: lateLeads ? scriptName(lateLeads.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (screenOutranks) {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot

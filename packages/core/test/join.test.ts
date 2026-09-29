@@ -910,6 +910,33 @@ test("where the working time was longer, the screen update's note says the frame
       ], `at ${start}`);
     }
   }
+  // So where the screen update outranks the working time and is the blame: 31 ms of a keydown's handlers, then its own
+  // timer 2 ms or more after them, in a 70, 90 or 100 ms screen update. Counted from the tick after the handlers, the
+  // blame said the frame waited on the next key, which had no listener or render on record before the paint, where
+  // without it the timer was the blame's script. It is what it is without that key, and says the frame most likely
+  // waited on it only where its render, ending by the paint, shows it did.
+  const painted = (paint: number, at: number, ms: number, next: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 32 + paint, 1001, 1030), entry('keyup', 1010, 22 + paint, 1031, 1032)],
+      [{ ...three, at: 1025, sinceInput: 25 }],
+      [frame(1000, 32 + paint, [script('DIV#root.onkeydown', 1001.5, 28), script('TimerHandler:setTimeout', at, ms)], 1020 + paint)],
+      [input(1000, 'keydown'), input(1010, 'keyup', { gestureTs: 1000 }), ...next],
+    ).explanation;
+  for (const paint of [70, 90, 100]) {
+    for (const [at, ms] of [[1034, 50], [1034, 40], [1040, 45]]) {
+      const alone = painted(paint, at, ms, []);
+      for (const next of [input(1020, 'keydown'), input(1020, 'keydown', worked(1040))]) assert.deepEqual(painted(paint, at, ms, [next]), alone, `${paint} ms, ${ms} ms at ${at}`);
+    }
+  }
+  const paintedAlone = painted(90, 1034, 50, []);
+  assert.deepEqual(paintedAlone.blame, { kind: 'painting', name: 'TimerHandler:setTimeout', detail: null, ms: 90, confidence: 'measured' });
+  assert.equal(paintedAlone.cause, 'After the key press was handled, the screen took another 90 ms to update, mostly because a script (TimerHandler:setTimeout, app.js) ran for 50 ms before the next frame.');
+  const paintedRendered = painted(90, 1034, 50, [input(1020, 'keydown', worked(1080))]);
+  assert.deepEqual(paintedRendered.blame, paintedAlone.blame);
+  assert.equal(
+    paintedRendered.cause,
+    'After the key press was handled, the screen took another 90 ms to update: the frame most likely waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 50 ms.',
+  );
   // And where the frame did wait on it, a 30 ms timer that ran after this key's handlers, before the next key came, is
   // the verdict under a 90 ms screen update, as the longest script of this key's own, and not under a 104 ms one,
   // where a script after the handlers takes it only from half of the screen update, with the next key or without.
