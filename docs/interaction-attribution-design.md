@@ -1322,27 +1322,31 @@ task after them, and is weighed whole. The sentence gives the render whole and t
 render began before the handlers, so at most 17 ms of it was in the 27 ms of working time." Where it
 gave several commits' total, the part is of that total: "Some of that rendering began before the
 handlers, so at most 35 ms of it was in the 38 ms of working time." A part that is all the working time
-says nothing, and is left out: "at most 64 ms of it was in the 64 ms of working time". A render is
-placed in the working time only where all of it can have run there. Below the render verdict, a render
-the working time held too little of for it is said the same way, not called small: "At most 3 ms of the
-5 ms of working time went to React's render, which began before the handlers (120 ms re-rendering 3
-components inside ProductPage, ...)". Where committing and effects choose no commit, the render a
-render verdict names is the one the working time held most of, not the longest, and so is the render
-the handler's and the layout's sentences name, and the one a verdict below them weighs or calls small.
-Until 2026-09-27 a 120 ms render that began 100 ms before a click's 27 ms of handlers was weighed whole
-and blamed for 120 ms of the 64 ms click, and a 100 ms render that held 7 ms of the handlers was named
-over one that ran all its 28 ms in them. A 43 ms render in the task the click waited behind, committed
-as its handlers began, was said as that wait and again as 43 ms in the 15 ms of working time after it.
-None of it was in there, so no note names it now, and no total counts it. Beside the 10 ms render a
-handler made, it took the handler's sentence too: "React spent 53 ms re-rendering 30 components inside
-List". Where the screen update outranks the working time too, the working time is the smallest of the
-three phases, and no note is added. The wait itself is said in a note under every verdict but its own,
-whatever React rendered: "It also waited 70 ms before the handler could start, because the main thread
-was busy." Until 2026-09-26 that note needed a render big enough to be the verdict, so a 70 ms wait
-before a 98 ms handler went unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. The
-one exception is a `script` verdict on a timer the input waited behind, said as before the handler
-started, where that timer held half of the wait: it is the wait, and the note would say it twice. A 62
-ms timer in a 63 ms wait leaves the note out, and a 30 ms timer in a 120 ms wait keeps it.
+says nothing, and is left out: "at most 64 ms of it was in the 64 ms of working time". Nor is a render
+said to have begun before them where it fits the time from their start to its commit, longer than the
+working time only by that rounding: a 62.5 ms render that began as a click's handlers did and committed
+as they ended read "The render was longer than the 61 ms of working time, so it began before the
+handlers" until 2026-09-28. Below the verdict one like it is small. A render is placed in the working
+time only where all of it can have run there. Below the render verdict, a render the working time held
+too little of for it is said the same way, not called small: "At most 3 ms of the 5 ms of working time
+went to React's render, which began before the handlers (120 ms re-rendering 3 components inside
+ProductPage, ...)". Where committing and effects choose no commit, the render a render verdict names is
+the one the working time held most of, not the longest, and so is the render the handler's and the
+layout's sentences name, and the one a verdict below them weighs or calls small. Until 2026-09-27 a 120
+ms render that began 100 ms before a click's 27 ms of handlers was weighed whole and blamed for 120 ms
+of the 64 ms click, and a 100 ms render that held 7 ms of the handlers was named over one that ran all
+its 28 ms in them. A 43 ms render in the task the click waited behind, committed as its handlers began,
+was said as that wait and again as 43 ms in the 15 ms of working time after it. None of it was in
+there, so no note names it now, and no total counts it. Beside the 10 ms render a handler made, it took
+the handler's sentence too: "React spent 53 ms re-rendering 30 components inside List". Where the
+screen update outranks the working time too, the working time is the smallest of the three phases, and
+no note is added. The wait itself is said in a note under every verdict but its own, whatever React
+rendered: "It also waited 70 ms before the handler could start, because the main thread was busy."
+Until 2026-09-26 that note needed a render big enough to be the verdict, so a 70 ms wait before a 98 ms
+handler went unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. The one exception
+is a `script` verdict on a timer the input waited behind, said as before the handler started, where
+that timer held half of the wait: it is the wait, and the note would say it twice. A 62 ms timer in a
+63 ms wait leaves the note out, and a 30 ms timer in a 120 ms wait keeps it.
 
 **With no render, the working time is outside React in any build.** The handler's figure is the working
 time less React's own time, which a build that records no durations cannot give. Until 2026-09-26 a click

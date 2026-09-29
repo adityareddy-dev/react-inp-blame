@@ -1298,6 +1298,8 @@ function explain(r: InteractionReport): Explanation {
   const handlersEnd = r.entries.reduce((a, e) => (Math.abs(e.startTime + e.duration - r.end) <= RENDER_GROUP_MS ? Math.max(a, e.processingEnd) : a), processingEnd);
   // A render committed with the handlers, by their own end.
   const withTheHandlers = (x: CommitSummary) => x.at <= handlersEnd + STAMP_TOLERANCE;
+  // The time from the handlers' start to a commit in them, all a render committed there can have had of them.
+  const roomTo = (at: number) => Math.max(0, Math.min(at, handlersEnd) - processingStart);
   /**
    * How much of a commit's render the interaction could have held from the start of its handlers, which is what
    * the verdict weighs it on. React does not yield inside one event's handlers, so a render committed with them
@@ -1311,7 +1313,7 @@ function explain(r: InteractionReport): Explanation {
    */
   const held = (x: CommitSummary) =>
     withTheHandlers(x)
-      ? Math.min(x.total, r.processing, Math.max(0, Math.min(x.at, handlersEnd) - processingStart))
+      ? Math.min(x.total, r.processing, roomTo(x.at))
       : x.total;
   /**
    * Working time no entry's handlers ran in. The entries painted in one frame are one working window, as
@@ -1666,13 +1668,17 @@ function explain(r: InteractionReport): Explanation {
    * the 27 ms of working time." The figure said is all of it, since the render's own components were timed whole:
    * said as the part held, a render of 17 ms held a component of 20. Where the sentence gave the total of several
    * commits, the clause is about that total. A part that is all the working time says nothing, so it is left out,
-   * and so is the clause where a render it would be about committed after the handlers, which is weighed whole.
+   * and so is the clause where a render it would be about committed after the handlers, which is weighed whole, or
+   * fits the time from their start to its commit. That one is longer than the working time only by the durations'
+   * rounding: a 62.5 ms render that began as a click's handlers did and committed as they ended read "The render
+   * was longer than the 61 ms of working time, so it began before the handlers."
    */
   const heldSaid = (named: CommitSummary, when = '') => {
     const several = severalRenders(named);
     const said = several ? renders : [named];
     const withThem = said.filter(withTheHandlers);
     if (withThem.length < said.length) return '';
+    if (said.reduce((a, x) => a + x.total, 0) <= roomTo(Math.max(...said.map((x) => x.at))) + STAMP_TOLERANCE) return '';
     const inWork = Math.min(r.processing, withThem.reduce((a, x) => a + held(x), 0));
     if (Math.round(inWork) >= Math.round(said.reduce((a, x) => a + x.total, 0))) return '';
     const within = `the ${ms(r.processing)} of working time${when ? ` ${when}` : ''}`;
@@ -2031,11 +2037,12 @@ function explain(r: InteractionReport): Explanation {
   /**
    * The render a rung under the render blame says was too small for it. Small is what the working time held of
    * it, so a render it held only part of says that part, where it ran and its whole figure: a 120 ms render that
-   * began before 5 ms of handlers, 72 ms of it in one component, read "React's render was small".
+   * began before 5 ms of handlers, 72 ms of it in one component, read "React's render was small". One that fits the
+   * time from their start to its commit is small too, and past the working time only by its rounding.
    */
   const smallRender = (x: CommitSummary) => {
     const kept = held(x);
-    if (!x.hasDurations || x.total <= kept + STAMP_TOLERANCE) return `React's render was small (${renderPhrase(x)})`;
+    if (!x.hasDurations || x.total <= Math.max(kept, roomTo(x.at)) + STAMP_TOLERANCE) return `React's render was small (${renderPhrase(x)})`;
     return `${kept < 0.5 ? 'Under 1 ms' : `At most ${ms(kept)}`} of the ${ms(r.processing)} of working time went to React's render, which began before the handlers (${ms(x.total)} ${renderPhrase(x)})`;
   };
   // The commit a render blame names is the one React spent longest on, committing and effects included,

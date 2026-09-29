@@ -3671,12 +3671,26 @@ test("a render committed at the end of the handlers, past the paint the duration
     begun.explanation.cause,
     'React spent 75 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). The render was longer than the 61 ms of working time, so it began before the handlers.',
   );
+  // One that began as they did and ran on to their end is longer than the working time only by the rounding, and is
+  // not said to have begun before them, nor is one that kept no start and is within the stamps' tolerance of the time
+  // from their start to its commit. Both read "The render was longer than the 61 ms of working time, so it began
+  // before the handlers."
+  const through = [commit(1065.5, 1000, { startedAt: 1003, total: 62.5 }), commit(1065.5, 1000, { total: 63.2 })].map((x) => report(click, [x], [], [input(1000, 'click')]));
+  for (const r of through) {
+    assert.deepEqual(r.explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 61, confidence: 'measured' });
+    assert.equal(r.explanation.cause, 'React spent 63 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
+  }
   // And one too small for the verdict, in 4 ms of working time whose handlers ran 2 ms past it, is too.
   const small = report([entry('click', 0, 8, 4, 10)], [commit(9.5, 0, { startedAt: -100, total: 104 })], [], [input(0, 'click')]);
   assert.match(small.explanation.cause, /^At most 4 ms of the 4 ms of working time went to React's render, which began before the handlers \(104 ms /);
-  // One within the stamps' tolerance of what the working time held is small as it was: 4.6 ms against those 4 ms.
-  const rounded = report([entry('click', 0, 8, 4, 10)], [commit(9.5, 0, { startedAt: -100, total: 4.6 })], [], [input(0, 'click')]);
+  // One within the stamps' tolerance of what the working time held is small as it was: 3.6 ms, committed 3 ms into
+  // those 4 ms.
+  const rounded = report([entry('click', 0, 8, 4, 10)], [commit(7, 0, { startedAt: -100, total: 3.6 })], [], [input(0, 'click')]);
   assert.match(rounded.explanation.cause, /^React's render was small \(/);
+  // So is one that began as the handlers did and ran past those 4 ms to their end. It read "At most 4 ms of the 4 ms of
+  // working time went to React's render, which began before the handlers".
+  const filling = report([entry('click', 0, 8, 4, 10)], [commit(9.5, 0, { startedAt: 4, total: 5.5 })], [], [input(0, 'click')]);
+  assert.match(filling.explanation.cause, /^React's render was small \(/);
   // It is placed in the working time, where a hedged sentence or a production build's says where it ran. Both said
   // "after the handlers, before the next frame".
   const partial = report(click, [{ ...ended, truncated: true }], [], [input(1000, 'click')]);
@@ -3697,7 +3711,7 @@ test("a render committed at the end of the handlers, past the paint the duration
   assert.equal(longer.explanation.blame.ms, 61);
   assert.deepEqual(longer.explanation.phases[1]?.parts?.map((p) => p.ms), [61]);
   assert.match(longer.explanation.cause, /: all 61 ms of working time, in a hydration that took 75 ms in all\.$/);
-  for (const r of [framed, unframed, unstarted, begun, small, rounded, partial, production, hydrated, longer]) saysWithinTheWorkingTime(r);
+  for (const r of [framed, unframed, unstarted, begun, ...through, small, rounded, filling, partial, production, hydrated, longer]) saysWithinTheWorkingTime(r);
 });
 
 test("a render with no start kept is weighed on the time from the handlers' start to its commit, and a bound that is all the working time is left out", () => {
