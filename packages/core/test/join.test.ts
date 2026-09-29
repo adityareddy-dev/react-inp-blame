@@ -937,6 +937,39 @@ test("where the working time was longer, the screen update's note says the frame
     paintedRendered.cause,
     'After the key press was handled, the screen took another 90 ms to update: the frame most likely waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 50 ms.',
   );
+  // So where React rendered nothing and the handlers are weighed first: a keydown's nine short handlers, or ones led by
+  // a 25 ms script, then its own 50 ms timer after them. Counted from the tick after the handlers as the next key's,
+  // the timer lost the verdict to the handlers' 181 ms, or to the 25 ms script, and the handlers' was said nowhere.
+  // A click's short handlers and timer, with the next click's, the same way.
+  const idleKey = (handlers: ScriptSummary[], next: InputRecord[]) =>
+    report(
+      [entry('keydown', 1000, 272, 1001, 1180), entry('keyup', 1060, 212, 1181, 1182)],
+      [],
+      [frame(1000, 272, [...handlers, script('TimerHandler:setTimeout', 1184, 50)], 1262)],
+      [...ring.slice(0, 2), ...next],
+    ).explanation;
+  for (const handlers of [keys, [script('DIV#root.onkeydown', 1001, 25), ...keys.slice(2)]]) {
+    const alone = idleKey(handlers, []);
+    assert.deepEqual(alone.blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 50, confidence: 'measured' });
+    assert.equal(alone.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 50 ms after the handler finished.");
+    assert.deepEqual(alone.notes, []);
+    assert.deepEqual(idleKey(handlers, [input(1100, 'keydown')]), alone, `${handlers[0]!.duration} ms first`);
+    const rendered = idleKey(handlers, [input(1100, 'keydown', worked(1260))]);
+    assert.deepEqual([rendered.blame, rendered.cause], [alone.blame, alone.cause], `${handlers[0]!.duration} ms first`);
+    assert.deepEqual(rendered.notes, [
+      'After the handler finished, the screen took another 90 ms to update: the frame most likely waited on the next key press, which the page handled first. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 50 ms.',
+    ]);
+  }
+  const tapped = { pointerType: 'mouse' };
+  const idleClick = (next: InputRecord[]) =>
+    report(
+      [entry('pointerdown', 990, 24, 991, 992), entry('pointerup', 1000, 272, 1000.5, 1001), entry('click', 1000, 272, 1001, 1182)],
+      [],
+      [frame(1000, 272, [...keys.map((s) => ({ ...s, invoker: 'DIV#root.onclick' })), script('TimerHandler:setTimeout', 1184, 50)], 1262)],
+      [input(990, 'pointerdown', tapped), input(1000, 'pointerup', { ...tapped, gestureTs: 990 }), input(1000, 'click', { ...tapped, gestureTs: 990 }), ...next],
+    ).explanation;
+  assert.deepEqual(idleClick([]).blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 50, confidence: 'measured' });
+  assert.deepEqual(idleClick([input(1100, 'pointerdown', tapped)]), idleClick([]));
   // And where the frame did wait on it, a 30 ms timer that ran after this key's handlers, before the next key came, is
   // the verdict under a 90 ms screen update, as the longest script of this key's own, and not under a 104 ms one,
   // where a script after the handlers takes it only from half of the screen update, with the next key or without.

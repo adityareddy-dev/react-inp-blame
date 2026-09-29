@@ -1498,11 +1498,11 @@ function explain(r: InteractionReport): Explanation {
   const nextClause = (sure: boolean) =>
     `: the frame ${sure ? '' : `${HEDGE} `}waited on the next ${kindOf(next!.type, next!.pointerType)}, which the page handled first.${longestSaid(lateScript)}`;
   // Under PRESENTATION_NOTE_MS the verdict ranks the scripts after the handlers with the rest, every one of them
-  // where no listener of that press is on record (`ownScript`), so there the note, and the blame where the screen
-  // update outranks the working time, go on the press's render alone, hedged as the render's end is: counted from
-  // the tick after the handlers, a keydown's own 38 ms timer was its verdict, and the note said in the same report
-  // that the frame waited on the next key, naming that timer. Its own 50 ms timer, the painting blame's script
-  // without the next key, was said as the next key's wait.
+  // where no listener of that press is on record (`ownScript` and `lateTaken`), so there the note, and the blame
+  // where the screen update outranks the working time, go on the press's render alone, hedged as the render's end
+  // is: counted from the tick after the handlers, a keydown's own 38 ms timer was its verdict, and the note said in
+  // the same report that the frame waited on the next key, naming that timer. Its own 50 ms timer, the painting
+  // blame's script without the next key, was said as the next key's wait.
   const byRender = !nextListener && r.presentation <= PRESENTATION_NOTE_MS;
   const nextNoted = byRender ? next && nextRenderMs >= nextShare : heldByNext;
   const waitedOnNext = nextNoted && r.presentation > r.processing && r.presentation >= r.inputDelay ? next : null;
@@ -1610,15 +1610,17 @@ function explain(r: InteractionReport): Explanation {
    * 50 ms handler, and under a 90 ms screen update, with no note, a keydown's named the next key's 70 ms handler as
    * having run after its own. A script that is not that press's work is this interaction's own, though, and still
    * taken: left out, a 60 ms timer between a keydown's handlers and the next key went to waiting and painting, and
-   * the note named it as the longest script. The rest is ranked by length, not by where it ran, against every
-   * script up to the end of the handlers: ranked by where, a 20 ms click handler took the verdict from the 150 ms
-   * listener, and a 25 ms pointerdown listener from a 120 ms timer the click waited behind, which was then said
-   * nowhere. `ledScript` is that ranking whether or not the note names the script after the handlers, for the idle
-   * handler's rung below, where `ranScript` is settled.
+   * the note named it as the longest script. Nor, under PRESENTATION_NOTE_MS with no listener of that press on
+   * record, is any script that press's work (`byRender`): taken for it, a keydown's own 50 ms timer, the verdict
+   * without the next key, lost it to 181 ms of idle handlers. The rest is ranked by length, not by where it ran,
+   * against every script up to the end of the handlers: ranked by where, a 20 ms click handler took the verdict
+   * from the 150 ms listener, and a 25 ms pointerdown listener from a 120 ms timer the click waited behind, which
+   * was then said nowhere. `ledScript` is that ranking whether or not the note names the script after the handlers,
+   * for the idle handler's rung below, where `ranScript` is settled.
    */
   const lateOnly = insideLate.length > 0 && !c;
   const lateNoted = insideLate.length > 0 || (!!lateScript && r.presentation > PRESENTATION_NOTE_MS);
-  const lateTaken = lateLeads && (!heldByNext || !nextsWork(lateLeads.script)) ? lateLeads : null;
+  const lateTaken = lateLeads && (byRender || !heldByNext || !nextsWork(lateLeads.script)) ? lateLeads : null;
   const earlyScript = longestPart(scriptParts(frames, r.start, processingEnd));
   const ledScript = lateTaken && (!earlyScript || lateTaken.ms > earlyScript.ms) ? lateTaken : earlyScript;
   const ownScript = longestPart(scriptParts(frames, r.start, r.end).filter((p) => !(nextListener && nextsWork(p.script))));
