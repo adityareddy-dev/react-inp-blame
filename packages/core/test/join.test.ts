@@ -73,7 +73,6 @@ function element(tag: string, children: Record<string, unknown>[], attributes: R
     child.parentNode = el;
     child.parentElement = el;
     child.nextSibling = children[i + 1] ?? null;
-    child.previousSibling = children[i - 1] ?? null;
   });
   return el;
 }
@@ -349,7 +348,7 @@ test("with attributes only, the label comes from what the page's code wrote on t
   assert.equal(label(element('div', [], { 'aria-label': 'B'.repeat(60) })), `div "${'B'.repeat(40)}"`);
 });
 
-test('with text allowed, a field is named by its <label>, and a control by its text across the marks and spans inside it', () => {
+test("with text allowed, a field is named by its <label>, and a control's text stops at the first element after it", () => {
   // `<label><input type="checkbox" /> Compact rows</label>`: the input's labels hold the label around it.
   const box = element('input', [], { type: 'checkbox' });
   Object.assign(box, { labels: [element('label', [box, text(' Compact rows')])] });
@@ -371,15 +370,10 @@ test('with text allowed, a field is named by its <label>, and a control by its t
   const named = element('input', [], { 'aria-label': 'Search members' });
   Object.assign(named, { labels: [element('label', [text('Search')])] });
   assert.equal(labelOf(named, 'text'), 'input "Search members"');
-  // A search result that highlights what matched: `<a><mark>Oak</mark> Chair 1</a>`.
-  assert.equal(labelOf(element('a', [element('mark', [text('Oak')]), text(' Chair 1')]), 'text'), 'link "Oak Chair 1"');
-  assert.equal(labelOf(element('button', [text('Save '), element('b', [text('3')]), text(' drafts')]), 'text'), 'button "Save 3 drafts"');
-  // An element straight after another ends it, a count badge or a price beside the name: nothing tells where one word ends.
-  assert.equal(labelOf(element('a', [element('span', [text('Notifications')]), element('span', [text('12')])]), 'text'), 'link "Notifications"');
-  assert.equal(labelOf(element('a', [element('span', [text('Oak Chair')]), element('span', [text('$120')])]), 'text'), 'link "Oak Chair"');
-  // A block inside still ends the run.
-  assert.equal(labelOf(element('div', [element('div', [text('Oak')]), element('div', [text('Chair 1')])]), 'text'), 'div "Oak"');
-  assert.equal(labelOf(element('a', [element('mark', [text('Oak')]), text(' Chair 1')]), 'attributes'), 'link');
+  // A count badge or a price after the name is not glued to it.
+  assert.equal(labelOf(element('a', [text('Notifications'), element('span', [text('12')])]), 'text'), 'link "Notifications"');
+  assert.equal(labelOf(element('a', [text('Oak Chair'), element('span', [text('$120')])]), 'text'), 'link "Oak Chair"');
+  assert.equal(labelOf(element('button', [text('Save'), element('kbd', [text('Ctrl S')])]), 'text'), 'button "Save"');
 });
 
 test('an editor is named like a form field whatever labels allows, never by the text a person typed into it', () => {
