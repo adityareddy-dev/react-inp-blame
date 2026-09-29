@@ -194,8 +194,14 @@ Two things the demo's suite leaves out of a normal run:
   hydration on every page it is installed on, so it stays that way. Elsewhere, add a development
   dependency only when the change needs one and say why; otherwise `package-lock.json` does not
   change.
-- The report is a contract. Adding a field to `InteractionReport` is fine; removing one, or changing
-  what one means, needs a new `schemaVersion` and a line in the pull request saying so.
+- The report is a contract. Adding a field to `InteractionReport` is fine. Removing one, or changing
+  what one means, waits for the next major and a new `schemaVersion`. A change to which kind, name or
+  detail a blame gets adds a line to the release's Blame changes.
+- Something deprecated keeps working through at least one minor, with `@deprecated` on its type, a
+  Deprecated line in the CHANGELOG and, where it runs, one warning in development builds with its own
+  README anchor. Only a major removes it.
+- Never remove or rename a troubleshooting anchor, even for a warning that is gone.
+- An export added to a browser entry gets its inert twin in `src/react-server.ts`.
 
 ## Security
 
