@@ -2895,6 +2895,40 @@ test('an input that waited behind a script says which script, and gives it the b
   assert.equal(bare.explanation.blame.name, null);
 });
 
+test("a key press that waited behind React's own task is blamed on the component React was rendering there", () => {
+  // Typing fast into a bio whose Preview reads useDeferredValue: React's scheduler task started at 995 and ran
+  // until 1180 rendering Preview for an earlier key, and this key's handler could start only at 1181.
+  const task = { ...script('MessagePort.onmessage', 995, 185), source: 'deps/react-dom_client.js' };
+  const busy = (s: ScriptSummary, before: ScriptSummary[] = []) => [frame(950, 250, [...before, s, script('INPUT.onkeydown', 1181, 5)])];
+  const preview = commit(1178, 900, { inputType: 'keydown', priority: 3, rendered: 1, roots: ['Settings'], hotPath: ['Settings', 'Preview'], components: [{ name: 'Preview', count: 1, self: 170, total: 170 }], total: 172, startedAt: 996 });
+  const key = [entry('keydown', 1000, 216, 1181, 1186)];
+  const deferred = report(key, [preview], busy(task), []).explanation;
+  assert.deepEqual(deferred.blame, { kind: 'waiting', name: 'Preview', detail: null, ms: 181, confidence: 'measured' });
+  assert.equal(
+    deferred.cause,
+    'The key press waited 181 ms before its handler could start: a script (MessagePort.onmessage, deps/react-dom_client.js) was already running when the key press came and held the main thread for 180 ms of that wait, and React rendered an earlier update inside it: 172 ms re-rendering Preview. Making Preview cheaper to render, or splitting it up, is what shortens this wait, not deferring it more: React already ran it in a task of its own, and the key press still waited for it.',
+  );
+  // A render that ended within a frame of the task is still the task's.
+  assert.equal(report(key, [{ ...preview, at: 1176 }], busy({ ...task, duration: 170 }), []).explanation.blame.name, 'Preview');
+
+  // With no render on record the task keeps its own name, and the sentence is as it was.
+  const unseen = report(key, [], busy(task), []).explanation;
+  assert.deepEqual(unseen.blame, { kind: 'waiting', name: 'MessagePort.onmessage', detail: null, ms: 181, confidence: 'measured' });
+  assert.match(unseen.cause, /held the main thread for 180 ms of that wait\.$/);
+  // A page's own message handler with nothing rendered inside it is named as before.
+  assert.equal(report(key, [], busy({ ...task, source: 'app.js' }), []).explanation.blame.name, 'MessagePort.onmessage');
+  // A render that ended before the task began, or in a timer that ran after it, was not the task's. A render inside
+  // a timer is the timer's work, which the timer names. And a render too small to count says nothing of the task.
+  assert.equal(report(key, [{ ...preview, at: 985 }], busy(task), []).explanation.blame.name, 'MessagePort.onmessage');
+  const after = busy({ ...task, duration: 105 }, [])[0]!;
+  const timed = [{ ...after, scripts: [after.scripts[0]!, script('TimerHandler:setTimeout', 1101, 75), after.scripts[1]!] }];
+  assert.equal(report(key, [{ ...preview, at: 1110 }], timed, []).explanation.blame.name, 'MessagePort.onmessage');
+  assert.equal(report(key, [{ ...preview, at: 1110 }], busy({ ...task, duration: 105 }), []).explanation.blame.name, 'Preview');
+  const tiny = { ...preview, total: 0.2, components: [{ name: 'Preview', count: 1, self: 0.2, total: 0.2 }] };
+  assert.equal(report(key, [tiny], busy(task), []).explanation.blame.name, 'MessagePort.onmessage');
+  assert.equal(report(key, [preview], busy({ ...task, invoker: 'TimerHandler:setTimeout', source: 'app.js' }), []).explanation.blame.name, 'TimerHandler:setTimeout');
+});
+
 test('a slow listener React did not attach is named by what the browser recorded for it', () => {
   // An undo shortcut bound on the document: the key's handlers ran from 7467 to 7672, React rendered
   // for 15 ms of that, and the browser charged 116 ms to the document's keydown listener.
