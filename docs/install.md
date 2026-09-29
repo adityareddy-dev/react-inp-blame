@@ -132,14 +132,6 @@ it beside your React plugin, not instead of it.
 `entry`, a module's path from the project root, is for a framework that writes its own HTML: that module gets
 the install as its first import instead, as the React Router, Remix and TanStack Start setups below show.
 
-### Numbers in development with Vite
-
-The dev server runs React's development build, slower than production, and create-vite's `src/main.tsx`
-wraps the app in `<StrictMode>`, which renders every component twice there. The badge marks that build `dev`
-and rates what it measured, as under Next.js ([Numbers in development](#numbers-in-development)). To check a
-number in production, keep `enabled: true` and `runtime: { overlay: 'query' }` as in the config above, run
-`vite build` and then `vite preview`, and open the page with `?inp-blame` in the URL.
-
 **A vendor chunk rule.** A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put
 this library in that chunk with react-dom, so the install script's import of the chunk ran react-dom before
 `install()` (seen on Vite 5.4.21, 6.4.3 and 7.3.6 with React 17, and on 7.3.6 with React 18). When
@@ -198,6 +190,14 @@ with the first, and a `manualChunks` rule sending `node_modules` to a vendor chu
 the plugin and the wrapper, which put the install in a file the page loads before its own. That settles the
 shared chunk, though not the vendor rule, as above. Anywhere else, check `stats().mode` and
 `debug.hook().renderers` in a built page once.
+
+### Numbers in development with Vite
+
+The dev server runs React's development build, slower than production, and create-vite's `src/main.tsx`
+wraps the app in `<StrictMode>`, which renders every component twice there. The badge marks that build `dev`
+and rates what it measured, as under Next.js ([Numbers in development](#numbers-in-development)). To check a
+number in production, keep `enabled: true` and `runtime: { overlay: 'query' }` as in the config above, run
+`vite build` and then `vite preview`, and open the page with `?inp-blame` in the URL.
 
 ## Install with React Router
 
