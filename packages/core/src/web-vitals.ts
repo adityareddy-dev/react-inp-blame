@@ -86,7 +86,7 @@ export interface ReactAttribution {
   readonly followUps: ReactRenderSummary;
   /** The build of react-dom that measured it, as the report says (`InteractionReport.reactBuild`): a development build's numbers run high, so drop or label them before they are forwarded. */
   readonly reactBuild: InteractionReport['reactBuild'];
-  /** Whether StrictMode rendered it twice, as the report says (`InteractionReport.strictMode`); null outside a development build. */
+  /** Whether StrictMode rendered it twice, as the report says (`InteractionReport.strictMode`), or null outside a development build. */
   readonly strictMode: boolean | null;
 }
 

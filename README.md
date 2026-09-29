@@ -88,6 +88,13 @@ defaults to `'development'`, so a production build carries nothing from either p
 build, show no badge by default, and the build prints a line saying it left the library out. The line on
 Next.js 15.3 to 16.2 stays in every build, but compiles to nothing in the ones `enabled` leaves out.
 
+**Numbers in development.** It is a development tool first, so most numbers you see come from React's
+development build, which is slower than production, and under `<StrictMode>` React renders every component
+twice there. The badge rates what it measured on the same scale, marks the build `dev`, and the panel says to
+check anything amber or red in a production build: add `enabled: true` and `runtime: { overlay: 'query' }`,
+run `next build` and `next start` or `vite build` and `vite preview`, and open the page with `?inp-blame`
+([Numbers in development](docs/install.md#numbers-in-development)).
+
 If you would rather read reports than look at a badge, drop `overlay` and subscribe:
 
 ```ts

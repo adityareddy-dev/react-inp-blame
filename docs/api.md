@@ -72,7 +72,7 @@ interface InteractionReport {
   pointerType: string | null;                            // 'mouse', 'pen' or 'touch' for a pointer's event
   reactStatus: 'reading' | 'waiting' | 'installed-late' | 'unreadable'; // stats().react as it was built
   reactBuild: 'development' | 'production' | 'profiling' | null; // development numbers run high: drop or label them
-  strictMode: boolean | null;                            // StrictMode rendered it twice; null outside a development build
+  strictMode: boolean | null;                            // whether StrictMode rendered it, null outside a development build
   start: number; end: number; duration: number; holdMs: number;             // ms, performance.now() clock
   inputDelay: number; processing: number; walkMs: number; presentation: number; // add up to duration
   nextInput: { type: string; pointerType: string | null; start: number; endedAt: number | null } | null; // next press before the paint
