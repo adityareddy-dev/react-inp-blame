@@ -259,11 +259,11 @@ a form field's `placeholder`, `aria-placeholder` or `name`, an input's `type`, `
 element's text is opt-in there, with `labels: 'text'`. What your code wrote goes out as written, though: an
 `aria-label`, `data-testid` or `id` built from user data, such as `` aria-label={`Message ${user.name}`} ``,
 lands in `target.label` or `target.selector`, and the label in the verdict. The page's URLs are kept whole, query
-string included, but a script's URL in a blame loses any password, query or fragment. Each report also goes out
-as a User Timing measure, with its verdict and label in the entry's `detail`, under a development build of React
-unless `devtoolsTrack` is `false`, and under any build where it is `true`. Any `PerformanceObserver` on the page
-sees it, a monitoring script that collects measures included. The details are under
-[labels and personal data](docs/api.md#labels-and-personal-data) in the API page.
+string included, but a script's URL in a blame loses any password, query or fragment. The details are under
+[labels and personal data](docs/api.md#labels-and-personal-data) in the API page. Each report also goes out as a
+User Timing measure, with its verdict and label in the entry's `detail`, under a development build of React
+unless [`devtoolsTrack`](docs/api.md#installoptions) is `false`, and under any build where it is `true`. Any
+`PerformanceObserver` on the page sees it, a monitoring script that collects measures included.
 
 ## Documentation
 
