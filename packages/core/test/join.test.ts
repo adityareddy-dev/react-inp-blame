@@ -3398,12 +3398,25 @@ test('where a long frame lists no scripts, the time outside React is said to be 
   assert.deepEqual([larger.explanation.blame.kind, larger.explanation.blame.name], ['render', 'TeamModal']);
   assert.match(larger.explanation.cause, / 265 ms outside React's render is not accounted for: /);
   assert.ok(!larger.explanation.notes.some((n) => n.startsWith("Time in TeamModal's own render")), larger.explanation.notes.join('\n'));
+  // Beside a render too small to take it, the handler keeps the verdict, but as a reading, with why it is one.
+  const small = report(
+    [entry('click', 1000, 368, 1001, 1366)],
+    [commit(1360, 1000, { total: 3, rendered: 3, roots: ['TeamModal'], hotPath: ['TeamModal'], components: [{ name: 'Avatar', count: 2, self: 2, total: 2 }, { name: 'TeamModal', count: 1, self: 1, total: 3 }], startedAt: 1357 })],
+    [frame(1000, 365, [])],
+    [input(1000, 'click', { target: element('button', [text('Team')]) as unknown as Node, owners: ['TeamPage'], handler: 'onClick' })],
+  );
+  assert.deepEqual(small.explanation.blame, { kind: 'handler', name: 'onClick', detail: 'TeamPage', ms: 362, confidence: 'inferred' });
+  assert.equal(
+    small.explanation.cause,
+    "The onClick handler most likely took about 362 ms; React's own render took only 3 ms. The browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.",
+  );
 
   // With a script listed, or no frame long enough to have listed one, the handler is said as before.
   const listed = openModal(214, [script('DIV#root.onclick', 1002, 10)]);
   assert.match(listed.explanation.cause, /On top of that, the onClick handler ran for about 151 ms\./);
   const short = openModal(100, [], 40);
   assert.equal(short.explanation.blame.kind, 'handler');
+  assert.equal(short.explanation.blame.confidence, 'measured');
 });
 
 test('a few milliseconds of committing do not make a small render outrank a wait', () => {

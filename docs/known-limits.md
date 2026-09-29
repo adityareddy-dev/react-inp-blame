@@ -84,8 +84,10 @@
   handler that is one setState. The same click under Turbopack measured the layout. Why webpack's dev frames
   list no scripts is not verified (its eval'd modules are the guess). Where every frame over the handlers lists
   none and one of them is 50 ms or longer, the time outside React's render is said to be not accounted for,
-  the handler does not take the verdict from a render on it, and a development build warns once, at the second
-  such interaction ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
+  and the handler does not take the verdict from a render on it. Beside a render too small to take it, the
+  handler still does, as inferred, with the reason in the sentence. A development build warns once, at the
+  second such interaction whose handlers ran for 50 ms or more
+  ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
 - **A listener React did not attach is blamed only where it is known not to be React's own.** A tag
   manager's click listener on the document that took most of a click is a `'script'` blame where a
   development build keeps React's listener named, or where React's listener is in the same frame, known by

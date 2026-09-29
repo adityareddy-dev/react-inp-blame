@@ -2144,7 +2144,8 @@ function explain(r: InteractionReport): Explanation {
   // a handler that is one setState, under a dev server whose frames listed no scripts. It is said as unaccounted
   // for instead, and never takes the verdict from a render that would have had it.
   const unlisted = listsNoScripts(frames, processingStart, processingEnd);
-  const unaccounted = ` ${ms(outside)} outside React's render is not accounted for: the browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.`;
+  const noScripts = 'the browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.';
+  const unaccounted = ` ${ms(outside)} outside React's render is not accounted for: ${noScripts}`;
   const handlerWins = outsideMatters && (outside > reactTime || !renderMatters) && !(unlisted && renderMatters);
   // A listener React did not attach (a shortcut bound on the document, a tag manager's, a library's own) is what
   // the handler's time went on where it holds most of it and is known not to be React's own listener, which runs
@@ -2470,7 +2471,12 @@ function explain(r: InteractionReport): Explanation {
       cause = otherListenerCause(otherListener, scriptConfidence, rest) + also;
       blame = { kind: 'script', name: listenerName(otherListener.script), detail: null, ms: otherListener.ms, confidence: scriptConfidence };
     } else {
-      cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
+      // Beside a small render, the time is still the handler's likelier than not, but with no script listed it is
+      // not measured, and the sentence says why. Where React rendered nothing, no effect ran to force a layout.
+      const layoutUntold = unlisted && !!c;
+      const handlerConfidence = layoutUntold ? 'inferred' : confidence;
+      cause = say(handlerConfidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
+      if (layoutUntold) cause += ` ${cap(noScripts)}`;
       // With no React name, "code outside React" sends nobody anywhere. The browser still says which listener
       // it ran and from which file, so the sentence passes that on as what the browser recorded. It is not
       // said to be the 190 ms: the script's time can hold React's render too.
@@ -2479,7 +2485,7 @@ function explain(r: InteractionReport): Explanation {
       // tree, so it goes without the target's component.
       blame = otherListener
         ? { kind: 'script', name: listenerName(otherListener.script), detail: null, ms: otherListener.ms, confidence }
-        : { kind: 'handler', name: handlerName ?? (listenerHolds ? scriptName(listener.script) : null), detail: listenerHolds && !handlerName ? null : component, ms: outside, confidence };
+        : { kind: 'handler', name: handlerName ?? (listenerHolds ? scriptName(listener.script) : null), detail: listenerHolds && !handlerName ? null : component, ms: outside, confidence: handlerConfidence };
     }
   } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
     saidAcross = rc;
