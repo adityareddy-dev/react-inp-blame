@@ -1346,6 +1346,9 @@ unless the script is React's own task, which Long Animation Frames names `Messag
 screen update did not outrank the working time: that render is one the handlers scheduled, a transition
 started from the click, and it stays the interaction's render. The sentence still says React rendered inside
 that task, or the task reads as a script that held the screen update, and not as the render the verdict names.
+Where the screen update did outrank the working time, the `painting` blame names the component that render is
+named after and not the task, since 2026-09-28. On a phone the cascading effect's row had read "screen took
+148 ms to update · MessagePort.onmessage", in bold the name of React's scheduler, which no page ever writes.
 A render is inside a script where its commit is stamped, give or take a millisecond, only where no other script
 the browser recorded holds the stamp, one on the tick a script ends and the next begins being the first one's,
 as for the forced layout's commits: taken a millisecond wide regardless, a production render committed at the
@@ -1624,17 +1627,16 @@ the components that rendered before and after the paint. It is plain DOM in a sh
 report, and the page's own clicks on it are dropped before they become reports and left out
 of the INP it shows (below). Its code arrives by dynamic `import()` after `install()` has
 returned, so a page that never shows it never downloads it, and `mountOverlay()` returns a
-promise of a handle of the caller's own.
-The badge goes when the last of those is disposed, handles from other copies of this version
-or later included, so a component can show it from an effect under StrictMode, whose cleanup
-runs between two mounts, and a load that failed is tried again at the next call. The blame line
-comes from `explanation.blame`, a data twin of the cause sentence decided in the same
-branch, so the short and the long form never disagree. Since 2026-09-28 it wraps: cut to one
-line with an ellipsis, in a panel 372 px wide, it lost the very name it is there to give,
-"browser recalculated styles and layout · 315 ms in LayoutT…" on a phone, and opening the row
-did not bring it back. On a touch screen, or one 480 px wide or less, the close button and Clear
-are at least 44 px each way, which a finger needs. Clear was 24 by 15 up to 0.18.0, the close
-button 40 by 40. Page INP, on the badge, in the panel
+promise of a handle of the caller's own. The badge goes when the last of those is disposed,
+handles from other copies of this version or later included, so a component can show it from an
+effect under StrictMode, whose cleanup runs between two mounts, and a load that failed is tried
+again at the next call. The blame line comes from `explanation.blame`, a data twin of the cause
+sentence decided in the same branch, so the short and the long form never disagree. Since
+2026-09-28 it wraps: cut to one line with an ellipsis, in a panel 372 px wide, it lost the very
+name it is there to give, "browser recalculated styles and layout · 315 ms in LayoutT…" on a
+phone, and opening the row did not bring it back. On a touch screen, or one 480 px wide or
+less, the close button and Clear are at least 44 px each way, which a finger needs. Clear was
+24 by 15 up to 0.18.0, the close button 40 by 40. Page INP, on the badge, in the panel
 head and from `api.inp()`, is the web-vitals estimate computed in-library, with no web-vitals
 dependency: the interaction count is `performance.interactionCount` where the browser has
 it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
@@ -1688,20 +1690,27 @@ that copy and this estimate can point at different interactions.
 Since 2026-09-28 the clicks, taps and key presses on the badge and panel are left out of the INP
 estimate too, not only out of the reports. On a Pixel 7 emulator running Chrome 124, opening the
 panel took 104 ms after a 56 ms tap on `#fine` was the page's only one: `inp()` moved to the
-panel's tap with a null `report`, the head read 104 ms with no "from click on" above a single
-56 ms row, and one real tap showed as 3 interactions. Each batch now asks, before INP counts it,
+panel's tap with a null `report`, the head read 104 ms with no "from click on" above a single 56
+ms row, and one real tap showed as 3 interactions. Each batch now asks, before INP counts it,
 whether an interaction's entries so far land on `#react-inp-blame`, the same test that keeps it
 from becoming a report. The tracker's `leaveOut` then keeps it from ever being a candidate and
-takes it off the count, once, whether that count is `performance.interactionCount` or the id
-spacing: it moves up the base the count starts from, as a reset does. A tap there too quick to
-send an entry, under 16 ms, stays in the count, since nothing says where it landed. `apps/demo/e2e/phone.spec.ts` taps `#fine`, opens, closes
+takes it off the count once, where the count holds it: it moves up the base the count starts
+from, as a reset does. `performance.interactionCount` takes a tap at its release, before any
+entry of it comes, so a tap that began before the last reset is in that base already. The
+panel's Clear tap is one, since its click handler clears after the browser counted it. Taken off
+again when its entries came, it made one real tap after Clear read "0 interactions". The id
+spacing holds a tap once an `event` entry of it widens the spacing, so one that sent only its
+`first-input` entry, the panel closed quickly as the page's first tap, does not come off a count
+that never held it. A tap there too quick to send an entry, under 16 ms, stays in the count,
+since nothing says where it landed. `apps/demo/e2e/phone.spec.ts` taps `#fine`, opens, closes
 and opens the panel on the Pixel 7 project, and checks that INP stays on the tap and that the
-count is the browser's less the panel's taps that sent an entry. WebKit on the iPhone project
+count is the browser's less the panel's taps that sent an entry. It then taps Clear and `#fine`,
+and checks that INP is that tap, counted as 1 interaction. WebKit on the iPhone project
 paints all of those taps under 16 ms, so there is nothing to leave out and the check is skipped.
 The panel's `backdrop-filter` went at the same time, a cost on a phone's GPU at every open, and
-the panel and its sticky header became opaque. The blur had been hiding the 3% of the page that a
-97% background let through, and without it the page's buttons could be read behind the rows, as
-the rows could behind the header's 98% as they scrolled under it.
+the panel and its sticky header became opaque. The blur had been hiding the 3% of the page that
+a 97% background let through, and without it the page's buttons could be read behind the rows,
+as the rows could behind the header's 98% as they scrolled under it.
 
 **Production builds and small renders.** Without durations, a 10-component render can win
 the blame over a 260 ms handler. Since 2026-09-14 a render only earns it in production when it
