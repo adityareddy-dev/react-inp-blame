@@ -55,6 +55,13 @@ Component names in production need the `displayName` transform (the
 or the [loader](install.md#webpack-or-rspack)). Without it the minifier has renamed them and the path reads
 `a > b (button.tile)`.
 
+A production build of React times no renders, so between a handler and the render beside it the blame there
+rests on the component count, and `blame.confidence` is `'inferred'`. That pick has gone both ways: a dark
+mode toggle whose 163 ms were 40 card renders read as the handler, and a sort whose time was the handler read
+as the 401 components it re-rendered. The cause names both where only the count chose. So send `blame.name`
+with its confidence and chart the two apart, or send the name only where the confidence is `'measured'`.
+A [profiling build](known-limits.md) turns those into measured blames.
+
 ## Sending it to Sentry
 
 Sentry records INP on its own, as a span, but that span carries no interaction id, so nothing ties this
