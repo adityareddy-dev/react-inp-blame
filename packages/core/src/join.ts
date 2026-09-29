@@ -2560,9 +2560,9 @@ function explain(r: InteractionReport): Explanation {
       const already = s.start < r.start - STAMP_TOLERANCE;
       const what = aScript(s);
       const rendering = heldBy ? `, and React rendered an earlier update inside it: ${heldBy.hasDurations ? `${ms(heldBy.total)} ` : ''}${renderPhrase(heldBy)}` : '';
-      const helps = heldName
-        ? ` Making ${heldName} cheaper to render, or splitting it up, is what shortens this wait${s.invoker === REACT_TASK ? `, not deferring it more: React already ran it in a task of its own, and the ${kind} still waited for it` : ''}.`
-        : '';
+      // Not "defer it more": React's task can hold a plain update from a fetch or an effect, not only a deferred one,
+      // and the commit's priority cannot tell a transition from those.
+      const helps = heldName ? ` Making ${heldName} cheaper to render, or splitting it up, is what shortens this wait.` : '';
       cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: ${what} ${already ? `was already running when the ${kind} came and` : 'ran first and'} held the main thread for ${Math.round(behind.ms) >= Math.round(r.inputDelay) ? 'all' : ms(behind.ms)} of that wait${rendering}.${helps}`;
     } else {
       cause = `The ${kind} waited ${ms(r.inputDelay)} before its handler could start: the main thread was busy with something else.`;

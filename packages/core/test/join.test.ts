@@ -2906,7 +2906,7 @@ test("a key press that waited behind React's own task is blamed on the component
   assert.deepEqual(deferred.blame, { kind: 'waiting', name: 'Preview', detail: null, ms: 181, confidence: 'measured' });
   assert.equal(
     deferred.cause,
-    'The key press waited 181 ms before its handler could start: a script (MessagePort.onmessage, deps/react-dom_client.js) was already running when the key press came and held the main thread for 180 ms of that wait, and React rendered an earlier update inside it: 172 ms re-rendering Preview. Making Preview cheaper to render, or splitting it up, is what shortens this wait, not deferring it more: React already ran it in a task of its own, and the key press still waited for it.',
+    'The key press waited 181 ms before its handler could start: a script (MessagePort.onmessage, deps/react-dom_client.js) was already running when the key press came and held the main thread for 180 ms of that wait, and React rendered an earlier update inside it: 172 ms re-rendering Preview. Making Preview cheaper to render, or splitting it up, is what shortens this wait.',
   );
   // A render that ended within a frame of the task is still the task's.
   assert.equal(report(key, [{ ...preview, at: 1176 }], busy({ ...task, duration: 170 }), []).explanation.blame.name, 'Preview');

@@ -1444,7 +1444,9 @@ the same rule: where the script the input waited behind is React's task or liste
 saw ended in it, or within a frame after it, the blame names that render's component. Typing fast into a bio
 whose Preview reads `useDeferredValue` had read "waited 181 ms · MessagePort.onmessage" three keys running,
 just as the developer checked whether React's own fix had worked. It now reads Preview, and the sentence says
-that making Preview cheaper or splitting it helps, not deferring it more. That render is none of the
+that making Preview cheaper or splitting it helps. It does not say the render was deferred: React's task
+also runs a plain update set from a fetch or an effect, which a transition could split, and a commit's
+priority does not tell a transition from one. That render is none of the
 interaction's, so buildReport keeps the commits that ended while the input waited beside the report, as it
 keeps the page's roots. The task is known by its invoker alone, as in the painting rung, so the two cannot
 disagree on one script, and a page's own `MessagePort` message that rendered is named after its render too.
