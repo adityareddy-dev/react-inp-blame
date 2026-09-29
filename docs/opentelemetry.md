@@ -191,7 +191,7 @@ build.
 | `react_inp_blame.status` | Whether a report was found, below | `matched` | yes |
 | `react_inp_blame.blame.kind` | Where the time mostly went: `render`, `handler`, `hydration`, `layout`, `waiting`, `painting`, `script` or `none` | `render` | yes |
 | `react_inp_blame.blame.name` | The component, handler or script it went to | `OrderSummary` | yes |
-| `react_inp_blame.blame.detail` | What that was mostly made of | `LineItem ×800` | no, it is for reading |
+| `react_inp_blame.blame.detail` | What that was mostly made of | `LineItem ×800` | no, it is display text, whose wording can change in any minor |
 | `react_inp_blame.blame.ms` | How much of the interaction it accounts for, in ms. Left out where the build records no durations | `167.5999999998603` | no |
 | `react_inp_blame.blame.confidence` | `measured` or `inferred` | `measured` | yes |
 | `react_inp_blame.handler` | The React handler that ran | `add` | yes |
@@ -219,10 +219,11 @@ and the loader add wherever they run, `runtime: false` included
 a dashboard grouped on them starts over with each deploy. Everything but the names still groups cleanly
 there, `blame.kind` and the statuses first.
 
-`blame.name` follows what a report's blame names ([Blame](api.md#interactionreport)). Two kinds changed what
-they name in 0.19.0: a `painting` blame on React's own task names the component that render is named after,
-and a `layout` blame can name the component the render started from. A dashboard that groups by
-`blame.name` across that release sees those under their new names.
+`blame.name` follows what a report's blame names ([Blame](api.md#interactionreport)). Which name it gives can
+change in a minor as the reading gets better, and each release's notes list those changes under a heading of
+their own. Two kinds changed what they name in 0.19.0: a `painting` blame on React's own task names the
+component that render is named after, and a `layout` blame can name the component the render started from. A
+dashboard that groups by `blame.name` across that release sees those under their new names.
 
 ### Status
 
