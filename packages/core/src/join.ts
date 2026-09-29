@@ -125,11 +125,9 @@ const LABEL_CHARS = 40;
 const UNSEEN_TEXT_TAGS = ['noscript', 'script', 'style', 'template'];
 // Nodes the search for that first run of text looks at: enough to get past an icon, not to crawl a table.
 const LABEL_NODES = 32;
-// Nodes joined into that run once it starts, the separators between them counted: an interpolated
+// Siblings joined into that run once it starts, the separators between them counted: an interpolated
 // string is a handful of nodes, so a long row of them is a list, not a label.
 const RUN_NODES = 16;
-// Elements a run of text goes on through, as in `<mark>Oak</mark> Chair 1`. Any other element ends it.
-const INLINE_TAGS = ['b', 'i', 'em', 'strong', 'mark', 'span', 'small', 'code', 'kbd', 's', 'u', 'sub', 'sup', 'abbr', 'time'];
 // The elements a person types or picks a value in: one the page made editable, and one with a text field's
 // role. The text inside one is that value, so it is named the way a form field is. A mention chip an editor
 // marks contenteditable="false" is still inside the editor. The browser reads "FALSE" as "false", and a
@@ -140,7 +138,6 @@ const TYPED_IN = '[contenteditable]:not([contenteditable="false" i]),[role="text
 // it, a word in a line, and nothing in the markup says so, so it is looked for the way a control is, not
 // by a selector.
 const EDIT_CONTEXT_ANCESTORS = 5;
-const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 const COMMENT_NODE = 8;
 const PREFERRED = ['click', 'keydown', 'input', 'keypress', 'keyup', 'pointerup', 'mouseup', 'pointerdown', 'mousedown'];
@@ -1032,28 +1029,23 @@ function clip(text: string): string {
 
 /**
  * The first run of text inside `el`: its first text node with more than whitespace, joined to
- * the text after it (React renders `Add to cart ({n})` as three nodes) through inline elements such
- * as a `<mark>` a search result puts round what matched, stopping at any other element, at an element
- * straight after another, or once 40 characters are in hand.
+ * the text nodes right after it (React renders `Add to cart ({n})` as three), stopping once 40
+ * characters are in hand.
  */
 function firstText(el: Element): string {
   let node: Node | null = el.firstChild;
   for (let looked = 0; node && looked < LABEL_NODES; looked++) {
     if (node.nodeType === TEXT_NODE && /\S/.test(node.nodeValue ?? '')) {
-      // The run stays inside the block the text is in, the nearest element above it that is not inline.
-      let block = node.parentNode ?? el;
-      while (block !== el && block.parentNode && isInline(block)) block = block.parentNode;
       let text = node.nodeValue ?? '';
       let joined = 0;
-      for (let next = nextNode(node, block); next && joined < RUN_NODES && text.length < LABEL_CHARS; next = nextNode(next, block), joined++) {
+      for (let next = node.nextSibling; next && joined < RUN_NODES && text.length < LABEL_CHARS; next = next.nextSibling, joined++) {
         // Server-rendered HTML separates two adjacent text children with `<!-- -->`, a comment
         // holding a single space, so that hydration can tell them apart, and it stays in the DOM.
         // It is a separator inside one run of text, not the end of it: skipping it is what makes
         // the label read the same under Next.js as under a client-only render.
         if (next.nodeType === COMMENT_NODE) continue;
-        if (next.nodeType === TEXT_NODE) text += next.nodeValue ?? '';
-        // An element straight after another is a piece of its own, a count badge or a price beside a name.
-        else if (!isInline(next) || next.previousSibling?.nodeType === ELEMENT_NODE) break;
+        if (next.nodeType !== TEXT_NODE) break;
+        text += next.nodeValue ?? '';
       }
       return text;
     }
@@ -1061,8 +1053,6 @@ function firstText(el: Element): string {
   }
   return '';
 }
-
-const isInline = (node: Node): boolean => INLINE_TAGS.includes((node as Element).tagName?.toLowerCase() ?? '');
 
 /** The node after `node` in document order, without leaving `root`. */
 function nextNode(node: Node, root: Node): Node | null {
