@@ -1654,7 +1654,9 @@ reports after it are placed at the new URL, and the click that started it is nam
 effect would not do. React runs a transition's passive effects in a later task, and runs them first
 when a discrete event sets state, so a click that waited behind a slow commit would run the effect
 inside its own dispatch, be placed on the page it left and be named as the one that started the
-navigation.
+navigation. The component has to come before the `<Outlet />` too: React runs the layout effects of
+siblings in order, so after it a slow route's own would run first, and a click made during them would
+start before the announcement and be placed on the page it left.
 At each soft navigation and back/forward cache restore the INP estimate starts over from the
 interactions that began after it, and quiet interactions held so far are let go, so renders of the
 new page stamped with an input from before it cannot publish them. The App Router announces a push

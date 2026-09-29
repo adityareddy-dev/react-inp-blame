@@ -251,7 +251,7 @@ needs Vite 8.
 **Route changes.** React Router changes the route in the page, and only the Next.js App Router tells the
 library of that by itself. So that reports follow route changes, with the new URL in `navigationURL` and
 `navigationType: 'soft-navigation'`, and `inp()` and the badge start over at each, add this component, which
-calls [`announceNavigation`](api.md#announcenavigationurl), and render `<AnnounceNavigations />` beside
+calls [`announceNavigation`](api.md#announcenavigationurl), and render `<AnnounceNavigations />` before
 `<Outlet />` in the `App` of `app/root.tsx`:
 
 ```tsx
@@ -264,7 +264,8 @@ import { announceNavigation } from "react-inp-blame";
 // where React 18 warns about useLayoutEffect, it is useEffect, which never runs there either.
 const useCommitEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
-// Tells react-inp-blame each time React Router changes the route. Render it once, in the root route's App.
+// Tells react-inp-blame each time React Router changes the route. Render it once, before the Outlet in the root
+// route's App, so that it announces before the new route's own layout effects run.
 export function AnnounceNavigations() {
   const { key } = useLocation();
   const last = useRef(key);
@@ -279,13 +280,16 @@ export function AnnounceNavigations() {
 
 It announces from a layout effect, which runs as the new route commits, so the reports after it carry the new
 URL and `inp()` starts over. A click made while a slow route is still committing waits for that commit, and is
-placed on the new route. From a plain `useEffect` the call would come later, inside that click, and name it as
-the one that started the navigation. The click that did start it is not named in `startedNavigation` though,
-since React Router renders the new route in a transition, after the click. The same component works in data
-and declarative mode, anywhere inside the router. A change of query string alone counts as a navigation, as
-under the App Router. The import stays in every build, so a production build the plugin leaves the library out
-of still carries `announceNavigation`, about 0.3 KB gzipped, and there it does nothing. CI's copies of this
-app render it and check where each report is placed, under `react-router dev` and on the production build.
+placed on the new route. That needs the component before the `<Outlet />`: React runs the layout effects of
+siblings in order, so after it the new route's own would run first, and a click made while they ran would be
+placed on the page it left. From a plain `useEffect` the call would come later, inside that click, and name it
+as the one that started the navigation. The click that did start it is not named in `startedNavigation` though,
+since React Router renders the new route in a transition, after the click. The same component works in data and
+declarative mode, inside the router and ahead of the routes. A change of query string alone counts as a
+navigation, as under the App Router. The import stays in every build, so a production build the plugin leaves
+the library out of still carries `announceNavigation`, about 0.3 KB gzipped, and there it does nothing. CI's
+copies of this app render it and check where each report is placed, under `react-router dev` and on the
+production build.
 
 ## Install with Remix
 
