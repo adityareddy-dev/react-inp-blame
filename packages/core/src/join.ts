@@ -386,12 +386,16 @@ function ringInputs(inputs: readonly InputRecord[], stamps: readonly Stamp[]): I
   return inputs.filter((i) => ownInput(i, stamps, inputs));
 }
 
-/**
- * The pointer that made the named entry, from its input in the ring. WebKit gives a tap's click the pointerType
- * 'mouse', so a click takes a finger's or a pen's from the pointerdown of its own press.
- */
+/** The pointer that made the named entry, from its input in the ring. */
 function pointerOf(inputs: readonly InputRecord[], named: { name: string; startTime: number }): string | null {
-  const i = inputs.find((x) => x.type === named.name && near(x.ts, named.startTime));
+  return pointerOfInput(inputs, inputs.find((x) => x.type === named.name && near(x.ts, named.startTime)));
+}
+
+/**
+ * The pointer that made an input of the ring. WebKit gives a tap's click the pointerType 'mouse', so a click
+ * takes a finger's or a pen's from the pointerdown of its own press.
+ */
+function pointerOfInput(inputs: readonly InputRecord[], i: InputRecord | undefined): string | null {
   const down = i?.type === 'click' ? inputs.find((x) => x.type === 'pointerdown' && x.ts === i.gestureTs && (x.pointerType === 'touch' || x.pointerType === 'pen')) : undefined;
   return down?.pointerType || i?.pointerType || null;
 }
@@ -650,7 +654,7 @@ export function buildReport(
     processing: processingEnd - processingStart - walkMs,
     walkMs,
     presentation: end - processingEnd,
-    nextInput: next ? Object.freeze({ type: next.type, pointerType: next.pointerType || null, start: next.ts, endedAt: next.work.ownEndedAt > next.ts ? next.work.ownEndedAt : null }) : null,
+    nextInput: next ? Object.freeze({ type: next.type, pointerType: pointerOfInput(inputs, next), start: next.ts, endedAt: next.work.ownEndedAt > next.ts ? next.work.ownEndedAt : null }) : null,
     // A node that left the page has no control above it any more; the one found at dispatch labels it.
     // Labelled as it read at dispatch where the ring has that node: a handler can change the text.
     target: targetNode ? describeTarget(targetNode, owners, handler, labels, live ?? ring?.control ?? targetNode, ring && (!live || ring.target === live) ? ring.label : null) : null,

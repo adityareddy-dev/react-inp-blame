@@ -1333,11 +1333,13 @@ test("a next click whose pointerdown came before this press, or is not in the ri
       for (const [how, ring] of [
         ['down first', [input(940, 'pointerdown', { pointerType: 'mouse' }), key, input(1021, 'click', { gestureTs: 940, pointerType: 'mouse' })]],
         ['touched first', [input(940, 'pointerdown', { pointerType: 'touch' }), key, input(1021, 'click', { gestureTs: 940, pointerType: 'touch' })]],
+        // WebKit gives the same tap's click the pointerType 'mouse'.
+        ['touched first in WebKit', [input(940, 'pointerdown', { pointerType: 'touch' }), key, input(1021, 'click', { gestureTs: 940, pointerType: 'mouse' })]],
         ['no pointerdown', [key, input(1021, 'click', { pointerType: 'mouse' })]],
         ['down in the window', [key, input(1010, 'pointerdown', { pointerType: 'mouse' }), input(1021, 'click', { gestureTs: 1010, pointerType: 'mouse' })]],
       ] as const) {
         // A finger's click is the next tap.
-        assert.deepEqual(said(clicked(invoker, paint, ms, [...ring])), waited(invoker, paint, ms, how === 'touched first' ? 'tap' : 'click'), `${invoker}, ${paint} ms, ${how}`);
+        assert.deepEqual(said(clicked(invoker, paint, ms, [...ring])), waited(invoker, paint, ms, how.startsWith('touched first') ? 'tap' : 'click'), `${invoker}, ${paint} ms, ${how}`);
       }
     }
     // So on the tick the key's handlers ended, where that click's dispatch, queued behind them, runs.
