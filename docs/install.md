@@ -256,15 +256,19 @@ calls [`announceNavigation`](api.md#announcenavigationurl), and render `<Announc
 
 ```tsx
 // app/announce-navigations.tsx
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useLocation } from "react-router";
 import { announceNavigation } from "react-inp-blame";
+
+// A layout effect runs as the new route commits, before a click that waited behind that commit. On the server,
+// where React 18 warns about useLayoutEffect, it is useEffect, which never runs there either.
+const useCommitEffect = typeof document === "undefined" ? useEffect : useLayoutEffect;
 
 // Tells react-inp-blame each time React Router changes the route. Render it once, in the root route's App.
 export function AnnounceNavigations() {
   const { key } = useLocation();
   const last = useRef(key);
-  useEffect(() => {
+  useCommitEffect(() => {
     if (key === last.current) return; // the first page is the document's own navigation
     last.current = key;
     announceNavigation(window.location.href);
@@ -273,13 +277,15 @@ export function AnnounceNavigations() {
 }
 ```
 
-Its effect runs once the new route has rendered, so the reports after it carry the new URL and `inp()` starts
-over, but the click that started the navigation is not named in `startedNavigation`: React Router renders the
-new route in a transition, after the click. The same component works in data and declarative mode, anywhere
-inside the router. A change of query string alone counts as a navigation, as under the App Router. The import
-stays in every build, so a production build the plugin leaves the library out of still carries
-`announceNavigation`, about 0.3 KB gzipped, and there it does nothing. CI's copies of this app render it and
-check where each report is placed, under `react-router dev` and on the production build.
+It announces from a layout effect, which runs as the new route commits, so the reports after it carry the new
+URL and `inp()` starts over. A click made while a slow route is still committing waits for that commit, and is
+placed on the new route. From a plain `useEffect` the call would come later, inside that click, and name it as
+the one that started the navigation. The click that did start it is not named in `startedNavigation` though,
+since React Router renders the new route in a transition, after the click. The same component works in data
+and declarative mode, anywhere inside the router. A change of query string alone counts as a navigation, as
+under the App Router. The import stays in every build, so a production build the plugin leaves the library out
+of still carries `announceNavigation`, about 0.3 KB gzipped, and there it does nothing. CI's copies of this
+app render it and check where each report is placed, under `react-router dev` and on the production build.
 
 ## Install with Remix
 

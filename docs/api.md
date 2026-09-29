@@ -56,9 +56,11 @@ Tells the library that your router changed the route in the page, to `url`. Repo
 begin after it carry that URL in `navigationURL`, with `navigationType: 'soft-navigation'`, and `inp()` and
 the badge start over. Called while a click or key press is being dispatched, it is named on that interaction's
 report in `startedNavigation`, always with `type: 'push'`. The URL may be relative to the page, and should
-include any base path. It does nothing before `install()`, on a page the sample left out, in a production
-build the plugin left the library out of, on the server and under `react-server`, and it never throws. Under
-the Next.js App Router `withInpBlame` already announces each navigation, so do not call it there.
+include any base path. From a React effect, call it in `useLayoutEffect`: a `useEffect` can run later, inside
+the next click, and name that click as the one that started the navigation. It does nothing before
+`install()`, on a page the sample left out, in a production build the plugin left the library out of, on the
+server and under `react-server`, and it never throws. Under the Next.js App Router `withInpBlame` already
+announces each navigation, so do not call it there.
 [Install with React Router](install.md#install-with-react-router) and
 [Install with TanStack Start](install.md#install-with-tanstack-start) show where to call it.
 
