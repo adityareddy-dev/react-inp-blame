@@ -1135,6 +1135,16 @@ function renderedWhere(c: CommitSummary): string {
 }
 
 /**
+ * The component `renderPhrase` says the render went "from ... down" (`startName`): only where it counts fewer
+ * inside the component the commit is named after, and that is not the one rendered many times over, where
+ * it says how many are inside that one and names no start. Null where it names none.
+ */
+function fromName(c: CommitSummary): string | null {
+  const top = dominantComponent(c);
+  return insideCount(c) != null && !(top && top.count > 1 && top.name === leafOf(c)) ? startName(c) : null;
+}
+
+/**
  * "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "re-rendering 637
  * components inside TableBody (257 ms of it in TableBody's own render)" where one component's own render was
  * most of it (`ownRender`); "mounting" where most of the components were rendering for the first time;
@@ -2297,9 +2307,9 @@ function explain(r: InteractionReport): Explanation {
     // The subtree is the one the commit in the forcing scripts rendered, where the sentence found one.
     const own = read.commit ? (!unjoined && namesThisInteraction(read.commit) ? read.commit : null) : named;
     const inTheSubtree = !!own && read.inTheSubtree;
-    // The hot path says where the render went, not where the read was, so where it started at a component
-    // that holds the whole commit (`startName`) that is the subtree named, with the whole count.
-    const whole = own && insideCount(own) != null ? startName(own) : null;
+    // The hot path says where the render went, not where the read was, so where the sentence says it went
+    // from a component that holds the whole commit (`fromName`) that is the subtree named, with the whole count.
+    const whole = own ? fromName(own) : null;
     blame = {
       kind: 'layout',
       name: inTheSubtree ? (whole ?? leafOf(own)) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null,

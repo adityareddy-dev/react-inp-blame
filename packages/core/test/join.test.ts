@@ -4944,6 +4944,31 @@ test('a layout blame is named after the component the render started at where th
   assert.match(tab.cause, /1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper\./);
 });
 
+test('a layout blame names no start the cause does not, where the component rendered many times over is the one the render is named after', () => {
+  // A file tree of TreeNodes inside TreeNodes: the render started at Explorer, which holds all 502, and went
+  // down through TreeNode. The sentence says how many are inside TreeNode and how many of them are TreeNodes,
+  // with no "from Explorer down", so a blame named after Explorer would name a component the cause never does.
+  const tree = commit(60, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 502,
+    mounted: 0,
+    roots: ['Explorer'],
+    hotPath: ['Explorer', 'TreeNode', 'TreeNode', 'TreeNode'],
+    startRendered: 502,
+    pathRendered: 500,
+    components: [
+      { name: 'TreeNode', count: 500, self: null, total: null },
+      { name: 'Explorer', count: 1, self: null, total: null },
+    ],
+  });
+  const forced = [frame(0, 160, [script('BODY.onclick', 3.2, 101.8, 87)])];
+  const layout = report([entry('click', 0, 160, 3.2, 105)], [tree], forced, [input(0, 'click')]).explanation;
+  assert.deepEqual(layout.blame, { kind: 'layout', name: 'TreeNode', detail: 'TreeNode ×500', ms: 87, confidence: 'measured' });
+  assert.match(layout.cause, /re-rendering 502 components inside TreeNode \(500 of them\)\./);
+  assert.doesNotMatch(layout.cause, /Explorer/);
+});
+
 test('a render known only by its counts is not blamed under a long task of working time, and where no frame covered the click the styles and layout it forced are said to be unmeasured', () => {
   // Finishing a rectangle in excalidraw, production build: 2.6 ms of waiting, 2.8 of working time and 34.4
   // updating the screen. Releasing the pointer re-rendered the chrome, 149 components inside
