@@ -2123,9 +2123,28 @@ test("a layout's sentence does not say it was charged to the listener React disp
   assert.doesNotMatch(layoutIn('DIV#app.onclick', 2, { roots: [], named: true }, { name: 'dispatchDiscreteEvent', source: 'deps/react-dom_client.js' }).cause, /charged to/);
   // A root's listener nothing says is React's is said, as in 0.19.0: a listener that ran as the handler can be anyone's.
   assert.match(layoutIn('DIV#root.onclick', 2, { roots: [], named: false }).cause, /It was charged to DIV#root\.onclick\./);
-  // Nor the document's listener, wherever it ran.
-  assert.doesNotMatch(layoutIn('#document.onclick').cause, /charged to/);
-  assert.doesNotMatch(layoutIn('#document.onclick', 125).cause, /charged to/);
+  // Nor the document's listener, wherever it ran, where a root is the document (the Next.js App Router) or nothing
+  // says which roots the page has.
+  for (const page of [{ roots: ['#document'], named: false }, { roots: [], named: false }]) {
+    assert.doesNotMatch(layoutIn('#document.onclick', 2, page).cause, /charged to/);
+    assert.doesNotMatch(layoutIn('#document.onclick', 125, page).cause, /charged to/);
+  }
+  // Where no root is the document, its listener is a tag manager's or another script's, and is said, as in 0.19.0.
+  // So is one a development build does not name as React's, wherever the root is.
+  assert.match(layoutIn('#document.onclick').cause, /It was charged to #document\.onclick\./);
+  assert.match(layoutIn('#document.onclick', 2, { roots: ['#document'], named: true }).cause, /It was charged to #document\.onclick\./);
+  const shared = report(
+    [entry('click', 0, 200, 2, 190)],
+    [commit(3, 0, { total: 1, rendered: 3, roots: ['Toast'], hotPath: ['Toast'], components: [{ name: 'Toast', count: 1, self: 1, total: 1 }] })],
+    [frame(0, 200, [script('#document.onclick', 5, 90, 80), script('IntersectionObserver.callback', 100, 80, 60)])],
+    [input(0, 'click')],
+    'attributes',
+    [],
+    undefined,
+    undefined,
+    rootPage,
+  ).explanation;
+  assert.match(shared.cause, /80 ms of it was charged to #document\.onclick\./);
   // A script that is not the listener is still said, an observer's callback in the same window: it is where to look.
   assert.match(layoutIn('IntersectionObserver.callback', 25).cause, /It was charged to IntersectionObserver\.callback\./);
   // Where the blame is named after the listener, with no commit to name a subtree, the sentence says it, so the name

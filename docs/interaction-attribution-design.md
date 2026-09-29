@@ -1024,12 +1024,15 @@ The invoker goes in the sentence ("It was charged to `IntersectionObserver.callb
 it was charged to …" where it holds less), because a script that merely ran inside the same window
 is charged separately and looks identical from the React side, so the subtree alone can send a
 reader to a file with nothing to do with it. Up to 0.19.0 it went in either way. Since 0.20.0 it
-does not for the document's listener, or for React's own listener, told as the time between handlers
-tells it: its file is react-dom's, its function is dispatchDiscreteEvent or dispatchContinuousEvent,
-or, in a minified build, it listens on the container of a root the hook saw (`DIV#root.onclick`).
-That is the listener React dispatched the event from, and "It was charged to #document.onclick" is
-the answer the browser gives on its own, true and no help. A root's listener nothing marks as
-React's is still said, as it was up to 0.19.0. The frames keep the invoker either way, and the
+does not for React's own listener, told as the time between handlers tells it: its file is
+react-dom's, its function is dispatchDiscreteEvent or dispatchContinuousEvent, or, in a minified
+build, it listens on the container of a root the hook saw (`DIV#root.onclick`). The document's
+listener counts as React's where a root is the document, as under the Next.js App Router, or where
+the hook saw no root it could name, unless a development build names it as something else. That is
+the listener React dispatched the event from, and "It was charged to #document.onclick" is the
+answer the browser gives on its own, true and no help. A root's listener nothing marks as React's is
+still said, as it was up to 0.19.0, and so is the document's on a page whose roots are elsewhere,
+where it is a tag manager's or another script's. The frames keep the invoker either way, and the
 sentences after it say "the script that forced it". **Decided not to change the name on that
 basis**: in a minified build the only held signal is the invoker string against the roots the hook
 saw, and a library's listener wrapped around React's on the same container reads the same. The field
