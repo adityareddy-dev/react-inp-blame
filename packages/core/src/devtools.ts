@@ -1,5 +1,5 @@
-import { leafName } from './commits.js';
-import { blamedCommit, ms } from './join.js';
+import { heaviest, leafName } from './commits.js';
+import { ms } from './join.js';
 import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 import { parseReactVersion } from './version.js';
@@ -84,7 +84,7 @@ export function createTimeline(renderers: () => RendererInfo[]): Timeline {
 function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void {
   const x = r.explanation;
   // The commit the verdict's blame names, so the entry's name never contradicts its tooltip.
-  const main = blamedCommit(r);
+  const main = r.commits.length ? heaviest(r.commits) : null;
   const leaf = main ? (leafName(main) ?? '') : '';
   const properties: [string, string][] = [
     ['Total', ms(r.duration)],

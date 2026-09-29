@@ -1,4 +1,4 @@
-import { leafName } from './commits.js';
+import { heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { unexplainedReports } from './install-state.js';
 import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
@@ -249,7 +249,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   function more(r: InteractionReport): HTMLElement {
     const x = r.explanation;
     // Only a render with real work gets a component list; a status pill updating does not.
-    const main = blamedCommit(r);
+    const main = r.commits.length ? heaviest(r.commits) : null;
     const before = main && carriesWork(main) ? main : null;
     const later = laterRenderOf(r);
     const legend = x.phases.flatMap((p, i) => [swatch(`p${i}`, p), ...(p.parts ?? []).map((part) => swatch('ph', part))]);
