@@ -105,7 +105,7 @@ const CSS = `
 .x:hover { color: #fff; background: rgba(255,255,255,.08); }
 .row { padding: 11px 16px 12px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; }
 .row:hover { background: rgba(255,255,255,.035); }
-@media (pointer: coarse), (max-width: 480px) { .x { min-width: 40px; min-height: 40px; padding: 9px 12px; font-size: 20px; } .row { padding: 14px 16px; } }
+@media (pointer: coarse), (max-width: 480px) { .x, .foot button { min-width: 44px; min-height: 44px; } .x { padding: 9px 12px; font-size: 20px; } .panel .foot { padding: 0 8px 0 16px; } .row { padding: 14px 16px; } }
 .r1 { display: flex; align-items: center; gap: 8px; }
 .r1 .dot { width: 8px; height: 8px; box-shadow: none; }
 .r1 .t { flex: 1; font-weight: 600; font-size: 12.5px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
