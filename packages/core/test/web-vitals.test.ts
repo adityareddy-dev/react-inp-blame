@@ -244,10 +244,11 @@ test('an icon a script drew is placed by what React renders in the element now, 
   /**
    * The svg drawn in the div, when `now` is the tree on the screen and `before` the one from the render before,
    * each fiber paired with its other, and `cached` which of the div's fibers the div holds. `shape` is how
-   * React left the two trees: each fiber pointing at its own tree's parent; a commit elsewhere since, which
-   * bailed out at the header, leaving both its fibers one child list, and made the other root current; the
-   * div's two fibers both pointing at LikeButton's current one, as a bailout can leave them; or the header's
-   * child list from the render before cleared, as React clears it once it deleted a child from it.
+   * React left the two trees. In 'apart' each fiber points at its own tree's parent. In 'bailed out' a commit
+   * elsewhere since bailed out at the header, leaving both its fibers one child list, and made the other root
+   * current. In 'one parent' the div's two fibers both point at LikeButton's current one, as a bailout can
+   * leave them. In 'cleared' the header's child list from the render before is cleared, as React clears it
+   * once it deleted a child from it.
    */
   const drawnIn = (now: ReturnType<typeof tree>, before: ReturnType<typeof tree>, cached: 'now' | 'before', shape: 'apart' | 'bailed out' | 'one parent' | 'cleared') => {
     for (const key of Object.keys(now) as (keyof typeof now)[]) {
