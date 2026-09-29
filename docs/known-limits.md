@@ -83,11 +83,10 @@
   scripts in it, and the verdict read "On top of that, the onClick handler ran for about 151 ms" for a
   handler that is one setState. The same click under Turbopack measured the layout. Why webpack's dev frames
   list no scripts is not verified (its eval'd modules are the guess). Where every frame over the handlers lists
-  none and one of them is 50 ms or longer, the time outside React's render is said to be not accounted for,
-  and the handler does not take the verdict from a render on it. Beside a render too small to take it, the
-  handler still does, as inferred, with the reason in the sentence. A development build warns once, at the
-  second such interaction whose handlers ran for 50 ms or more
-  ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
+  none and one of them is 50 ms or longer, the time outside a render that has the verdict is said to be not
+  accounted for. Where that time outruns React's render, the handler still has the verdict, measured, though
+  it may have been a layout. A development build warns once, at the second such interaction whose handlers
+  ran for 50 ms or more ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
 - **The next press's work is told from the interaction's own by a listener of that press the browser
   recorded.** Typing or clicking fast, the frame an interaction paints in can hold the next press's handlers
   too, and Long Animation Frames lists only scripts over 5 ms, which in a React app often leaves out the next

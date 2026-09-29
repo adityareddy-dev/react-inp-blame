@@ -3283,7 +3283,7 @@ test('with long animation frames, React time and forced layout are not added tog
   assert.match(r.explanation.cause, /On top of that, .* ran for about 150 ms./);
 });
 
-test('where a long frame lists no scripts, the time outside React is said to be unaccounted for, not the handler\'s', () => {
+test('where a long frame lists no scripts, the time outside a render that has the verdict is said to be unaccounted for, not the handler\'s', () => {
   // A modal whose layout effect forces layout, under a dev server whose long animation frames list no scripts: the
   // onClick is one setState, and 151 ms of the 365 went nowhere the browser said.
   const openModal = (render: number, scripts: ScriptSummary[], duration = 365) =>
@@ -3301,24 +3301,25 @@ test('where a long frame lists no scripts, the time outside React is said to be 
   // The render outruns the time nothing accounts for, so the note on its own render still stands.
   assert.ok(r.explanation.notes.some((n) => n.startsWith("Time in TeamModal's own render")));
 
-  // Where that time outruns the render, the handler does not take the verdict on it, and the note on the render's
-  // own work is left out, since most of the time may not be the render's at all.
-  const larger = openModal(100, []);
-  assert.deepEqual([larger.explanation.blame.kind, larger.explanation.blame.name], ['render', 'TeamModal']);
-  assert.match(larger.explanation.cause, / 265 ms outside React's render is not accounted for: /);
-  assert.ok(!larger.explanation.notes.some((n) => n.startsWith("Time in TeamModal's own render")), larger.explanation.notes.join('\n'));
-  // Beside a render too small to take it, the handler keeps the verdict, but as a reading, with why it is one.
-  const small = report(
+  // Where a render with less time in its own render than nothing accounts for has the verdict, the note on that
+  // work is left out, since the time may not have been the render's at all.
+  const shared = report(
     [entry('click', 1000, 368, 1001, 1366)],
-    [commit(1360, 1000, { total: 3, rendered: 3, roots: ['TeamModal'], hotPath: ['TeamModal'], components: [{ name: 'Avatar', count: 2, self: 2, total: 2 }, { name: 'TeamModal', count: 1, self: 1, total: 3 }], startedAt: 1357 })],
+    [commit(1360, 1000, { total: 214, rendered: 3, roots: ['TeamModal'], hotPath: ['TeamModal'], components: [{ name: 'TeamModal', count: 1, self: 120, total: 214 }, { name: 'Avatar', count: 2, self: 94, total: 94 }], startedAt: 1146 })],
     [frame(1000, 365, [])],
     [input(1000, 'click', { target: element('button', [text('Team')]) as unknown as Node, owners: ['TeamPage'], handler: 'onClick' })],
   );
-  assert.deepEqual(small.explanation.blame, { kind: 'handler', name: 'onClick', detail: 'TeamPage', ms: 362, confidence: 'inferred' });
-  assert.equal(
-    small.explanation.cause,
-    "The onClick handler most likely took about 362 ms; React's own render took only 3 ms. The browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.",
-  );
+  assert.equal(shared.explanation.blame.kind, 'render');
+  assert.ok(!shared.explanation.notes.some((n) => n.startsWith("Time in TeamModal's own render")), shared.explanation.notes.join('\n'));
+
+  // Where that time outruns the render, the handler keeps the verdict, measured, as it would with a script listed:
+  // a render of a few milliseconds is no reason to take a 368 ms click's verdict from it.
+  for (const render of [100, 20, 6]) {
+    const larger = openModal(render, []).explanation;
+    assert.deepEqual([larger.blame.kind, larger.blame.name, larger.blame.ms, larger.blame.confidence], ['handler', 'onClick', 365 - render, 'measured'], `${render} ms`);
+    assert.match(larger.cause, new RegExp(`^The onClick handler ran for about ${365 - render} ms; `));
+    assert.doesNotMatch(larger.cause, /not accounted for/);
+  }
 
   // With a script listed, or no frame long enough to have listed one, the handler is said as before.
   const listed = openModal(214, [script('DIV#root.onclick', 1002, 10)]);

@@ -286,7 +286,7 @@ function installNow(opts: InstallOptions): Api {
       delivery ??= setTimeout(deliver, 0);
       if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', MINIFIED_NAMES_CONSOLE);
       if (unlisted.size < 2 && scriptsUnlisted(r) && unlisted.add(r.interactionId).size === 2) {
-        warnOnce('frames-without-scripts', "Long Animation Frames on this page list no scripts, so forced layout cannot be measured here. A verdict says the time outside React's render is not accounted for rather than put it on a handler.", 'frames-without-scripts', developmentBuild);
+        warnOnce('frames-without-scripts', "Long Animation Frames on this page list no scripts, so forced layout cannot be measured here. A handler a verdict names may have spent its time in a layout instead.", 'frames-without-scripts', developmentBuild);
       }
       drawWhenIdle(r);
     },

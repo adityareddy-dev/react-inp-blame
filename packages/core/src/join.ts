@@ -2116,13 +2116,13 @@ function explain(r: InteractionReport): Explanation {
   // The handler is the blame where it outruns all of React's time, or where React's time, whatever it
   // is, would not be the blame anyway: a 28 ms handler beside a 4 ms render and 24 ms of effects.
   // Where the long frames over the handlers list no script at all, nothing says the time outside React was the
-  // handler's: a modal that forced layout in a layout effect read "the onClick handler ran for about 151 ms" for
-  // a handler that is one setState, under a dev server whose frames listed no scripts. It is said as unaccounted
-  // for instead, and never takes the verdict from a render that would have had it.
+  // handler's: a modal that forced layout in a layout effect read "On top of that, the onClick handler ran for
+  // about 151 ms" beside its render, for a handler that is one setState, under a dev server whose frames listed
+  // no scripts. Beside a render that has the verdict, that time is said as unaccounted for instead. It does not
+  // take the verdict from the handler: a render of a few milliseconds took a 368 ms click's verdict that way.
   const unlisted = listsNoScripts(frames, processingStart, processingEnd);
-  const noScripts = 'the browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.';
-  const unaccounted = ` ${ms(outside)} outside React's render is not accounted for: ${noScripts}`;
-  const handlerWins = outsideMatters && (outside > reactTime || !renderMatters) && !(unlisted && renderMatters);
+  const unaccounted = ` ${ms(outside)} outside React's render is not accounted for: the browser listed no scripts for this frame, so a forced layout in an effect cannot be told apart from a slow handler.`;
+  const handlerWins = outsideMatters && (outside > reactTime || !renderMatters);
   // Forced layout is the one cost outside React the browser measures in every build, so it is weighed
   // against React's render rather than left as a footnote under it: `renderTotal` is 0 in a production
   // build, where a render the library only counted used to outrank a layout it had timed.
@@ -2425,12 +2425,7 @@ function explain(r: InteractionReport): Explanation {
     // totals, since the render named here need not be the commit that spent them.
     const spent = figures(committing, effects, totalsSaid);
     const also = spent.length ? ` React also spent ${spent.join(' and ')}${whereOf(c, totalsSaid)}.` : '';
-    // Beside a small render, the time is still the handler's likelier than not, but with no script listed it is
-    // not measured, and the sentence says why. Where React rendered nothing, no effect ran to force a layout.
-    const layoutUntold = unlisted && !!c;
-    const handlerConfidence = layoutUntold ? 'inferred' : confidence;
-    cause = say(handlerConfidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
-    if (layoutUntold) cause += ` ${cap(noScripts)}`;
+    cause = say(confidence, `${cap(outsideName)} ran for about ${ms(outside)}; ${rest}.${also}`, `${cap(outsideName)} ${HEDGE} took about ${ms(outside)}; ${rest}.${also}${profiling}`);
     // A listener React did not attach (a shortcut bound on the document, a library's own listener) has
     // no React name, and "code outside React" sends nobody anywhere. The browser still says which
     // listener it ran and from which file, so the sentence passes that on as what the browser
@@ -2442,7 +2437,7 @@ function explain(r: InteractionReport): Explanation {
     const blamedListener = listener && listener.ms >= WAITED_BEHIND_MIN_SHARE * outside ? listenerName : null;
     // The component is the target's, which is where a React handler lives. A listener on the document
     // lives nowhere in the tree, so a name that came from the browser goes without one.
-    blame = { kind: 'handler', name: handlerName ?? blamedListener, detail: blamedListener && !handlerName ? null : component, ms: outside, confidence: handlerConfidence };
+    blame = { kind: 'handler', name: handlerName ?? blamedListener, detail: blamedListener && !handlerName ? null : component, ms: outside, confidence };
   } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
     saidAcross = rc;
     const confidence = measuredFrom(rc);
