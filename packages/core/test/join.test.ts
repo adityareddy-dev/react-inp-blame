@@ -279,7 +279,7 @@ test('a report says whether StrictMode rendered it only under a development buil
   const strict = commit(140, 61, { strictMode: true });
   const plain = commit(140, 61, { strictMode: false });
   const built = (commits: CommitSummary[], build: InteractionReport['reactBuild']) => {
-    const r = buildReport(longPress, commits, [], [], 'attributes', [], undefined, 'reading', build);
+    const r = buildReport(longPress, commits, [], [], 'attributes', [], undefined, 'reading', undefined, build);
     return { reactBuild: r.reactBuild, strictMode: r.strictMode };
   };
   assert.deepEqual(built([strict], 'development'), { reactBuild: 'development', strictMode: true });
@@ -290,7 +290,7 @@ test('a report says whether StrictMode rendered it only under a development buil
   assert.deepEqual(built([], 'development'), { reactBuild: 'development', strictMode: null });
   assert.deepEqual(built([strict], null), { reactBuild: null, strictMode: null });
   // A revision keeps the build the report was measured on, and reads StrictMode from the commits it holds now.
-  const first = buildReport(longPress.slice(0, 1), [], [], [], 'attributes', [], undefined, 'reading', 'development');
+  const first = buildReport(longPress.slice(0, 1), [], [], [], 'attributes', [], undefined, 'reading', undefined, 'development');
   assert.equal(first.strictMode, null);
   const second = refreshReport(first, longPress, [strict], []);
   assert.deepEqual({ reactBuild: second.reactBuild, strictMode: second.strictMode }, { reactBuild: 'development', strictMode: true });

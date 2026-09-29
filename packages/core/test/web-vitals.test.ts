@@ -521,8 +521,8 @@ test('the attribution keeps every field web-vitals measured and adds one of its 
 
 test('the attribution says which build of react-dom measured it, so development numbers can be told apart before they are sent', (t) => {
   const reports = [
-    reportOf(CLICK, [commit({ strictMode: true })], [], [], 'attributes', [], undefined, 'reading', 'development'),
-    reportOf(CLICK, [commit({ strictMode: true })], [], [], 'attributes', [], undefined, 'reading', 'production'),
+    reportOf(CLICK, [commit({ strictMode: true })], [], [], 'attributes', [], undefined, 'reading', undefined, 'development'),
+    reportOf(CLICK, [commit({ strictMode: true })], [], [], 'attributes', [], undefined, 'reading', undefined, 'production'),
   ];
   const restore = installed(reports.slice(0, 1));
   const development = attributeINP(metricWithAttribution).react;
