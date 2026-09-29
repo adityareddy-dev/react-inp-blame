@@ -387,6 +387,30 @@ test("a tap on the library's own badge or panel is never reported, and INP and i
   assert.equal(life.inp()?.interactionCount, 2);
 });
 
+test("the panel's Clear tap is left out of the count once: the browser counted it before its handler cleared, so the count the estimate starts over from holds it", () => {
+  let count = 1;
+  let clock = 0;
+  const { life } = lifecycle({ interactionCount: () => count, now: () => clock });
+  life.onEntries([entry(7, 'click', 56)]);
+  count = 2;
+  life.onEntries([entry(14, 'click', 104, { target: elementWithId('react-inp-blame') })]);
+  // The browser counts a tap at its pointerup, and Clear's click handler runs after that.
+  count = 3;
+  clock = 21_050;
+  life.clear();
+  life.onEntries([entry(21, 'click', 64, { target: elementWithId('react-inp-blame') })]);
+  count = 4;
+  clock = 28_000;
+  life.onEntries([entry(28, 'click', 72)]);
+  assert.deepEqual(life.inp(), { value: 72, rating: 'good', interactionId: 28, interactionCount: 1, report: life.last() });
+  // A tap on the badge that began after the clear is not in that count, and still comes off it.
+  count = 5;
+  life.onEntries([entry(35, 'click', 120, { target: elementWithId('react-inp-blame') })]);
+  count = 6;
+  life.onEntries([entry(42, 'click', 48)]);
+  assert.deepEqual(life.inp(), { value: 72, rating: 'good', interactionId: 28, interactionCount: 2, report: life.reports()[0] });
+});
+
 test('an interaction whose report cannot be built goes to dropped on its own, and the others in its batch are still published', () => {
   const errors: unknown[] = [];
   const { life, published } = lifecycle({ dropped: (error) => errors.push(error) });

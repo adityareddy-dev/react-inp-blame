@@ -101,6 +101,30 @@ test('an interaction left out comes off the count made from id spacing too, and 
   assert.deepEqual(t.estimate(), { id: 42, value: 48, interactionCount: 1 });
 });
 
+test('an interaction left out with only its first-input entry does not come off a count made from id spacing, which never held it', () => {
+  const t = createInpTracker(null);
+  // Closing the panel as the page's first tap, quick enough that only its first-input entry exists.
+  t.leaveOut(7);
+  t.add([interaction(1, 8, 'first-input')]);
+  t.add([interaction(2, 56)]);
+  t.add([interaction(3, 48)]);
+  assert.deepEqual(t.estimate(), { id: 14, value: 56, interactionCount: 2 });
+});
+
+test('an interaction left out that began before a reset does not come off the native count again, since the reset counted from after it', () => {
+  let count = 1;
+  const t = createInpTracker(() => count);
+  t.add([interaction(1, 56)]);
+  // The panel's Clear tap: the browser counts it, its handler clears, then its entries come.
+  count = 2;
+  t.reset('clear');
+  t.leaveOut(14, true);
+  t.add([interaction(2, 64)]);
+  count = 3;
+  t.add([interaction(3, 72)]);
+  assert.deepEqual(t.estimate(), { id: 21, value: 72, interactionCount: 1 });
+});
+
 test('a batch is taken in the order its entries were presented, so equal latencies rank as they do in web-vitals', () => {
   const t = createInpTracker(null);
   // Delivered second-interaction first, but the first interaction's frame was presented earlier.

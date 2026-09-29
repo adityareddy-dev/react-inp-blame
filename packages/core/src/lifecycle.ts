@@ -105,6 +105,9 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
   const inp = createInpTracker(options.interactionCount);
   // When the navigation the page is on began: interactions that began earlier are not part of its INP.
   let navigationStart = 0;
+  // When the INP estimate last started over, at a navigation or `clear()`. The browser counts a tap at its
+  // release, so the panel's Clear tap is in the count it started over from before any entry of it comes.
+  let countFrom = 0;
   let spent = 0;
 
   /** Adds the time since `started` to the total, and returns it. */
@@ -234,7 +237,10 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       // built. The badge and panel's own taps are left out of it as they are of the reports: the browser
       // counts them, but they are not the page's, and on a phone opening the panel can take longer than its taps.
       alone(() => {
-        for (const [id, group] of byId) if (onOverlay((entriesById.get(id) ?? []).concat(group))) inp.leaveOut(id);
+        for (const [id, group] of byId) {
+          const entries = (entriesById.get(id) ?? []).concat(group);
+          if (onOverlay(entries)) inp.leaveOut(id, entries.some((e) => e.startTime < countFrom));
+        }
         inp.add(batch.filter((e) => e.startTime >= navigationStart));
       });
       spend(started);
@@ -292,6 +298,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
 
     onNavigation(start) {
       navigationStart = start;
+      countFrom = now();
       inp.reset('navigation');
       // Renders of the page it moves to, stamped with an input from before it, would otherwise publish
       // quiet interactions from the page it left as if they had caused them.
@@ -318,6 +325,7 @@ export function createLifecycle(options: LifecycleOptions): Lifecycle {
       published.length = 0;
       quiet.length = 0;
       entriesById.clear();
+      countFrom = now();
       inp.reset('clear');
     },
     spentMs: () => spent,
