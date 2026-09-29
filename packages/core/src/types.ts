@@ -558,8 +558,9 @@ export interface InteractionReport {
   readonly reactBuild: 'development' | 'production' | 'profiling' | null;
   /**
    * Whether a component React rendered for this interaction was under `<StrictMode>`, which renders each
-   * component twice in a development build, so about half of the render time is the second pass. Null
-   * unless `reactBuild` is 'development' and the report holds a commit, since no other build renders twice.
+   * component under it twice in a development build. It says nothing of how much of the render time that
+   * was. Null unless `reactBuild` is 'development' and the report holds a commit, since no other build
+   * renders twice.
    */
   readonly strictMode: boolean | null;
   /**
