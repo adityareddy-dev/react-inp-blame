@@ -970,6 +970,8 @@ test("where the working time was longer, the screen update's note says the frame
     ).explanation;
   assert.deepEqual(idleClick([]).blame, { kind: 'script', name: 'TimerHandler:setTimeout', detail: null, ms: 50, confidence: 'measured' });
   assert.deepEqual(idleClick([input(1100, 'pointerdown', tapped)]), idleClick([]));
+  // So with a next click whose pointerdown the ring does not have after this one, as in 0.18.0.
+  assert.deepEqual(idleClick([input(1100, 'click', tapped)]), idleClick([]));
   // And where the frame did wait on it, a 30 ms timer that ran after this key's handlers, before the next key came, is
   // the verdict under a 90 ms screen update, as the longest script of this key's own, and not under a 104 ms one,
   // where a script after the handlers takes it only from half of the screen update, with the next key or without.
@@ -1183,6 +1185,51 @@ test("where the working time was longer, the screen update's note says the frame
       assert.deepEqual(own.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, `${invoker}, ${entries.length} entries`);
       assert.deepEqual(unreleased(invoker, entries, pointers, [{ ...three, inputType: 'pointerdown' }], [...pressed, mouse]), own, `${invoker}, ${entries.length} entries`);
     }
+    // A next click whose button went down before the key has only its click in the ring, and is weighed as in 0.18.0:
+    // after a keydown with no keyup, its listener is still the key's script, and no note says the frame waited on it.
+    const keyOnly = [entry('keydown', 1000, 272, 1001, 1180)];
+    const alone = unreleased(invoker, keyOnly, keys, [three], [ring[0]!]);
+    const downFirst = [input(950, 'pointerdown', { pointerType: 'mouse' }), ring[0]!, input(1150, 'click', { gestureTs: 950, pointerType: 'mouse' })];
+    assert.deepEqual(unreleased(invoker, keyOnly, keys, [three], downFirst), alone, invoker);
+    // Nor does a key's listener after it, the key held down and repeating, start that click's work later.
+    assert.deepEqual(unreleased(invoker, keyOnly, [...keys, script('DIV#root.onkeydown', 1240, 6)], [three], downFirst).blame, alone.blame, invoker);
+  }
+});
+
+test("a next click whose pointerdown came before this press, or is not in the ring, holds the frame as in 0.18.0", () => {
+  // A key press with 18 ms of handlers, then the next click's listener after them. Where the ring has only that
+  // click, its button pressed before the key (a touch tap, or a held button) or its pointerdown not recorded, the
+  // listener is still that click's work: taken for the key's, a 36 ms `onclick` under a 40 ms screen update was named
+  // as the key's script, and under 76 ms the blame no longer said the frame waited on that click.
+  const three = commit(1015, 1000, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 3, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 3, self: null, total: null }] });
+  const key = input(1000, 'keydown');
+  const clicked = (invoker: string, paint: number, ms: number, ring: InputRecord[], at = 1022) =>
+    report(
+      [entry('keydown', 1000, 20 + paint, 1002, 1020)],
+      [three],
+      [frame(1000, 20 + paint, [script('DIV#root.onkeydown', 1002, 18), script(invoker, at, ms)])],
+      ring,
+    ).explanation;
+  const waited = (invoker: string, paint: number, ms: number) => ({
+    blame: { kind: 'painting', name: invoker, detail: null, ms: paint, confidence: 'measured' },
+    cause: `After the key press was handled, the screen took another ${paint} ms to update: the frame waited on the next click, which the page handled first. The longest script the browser recorded in that time was ${invoker} (app.js), ${ms} ms.`,
+    notes: [],
+  });
+  const said = (e: ReturnType<typeof clicked>) => ({ blame: e.blame, cause: e.cause, notes: e.notes });
+  for (const invoker of ['DIV#root.onclick', 'DIV#root.onpointerup', 'DIV#root.onmouseup', 'DIV#root.onmousedown']) {
+    for (const [paint, ms] of [[40, 36], [76, 56], [116, 70]]) {
+      for (const [how, ring] of [
+        ['down first', [input(940, 'pointerdown', { pointerType: 'mouse' }), key, input(1021, 'click', { gestureTs: 940, pointerType: 'mouse' })]],
+        ['touched first', [input(940, 'pointerdown', { pointerType: 'touch' }), key, input(1021, 'click', { gestureTs: 940, pointerType: 'touch' })]],
+        ['no pointerdown', [key, input(1021, 'click', { pointerType: 'mouse' })]],
+        ['down in the window', [key, input(1010, 'pointerdown', { pointerType: 'mouse' }), input(1021, 'click', { gestureTs: 1010, pointerType: 'mouse' })]],
+      ] as const) {
+        assert.deepEqual(said(clicked(invoker, paint, ms, [...ring])), waited(invoker, paint, ms), `${invoker}, ${paint} ms, ${how}`);
+      }
+    }
+    // So on the tick the key's handlers ended, where that click's dispatch, queued behind them, runs.
+    const early = clicked(invoker, 40, 36, [input(940, 'pointerdown', { pointerType: 'mouse' }), key, input(1019, 'click', { gestureTs: 940, pointerType: 'mouse' })], 1020);
+    assert.deepEqual(said(early), waited(invoker, 40, 36), invoker);
   }
 });
 
