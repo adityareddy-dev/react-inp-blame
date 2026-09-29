@@ -5,7 +5,7 @@ import type { CommitSummary, NavigationType, StartedNavigation } from './types.j
  * The navigations of a page, which reports are placed in: the document's own load, then each soft
  * navigation a router announces and each restore from the back/forward cache. Their names and values
  * are web-vitals' (`navigationURL`, `navigationType`), so a report lines up with the INP web-vitals
- * reports for the same navigation.
+ * reports for the same navigation. A report's URL keeps only the origin and path, so match on those.
  */
 
 /** One navigation of the page. */

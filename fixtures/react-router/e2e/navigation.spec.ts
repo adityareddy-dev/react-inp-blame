@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { counter, documentNavigation, open, reportsAfter } from "./page";
 
+// A report keeps a URL's origin and path: the page opens on /?inp-blame, and its reports say /.
+const withoutQuery = (url: string) => url.replace(/[?#].*$/, "");
+
 // app/announce-navigations.tsx is docs/install.md's block for route changes, rendered in the root route. React
 // Router renders a new route in a transition, after the click that started it, and the block's layout effect
 // announces as that route commits, with no input being dispatched: the reports after it are placed at the new
@@ -18,7 +21,7 @@ test("reports follow route changes, and the link click is placed on the page it 
   await page.mouse.click(5, 5);
   await page.getByRole("heading", { name: "Second page", exact: true }).waitFor();
   const [link, waited] = await reportsAfter(page, null, 2);
-  expect(link.place).toEqual({ navigationURL: home.url, navigationType: home.type, startedNavigation: null });
+  expect(link.place).toEqual({ navigationURL: withoutQuery(home.url), navigationType: home.type, startedNavigation: null });
   expect(waited.place).toEqual({ navigationURL: second, navigationType: "soft-navigation", startedNavigation: null });
 
   await page.getByRole("button", { name: "Slow", exact: true }).click();
@@ -31,7 +34,7 @@ test("reports follow route changes, and the link click is placed on the page it 
   const back = await page.evaluate(() => location.href);
   await counter(page, 0).click();
   const [counted] = await reportsAfter(page, slow.interactionId, 1);
-  expect(counted.place).toEqual({ navigationURL: back, navigationType: "soft-navigation", startedNavigation: null });
+  expect(counted.place).toEqual({ navigationURL: withoutQuery(back), navigationType: "soft-navigation", startedNavigation: null });
 
   expect(problems).toEqual([]);
 });
@@ -55,8 +58,8 @@ test("a navigation to the page it is on is not a route change", async ({ page })
   // paint, so the click after it is the counter's, which paints.
   await counter(page, 0).click();
   const [navigated, counted] = await reportsAfter(page, saved.interactionId, 2);
-  expect(navigated.place).toEqual({ navigationURL: home.url, navigationType: home.type, startedNavigation: null });
-  expect(counted.place).toEqual({ navigationURL: home.url, navigationType: home.type, startedNavigation: null });
+  expect(navigated.place).toEqual({ navigationURL: withoutQuery(home.url), navigationType: home.type, startedNavigation: null });
+  expect(counted.place).toEqual({ navigationURL: withoutQuery(home.url), navigationType: home.type, startedNavigation: null });
 
   expect(problems).toEqual([]);
 });
