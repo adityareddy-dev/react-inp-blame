@@ -28,7 +28,19 @@ test('a panel row reads as typing only for a key that typed into a field, and an
   assert.equal(titleFor(report('change', 'select "Size"', ['change'])), 'Typing in "Size"');
 
   assert.equal(titleFor(report('click', 'button "Close"', ['keydown', 'keypress', 'click'])), 'Click on "Close"');
-  assert.equal(titleFor(report('pointerup', 'button "Close"', ['pointerdown', 'pointerup', 'click'])), 'Click on "Close"');
+  assert.equal(titleFor({ ...report('pointerup', 'button "Close"', ['pointerdown', 'pointerup', 'click']), pointerType: 'mouse' }), 'Click on "Close"');
+});
+
+test("a panel row says tap for a finger's click and click for a mouse's", () => {
+  const pressed = (type: string, pointerType: string | null) => ({ ...report(type, 'button "Save"', [type]), pointerType });
+  assert.equal(titleFor(pressed('click', 'touch')), 'Tap on "Save"');
+  assert.equal(titleFor(pressed('click', 'pen')), 'Tap on "Save"');
+  assert.equal(titleFor(pressed('pointerdown', 'touch')), 'Tap on "Save"');
+  assert.equal(titleFor(pressed('click', 'mouse')), 'Click on "Save"');
+  assert.equal(titleFor(pressed('pointerup', 'mouse')), 'Click on "Save"');
+  // A key's click carries no pointer, and stays a click.
+  assert.equal(titleFor(pressed('click', null)), 'Click on "Save"');
+  assert.equal(titleFor({ ...pressed('click', 'touch'), target: null }), 'Tap');
 });
 
 test("the panel's line for a later render says what the render was made of in the verdict's words", () => {
