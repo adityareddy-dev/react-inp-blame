@@ -54,7 +54,9 @@ The harness only reads them, apart from its builds and what the steps below say.
 `21d713fc4947d2a08cc2136bb055889a61412ded`, in `clones/tt`). `examples/react/filters-fuzzy` is copied to
 `a/fz` (the `tt-fuzzy` app) and `examples/react/virtualized-rows` to `a/vr` (`tt-virtual`). The copies keep
 `node_modules` inside Windows' 260-character path limit. `patches/tt-fuzzy.patch` and `patches/tt-virtual.patch`
-go on in those folders:
+go on in those folders. Each one drops the react-scan script tag from `index.html`, seeds faker so every load
+gets the same rows, pins react-inp-blame, and has `vite.config.js` add `inpBlame` by `BENCH_CONFIG` and take
+its `outDir` from `BENCH_OUTDIR`.
 
 ```sh
 git clone https://github.com/TanStack/table.git clones/tt
@@ -62,9 +64,12 @@ git -C clones/tt checkout 21d713fc4947d2a08cc2136bb055889a61412ded
 mkdir a
 cp -r clones/tt/examples/react/filters-fuzzy a/fz
 cp -r clones/tt/examples/react/virtualized-rows a/vr
-(cd a/fz && git apply ../../patches/tt-fuzzy.patch)
-(cd a/vr && git apply ../../patches/tt-virtual.patch)
+(cd a/fz && git init -q && git apply ../../patches/tt-fuzzy.patch)
+(cd a/vr && git init -q && git apply ../../patches/tt-virtual.patch)
 ```
+
+The `git init -q` matters. Without a repository of its own, `git apply` in `a/fz` finds the react-inp-blame
+repository above it, reads the patch's paths from that repository's root, and skips every file without a word.
 
 **excalidraw** ([excalidraw/excalidraw](https://github.com/excalidraw/excalidraw) at
 `97c68dd371e13c017a8dcca49f8b3995ba7890a8`, in `clones/ex`). `patches/excalidraw.patch` goes on at the clone's
@@ -74,8 +79,11 @@ root (yarn 1 through corepack) before the first run.
 
 **The shadcn/ui docs site** ([shadcn-ui/ui](https://github.com/shadcn-ui/ui) at
 `a87a63b2ca25143d26c8bd0903e4e9bc77b3f824`, in `clones/ui`). `patches/shadcn-v4.patch` goes on at the
-clone's root. `shadcn-v4`, `shadcn-sheet` and `shadcn-sheet-phone` all use this clone and the builds
-`shadcn-v4` makes, so the two Sheet apps build nothing of their own.
+clone's root. In `apps/v4/next.config.mjs` it wraps the config in `withInpBlame` outermost, by
+`BENCH_CONFIG`, and takes `distDir` from `BENCH_OUTDIR`. It pins react-inp-blame in `apps/v4/package.json`
+and adds `apps/v4/tsconfig.registry-node.json`, which lets the registry build run under tsx rather than bun.
+`shadcn-v4`, `shadcn-sheet` and `shadcn-sheet-phone` all use this clone and the builds `shadcn-v4` makes, so
+the two Sheet apps build nothing of their own.
 
 **twenty** ([twentyhq/twenty](https://github.com/twentyhq/twenty) at
 `2feb94c3128e12a6cab9fb2dfec091c1b2d2f37e`, in `clones/twenty`, or wherever `TWENTY_ROOT` points). On
@@ -148,6 +156,9 @@ BENCH_CONFIG=b BENCH_OUTDIR=dist-f npx vite build
 git apply -R ../../patches/tt-virtual-sort.patch
 ```
 
+Always run `tt-virtual-fix` with `--no-build`. Without it, `run.mjs` builds F again in `a/vr` with the sort
+patch off, so F comes out the same as B.
+
 Two scripts read a results file and nothing else. `node steps.mjs results/<file>.json [app,app] [--verdicts]`
 prints each scripted step's slowest interaction and what configuration B blamed for it.
 `node before-after.mjs results/<file>.json` compares F with B for `tt-virtual-fix`, bootstrapped as
@@ -187,5 +198,5 @@ twenty's server listens on 3100, and the two containers on 5432 and 6379.
 
 `results/` gets a JSON file and its markdown report each time `run.mjs` runs, `report.md` a copy of the
 latest report, `state/` the saved sign-ins and twenty's setup logs, and `npm-lib/` the release
-`verify-lib.mjs` packs from npm. git ignores all four. A results file records paths on your machine, such as Chromium's and a
-tarball's, so look through it before sharing one.
+`verify-lib.mjs` packs from npm. git ignores all four. A results file records paths on your machine, such
+as Chromium's and a tarball's, so look through it before sharing one.
