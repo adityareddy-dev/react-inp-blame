@@ -413,17 +413,10 @@ uses, and one this library cannot read is left out. `strictMode` is read in the 
 `<StrictMode>` sets on the fibers under it (1 on React 17, StrictLegacyMode 8 on 18 and 19, read in each
 version's react-dom), on any component that rendered, and only in a development build's commits. It is
 said only under a development build, the one build that renders twice, and only for a report holding a
-commit. Where it is true and the blame is a render the build timed, a note says about half of React's
-render time is the second pass, with the time the cause gives: the total across commits where the cause
-leads with one, never the named commit's share and never `blame.ms`, which holds committing and effects
-too. It is left out where that time is under 1 ms, or under a quarter of the commit's useEffect time,
-where there is little worth halving. Committing does not count against it: a 40 ms render before 200 ms
-of layout effects still ran twice. A handler is not run twice (a sort handler read 2784 ms in
-development and 2400 on a profiling build), so no other blame gets the note, though a handler's cause
-gives React's render time as well. No number changes. The overlay reads the build from the hook's
-renderers rather than a report, so it shows before the first interaction: under a development react-dom
-the badge carries a small 'dev' mark and the panel head says to check anything amber or red in a
-production build, with a link to the install guide. The rating and its colour stay as measured.
+commit. The overlay reads the build from the hook's renderers rather than a report, so it shows before
+the first interaction: under a development react-dom the badge carries a small 'dev' mark and the panel
+head says to check anything amber or red in a production build, with a link to the install guide. The
+rating and its colour stay as measured.
 
 **Coarse clocks.** React times each component with `performance.now()`, which Chromium steps in
 0.1 ms and Firefox 148 and WebKit 26.4 step in whole milliseconds on a page without cross-origin
