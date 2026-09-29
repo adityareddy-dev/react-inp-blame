@@ -1183,7 +1183,7 @@ export function renderedCount(c: CommitSummary): string {
  * walk was cut both counts are lower bounds, and the one inside is said as one. Null where they are all of
  * them, and on a report an earlier release stored.
  */
-function insideCount(c: CommitSummary): number | null {
+export function insideCount(c: CommitSummary): number | null {
   return c.pathRendered != null && c.pathRendered < c.rendered ? c.pathRendered : null;
 }
 

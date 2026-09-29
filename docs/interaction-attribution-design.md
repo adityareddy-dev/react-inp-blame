@@ -1856,27 +1856,27 @@ commit lists it among what rendered. A render is named after where it went, and 
 that bailed out while the context consumers inside it rendered, so since 0.20.0 that row leads with
 the commit's one root where there is one, "PrefsProvider updated · ProductRow ×375 re-rendered
 inside ProductList", in place of "ProductList re-rendered", and the blame itself is unchanged. With
-no one component most of the commit, the count is the ones inside, "120 of 351 components", as the
-cause has it. A root that is the component said to have re-rendered, rows that each update from a
-store they read, is not said a second time. Since 2026-09-28 it wraps: cut to one line with an
-ellipsis, in a panel 372 px wide, it lost the very name it is there to give, "browser recalculated
-styles and layout · 315 ms in LayoutT…" on a phone, and opening the row did not bring it back. On a
-touch screen, or one 480 px wide or less, the close button and Clear are at least 44 px each way,
-which a finger needs. Clear was 24 by 15 up to 0.18.0, the close button 40 by 40. Page INP, on the
-badge, in the panel head and from `api.inp()`, is the web-vitals estimate computed in-library, with
-no web-vitals dependency: the interaction count is `performance.interactionCount` where the browser
-has it (Chromium 147, Firefox 148 and WebKit 26.4 all do), else the spacing of `event` entry ids
-(Chrome steps ids by 7); the 10 longest interactions are kept by their longest single entry; INP is
-the one at index `min(floor(count / 50), n - 1)` among the `n` kept, longest first, chosen as
-entries arrive and again when the page is hidden, which are the two moments web-vitals chooses at.
-At hide both observers first hand over what the browser has queued for them and not delivered yet,
-as web-vitals takes its own observer's entries then, so the interaction it reports at hide has a
-report here too. Long animation frames go first, so a report built then already holds its frame.
-After a soft navigation or a back/forward cache restore, interactions the browser counted but sent
-no entry for read as the 8 ms web-vitals stands in for them, with `interactionId: null`. It counts
-every interaction the observer sees at its 16 ms floor, plus the page's first input at any duration.
-The demo's own "Page INP so far" line reads the same call, so the page never shows two INPs that
-disagree.
+no one component most of the commit, or with more of it than rendered inside, the count is the ones
+inside, "120 of 351 components", as the cause has it. A root that is the component said to have
+re-rendered, rows that each update from a store they read, is not said a second time. Since
+2026-09-28 it wraps: cut to one line with an ellipsis, in a panel 372 px wide, it lost the very name
+it is there to give, "browser recalculated styles and layout · 315 ms in LayoutT…" on a phone, and
+opening the row did not bring it back. On a touch screen, or one 480 px wide or less, the close
+button and Clear are at least 44 px each way, which a finger needs. Clear was 24 by 15 up to 0.18.0,
+the close button 40 by 40. Page INP, on the badge, in the panel head and from `api.inp()`, is the
+web-vitals estimate computed in-library, with no web-vitals dependency: the interaction count is
+`performance.interactionCount` where the browser has it (Chromium 147, Firefox 148 and WebKit 26.4
+all do), else the spacing of `event` entry ids (Chrome steps ids by 7); the 10 longest interactions
+are kept by their longest single entry; INP is the one at index `min(floor(count / 50), n - 1)`
+among the `n` kept, longest first, chosen as entries arrive and again when the page is hidden, which
+are the two moments web-vitals chooses at. At hide both observers first hand over what the browser
+has queued for them and not delivered yet, as web-vitals takes its own observer's entries then, so
+the interaction it reports at hide has a report here too. Long animation frames go first, so a
+report built then already holds its frame. After a soft navigation or a back/forward cache restore,
+interactions the browser counted but sent no entry for read as the 8 ms web-vitals stands in for
+them, with `interactionId: null`. It counts every interaction the observer sees at its 16 ms floor,
+plus the page's first input at any duration. The demo's own "Page INP so far" line reads the same
+call, so the page never shows two INPs that disagree.
 
 Three details make it name the same interaction as web-vitals, not only the same number. Each
 observer batch is taken sorted by the time its entries were presented, the order web-vitals
