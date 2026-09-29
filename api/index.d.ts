@@ -1,0 +1,10 @@
+import { type Listener } from "./install-state.js";
+import type { OverlayHandle } from "./overlay.js";
+import type { Api, InstallOptions, OverlayOptions } from "./types.js";
+export type * from "./types.js";
+export type { InpEstimate } from "./inp.js";
+export type { OverlayHandle } from "./overlay.js";
+export { announceNavigation } from "./navigation.js";
+export declare function install(opts?: InstallOptions): Api;
+export declare function mountOverlay(opts?: OverlayOptions): Promise<OverlayHandle | null>;
+export declare function onInteraction(fn: Listener): () => void;
