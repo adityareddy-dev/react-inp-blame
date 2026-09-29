@@ -46,6 +46,12 @@
       "import": "./dist/web-vitals.js",
       "default": "./dist/web-vitals.js"
     },
+    "./otel": {
+      "types": "./dist/otel.d.ts",
+      "react-server": "./dist/react-server.js",
+      "import": "./dist/otel.js",
+      "default": "./dist/otel.js"
+    },
     "./vite": {
       "types": "./vite.d.mts",
       "import": "./vite.mjs",
@@ -69,6 +75,7 @@
       "next": ["./next.d.cts"],
       "next-client": ["./dist/next-client.d.ts"],
       "web-vitals": ["./dist/web-vitals.d.ts"],
+      "otel": ["./dist/otel.d.ts"],
       "vite": ["./vite.d.mts"],
       "astro": ["./astro.d.mts"],
       "display-names-loader": ["./display-names-loader.d.cts"]

@@ -38,6 +38,7 @@ const EXPECTED = {
   './next': { names: functions('withInpBlame') },
   './next-client': { names: functions('onRouterTransitionStart') },
   './web-vitals': { names: functions('generateTarget', 'attributeINP') },
+  './otel': { names: functions('inpBlameAttributes', 'InpBlameLogRecordProcessor') },
   './vite': { names: functions('inpBlame') },
   './astro': { names: functions('inpBlame') },
   './display-names-loader': { whole: 'function', names: functions('stamp') },

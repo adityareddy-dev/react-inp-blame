@@ -1,11 +1,12 @@
 /**
- * What `react-inp-blame`, `react-inp-blame/auto`, `react-inp-blame/next-client` and
- * `react-inp-blame/web-vitals` resolve to under the `react-server` export condition, which bundlers
- * set for the React Server Components graph. A server component has no page to measure, so every
- * export does nothing, and none of the browser code reaches the server bundle. The types stay those
- * of the browser entries.
+ * What `react-inp-blame`, `react-inp-blame/auto`, `react-inp-blame/next-client`,
+ * `react-inp-blame/web-vitals` and `react-inp-blame/otel` resolve to under the `react-server` export
+ * condition, which bundlers set for the React Server Components graph. A server component has no page
+ * to measure, so every export does nothing, and none of the browser code reaches the server bundle.
+ * The types stay those of the browser entries.
  */
 import { inertApi } from './inert.js';
+import type { InpBlameAttributes } from './otel.js';
 import type { Api } from './types.js';
 
 const api: Api = inertApi('none');
@@ -32,4 +33,20 @@ export function generateTarget(): undefined {
 
 export function attributeINP(): { react: null } {
   return { react: null };
+}
+
+export function inpBlameAttributes(): InpBlameAttributes {
+  return {};
+}
+
+export class InpBlameLogRecordProcessor {
+  onEmit(): void {}
+
+  forceFlush(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  shutdown(): Promise<void> {
+    return Promise.resolve();
+  }
 }
