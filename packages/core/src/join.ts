@@ -2248,7 +2248,11 @@ function explain(r: InteractionReport): Explanation {
     // The same test the rungs above were closed by, so one of the two always fires: a verdict cannot
     // be refused for the screen update and then fall past it.
     cause = `After the ${kind} was handled, the screen took another ${ms(r.presentation)} to update${lateScriptClause}`;
-    blame = { kind: 'painting', name: lateLeads ? scriptBlameName(lateLeads.script) : null, detail: null, ms: r.presentation, confidence: 'measured' };
+    // React's own task is named after the port its scheduler posts to, which nobody wrote: where React
+    // rendered inside it, the blame names that render's component, and the sentence still names the task.
+    // On a phone a cascading effect's 400 rows read "screen took 148 ms to update · MessagePort.onmessage".
+    const reactTaskRender = lateLeads?.script.invoker === REACT_TASK && lateRender ? leafName(lateRender) : null;
+    blame = { kind: 'painting', name: reactTaskRender ?? (lateLeads ? scriptBlameName(lateLeads.script) : null), detail: null, ms: r.presentation, confidence: 'measured' };
   } else if (unseen) {
     // No react-dom is read, so what React rendered for this input, if anything, is unknown, and with it
     // the split of the working time: a handler and the render its state update sets off run in one

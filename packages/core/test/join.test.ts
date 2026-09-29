@@ -4838,6 +4838,39 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   ]);
 });
 
+test("a screen update that took the blame for React's own task names the component React rendered inside it, not the task", () => {
+  // A cascading effect tapped on a phone: the click re-renders one component, and the state its effect sets
+  // renders 400 rows in React's next task, before the paint. The row read "screen took 132 ms to update ·
+  // MessagePort.onmessage", React's scheduler, which the page never wrote.
+  const cascade = (hasDurations: boolean, invoker = 'MessagePort.onmessage') =>
+    report(
+      [entry('pointerdown', 0, 16, 1, 2), entry('click', 20, 136, 21, 24)],
+      [
+        commit(23, 20, { rendered: 1, roots: ['CascadingEffect'], hotPath: ['CascadingEffect'], components: [{ name: 'CascadingEffect', count: 1, self: 0.3, total: 0.3 }], total: hasDurations ? 0.3 : 0, hasDurations }),
+        commit(120, 20, {
+          rendered: 401,
+          roots: ['CascadingEffect'],
+          hotPath: ['CascadingEffect'],
+          components: [{ name: 'Detail', count: 400, self: hasDurations ? 80 : null, total: hasDurations ? 80 : null }],
+          total: hasDurations ? 90 : 0,
+          hasDurations,
+          priority: 3,
+          startedAt: hasDurations ? 27 : null,
+        }),
+      ],
+      [frame(20, 136, [script('DIV#root.onclick', 21, 3), script(invoker, 26, 96)])],
+      [input(0, 'pointerdown'), input(20, 'click')],
+    ).explanation;
+  for (const hasDurations of [true, false]) {
+    const { blame, cause } = cascade(hasDurations);
+    assert.deepEqual(blame, { kind: 'painting', name: 'CascadingEffect', detail: null, ms: 132, confidence: 'measured' }, `durations: ${hasDurations}`);
+    // The sentence still says what ran, the task and the render inside it.
+    assert.match(cause, /^After the click was handled, the screen took another 132 ms to update, mostly because a script \(MessagePort\.onmessage, app\.js\) ran for 96 ms before the next frame, and React rendered inside it: /);
+  }
+  // A script the page wrote keeps the blame's name, whatever React rendered inside it.
+  assert.equal(cascade(true, 'DIV.onscroll').blame.name, 'DIV.onscroll');
+});
+
 test("a render stamped inside React's own task stays there, not in a longer script starting under a millisecond after it", () => {
   // handleSave ran from 1 to 61 ms, React's own task from 62 to 67.5 ms committed a production render of 800 rows at
   // 67 ms, and a timer ran from 68 to 90 ms. The stamp is a millisecond from the timer's start, and it was put in the
