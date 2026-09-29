@@ -225,8 +225,8 @@ and the flag on Node 24.19 and on older Jest, which were checked by hand.
 options it takes, and the shape of a report. Only a major release removes or renames an export, an entry point,
 an option or a report field, changes what a field holds or what an option does, changes a default, adds a value
 to one of the fixed sets of strings (a new `blame.kind`, a new `stats().mode`), or drops a version the table above
-lists. `schemaVersion` stays where 1.0.0 has it for all of 1.x, on a report and on the `react` object
-`attributeINP` adds.
+lists. `schemaVersion` stays where 1.0.0 has it for all of 1.x, on a report and on the `react` object that
+`react-inp-blame/web-vitals`' `attributeINP` adds.
 
 Until then the 0.x rules hold. A minor release, 0.14.0 after 0.13.0, can remove or rename an export or an
 option, change what a report field holds, or raise an oldest version in the table. The CHANGELOG says which
