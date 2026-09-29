@@ -551,10 +551,10 @@ or its preset already sets a `transform`, give the presets to its babel-jest ent
 one with `'\\.jsx?$'` as its key, so the `.ts` files stay with ts-jest. With Jest 30.4 or later on Node 24.9 or
 later, running Jest with `NODE_OPTIONS=--experimental-vm-modules` also works, with neither key.
 
-While on 0.x a minor release can break things (an export, an option, what a report field holds, an oldest
-version), and the CHANGELOG says which; `schemaVersion` on a report moves when a field is removed or changes
-meaning. A patch only fixes. The component a report blames, and its sentence, can change in any release as the
-verdict gets better. Fixes go into the latest release only.
+From 1.0.0 the package follows semantic versioning on its exports, their options and the shape of a report. A
+minor can change which component a report blames and any display text, and each release lists its blame
+changes. The rest, with the support window, is under
+[Versions](https://github.com/adityareddy-dev/react-inp-blame#versions).
 
 ## Size
 

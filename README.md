@@ -221,15 +221,48 @@ Jest loads the package as it is only from Jest 30.4 and only when run with
 on Jest 30, ts-jest 29, the Next.js `apps/next-demo` pins and Node 20.19, except a pnpm install, the `babel` key
 and the flag on Node 24.19 and on older Jest, which were checked by hand.
 
-**What a release can change while on 0.x.** A minor release, 0.14.0 after 0.13.0, can break things: remove or
-rename an export or an option, change what a report field holds, or raise an oldest version in the table. The
-CHANGELOG says which under Changed or Removed, and `schemaVersion` on a report moves when a field is removed or
-changes meaning. A patch release only fixes. From 1.0.0 on, those changes wait for 2.0.0.
+**What 1.x promises.** From 1.0.0 the package follows semantic versioning. That covers every export and the
+options it takes, and the shape of a report. Only a major release removes or renames an export, an entry point,
+an option or a report field, changes what a field holds or what an option does, changes a default, adds a value
+to one of the fixed sets of strings (a new `blame.kind`, a new `stats().mode`), or drops a version the table above
+lists. `schemaVersion` stays where 1.0.0 has it for all of 1.x, on a report and on the `react` object
+`attributeINP` adds.
 
-Which component a report blames, and the sentence that explains it, can change in any release, a patch
-included, as the verdict gets better. Don't key alerts or dashboards on the wording, or expect the same click to
-be blamed on the same component after an upgrade. Fixes, security ones included, go into the latest release on
-npm only ([SECURITY.md](SECURITY.md)).
+Until then the 0.x rules hold. A minor release, 0.14.0 after 0.13.0, can remove or rename an export or an
+option, change what a report field holds, or raise an oldest version in the table. The CHANGELOG says which
+under Changed or Removed, and `schemaVersion` on a report moves when a field is removed or changes meaning.
+
+A minor release can add exports, options, report fields and entry points. It can also change how a report reads
+an interaction: which kind, name and detail its blame gets, which components a report and `generateTarget` name,
+and any display text. That is how the verdict gets better. Display text is `headline`, `where`, `cause`, `notes`,
+the phases' `label` and `hint`, `verdict`, `blame.detail`, the words of `target.label`, console warnings, the
+Performance panel's entries, and the badge and panel. Show it, never parse it. What each kind means stays the
+same through 1.x ([Blame](docs/api.md#interactionreport)), and so does what each `labels` value may read. Each
+release's notes list its blame changes under a heading of their own, so a dashboard that groups by kind or name
+knows what moved.
+
+A patch release fixes bugs and security problems. It changes a blame only to undo a regression from the release
+before, and its notes list that too.
+
+Minor releases come at most once every two weeks. Anything deprecated keeps working through at least one minor,
+marked `@deprecated` and, where it runs, with a warning in development builds. Only a major removes it. Security
+fixes go into the latest minor, and into the minor before it for 90 days after the latest came out
+([SECURITY.md](SECURITY.md#versions)). Once 2.0.0 is out, the last 1.x minor counts as the one before it.
+
+`react-inp-blame/otel` is experimental. Its export names and the attribute names it sends can change in any minor,
+1.x included, until OpenTelemetry names these fields, and the CHANGELOG says so when they do. `api.debug` can
+change in any release. So can bundle size and the library's own time.
+
+**Support window.** 1.x supports what the table above lists at 1.0.0. A new major of React, Next.js, Vite or Astro
+comes in a minor, once CI runs it. Dropping anything the table lists waits for 2.0.0. The canaries run in CI every
+day but are not supported: a canary can break the library, and the fix comes in an ordinary release. The build
+plugins run on Node 20.19 and later through all of 1.x.
+
+Load one copy of the library per page. Two copies from different releases may refuse to share it, and the second
+says so in the console ([another-copy](#another-copy)).
+
+CI keeps a copy of the type declarations each entry point publishes, `/otel`'s included, and fails when a build's
+differ from it. No change to the surface goes out unseen, and the pull request that makes one says why.
 
 ## What it costs
 
