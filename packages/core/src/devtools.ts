@@ -89,7 +89,8 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
   const properties: [string, string][] = [
     ['Total', ms(r.duration)],
     ['Waiting before the handler', ms(r.inputDelay)],
-    ['Handlers and React rendering', ms(r.processing)],
+    // The tooltip's time to handle the input holds the library's own read, which the Summary gives on a row of its own.
+    ['Handlers and React rendering', r.walkMs > 0 ? `${ms(r.processing)}, not counting react-inp-blame itself` : ms(r.processing)],
     ['Updating the screen', ms(r.presentation)],
     ['Where', x.where || 'n/a'],
     ['Handler', r.target?.handler || 'n/a'],

@@ -2265,9 +2265,11 @@ function explain(r: InteractionReport): Explanation {
      * this library's read of what React rendered. That is the window the browser counted the forced
      * layout across, so it is the only one the layout can be subtracted from and leave a true
      * remainder. It is deliberately not `processing`, which has the library's own read taken back
-     * out of it and is what the Working phase and the walk note both report.
+     * out of it and is what the Working phase and the walk note both report. It is said as the time it
+     * took to handle the input, since what the browser spent is said inside it: "401 ms of the 474 ms
+     * spent handling the click" said spent twice.
      */
-    const window = `${ms(handledWindow)} spent handling the ${kind}`;
+    const window = `${ms(handledWindow)} it took to handle the ${kind}`;
     // What is left of that window bounds everything else in it, React's render included, which is the
     // whole of why this outranks a render the build never timed. Unless React's render is itself
     // timed higher than that remainder: the browser charges forced layout to the script it happened
@@ -2281,7 +2283,7 @@ function explain(r: InteractionReport): Explanation {
     const rest = overlapping
       ? "which overlaps React's own render: geometry read inside a render body is charged to both"
       : `leaving ${ms(left)} for React's render and commit, its layout effects${ourRead} and the ${kind} handler together`;
-    const spent = `${ms(forcedWhileHandling)} of the ${window} recalculating styles and layout, ${rest}`;
+    const spent = `${ms(forcedWhileHandling)} recalculating styles and layout, ${rest}`;
     // Where the layout happened and where React was working are two different records, and the
     // browser's is the one that is never a reading. Naming the subtree without it would point a
     // reader at a file that need have nothing to do with the layout: an observer callback running
@@ -2299,7 +2301,7 @@ function explain(r: InteractionReport): Explanation {
     const read = whereRead(whileHandling);
     // What forces a layout is said straight after the layout, and React's clause after that: put after the
     // clause, its "That happens" read as about the re-render.
-    cause = `${say(confidence, `The browser spent ${spent}.`, `The browser ${HEDGE} spent ${spent}.`)}${chargedTo} ${read.said}${rendered}`;
+    cause = `Of the ${window}, ${say(confidence, `the browser spent ${spent}.`, `the browser ${HEDGE} spent ${spent}.`)}${chargedTo} ${read.said}${rendered}`;
     // Nothing names the read that forced the layout. What is held is where it happened: the subtree
     // of the commit this interaction joined, or, failing that, the script the browser charged it to
     // — and that only while one script holds nearly all of it, since `ms` is the whole total and a

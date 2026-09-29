@@ -939,10 +939,11 @@ render and layout at 49 and 50 ms), when it is half the window it was counted ac
 time plus this library's own walk, since the scripts run to the end of that and `processing` has it
 taken back out — and larger than both React's render and the working time left outside it, and the
 sentence is printed against that same window, or it reads "110 ms of the 100 ms of working time".
-So the sentence names that window rather than the working time — "the 116 ms spent handling the
-click" — and its numbers add up to it. Where the walk is worth a whole millisecond the remainder
-names it too, because the window it was taken from holds it. The sentence says what is left over —
-"the browser spent 108 ms of the 116 ms spent handling the click recalculating styles and layout, leaving 8 ms
+So the sentence names that window rather than the working time ("the 116 ms it took to handle the
+click"), and its numbers add up to it. It says "it took" and not "spent", since what the browser
+spent is said inside it, and up to 0.18.0 the sentence said spent twice. Where the walk is worth a
+whole millisecond the remainder names it too, because the window it was taken from holds it. The sentence says what is left over —
+"of the 116 ms it took to handle the click, the browser spent 108 ms recalculating styles and layout, leaving 8 ms
 for React's render and commit, its layout effects and the click handler together" — which is what
 makes the demotion of the
 render a measurement rather than a preference. Where React's render is itself timed higher than that
@@ -1681,7 +1682,11 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   the trace as an empty field in Chromium 147. Its count of renders before the paint leaves out
   the commits too small to count, as the verdict's "React rendered 3 times" does, and says how
   many it left out ("3, and 3 too small to count"): on the shadcn/ui Sheet the tooltip said 3 and
-  the Summary 6, for the six commits the renders track drew.
+  the Summary 6, for the six commits the renders track drew. Its handlers and React rendering row
+  is the working time, with this library's own read taken out and on a row of its own, and where
+  there is one the row says so ("469 ms, not counting react-inp-blame itself"): the tooltip's
+  "of the 474 ms it took to handle the click" holds the read, and without the words the two read
+  as two figures for the same time.
 - Each commit joined to the report gets an entry in a "React renders" track, but only where
   React draws none itself. Development builds of React 19.2 and later draw every component in
   Components ⚛, and there the interaction's tooltip points to it instead; production and

@@ -535,7 +535,7 @@ test("the browser's forced layout is said as styles and layout, since its one fi
   // The blame keeps its kind.
   const thrash = report([entry('click', 0, 128, 2, 118)], [], [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 108)])]).explanation;
   assert.equal(thrash.blame.kind, 'layout');
-  assert.match(thrash.cause, /^The browser spent 108 ms of the 116 ms spent handling the click recalculating styles and layout, leaving 8 ms for React's render and commit/);
+  assert.match(thrash.cause, /^Of the 116 ms it took to handle the click, the browser spent 108 ms recalculating styles and layout, leaving 8 ms for React's render and commit/);
 });
 
 test('later renders attach only by an exact stamp', () => {
@@ -1735,7 +1735,7 @@ test('forced layout the browser measured outranks a render no build timed', () =
   });
   assert.equal(
     r.explanation.cause,
-    'The browser spent 108 ms of the 116 ms spent handling the click recalculating styles and layout, leaving 8 ms for' +
+    'Of the 116 ms it took to handle the click, the browser spent 108 ms recalculating styles and layout, leaving 8 ms for' +
       " React's render and commit, its layout effects and the click handler together." +
       // Where the layout happened and where React was working are two records, and only the first is
       // the browser's. The sentence carries both, so the subtree is never the only thing named.
@@ -1852,7 +1852,7 @@ test('a forced layout is never reported as more of the working time than the wor
     [input(0, 'click')],
   );
   assert.equal(r.explanation.blame.kind, 'layout');
-  assert.match(r.explanation.cause, /110 ms of the 120 ms/);
+  assert.match(r.explanation.cause, /Of the 120 ms it took to handle the click, the browser spent 110 ms /);
   assert.doesNotMatch(r.explanation.cause, /of the 100 ms/);
 });
 
@@ -2030,14 +2030,14 @@ test('the layout sentence names one window, and the numbers in it add up to that
   assert.equal(r.explanation.blame.kind, 'layout');
   // 110 and 10 make the 120 the sentence names, and what the 10 covers includes the walk, because
   // the window it is taken from does.
-  assert.match(r.explanation.cause, /110 ms of the 120 ms spent handling the click/);
+  assert.match(r.explanation.cause, /^Of the 120 ms it took to handle the click, the browser spent 110 ms recalculating/);
   assert.match(r.explanation.cause, /leaving 10 ms for/);
   assert.match(r.explanation.cause, /read of what React rendered/);
   assert.doesNotMatch(r.explanation.cause, /120 ms of working time/);
 
   // With no walk worth counting the window is the working time and the sentence says nothing extra.
   const clean = report([entry('click', 0, 200, 0, 120)], [commit(90, 0, { hasDurations: false, total: 0, rendered: 40 })], [frame(0, 130, [script('DIV#root.onclick', 0, 118, 110)])], [input(0, 'click')]);
-  assert.match(clean.explanation.cause, /110 ms of the 120 ms spent handling the click/);
+  assert.match(clean.explanation.cause, /^Of the 120 ms it took to handle the click, the browser spent 110 ms recalculating/);
   assert.doesNotMatch(clean.explanation.cause, /read of what React rendered/);
 });
 
