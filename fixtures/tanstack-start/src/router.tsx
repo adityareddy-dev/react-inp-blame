@@ -12,12 +12,15 @@ export function getRouter() {
   })
 
   // Tells react-inp-blame each time the route changes, with the URL the address bar shows. Not on the first load, which is the document's own.
-  let last = router.history.location.href
-  router.subscribe('onBeforeNavigate', ({ fromLocation }) => {
-    const href = router.history.location.href
-    if (fromLocation && href !== last) announceNavigation(href)
-    last = href
-  })
+  // Only in the browser: TanStack Start calls getRouter on the server too, where the router has no history.
+  if (!router.isServer) {
+    let last = router.history.location.href
+    router.subscribe('onBeforeNavigate', ({ fromLocation }) => {
+      const href = router.history.location.href
+      if (fromLocation && href !== last) announceNavigation(href)
+      last = href
+    })
+  }
 
   return router
 }
