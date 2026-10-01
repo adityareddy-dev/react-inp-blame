@@ -439,12 +439,15 @@ export function getRouter() {
   })
 
   // Tells react-inp-blame each time the route changes, with the URL the address bar shows. Not on the first load, which is the document's own.
-  let last = router.history.location.href
-  router.subscribe('onBeforeNavigate', ({ fromLocation }) => {
-    const href = router.history.location.href
-    if (fromLocation && href !== last) announceNavigation(href)
-    last = href
-  })
+  // Only in the browser: TanStack Start calls getRouter on the server too, where the router has no history.
+  if (!router.isServer) {
+    let last = router.history.location.href
+    router.subscribe('onBeforeNavigate', ({ fromLocation }) => {
+      const href = router.history.location.href
+      if (fromLocation && href !== last) announceNavigation(href)
+      last = href
+    })
+  }
 
   return router
 }
@@ -467,7 +470,7 @@ TanStack Router takes from the last route that finished loading: going back befo
 waits for `fromLocation`, which stays unset until the first load finishes: a route whose `validateSearch` fills
 in a default the URL lacks rewrites the address as it first loads, and that is still the document's own
 navigation. A change of query string alone counts as a navigation here too, with the same `navigationURL` as
-before it. In a TanStack Router app without Start, put the same `router.subscribe` call after `createRouter`.
+before it. In a TanStack Router app without Start, put the same `if` block after `createRouter`.
 That is for browser history, the default. Under `createHashHistory`, `router.history.location.href` is the path
 inside the hash, so a report would carry it as a path from the site's root, `https://shop.example/second` for
 `https://shop.example/app/#/second`, and not the URL the address bar shows. As under React Router, a production
