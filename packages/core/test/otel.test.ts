@@ -73,6 +73,15 @@ const record = (time: Partial<InpLogRecordLike>, value = 240, name = 'inp'): Inp
   ...time,
 });
 
+/** A web-vitals INP metric whose entries getter throws. */
+const unreadable = {
+  name: 'INP',
+  value: 200,
+  get entries(): object[] {
+    throw new Error('a getter that throws');
+  },
+};
+
 const statusOf = (attributes: InpBlameAttributes) => attributes['react_inp_blame.status'];
 
 test('a record is matched on its time and value, read back from the HrTime the SDK stores', (t) => {
@@ -154,6 +163,8 @@ test('anything that is not INP gets nothing', (t) => {
 test('a page the library is not on says so, and so does one that lost the sampleRate roll', (t) => {
   assert.equal(page.installed, null);
   assert.deepEqual(inpBlameAttributes(record({ timestamp: 100 })), { 'react_inp_blame.status': 'not-installed' });
+  // An INP metric whose entries can't be read is INP's, and nothing reads them here.
+  assert.deepEqual(inpBlameAttributes(unreadable), { 'react_inp_blame.status': 'not-installed' });
   page.sampledOut = inertApi('sampled-out');
   t.after(() => {
     page.sampledOut = null;
@@ -195,6 +206,8 @@ test('a source whose getters throw never throws out of inpBlameAttributes or the
     },
   });
   assert.deepEqual(inpBlameAttributes(late), { 'react_inp_blame.status': 'library-error' });
+  // A metric named INP whose entries can't be read: INP's, so the library's error too.
+  assert.deepEqual(inpBlameAttributes(unreadable), { 'react_inp_blame.status': 'library-error' });
   const processor = new InpBlameLogRecordProcessor();
   assert.doesNotThrow(() => processor.onEmit(hostile as InpLogRecordLike));
   const refusing = {
