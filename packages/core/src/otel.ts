@@ -84,7 +84,8 @@ const SEPARATOR = ' > ';
 export function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | number | null | undefined): InpBlameAttributes {
   let inp = false;
   try {
-    inp = isInp(source);
+    // A metric named INP is INP's before its entries are read, so one whose entries throw is the library's error.
+    inp = (source as InpMetricLike | null)?.name === 'INP' || isInp(source);
     if (!inp) return EMPTY;
     const api = page.installed?.api;
     if (!api) return status(page.sampledOut ? 'sampled-out' : 'not-installed');
