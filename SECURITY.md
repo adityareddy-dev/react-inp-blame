@@ -82,7 +82,7 @@ setups leave it out of, which is their default, gets none of it.
 
 ### What it keeps
 
-In memory, until `dispose()` or the page unloads, and every list capped:
+In memory, at most until the page unloads, and every list capped:
 
 - the last 300 commits walked,
 - the last 8 inputs, with their target elements,
@@ -92,8 +92,10 @@ In memory, until `dispose()` or the page unloads, and every list capped:
 - 60 Long Animation Frames entries and 20 navigations.
 
 `clear()` drops the commits, the reports, the quick interactions and the Event Timing entries. The
-inputs with their elements, the Long Animation Frames entries and the navigations stay until
-`dispose()`, or until newer ones push them out of their lists. A report holds plain data, never an
+inputs with their elements, the Long Animation Frames entries and the navigations stay until newer
+ones push them out of their lists. `dispose()` drops the commits and the inputs with their elements.
+The reports, the Event Timing entries, the frames and the navigations stay reachable through the
+object `install()` returned until the page lets go of it. A report holds plain data, never an
 element.
 
 In `localStorage`, two keys, set only when someone uses the badge. `react-inp-blame` is `hidden`
