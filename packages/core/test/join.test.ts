@@ -5167,10 +5167,12 @@ test("a mouse's pointerdown alone reads as a click, a finger's as a tap", () => 
   const touch = report(alone, [], [], [input(0, 'pointerdown', { pointerType: 'touch' })]);
   assert.equal(touch.pointerType, 'touch');
   assert.match(touch.verdict, /^120 ms tap\b/);
-  // Not seen at dispatch: as before.
+  // Not seen at dispatch: a click, as the panel's row says, since the press may have been a mouse's.
   const unseen = report(alone, [], []);
   assert.equal(unseen.pointerType, null);
-  assert.match(unseen.verdict, /^120 ms tap\b/);
+  assert.match(unseen.verdict, /^120 ms click\b/);
+  assert.match(unseen.explanation.cause, /\(the click handler or other scripts\)/);
+  assert.match(report([entry('pointerup', 0, 120, 2, 92)], [], []).verdict, /^120 ms click\b/);
   // A key's click carries no pointer.
   assert.equal(report([entry('click', 0, 120, 2, 92)], [], [], [input(0, 'click', { pointerType: '' })]).pointerType, null);
   // A finger's or a pen's click is a tap too, all through the sentences, and a mouse's is a click.
