@@ -1174,14 +1174,21 @@ const atLeast = (c: CommitSummary): string => (c.truncated ? 'at least ' : '');
 /**
  * What a render's cause says of a walk cut short, after the render's own sentence: what took the time past the
  * cut was not seen, and where the walk could not tell where the render started (`leafName` gives none), that
- * too. Empty for a walk that went to the end, and for one that reached nothing that rendered, which the note
- * on the partial count covers.
+ * too. A build that timed the components the walk reached knows which took the time where the commit's total
+ * less their own times, all that is left for the ones past the cut, is no more than the heaviest of them, and
+ * then says only that the rest went uncounted. The components a commit lists are its heaviest, so any it
+ * leaves out count as past the cut. Empty for a walk that went to the end, and for one that reached nothing
+ * that rendered, which the note on the partial count covers.
  */
 function walkStopped(c: CommitSummary): string {
   if (!c.truncated || c.rendered === 0) return '';
-  return leafName(c) === null
-    ? " The walk stopped partway through that render, so where it started and which components took the time aren't known."
-    : " The walk stopped partway through that render, so which components took the time isn't known.";
+  if (leafName(c) === null) return " The walk stopped partway through that render, so where it started and which components took the time aren't known.";
+  const selves = c.components.map((x) => x.self);
+  if (c.hasDurations && selves.length && !selves.includes(null)) {
+    const own = selves as number[];
+    if (c.total - own.reduce((a, self) => a + self, 0) <= Math.max(...own)) return " The walk stopped partway through that render, so the components past that point aren't counted.";
+  }
+  return " The walk stopped partway through that render, so which components took the time isn't known.";
 }
 
 /** "801 components"; "at least 5000 components" where the walk stopped before the end of the tree. */
