@@ -6909,3 +6909,10 @@ test('each line for naming a render, a later render, forced layout or a long pre
   assert.equal(held(100).holdMs, 100);
   assert.match(holdNote(held(100)) ?? '', /^The whole click, from press to release, spanned 220 ms/);
 });
+
+test('a production render cut at its budget with useEffect callbacks after it says the walk stopped after the profiling line', () => {
+  const ring = [input(1000, 'click', { handler: 'onClick', owners: ['Grid'] })];
+  const cut = commit(1010, 1000, { hasDurations: false, total: 0, startedAt: null, rendered: 5000, truncated: true, roots: ['Grid'], hotPath: ['Grid'], pathStart: 'only-root', components: [{ name: 'Cell', count: 4990, self: null, total: null }, { name: 'Grid', count: 1, self: null, total: null }], effectsStartedAt: 1010, effectsEndedAt: 1310 });
+  const { cause } = report([entry('click', 1000, 330, 1003, 1320)], [cut], null, ring).explanation;
+  assert.ok(cause.includes(" before the screen could update. A profiling build of React would time the render too. The walk stopped partway through that render, so which components took the time isn't known."), cause);
+});

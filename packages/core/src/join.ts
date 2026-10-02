@@ -2569,7 +2569,7 @@ function explain(r: InteractionReport): Explanation {
     cause = effectsLed
       ? `${effectsFirst}${stopped}${say(confidence, '', profiling)}`
       : !hasDurations && effectsThen
-        ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${stopped}${profilingRender}`
+        ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}${stopped}`
         : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.${stopped}`, `${likely}${listByCount ? `${stopped} It could have been ${handler} instead.${tellApart}` : `${profiling}${stopped}`}`);
     if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
     if (sayEffects && hasDurations && !effectsLed) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
