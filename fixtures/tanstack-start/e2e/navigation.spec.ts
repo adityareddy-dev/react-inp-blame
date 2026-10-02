@@ -40,16 +40,18 @@ test('reports follow route changes, and the link click names the navigation it s
   expect(problems).toEqual([])
 })
 
-// The three cases docs/install.md gives for checking the URL against the one last announced, and for waiting on
-// fromLocation. TanStack Router's own hrefChanged compares with the last route that finished loading, and is false
-// for Back before a slow loader and for a redirect to the page it was on, which left reports on a URL the page had
-// left. Under TanStack Start the server redirects to a default validateSearch fills in on the landing page, so the
-// first load is already at that URL and nothing here depends on fromLocation. Without Start, the router rewrites it.
-test('a validateSearch default filled in on the landing page announces nothing', async ({ page }) => {
+// The cases docs/install.md gives for checking the URL against the one last announced. TanStack Router's own
+// hrefChanged compares with the last route that finished loading, and is false for Back before a slow loader and
+// for a redirect to the page it was on, which left reports on a URL the page had left. The fromLocation wait is
+// not pinned here: under TanStack Start the server redirects to a default validateSearch fills in, even on a
+// route with ssr: false, and a Link to the route pushes the URL with the default in it, so the router never
+// rewrites the address in the page. Only TanStack Router without Start does, as it first loads.
+test("Start's server redirects to a validateSearch default on the landing page, the document's navigation is at it, and nothing is announced", async ({ page }) => {
   const { problems } = await open(page, '/search?inp-blame')
   await expect(page.getByRole('heading', { name: 'Search, all', exact: true })).toBeVisible()
   await expect(page).toHaveURL(/[?&]tab=all\b/)
   const landed = await documentNavigation(page)
+  expect(landed.url).toMatch(/[?&]tab=all\b/)
   await page.getByRole('button', { name: 'Slow', exact: true }).click()
   const slow = await reportAfter(page, null)
   expect(slow.place).toEqual({ navigationURL: withoutQuery(landed.url), navigationType: landed.type, startedNavigation: null })
