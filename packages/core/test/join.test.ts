@@ -4024,10 +4024,10 @@ test("where a render's useEffect callbacks took most of its commit, the cause le
   // A walk cut short counted only the mounts it reached, so none is named, and the count is a lower bound.
   const cut = (effectMounts: number) => report(click(1435), [{ ...reports(1431, effectMounts), truncated: true, pathStart: 'only-root' }], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(cut(1).blame.detail, 'useEffect callbacks in at least 1 mounted component');
-  assert.match(cut(1).cause, /\. At least 1 component mounted in that commit with a useEffect of its own\. The walk stopped partway through that render, so the components past that point aren't counted\.$/);
+  assert.match(cut(1).cause, /\. At least 1 component mounted in that commit with a useEffect of its own\.$/);
   assert.doesNotMatch(cut(1).cause, /RevenueChart/);
   assert.equal(cut(3).blame.detail, 'useEffect callbacks in at least 3 mounted components');
-  assert.match(cut(3).cause, /\. At least 3 components mounted in that commit, each with a useEffect of its own\. /);
+  assert.match(cut(3).cause, /\. At least 3 components mounted in that commit, each with a useEffect of its own\.$/);
   assert.equal(cut(0).blame.detail, 'useEffect callbacks');
   assert.doesNotMatch(heavy.cause, /then ran for about/);
   assert.ok(!heavy.notes.some((n) => n.includes('own render')), heavy.notes.join(' | '));
@@ -4219,7 +4219,7 @@ test("React's render time across several commits is said as their total with the
   const partial = report([entry('click', 0, 72, 2, 64)], [{ ...list, truncated: true }, sidebar], [], [input(0, 'click')]).explanation;
   assert.equal(
     partial.cause,
-    "React most likely spent about 30 ms of the 62 ms of working time re-rendering at least 30 components inside List, and 55 ms of rendering in all across 2 commits. The walk stopped partway through that render, so the components past that point aren't counted.",
+    'React most likely spent about 30 ms of the 62 ms of working time re-rendering at least 30 components inside List, and 55 ms of rendering in all across 2 commits.',
   );
   // Three renders of 3 ms earned the blame together, over the 5 ms a render needs, and read as 3 ms.
   const small = { total: 3, components: [{ name: 'Row', count: 30, self: 2, total: 2 }] };
@@ -5262,6 +5262,7 @@ test('a render whose walk stopped at its budget says "at least", names no compon
     const timed = blameOf({ hasDurations: true, total: 380, roots: ['Left'], hotPath, pathStart: 'unknown-root', components });
     assert.equal(timed.blame.name, 'the app', hotPath.join());
     assert.doesNotMatch(`${timed.cause} ${timed.blame.detail}`, /\b(Left|App)\b/);
+    assert.match(timed.cause, /\. The walk stopped partway through that render, so where it started and which components took the time aren't known\./);
   }
   // A Folder that did not render over the Folders that did reads, by name, like a Folder that rendered over them:
   // `pathStart` tells the two apart.
@@ -5305,26 +5306,6 @@ test('a render the walk could not tell the start of is named after the app, from
   for (const [r, start] of [[app, 'unknown-root'], [beside, 'unknown-root'], [none, 'no-root']] as const) {
     assert.equal(JSON.parse(JSON.stringify(r)).commits[0].pathStart, start);
   }
-});
-
-test("a timed walk cut at its budget says which components took the time isn't known only where the part it never reached could outweigh the heaviest it did", () => {
-  // The budget demo on React 19.3's development build, cut at 5000 inside Metrics: what the walk reached
-  // took 86.4 of React's 124.2 ms on its own, so the 37.8 ms past the cut can't hold more than Metrics' 49.2.
-  const reached = (rows: [string, number, number][]) => rows.map(([name, count, self]) => ({ name, count, self, total: null }));
-  const cut = (opts: Partial<CommitSummary>) =>
-    report([entry('click', 0, 160, 3, 130)], [commit(128, 0, { rendered: 5000, truncated: true, total: 124.2, roots: ['Budget'], hotPath: ['Budget', 'Metrics'], pathStart: 'only-root', startRendered: 5000, pathRendered: 1998, ...opts })], []).explanation;
-  const measured = cut({ components: reached([['Metrics', 1, 49.2], ['Orders', 1, 24], ['Order', 3000, 8], ['Metric', 1997, 4.8], ['Budget', 1, 0.4]]) });
-  assert.equal(measured.blame.name, 'Metrics');
-  assert.match(measured.cause, /, at least 1998 of them inside Metrics\. The walk stopped partway through that render, so the components past that point aren't counted\.$/);
-  assert.doesNotMatch(measured.cause, /isn't known/);
-  assert.ok(!measured.notes.some((n) => n.startsWith('The component count is partial')), measured.notes.join('\n'));
-  // The same shape with the time in the rows past the cut: 70.4 ms the walk never reached, against the 30.1 of
-  // its heaviest, Metric. Any component past the cut could have taken more.
-  const unreached = cut({ total: 130.4, components: reached([['Metric', 1997, 30.1], ['Orders', 1, 11.2], ['Metrics', 1, 9.6], ['Order', 3000, 8.8], ['Budget', 1, 0.3]]) });
-  assert.match(unreached.cause, /\. The walk stopped partway through that render, so which components took the time isn't known\.$/);
-  // A clock too coarse to time single components measured none of them.
-  const coarse = cut({ coarseClock: true, components: reached([['Order', 3000, 0], ['Metric', 1997, 0]]).map((x) => ({ ...x, self: null })) });
-  assert.match(coarse.cause, /so which components took the time isn't known\./);
 });
 
 test('a render is counted inside the component it is named after, from the one it started at where that holds them all, and is a mount where most of it was one', () => {
@@ -5468,7 +5449,9 @@ test('a render is counted inside the component it is named after, from the one i
   });
   const cutReport = report([entry('click', 0, 220, 3, 210)], [heavy], []);
   const cut = cutReport.explanation;
-  assert.match(cut.cause, /re-rendering at least 5000 components from App down, at least 800 of them inside Heavy\. The walk stopped partway through that render, so which components took the time isn't known\./);
+  assert.match(cut.cause, /re-rendering at least 5000 components from App down, at least 800 of them inside Heavy\.$/);
+  // A timed walk that could tell where the render started says only that the count is partial, as 0.20.0 did.
+  assert.ok(cut.notes.includes('The component count is partial: the walk stopped at its budget or at its depth limit.'), cut.notes.join('\n'));
   assert.deepEqual([cut.blame.name, cut.blame.detail], ['Heavy', 'at least 800 of at least 5000 components, the rest not walked']);
   // The panel still finds the commit the blame was built from.
   assert.equal(blamedCommit(cutReport), cutReport.commits[0]);

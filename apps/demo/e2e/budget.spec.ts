@@ -23,11 +23,11 @@ test('a render past the walk budget is not blamed on the subtree the walk reache
   if (prod) expect(r.explanation.blame.name).toBe('Budget');
   else expect(r.explanation.blame.name).toBe('Metrics');
   expect(r.verdict).not.toMatch(/mostly Order\b/);
-  // Budget holds the state and re-rendered itself, so the walk knows the render started there. Counts alone
-  // can't say which components past the cut took the time. React's durations can: the components the walk
-  // reached took more of React's total on their own than is left for the rest.
+  // Budget holds the state and re-rendered itself, so the walk knows the render started there. In production
+  // the verdict says what it can't know: which components past the cut took the time. A development build
+  // says only that the count is partial, as 0.20.0 did.
   expect(r.commits.find((c) => c.truncated)?.pathStart).toBe('only-root');
   expect(r.explanation.blame.detail).toMatch(/the rest not walked$/);
   if (prod) expect(r.verdict).toContain("The walk stopped partway through that render, so which components took the time isn't known.");
-  else expect(r.verdict).toContain("The walk stopped partway through that render, so the components past that point aren't counted.");
+  else expect(r.verdict).toMatch(/The component count is partial: the walk stopped at its budget or at its depth limit\.$/);
 });
