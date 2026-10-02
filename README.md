@@ -245,9 +245,9 @@ A patch release fixes bugs and security problems. It changes a blame only to und
 before, and its notes list that too.
 
 Minor releases come at most once every two weeks. Anything deprecated keeps working through at least one minor,
-marked `@deprecated` and, where it runs, with a warning in development builds. Only a major removes it. Security
-fixes go into the latest minor, and into the minor before it for 90 days after the latest came out
-([SECURITY.md](SECURITY.md#versions)). Once 2.0.0 is out, the last 1.x minor counts as the one before it.
+marked `@deprecated` and, where it runs, with a warning in development builds. Only a major removes it. From
+1.0.0, security fixes go into the latest minor, and into the minor before it for 90 days after the latest came
+out ([SECURITY.md](SECURITY.md#versions)). Once 2.0.0 is out, the last 1.x minor counts as the one before it.
 
 `react-inp-blame/otel` is experimental. Its export names and the attribute names it sends can change in any minor,
 1.x included, until OpenTelemetry names these fields, and the CHANGELOG says so when they do. `api.debug` can
