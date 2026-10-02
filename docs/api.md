@@ -194,6 +194,9 @@ missing from this list.
 - `stats().unsupportedReason.kind` (`UnsupportedReason`): `'browser'`, `'another-copy'`, `'hook-disabled'`,
   `'react-version'`, `'fiber-shape'`, `'walk-threw'`
 
+`navigationType` has the values of web-vitals' own `navigationType`, so the two line up, but the set is this
+library's. Should web-vitals add a value during 1.x, a report gives the nearest of these until 2.0.0.
+
 ## Labels and personal data
 
 `target.label` names the element by its tag and a name of at most 40 characters, and never reads a form
