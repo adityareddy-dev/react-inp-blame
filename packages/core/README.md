@@ -597,7 +597,8 @@ current:
 component names in its web-vitals attribution pays for the fiber reading and nothing else.
 
 Under the `react-server` condition, `react-inp-blame`, `react-inp-blame/auto`,
-`react-inp-blame/next-client` and `react-inp-blame/web-vitals` resolve to a module whose exports do
-nothing, so a Server Component that imports them adds no browser code to the server bundle.
+`react-inp-blame/next-client`, `react-inp-blame/web-vitals` and `react-inp-blame/otel` resolve to a
+module whose exports do nothing, so a Server Component that imports them adds no browser code to the
+server bundle.
 
 MIT
