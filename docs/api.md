@@ -171,6 +171,29 @@ this interaction recorded a script that shows it, from that press's own listener
 press's listeners recorded, a script that started after both that press and this interaction's handlers counts
 where the screen update was over 100 ms, and under that only the press's render says it, hedged.
 
+## Fixed sets of strings
+
+These fields take one of a fixed set of strings, and each set stays as it is through 1.x. A new value comes
+only in 2.0.0, so code that switches on one of them, or a dashboard that groups by it, never meets a value
+missing from this list.
+
+- `explanation.blame.kind`: `'render'`, `'handler'`, `'hydration'`, `'layout'`, `'waiting'`, `'painting'`,
+  `'script'`, `'none'`
+- `explanation.blame.confidence`: `'measured'`, `'inferred'`
+- `explanation.rating` (`Rating`): `'good'`, `'needs-improvement'`, `'poor'`
+- `reactStatus` and `stats().react` (`ReactStatus`): `'reading'`, `'waiting'`, `'installed-late'`,
+  `'unreadable'`
+- `reactBuild`: `'development'`, `'production'`, `'profiling'`, or null
+- `navigationType` (`NavigationType`): `'navigate'`, `'reload'`, `'back-forward'`, `'back-forward-cache'`,
+  `'prerender'`, `'restore'`, `'soft-navigation'`
+- `startedNavigation.type`: `'push'`, `'replace'`, `'traverse'`
+- `hydration.kind`: `'waited'`, `'not-hydrated'`
+- `hydration.scope`: `'root'`, `'boundary'`
+- `joinedBy` on each of `commits` and `followUps` (`CommitSummary`): `'exact'`, `'overlap'`
+- `stats().mode`: `'shim'`, `'chained'`, `'none'`, `'unsupported'`, `'sampled-out'`
+- `stats().unsupportedReason.kind` (`UnsupportedReason`): `'browser'`, `'another-copy'`, `'hook-disabled'`,
+  `'react-version'`, `'fiber-shape'`, `'walk-threw'`
+
 ## Labels and personal data
 
 `target.label` names the element by its tag and a name of at most 40 characters, and never reads a form

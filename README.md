@@ -224,7 +224,7 @@ and the flag on Node 24.19 and on older Jest, which were checked by hand.
 **What 1.x promises.** From 1.0.0 the package follows semantic versioning. That covers every export and the
 options it takes, and the shape of a report. Only a major release removes or renames an export, an entry point,
 an option or a report field, changes what a field holds or what an option does, changes a default, adds a value
-to one of the fixed sets of strings (a new `blame.kind`, a new `stats().mode`), or drops a version the table above
+to one of the [fixed sets of strings](docs/api.md#fixed-sets-of-strings), or drops a version the table above
 lists. `schemaVersion` stays where 1.0.0 has it for all of 1.x, on a report and on the `react` object that
 `react-inp-blame/web-vitals`' `attributeINP` adds.
 
