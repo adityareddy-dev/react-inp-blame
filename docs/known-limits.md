@@ -68,10 +68,15 @@
   not walked. In a production build, which has only counts to go on, the blame names the component the render
   started at only where one rendered at the top and holds everything the walk reached, and that is where the
   render started, not what inside it took the time: a theme change over 6,000 labels reads ThemeProvider, at
-  least 1,999 components, where a walk of the whole tree finds NodeLabel ×6,000. Where the walk reached several such
-  components, or one with work beside it that it never got to, it names the app and says it could not tell
-  where the render started (`pathStart` is `'unknown-root'`). A larger budget walks further, inside the
-  interaction it measures: a sort of 18,456 cells took 12.6 ms to walk in full, against 1.7 ms capped. A
+  least 1,999 components, where a walk of the whole tree finds NodeLabel ×6,000. Where the walk reached
+  several such components, or one with work beside it that it never got to, it names the app and says it
+  could not tell where the render started (`pathStart` is `'unknown-root'`). A development build has React's
+  durations, which are totals for each subtree walked or not, so it still chooses among the subtrees the walk
+  reached, but a subtree past the cut is in none of them. Where React's total for the whole render shows the
+  part not reached took longer than the heaviest part reached, a development build names the app the same
+  way, and takes React's total as the render's time. A root timed only under `<Profiler>` has no total of its
+  own, and there the subtree the walk reached first can still be named. A larger budget walks further, inside
+  the interaction it measures: a sort of 18,456 cells took 12.6 ms to walk in full, against 1.7 ms capped. A
   branch more than 1,000 fibers deep is cut as well, and the walk sees nothing below it, so a component that
   rendered down there is missed, and `'only-root'` can be one start of two.
 - **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only. The

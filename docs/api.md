@@ -29,7 +29,7 @@ their first value, with a warning, until `dispose()`.
 | `labels` | `'auto'` | Where `target.label` comes from: see [Labels and personal data](#labels-and-personal-data) |
 | `hook` | `'auto'` | `'chain'` wraps an existing `__REACT_DEVTOOLS_GLOBAL_HOOK__` and never creates one; `'shim'` creates one unless one exists; `'auto'` chains or creates |
 | `sampleRate` | `1` | Share of page loads that install anything; in a production build, also of the pages that [warn about a browser without Event Timing](troubleshooting.md#unsupported-browser) |
-| `walkBudget` | `5000` | Component fibers React rendered or passed through, per commit; one it only cloned and skipped does not count. A commit past it is reported as partial: its counts say "at least", and its blame's detail and sentence say the rest was not walked. In a production build, which has only counts to go on, the blame names the component the render started at where one rendered at the top and holds everything the walk reached, and otherwise the app, with the sentence saying it could not tell where the render started, rather than the subtree the walk reached first or a component the subtrees only sit under. Each commit's `pathStart` says which |
+| `walkBudget` | `5000` | Component fibers React rendered or passed through, per commit; one it only cloned and skipped does not count. A commit past it is reported as partial: its counts say "at least", and its blame's detail and sentence say the rest was not walked. In a production build, which has only counts to go on, the blame names the component the render started at where one rendered at the top and holds everything the walk reached, and otherwise the app, with the sentence saying it could not tell where the render started, rather than the subtree the walk reached first or a component the subtrees only sit under. A development or profiling build names the app the same way where the part the walk did not reach took longer than the heaviest part it did, by React's own total for the render, which is then the commit's `total`. Each commit's `pathStart` says which |
 | `inputWindow` | `1500` | A commit outside any input's dispatch is walked only within this many ms of the end of the last commit inside the newest input's dispatch, or of the input where there was none; commits inside an input's own dispatch are always walked. It also bounds `followUps`, whose window runs from the paint as a rule |
 | `devtoolsTrack` | `'auto'` | Draw each report in Chrome's Performance panel, in an "Interaction blame" track. `'auto'` draws it only under a development build of React, since any script on the page can read each entry, verdict and label included, through a `PerformanceObserver`; `true` draws it under production and profiling builds too. The entries' names, tooltips and properties are display text |
 | `debugGlobal` | `false` | `true` puts the API on `window.__REACT_INP_BLAME__`; a string names the property |
@@ -101,12 +101,14 @@ Each commit in `commits` and `followUps` says where its `hotPath` starts, as the
 `'only-root'`: the walk found one component where this render started, and the path starts at it.
 `'heaviest-root'`: the walk found several components where renders started, and the path starts at the
 heaviest one it reached. `roots` has up to five of their names. `'unknown-root'`: the walk reached components
-that rendered but stopped before it could tell which one held the render (in production at walkBudget), so
-the path starts at the nearest component they all sit under, or is empty when they share none. `'no-root'`:
-the walk reached no component that rendered, either because the commit rendered none or because it stopped
-first (then `truncated` is true). hotPath is empty and `rendered` is 0. It is absent only on a report from
-before 0.21.0 (0.20.0 and 0.21.0 share schemaVersion 4). These four are all there are in 1.x. A render blame
-built on a commit whose `pathStart` is `'unknown-root'` or `'no-root'` is named `'the app'`.
+that rendered but stopped before it could tell which one held the render (in production at walkBudget, in a
+development or profiling build when React's own total shows more of the render went unreached than the
+heaviest start it reached), so the path starts at the nearest component they all sit under, or is empty when
+they share none. `'no-root'`: the walk reached no component that rendered, either because the commit rendered
+none or because it stopped first (then `truncated` is true). hotPath is empty and `rendered` is 0. It is
+absent only on a report from before 0.21.0 (0.20.0 and 0.21.0 share schemaVersion 4). These four are all
+there are in 1.x. A render blame built on a commit whose `pathStart` is `'unknown-root'` or `'no-root'` is
+named `'the app'`.
 
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when that
 function has no name worth printing. An inline `onClick={() => ...}` therefore reads as `onClick`, and so
