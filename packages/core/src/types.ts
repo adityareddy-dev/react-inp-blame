@@ -461,9 +461,10 @@ export interface Blame {
    * What the time is charged to: a subtree that re-rendered, a handler that ran, what ran a script as the
    * browser names it, or the boundary that was hydrated, and null when unknown. Which of them a report names
    * can change in a minor as the reading gets better, and the rest of this says how each kind picks one
-   * today. A 'render' always has one: the subtree, or 'the app' where the commit named none, which takes in a
-   * walk that could not tell where the render started (`CommitSummary.pathStart`). For a 'layout' it is
-   * where the layout was forced, never what forced it, because no source says that. That is the subtree
+   * today. A 'render' always has one: the subtree, or 'the app', the fixed value (the same through 1.x) a
+   * 'render' or a 'layout' takes where its commit's walk gave no component to name it after, as when it could
+   * not tell where the render started, and the commit's `pathStart` says why. For a 'layout' it is where the
+   * layout was forced, never what forced it, because no source says that. That is the subtree
    * of a commit the interaction can claim: one joined by its own input stamp, walked to the end, with no
    * commit of the interaction left unjoined. Failing that it is the invoker the browser charged the script to
    * ("DIV#root.onclick"), and only while one script holds nearly all of `ms`; where several scripts share the
