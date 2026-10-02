@@ -318,6 +318,49 @@ test("a row says a component re-rendered only where it did, and otherwise leads 
   }
 });
 
+test('a row whose useEffect detail names the component it blames does not also say that component re-rendered', () => {
+  // 20 SalesCharts rendered, one of them mounting with a 176 ms useEffect. The row read "SalesChart re-rendered ·
+  // useEffect callbacks after mounting SalesChart".
+  const chart: CommitSummary = {
+    at: 129.5,
+    sinceInput: 129.5,
+    inputTs: 0,
+    gestureTs: 0,
+    inputType: 'click',
+    rendered: 20,
+    mounted: 1,
+    effectMounts: 1,
+    effectMountName: 'SalesChart',
+    hydrated: false,
+    truncated: false,
+    roots: ['ReportView'],
+    hotPath: ['Dashboard', 'SalesChart'],
+    components: [{ name: 'SalesChart', count: 20, self: 75.6, total: 126 }],
+    hasDurations: true,
+    coarseClock: false,
+    total: 126,
+    startedAt: 3.5,
+    effectsStartedAt: 129.8,
+    effectsEndedAt: 306.2,
+    walkMs: 0,
+    priority: 1,
+    didError: false,
+  };
+  const click = { name: 'click', interactionId: 1, startTime: 0, duration: 463, processingStart: 3, processingEnd: 423, target: null };
+  const { restore } = panelDocument();
+  try {
+    const line = (c: CommitSummary) => {
+      const r = sealReport(buildReport([click], [c], [], []));
+      return blameLine(r).map((x) => (typeof x === 'string' ? x : x ? (x as unknown as Drawn).textContent : '')).join('');
+    };
+    assert.equal(line(chart), 'SalesChart · useEffect callbacks after mounting SalesChart · 302 ms');
+    // Another component's mount keeps the verb.
+    assert.equal(line({ ...chart, effectMountName: 'Legend' }), 'SalesChart re-rendered · useEffect callbacks after mounting Legend · 302 ms');
+  } finally {
+    restore();
+  }
+});
+
 test('quick rows with nothing to fix fold into one line that opens on a click, and the rows worth reading stay rows', (t) => {
   t.mock.method(console, 'warn', () => {});
   // Ten 45 ms clicks whose handlers ran 5 ms, then a 300 ms one whose handler ran nearly all of it.
