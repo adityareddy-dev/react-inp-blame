@@ -204,6 +204,9 @@ library's. The document's own load takes it from the browser's navigation entry,
 router or `announceNavigation`, and a restore from the back/forward cache from the page's `pageshow`. A
 navigation type a browser adds later reads as `'navigate'` until 2.0.0.
 
+`startedNavigation.type` is the router's word for the navigation, and `announceNavigation` always gives
+`'push'`. A type the Next.js App Router passes that is none of these three reads as `'push'` too.
+
 `pointerType` is not on the list. It is the browser's own string, passed on as the event gave it: browsers
 give `'mouse'`, `'pen'` and `'touch'`, and a value a browser adds later would come through as it is. An empty
 string reads as null.

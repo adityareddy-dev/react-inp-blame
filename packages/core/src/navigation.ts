@@ -54,9 +54,13 @@ export function pageURL(href: string): string {
   }
 }
 
-/** Tells the installation that a router started a soft navigation. Does nothing while nothing is installed. */
+/**
+ * Tells the installation that a router started a soft navigation. Does nothing while nothing is installed.
+ * A type other than 'push', 'replace' or 'traverse' (Next.js passes its router's own) reads as 'push'.
+ */
 export function routerNavigated(navigation: RouterNavigation): void {
-  router.listener?.(navigation);
+  const { type } = navigation;
+  router.listener?.(type === 'push' || type === 'replace' || type === 'traverse' ? navigation : { ...navigation, type: 'push' });
 }
 
 /**

@@ -1967,6 +1967,17 @@ test('a click that starts an App Router navigation is named with it, and the rep
   });
 });
 
+test("a navigation type Next.js passes that is not 'push', 'replace' or 'traverse' reads as 'push', so startedNavigation.type keeps to its fixed set", async (t) => {
+  const { onRouterTransitionStart } = await nextClient(t, 'refresh', { install: {}, basePath: '' });
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    const clickedAt = page.duringClick(() => onRouterTransitionStart('/cart', 'refresh' as never, null));
+    page.paint([click(7, clickedAt, 64)]);
+    assert.deepEqual(api.last()?.startedNavigation, { url: 'https://shop.example/cart', type: 'push' });
+    api.dispose();
+  });
+});
+
 test('next-client installs nothing and names no navigation where no withInpBlame set its value, as an older one did in a build it left out', async (t) => {
   await inBrowser(async (page) => {
     const { onRouterTransitionStart } = await nextClient(t, 'unset');
