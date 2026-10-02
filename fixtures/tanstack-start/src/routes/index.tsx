@@ -29,6 +29,13 @@ function Home() {
       >
         Second page
       </Link>
+      {/* For the navigation spec's Back before a slow loader, and a redirect back here. Not preloaded on hover. */}
+      <Link to="/slow-loader" preload={false}>
+        Slow loader
+      </Link>
+      <Link to="/bounce" preload={false}>
+        Bounce
+      </Link>
       <SlowList count={count} />
     </main>
   )
