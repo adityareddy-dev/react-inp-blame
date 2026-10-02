@@ -2641,6 +2641,17 @@ test('a render under 1 ms reads "under 1 ms", and a handler known only by its pr
   assert.equal(production.explanation.cause, "The onClick handler or React's render of List most likely took the 97 ms, the handler the likelier: React re-rendered only 2 components. A production build of React can't tell these apart, a profiling build can.");
 });
 
+test("the production either-or sentence names the app for a render whose walk could not tell where it started, and gives the count once", () => {
+  const slowClick = [entry('click', 0, 120, 3, 100)];
+  const cut = { hasDurations: false, total: 0, rendered: 2, truncated: true, roots: ['List', 'Sidebar'], hotPath: [], pathStart: 'unknown-root' } as const;
+  const r = report(slowClick, [commit(50, 0, cut)], [], loginClick('onClick')).explanation;
+  assert.match(r.cause, /^The onClick handler or React's render of the app most likely took the 97 ms, the handler the likelier: React re-rendered /);
+  assert.equal(r.cause.match(/\b2 components\b/g)?.length, 1, r.cause);
+  assert.doesNotMatch(r.cause, /\b(List|Sidebar)\b/);
+  // The handler is the blame, so the cause says nothing of the cut, and the note on the partial count stays.
+  assert.ok(r.notes.includes('The component count is partial: the walk stopped at its budget or at its depth limit.'), r.notes.join(' | '));
+});
+
 test('in a production build a render beside a handler is blamed only where its count explains the working time', () => {
   // Nothing times a render there, so the count is all that weighs it against the handler beside it. A click
   // whose handlers ran for `processing` ms from 3 ms, painted 5 ms after them, with one commit at their end.
