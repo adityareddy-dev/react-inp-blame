@@ -225,8 +225,8 @@ and the flag on Node 24.19 and on older Jest, which were checked by hand.
 options it takes, and the shape of a report. Only a major release removes or renames an export, an entry point,
 an option or a report field, changes what a field holds or what an option does, changes a default, adds a value
 to one of the [fixed sets of strings](docs/api.md#fixed-sets-of-strings), or drops a version the table above
-lists. `schemaVersion` stays where 1.0.0 has it for all of 1.x, on a report and on the `react` object that
-`react-inp-blame/web-vitals`' `attributeINP` adds.
+lists, except a Node line past its end of life. `schemaVersion` stays where 1.0.0 has it for all of 1.x, on a
+report and on the `react` object that `react-inp-blame/web-vitals`' `attributeINP` adds.
 
 Until then the 0.x rules hold. A minor release, 0.14.0 after 0.13.0, can remove or rename an export or an
 option, change what a report field holds, or raise an oldest version in the table. The CHANGELOG says which
@@ -254,9 +254,10 @@ fixes go into the latest minor, and into the minor before it for 90 days after t
 change in any release. So can bundle size and the library's own time.
 
 **Support window.** 1.x supports what the table above lists at 1.0.0. A new major of React, Next.js, Vite or Astro
-comes in a minor, once CI runs it. Dropping anything the table lists waits for 2.0.0. The canaries run in CI every
-day but are not supported: a canary can break the library, and the fix comes in an ordinary release. The build
-plugins run on Node 20.19 and later through all of 1.x.
+comes in a minor, once CI runs it. The build plugins run on Node 20.19 and later at 1.0.0. A minor can drop a
+Node line once it is past its end of life upstream, and the CHANGELOG says so under Changed. A patch never drops
+one. Dropping anything else the table lists waits for 2.0.0. The canaries run in CI every day but are not
+supported: a canary can break the library, and the fix comes in an ordinary release.
 
 Load one copy of the library per page. Two copies from different releases may refuse to share it, and the second
 says so in the console ([another-copy](#another-copy)).
