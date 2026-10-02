@@ -1106,7 +1106,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // in. Where it reached several roots, or one with rendered work beside it that the walk never reached,
   // the counts cannot choose a root: the one counted first can be the smaller. The path then names the
   // component they all sit under, or nothing. React's durations are totals for each subtree, walked or not,
-  // so they still choose.
+  // so they still choose among the roots the walk reached, though not for the ones it never did (below).
   const comparable = (a: Agg) => hasDurations || !a.cut;
   const hotPath: string[] = [];
   // Of `rendered`, those inside the component the path starts from: all of them under the component several
@@ -1116,7 +1116,13 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // path that is not a layer, else the end of the path.
   let pathRendered = rendered;
   const onlyRoot = performedRoots.length === 1 ? performedRoots[0]! : null;
-  const fellBack = !hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber));
+  // A timed walk cut at its budget never reaches the roots after the cut, and only React's total for the whole
+  // render has their time, in ProfileMode (under <Profiler> alone the root is not timed). Where they took longer
+  // than the heaviest root it reached, the durations cannot choose a root either.
+  const rootTotal = outOfBudget && performedRoots.length && rootFiber.mode & context.profileMode && rootFiber.actualDuration! >= renderTime ? rootFiber.actualDuration! : 0;
+  const fellBack =
+    rootTotal - renderTime > performedRoots.reduce((a, t) => Math.max(a, t.total), 0) ||
+    (!hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber)));
   if (fellBack) {
     const shared = sharedAncestor(top);
     if (shared) hotPath.push(shared);
@@ -1174,7 +1180,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     components: Object.freeze(components),
     hasDurations,
     coarseClock,
-    total: hasDurations ? renderTime : 0,
+    total: rootTotal || (hasDurations ? renderTime : 0),
     startedAt: renderStartOf(rootFiber, at),
     effectsStartedAt: null,
     effectsEndedAt: null,

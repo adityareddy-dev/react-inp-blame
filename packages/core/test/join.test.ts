@@ -5256,6 +5256,13 @@ test('a render whose walk stopped at its budget says "at least", names no compon
   assert.equal(blameOf({ roots: ['Orders'], hotPath: ['App'], pathStart: 'unknown-root', components }).blame.name, 'the app');
   const nothingHolds = blameOf({ roots: ['App'], hotPath: [], pathStart: 'unknown-root', components });
   assert.deepEqual([nothingHolds.blame.name, nothingHolds.blame.detail, nothingHolds.cause], [container.blame.name, container.blame.detail, container.cause]);
+  // A timed walk that reached one root, Left, where React's total says more of the render went unreached: the app,
+  // with a path that names a container or nothing, never the root it reached first.
+  for (const hotPath of [['App'], []]) {
+    const timed = blameOf({ hasDurations: true, total: 380, roots: ['Left'], hotPath, pathStart: 'unknown-root', components });
+    assert.equal(timed.blame.name, 'the app', hotPath.join());
+    assert.doesNotMatch(`${timed.cause} ${timed.blame.detail}`, /\b(Left|App)\b/);
+  }
   // A Folder that did not render over the Folders that did reads, by name, like a Folder that rendered over them:
   // `pathStart` tells the two apart.
   assert.equal(blameOf({ roots: ['Folder'], hotPath: ['Folder'], pathStart: 'unknown-root', components }).blame.name, 'the app');

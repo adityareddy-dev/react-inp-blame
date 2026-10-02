@@ -185,10 +185,27 @@ test('a production walk cut at its budget does not blame the subtree it happened
   time(timed.child.child, 30);
   time(timed.child.child.sibling, 60);
   const timedCut = walkCommit(timed as any, 5000, 100, click, development);
-  assert.deepEqual([timedCut.hotPath, timedCut.pathStart, timedCut.truncated], [['Dashboard', 'Metrics'], 'only-root', true]);
+  assert.deepEqual([timedCut.hotPath, timedCut.pathStart, timedCut.truncated, timedCut.total], [['Dashboard', 'Metrics'], 'only-root', true, 90]);
 
   // Several roots, the walk cut in the first: named by the component they all sit under, not by the first.
   const passedThrough = (component: () => void, ...children: Record<string, unknown>[]) => fiber(0, component, children, 0);
+
+  // A timed walk cut inside the first of two roots never reaches the second, and its durations are the first's
+  // alone. React's total for the root says how long the rest took: where that is longer than the root the walk
+  // reached, the durations cannot choose either, and the render is as long as React measured it.
+  const timedRoots = (orders: number, metrics: number, wrap = (...kids: Record<string, unknown>[]) => passedThrough(App, ...kids)) =>
+    time(root(wrap(time(rendered(Orders, ...rows(Order, 3000)), orders), time(rendered(Metrics, ...rows(Metric, 6000)), metrics))), orders + metrics);
+  const said = (c: ReturnType<typeof walkCommit>) => [c.hotPath, c.roots, c.pathStart, leafName(c as CommitSummary), c.total];
+  assert.deepEqual(said(walkCommit(timedRoots(30, 60) as any, 1000, 100, click, development)), [['App'], ['Orders'], 'unknown-root', null, 90]);
+  assert.deepEqual(said(walkCommit(timedRoots(30, 60, (...kids) => element('main', ...kids)) as any, 1000, 100, click, development)), [[], ['Orders'], 'unknown-root', null, 90]);
+  // Where the root it reached took most of it, that root is the one the walk found, with the root's total.
+  assert.deepEqual(said(walkCommit(timedRoots(70, 20) as any, 1000, 100, click, development)), [['Orders'], ['Orders'], 'only-root', 'Orders', 90]);
+  // A root outside ProfileMode, timed only under a <Profiler>, has no total of its own to go by: as before.
+  const profiled = timedRoots(30, 60);
+  profiled.mode = 0;
+  assert.deepEqual(said(walkCommit(profiled as any, 1000, 100, click, development)), [['Orders'], ['Orders'], 'only-root', 'Orders', 30]);
+  // Nothing reached, nothing to compare.
+  assert.deepEqual(said(walkCommit(timedRoots(30, 60) as any, 0, 100, click, development)), [[], [], 'no-root', null, 0]);
   const roots = () => root(passedThrough(App, rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000))));
   const several = walkCommit(roots() as any, 5000, 100, click, development);
   assert.deepEqual(several.roots, ['Orders', 'Metrics']);
