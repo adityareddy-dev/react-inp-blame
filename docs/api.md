@@ -204,8 +204,9 @@ navigation type a browser adds later reads as `'navigate'` until 2.0.0.
 `pointerType` is not on the list. It is the browser's own string, passed on as the event gave it: browsers
 give `'mouse'`, `'pen'` and `'touch'`, and a value a browser adds later would come through as it is.
 
-`blame.name` is free text with one fixed value: `'the app'`, which a render blame takes where its commit named
-no component. That value stays the same through 1.x, and the commit's `pathStart` says why it named none.
+`blame.name` is free text with one fixed value: `'the app'`, which a render or layout blame takes where its
+commit's walk gave no component to name it after, as when the walk could not tell where the render started.
+That value stays the same through 1.x, and the commit's `pathStart` says why there was none.
 
 ## Labels and personal data
 
