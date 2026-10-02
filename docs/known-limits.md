@@ -63,6 +63,17 @@
   ways to a profiling build: in Vite, a `resolve.alias` from `react-dom/client` to `react-dom/profiling`, and
   in Next.js, `next build --profile`. The Vite alias added 5.4 KB gzipped to one app. The runtime cost of
   either is not measured yet.
+- **A commit past `walkBudget` (5000 components by default) is walked only in part**, and what took the time
+  past the cut is not known. Its counts say "at least", and its blame's detail and sentence say the rest was
+  not walked. In a production build, which has only counts to go on, the blame names the component the render
+  started at only where one rendered at the top and holds everything the walk reached, and that is where the
+  render started, not what inside it took the time: a theme change over 6,000 labels reads ThemeProvider, at
+  least 1,999 components, where a walk of the whole tree finds NodeLabel ×6,000. Where the walk reached several such
+  components, or one with work beside it that it never got to, it names the app and says it could not tell
+  where the render started (`pathStart` is `'unknown-root'`). A larger budget walks further, inside the
+  interaction it measures: a sort of 18,456 cells took 12.6 ms to walk in full, against 1.7 ms capped. A
+  branch more than 1,000 fibers deep is cut as well, and the walk sees nothing below it, so a component that
+  rendered down there is missed, and `'only-root'` can be one start of two.
 - **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only. The
   browser counts style recalculation in the same figure, so a `'layout'` blame covers either. Its share of
   a script that ran on past the handlers is apportioned by time rather than measured, so such a blame is

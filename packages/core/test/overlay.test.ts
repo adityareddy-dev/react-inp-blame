@@ -549,6 +549,53 @@ test("the panel's row and its open section say a key press's render before the s
   assert.equal(after.heading, 'Rendered after the paint · 400 components');
 });
 
+test('a render whose walk could not tell where it started is the tree in the panel, never the component the roots sit under', () => {
+  // A production build, the walk cut at its budget inside Orders with Metrics beside it, both under an App that
+  // did not render.
+  const entry = (name: string, startTime: number, duration: number, processingStart: number, processingEnd: number) => ({ name, interactionId: 7, startTime, duration, processingStart, processingEnd, target: null });
+  const click = { ts: 0, type: 'click', gestureTs: 0, press: undefined, target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } };
+  const cut = (at: number, opts: Partial<CommitSummary> = {}): CommitSummary => ({
+    at,
+    sinceInput: at,
+    inputTs: 0,
+    gestureTs: 0,
+    inputType: 'click',
+    rendered: 5000,
+    hydrated: false,
+    hydratedTarget: null,
+    truncated: true,
+    roots: ['Orders', 'Metrics'],
+    hotPath: ['App'],
+    pathStart: 'unknown-root',
+    components: [{ name: 'Row', count: 4998, self: null, total: null }],
+    hasDurations: false,
+    coarseClock: false,
+    total: 0,
+    startedAt: null,
+    effectsStartedAt: null,
+    effectsEndedAt: null,
+    walkMs: 0,
+    priority: undefined,
+    didError: false,
+    ...opts,
+  });
+  for (const opts of [{}, { roots: ['App'], hotPath: [] }]) {
+    // Rendered in the working time, it is the row's blame.
+    const r = sealReport(buildReport([entry('click', 0, 400, 3, 390)], [cut(200, opts)], [], [click]));
+    const { restore } = panelDocument();
+    try {
+      const line = blameLine(r).map((x) => (typeof x === 'string' ? x : x ? (x as unknown as Drawn).textContent : '')).join('');
+      assert.equal(line, 'most likely the app re-rendered · at least 5000 components, the rest not walked');
+    } finally {
+      restore();
+    }
+    // After the paint, it is the row's later render.
+    const later = sealReport(buildReport([entry('click', 0, 48, 3, 40)], [cut(600, opts)], [], [click]));
+    assert.deepEqual(later.followUps.map((c) => c.at), [600]);
+    assert.equal(byClass(panelFor(later), 'later')?.textContent, 'then the tree re-rendered after the paint · at least 5000 components, the rest not walked');
+  }
+});
+
 test('under a development build of react-dom the badge is marked dev, and the panel says why its colours can run high', () => {
   // A 608 ms INP: the badge and the panel's head, drawn with react-dom of `bundleType` registered.
   const drawnUnder = (bundleType: number) => {
