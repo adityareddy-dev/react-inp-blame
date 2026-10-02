@@ -23,6 +23,7 @@ export interface CommitSummary {
     readonly truncated: boolean;
     readonly roots: readonly string[];
     readonly hotPath: readonly string[];
+    readonly pathStart?: "only-root" | "heaviest-root" | "unknown-root" | "no-root";
     readonly startRendered?: number;
     readonly pathRendered?: number;
     readonly strictMode?: boolean;

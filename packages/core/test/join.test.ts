@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { heaviest, mostlyComponent } from '../src/commits.ts';
+import { walkCommit } from '../src/fiber.ts';
 import type { InputRecord } from '../src/hook.ts';
 import { attachLaterRender, blamedCommit, buildReport, carriesWork, isLaterRender, refreshReport, renderedVerb, sealReport, verdictCounts, type LabelSource } from '../src/join.ts';
 import type { PageNavigation } from '../src/navigation.ts';
@@ -4020,6 +4021,14 @@ test("where a render's useEffect callbacks took most of its commit, the cause le
   const beside = report(click(1435), [reports(1431, 2, null, 3)], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(beside.blame.detail, 'useEffect callbacks');
   assert.match(beside.cause, /own render\)\.$/);
+  // A walk cut short counted only the mounts it reached, so none is named, and the count is a lower bound.
+  const cut = (effectMounts: number) => report(click(1435), [{ ...reports(1431, effectMounts), truncated: true, pathStart: 'only-root' }], null, draw({ owners: ['Reports'] })).explanation;
+  assert.equal(cut(1).blame.detail, 'useEffect callbacks in at least 1 mounted component');
+  assert.match(cut(1).cause, /\. At least 1 component mounted in that commit with a useEffect of its own\. The walk stopped partway through that render, so which components took the time isn't known\.$/);
+  assert.doesNotMatch(cut(1).cause, /RevenueChart/);
+  assert.equal(cut(3).blame.detail, 'useEffect callbacks in at least 3 mounted components');
+  assert.match(cut(3).cause, /\. At least 3 components mounted in that commit, each with a useEffect of its own\. /);
+  assert.equal(cut(0).blame.detail, 'useEffect callbacks');
   assert.doesNotMatch(heavy.cause, /then ran for about/);
   assert.ok(!heavy.notes.some((n) => n.includes('own render')), heavy.notes.join(' | '));
   // Effects that are a third of the commit leave it as it was.
@@ -4210,7 +4219,7 @@ test("React's render time across several commits is said as their total with the
   const partial = report([entry('click', 0, 72, 2, 64)], [{ ...list, truncated: true }, sidebar], [], [input(0, 'click')]).explanation;
   assert.equal(
     partial.cause,
-    'React most likely spent about 30 ms of the 62 ms of working time re-rendering at least 30 components inside List, and 55 ms of rendering in all across 2 commits.',
+    "React most likely spent about 30 ms of the 62 ms of working time re-rendering at least 30 components inside List, and 55 ms of rendering in all across 2 commits. The walk stopped partway through that render, so which components took the time isn't known.",
   );
   // Three renders of 3 ms earned the blame together, over the 5 ms a render needs, and read as 3 ms.
   const small = { total: 3, components: [{ name: 'Row', count: 30, self: 2, total: 2 }] };
@@ -4498,7 +4507,7 @@ test("one component's own render is named from 25 ms and half of the render, and
 
   // A walk cut short has counted only the part it reached, so no one component's share of it is known.
   const cut = sorted(100, 120, { truncated: true });
-  assert.equal(cut.blame.detail, 'at least 637 components');
+  assert.equal(cut.blame.detail, 'at least 637 components, the rest not walked');
   assert.ok(unnamed(cut), cut.cause);
 
   // Without durations there is no time of a component's own to go by.
@@ -5221,10 +5230,14 @@ test('a render whose walk stopped at its budget says "at least", names no compon
     { name: 'Order', count: 3000, self: null, total: null },
     { name: 'Metric', count: 1998, self: null, total: null },
   ];
-  const one = blameOf({ roots: ['Dashboard'], hotPath: ['Dashboard'], components });
-  assert.deepEqual(one.blame, { kind: 'render', name: 'Dashboard', detail: 'at least 5000 components', ms: one.blame.ms, confidence: 'inferred' });
+  const one = blameOf({ roots: ['Dashboard'], hotPath: ['Dashboard'], pathStart: 'only-root', components });
+  assert.deepEqual(one.blame, { kind: 'render', name: 'Dashboard', detail: 'at least 5000 components, the rest not walked', ms: one.blame.ms, confidence: 'inferred' });
   assert.ok(one.cause.includes('re-rendering at least 5000 components inside Dashboard, in the 387 ms of working time.'), one.cause);
+  // The render started at Dashboard, and what inside it took the time is past the cut, which the sentence says
+  // in place of the note.
+  assert.ok(one.cause.includes(" not measured. The walk stopped partway through that render, so which components took the time isn't known. A profiling build of React would give exact numbers."), one.cause);
   assert.doesNotMatch(one.cause, /mostly/);
+  assert.ok(!one.notes.some((n) => n.startsWith('The component count is partial')), one.notes.join('\n'));
   // Several roots under no shared component: not the first root the walk reached. The name falls back to
   // the app, as the sentence does, rather than to null, which a reader of a render blame does not expect.
   const several = blameOf({ roots: ['Orders', 'Metrics'], hotPath: [], components });
@@ -5232,6 +5245,59 @@ test('a render whose walk stopped at its budget says "at least", names no compon
   assert.ok(several.cause.includes('inside the app'), several.cause);
   // Nor the one root it reached, when the walk says the work may be beside it (an empty hot path).
   assert.equal(blameOf({ roots: ['Orders'], hotPath: [], components }).blame.name, 'the app');
+
+  // A component the roots sit under that did not render itself is not where the render started, and the work the
+  // walk never reached need not be under it: the app, and nothing in the sentence or the detail names it.
+  const container = blameOf({ roots: ['Orders', 'Metrics'], hotPath: ['App'], pathStart: 'unknown-root', components });
+  assert.deepEqual([container.blame.name, container.blame.detail], ['the app', 'at least 5000 components, the rest not walked']);
+  assert.ok(container.cause.startsWith(CUT_UNKNOWN), container.cause);
+  assert.doesNotMatch(`${container.cause} ${container.blame.detail}`, /\bApp\b/);
+  // The same with the one root the walk reached and work beside it, and with a path that names nothing.
+  assert.equal(blameOf({ roots: ['Orders'], hotPath: ['App'], pathStart: 'unknown-root', components }).blame.name, 'the app');
+  const nothingHolds = blameOf({ roots: ['App'], hotPath: [], pathStart: 'unknown-root', components });
+  assert.deepEqual([nothingHolds.blame.name, nothingHolds.blame.detail, nothingHolds.cause], [container.blame.name, container.blame.detail, container.cause]);
+  // A Folder that did not render over the Folders that did reads, by name, like a Folder that rendered over them:
+  // `pathStart` tells the two apart.
+  assert.equal(blameOf({ roots: ['Folder'], hotPath: ['Folder'], pathStart: 'unknown-root', components }).blame.name, 'the app');
+  assert.equal(blameOf({ roots: ['Folder'], hotPath: ['Folder'], pathStart: 'only-root', components }).blame.name, 'Folder');
+  // A walk cut at its depth limit follows the path it took, as before.
+  assert.equal(blameOf({ roots: ['List', 'Sidebar'], hotPath: ['List', 'Row'], pathStart: 'heaviest-root', components }).blame.name, 'Row');
+  // A summary an earlier release stored has nothing to tell the two apart, and keeps the name it had.
+  assert.equal(blameOf({ roots: ['Orders', 'Metrics'], hotPath: ['App'], components }).blame.name, 'App');
+});
+
+const CUT_UNKNOWN =
+  "React was most likely re-rendering at least 5000 components inside the app, in the 387 ms of working time. This React build records no render durations, so that is read from the component counts, not measured. The walk stopped partway through that render, so where it started and which components took the time aren't known. A profiling build of React would give exact numbers.";
+
+test('a render the walk could not tell the start of is named after the app, from a walk of the tree', () => {
+  function fiber(tag: number, type: unknown, children: Record<string, unknown>[] = [], flags = tag === 0 ? 1 : 0): Record<string, unknown> {
+    // Each one rendered before, so this is a re-render, not a mount.
+    const f: Record<string, unknown> = { tag, flags, mode: 0, elementType: type, type, memoizedProps: null, memoizedState: null, return: null, child: children[0] ?? null, sibling: null, alternate: { tag, child: {} } };
+    children.forEach((child, i) => Object.assign(child, { return: f, sibling: children[i + 1] ?? null }));
+    return f;
+  }
+  const named = (name: string) => Object.assign(() => {}, { displayName: name });
+  const rows = (n: number) => Array.from({ length: n }, () => fiber(0, named('Row'), [fiber(5, 'li')]));
+  const production = { profileMode: 0b10, strictMode: 0b1000, priority: undefined, didError: false, hydratedTarget: null };
+  const walked = (...tree: Record<string, unknown>[]): CommitSummary => ({ ...walkCommit(fiber(3, null, tree) as any, 5000, 200, { ts: 0, type: 'click', gestureTs: 0 }, production), walkMs: 0 });
+  const reportOf = (c: CommitSummary) => report([entry('click', 0, 400, 3, 390)], [c], [], [input(0, 'click')]);
+
+  // App over Orders and Metrics, cut at 5000, App passed through.
+  const app = reportOf(walked(fiber(0, named('App'), [fiber(0, named('Orders'), rows(3000)), fiber(0, named('Metrics'), rows(6000))], 0)));
+  assert.equal(app.explanation.blame.name, 'the app');
+  // App beside a Toaster, the walk out of budget inside App before it reached the Toaster.
+  const beside = reportOf(walked(fiber(0, named('App'), rows(6000)), fiber(0, named('Toaster'), [fiber(0, named('Toast'))])));
+  assert.deepEqual([beside.explanation.blame.name, beside.explanation.blame.detail], ['the app', 'at least 5000 components, the rest not walked']);
+  assert.ok(beside.explanation.cause.startsWith(CUT_UNKNOWN), beside.explanation.cause);
+  assert.doesNotMatch(`${beside.explanation.cause} ${beside.explanation.blame.detail}`, /App|Toast/);
+
+  // The field survives the trip to a backend, and a commit that rendered nothing says so.
+  const bailedOut = fiber(0, named('List'), [fiber(5, 'ul')], 0);
+  bailedOut.alternate = { child: bailedOut.child };
+  const none = reportOf(walked(bailedOut));
+  for (const [r, start] of [[app, 'unknown-root'], [beside, 'unknown-root'], [none, 'no-root']] as const) {
+    assert.equal(JSON.parse(JSON.stringify(r)).commits[0].pathStart, start);
+  }
 });
 
 test('a render is counted inside the component it is named after, from the one it started at where that holds them all, and is a mount where most of it was one', () => {
@@ -5350,12 +5416,12 @@ test('a render is counted inside the component it is named after, from the one i
   });
   const all = report([entry('click', 0, 900, 3, 880)], [rows], [], [input(0, 'click')]).explanation;
   assert.match(all.cause, /^React was most likely re-rendering at least 4632 components inside RecordIndexContainer, in the 877 ms of working time\. /);
-  assert.equal(all.blame.detail, 'at least 4632 components');
+  assert.equal(all.blame.detail, 'at least 4632 components, the rest not walked');
   // A walk cut short whose path went below where it started: every count is a lower bound, the one inside
   // too, and the sentence says so of both rather than putting the whole count inside the deeper component.
   const partial = report([entry('click', 0, 900, 3, 880)], [commit(400, 0, { ...rows, hotPath: ['RecordIndexContainer', 'RecordIndexTableContainer'], pathRendered: 3000 })], [], [input(0, 'click')]).explanation;
   assert.match(partial.cause, /^React was most likely re-rendering at least 4632 components from RecordIndexContainer down, at least 3000 of them inside RecordIndexTableContainer, in the 877 ms of working time\. /);
-  assert.equal(partial.blame.detail, 'at least 3000 of at least 4632 components');
+  assert.equal(partial.blame.detail, 'at least 3000 of at least 4632 components, the rest not walked');
   // A development build follows React's durations past the cut, so the path can end in a subtree the walk
   // counted in full beside one it did not: 800 inside Heavy is exact, and still a lower bound of the 5000.
   const heavy = commit(200, 0, {
@@ -5365,6 +5431,7 @@ test('a render is counted inside the component it is named after, from the one i
     total: 180,
     roots: ['App'],
     hotPath: ['App', 'Heavy'],
+    pathStart: 'only-root',
     startRendered: 5000,
     pathRendered: 800,
     components: [
@@ -5372,9 +5439,12 @@ test('a render is counted inside the component it is named after, from the one i
       { name: 'Heavy', count: 1, self: 80, total: 170 },
     ],
   });
-  const cut = report([entry('click', 0, 220, 3, 210)], [heavy], []).explanation;
-  assert.match(cut.cause, /re-rendering at least 5000 components from App down, at least 800 of them inside Heavy\./);
-  assert.deepEqual([cut.blame.name, cut.blame.detail], ['Heavy', 'at least 800 of at least 5000 components']);
+  const cutReport = report([entry('click', 0, 220, 3, 210)], [heavy], []);
+  const cut = cutReport.explanation;
+  assert.match(cut.cause, /re-rendering at least 5000 components from App down, at least 800 of them inside Heavy\. The walk stopped partway through that render, so which components took the time isn't known\./);
+  assert.deepEqual([cut.blame.name, cut.blame.detail], ['Heavy', 'at least 800 of at least 5000 components, the rest not walked']);
+  // The panel still finds the commit the blame was built from.
+  assert.equal(blamedCommit(cutReport), cutReport.commits[0]);
 });
 
 test('a layout blame is named after the component the render started at where that holds the whole commit, and after the one the render is named after where none does', () => {
@@ -5709,8 +5779,8 @@ test("a minifier's name the report gives, in a build whose names are otherwise r
   // Twenty, where React Router's RouterProvider is minified in a build that names the app's own components:
   // five readable names of the seven beside it.
   const records = named(['RecordTable', 'RecordTableRow', 'RecordTableCell', 'RecordTableCellDisplayMode', 'RecordShowPage', 'Wr', 'Qe', '(anonymous)']);
-  const twenty = report(click, [walk({ rendered: 4917, truncated: true, roots: ['hl'], hotPath: ['hl'], components: records })], []).explanation;
-  assert.match(twenty.cause, /^React was most likely re-rendering at least 4917 components inside hl, in the 97 ms of working time\. /);
+  const twenty = report(click, [walk({ rendered: 4917, truncated: true, roots: ['hl'], hotPath: ['hl'], pathStart: 'only-root', components: records })], []).explanation;
+  assert.match(twenty.cause, /^React was most likely re-rendering at least 4917 components inside hl, in the 97 ms of working time\. .* The walk stopped partway through that render, so which components took the time isn't known\. /);
   assert.equal(twenty.blame.name, 'hl');
   assert.ok(twenty.notes.includes(oddNote('hl')), twenty.notes.join('\n'));
   assert.ok(!twenty.notes.some((n) => n.startsWith('Most component names')));

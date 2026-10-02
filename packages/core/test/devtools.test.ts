@@ -254,6 +254,24 @@ test('the interaction entry is named after the heaviest render before the paint,
   assert.equal(r.explanation.blame.name, 'OrderSummary');
 });
 
+test('a render whose walk could not tell where it started is named after no component, though its path still shows the one the roots sit under', () => {
+  // A production walk cut at its budget under an App that did not render, and beside a Toaster it never reached.
+  const cut = { rendered: 5000, truncated: true, pathStart: 'unknown-root' as const, components: [{ name: 'Row', count: 4998, self: null, total: null }] };
+  for (const [opts, path] of [
+    [{ roots: ['Orders', 'Metrics'], hotPath: ['App'] }, ['Heaviest path', 'App']],
+    [{ roots: ['App'], hotPath: [] }, undefined],
+  ] as const) {
+    const r = report([commit(150, { ...cut, ...opts })]);
+    const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+    assert.deepEqual(
+      drawn.map((d) => d.label),
+      ['200 ms click', 'React render · root (at least 5000 components, time not measured)'],
+    );
+    assert.deepEqual(drawn[0]?.properties?.find(([name]) => name === 'Heaviest path'), path);
+    assert.equal(r.explanation.blame.name, 'the app');
+  }
+});
+
 test("the interaction entry takes the start a layout blame is named after, where that start is the heaviest render's", () => {
   // Closing a Sheet on the shadcn/ui docs, production build: 56 components from Dialog down, 15 of them inside
   // DismissableLayer, and 87 ms of layout forced in BODY.onclick. The tooltip blamed Dialog and the entry read DismissableLayer.

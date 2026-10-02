@@ -23,4 +23,9 @@ test('a render past the walk budget is not blamed on the subtree the walk reache
   if (prod) expect(r.explanation.blame.name).toBe('Budget');
   else expect(r.explanation.blame.name).toBe('Metrics');
   expect(r.verdict).not.toMatch(/mostly Order\b/);
+  // Budget holds the state and re-rendered itself, so the walk knows the render started there, and the
+  // verdict says what it can't know: which components past the cut took the time.
+  expect(r.commits.find((c) => c.truncated)?.pathStart).toBe('only-root');
+  expect(r.explanation.blame.detail).toMatch(/the rest not walked$/);
+  expect(r.verdict).toContain("The walk stopped partway through that render, so which components took the time isn't known.");
 });

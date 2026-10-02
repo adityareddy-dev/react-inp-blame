@@ -87,9 +87,28 @@ export interface CommitSummary {
    * it renders) are on the chain but spend no step. For a production walk cut at `walkBudget`, whose counts
    * cannot choose among subtrees it reached in part or not at all, it stops at its one subtree where
    * nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
-   * under, or empty where they sit under none.
+   * under, or empty where they sit under none. `pathStart` says which.
    */
   readonly hotPath: readonly string[];
+  /**
+   * Where `hotPath` starts, as the walk found it. Every walk sets one of the four, and these four are all
+   * there are in 1.x.
+   *
+   * 'only-root': the walk found one component where this render started, and the path starts at it.
+   *
+   * 'heaviest-root': the walk found several components where renders started, and the path starts at the
+   * heaviest one it reached. `roots` has up to five of their names.
+   *
+   * 'unknown-root': the walk reached components that rendered but stopped before it could tell which one
+   * held the render (in production at walkBudget), so the path starts at the nearest component they all sit
+   * under, or is empty when they share none.
+   *
+   * 'no-root': the walk reached no component that rendered, either because the commit rendered none or
+   * because it stopped first (then `truncated` is true). hotPath is empty and `rendered` is 0.
+   *
+   * Absent: a report from before 0.21.0 (0.20.0 and 0.21.0 share schemaVersion 4).
+   */
+  readonly pathStart?: 'only-root' | 'heaviest-root' | 'unknown-root' | 'no-root';
   /**
    * Of `rendered`, those inside the component `hotPath` starts from, that component included. Equal to
    * `rendered` where that is the commit's one root or the component every root sits under, and below it
@@ -436,8 +455,9 @@ export interface Blame {
    * What the time is charged to: a subtree that re-rendered, a handler that ran, what ran a script as the
    * browser names it, or the boundary that was hydrated, and null when unknown. Which of them a report names
    * can change in a minor as the reading gets better, and the rest of this says how each kind picks one
-   * today. A 'render' always has one: the subtree, or 'the app' where the commit named none. For a 'layout'
-   * it is where the layout was forced, never what forced it, because no source says that. That is the subtree
+   * today. A 'render' always has one: the subtree, or 'the app' where the commit named none, which takes in a
+   * walk that could not tell where the render started (`CommitSummary.pathStart`). For a 'layout' it is
+   * where the layout was forced, never what forced it, because no source says that. That is the subtree
    * of a commit the interaction can claim: one joined by its own input stamp, walked to the end, with no
    * commit of the interaction left unjoined. Failing that it is the invoker the browser charged the script to
    * ("DIV#root.onclick"), and only while one script holds nearly all of `ms`; where several scripts share the
@@ -458,16 +478,19 @@ export interface Blame {
    * ("TableBody's own render"), else how many components rendered ("637 components"). For a render, of which
    * how many inside the component `name` gives, where that is fewer ("812 of 1216 components"); a hydration
    * is named after a boundary or the page, which holds them all, so it carries the whole count. Null where it
-   * rendered one. A render whose commit spent over half of `ms` in its useEffect callbacks has
+   * rendered one. Where the walk was cut short it is always the count, and says so: "at least 1999 components,
+   * the rest not walked". A render whose commit spent over half of `ms` in its useEffect callbacks has
    * "useEffect callbacks" instead, "useEffect callbacks after mounting RevenueChart" where one component
    * mounted in it with one (`effectMountName`), or "useEffect callbacks in 3 mounted components" where
-   * several did and no component that rendered again had one to run (`effectRuns`). For a handler, its
-   * component, or null where the name is a listener the browser recorded rather than a React handler. For a
-   * 'layout', what that same commit was mostly made of, as a render's, where a count is the whole commit's
-   * ("56 components", not "15 of 56") when `name` is the component the render started from and that holds the
-   * whole commit, wherever `name` came from that commit, and null wherever `name` did not, since a script has
-   * no component counts. For a 'waiting' inside the working time, where it came: "between click and keyup",
-   * or "between handlers" where it was split across more than one; null for a wait before the first handler.
+   * several did and no component that rendered again had one to run (`effectRuns`), and on a walk cut short,
+   * which counted only the mounts it reached, "useEffect callbacks in at least 2 mounted components". For a
+   * handler, its component, or null where the name is a listener the browser recorded rather than a React
+   * handler. For a 'layout', what that same commit was mostly made of, as a render's, where a count is the
+   * whole commit's ("56 components", not "15 of 56") when `name` is the component the render started from and
+   * that holds the whole commit, wherever `name` came from that commit, and null wherever `name` did not,
+   * since a script has no component counts. For a 'waiting' inside the working time, where it came: "between
+   * click and keyup", or "between handlers" where it was split across more than one; null for a wait before
+   * the first handler.
    */
   readonly detail: string | null;
   /**

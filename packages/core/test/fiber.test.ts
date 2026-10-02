@@ -1,8 +1,49 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { leafName, startName } from '../src/commits.ts';
-import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, rootShapeProblem, walkCommit, type FiberRoot } from '../src/fiber.ts';
+import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, rootShapeProblem, walkCommit as walkTree, type FiberRoot } from '../src/fiber.ts';
 import type { CommitSummary } from '../src/types.ts';
+
+/** The components that rendered with no component that rendered above them: where a commit's renders started. */
+function startsIn(rootFiber: Record<string, any>): Record<string, any>[] {
+  const starts: Record<string, any>[] = [];
+  const stack = [rootFiber];
+  while (stack.length) {
+    const f = stack.pop()!;
+    if ([0, 1, 11, 15].includes(f.tag) && f.flags & 1) starts.push(f);
+    else for (let c = f.child; c; c = c.sibling) stack.push(c);
+  }
+  return starts;
+}
+
+/**
+ * Every walk in this file, checked for where its path starts: 'no-root' exactly where nothing rendered, and for
+ * 'only-root' and 'heaviest-root' a component where a render started at the top of the path. That is checked by
+ * fiber, not by name: each such component is given a name no other fiber has and the tree walked again, so a
+ * Folder that did not render cannot pass for the Folders under it, and two starts of one name are told apart.
+ */
+function walkCommit(...args: Parameters<typeof walkTree>): ReturnType<typeof walkTree> {
+  const w = walkTree(...args);
+  assert.equal(w.pathStart === 'no-root', w.rendered === 0, `pathStart ${w.pathStart} with ${w.rendered} rendered`);
+  const starts = startsIn(args[0] as Record<string, any>);
+  // A memo wrapper lends its name to the component it renders, so it is renamed with it.
+  const renamed = starts.flatMap((f, i) => (f.return?.tag === 14 ? [[f, i], [f.return, i]] : [[f, i]]) as [Record<string, any>, number][]);
+  const kept = renamed.map(([f]) => [f.elementType, f.type, f.memoizedProps]);
+  for (const [f, i] of renamed) {
+    const own = Object.assign(() => {}, { displayName: `StartedHere${i}` });
+    Object.assign(f, { elementType: own, type: own, memoizedProps: null });
+  }
+  try {
+    const again = walkTree(...args);
+    assert.equal(again.pathStart, w.pathStart, 'the same pathStart whatever the starts are called');
+    const atStart = /^StartedHere\d+$/.test(again.hotPath[0] ?? '');
+    if (w.pathStart === 'only-root' || w.pathStart === 'heaviest-root') assert.ok(atStart, `${w.pathStart} starts at a component where a render started: ${again.hotPath.join(' > ')}`);
+    else assert.ok(!again.hotPath.some((n) => /^StartedHere\d+$/.test(n)), `${w.pathStart} starts at no component where a render started: ${again.hotPath.join(' > ')}`);
+  } finally {
+    renamed.forEach(([f], i) => Object.assign(f, { elementType: kept[i]![0], type: kept[i]![1], memoizedProps: kept[i]![2] }));
+  }
+  return w;
+}
 
 // The HostRoot fiber React 17, 18 and 19 hand the hook as `root.current`, in a development build.
 const hostRoot = (): Record<string, unknown> => ({ tag: 3, flags: 0, mode: 3, child: null, sibling: null, return: null, alternate: null, actualDuration: 1.5 });
@@ -104,11 +145,13 @@ test('a component React only cloned and skipped does not count against the walk 
   }
   // A list where nothing rendered is still nothing, and not a cut either.
   const none = walkCommit(list(null) as any, 5000, 100, click, development);
-  assert.deepEqual([none.rendered, none.truncated], [0, false]);
+  assert.deepEqual([none.rendered, none.truncated, none.pathStart, none.hotPath, none.roots], [0, false, 'no-root', [], []]);
   // A component that rendered counts, even where it rendered nothing below it for the walk to follow.
   const empty = () => Object.assign(rendered(Row), { alternate: { child: null } });
   const cut = walkCommit(root(passedThrough(List, ...Array.from({ length: 5 }, empty))) as any, 4, 100, click, development);
   assert.deepEqual([cut.rendered, cut.truncated], [3, true]);
+  // The rows it reached sit under a List that did not render, which is named on the path and not after.
+  assert.deepEqual([cut.pathStart, cut.roots, cut.hotPath, leafName(cut as CommitSummary)], ['unknown-root', ['Row'], ['List'], null]);
 });
 
 test('a production walk cut at its budget does not blame the subtree it happened to reach first', () => {
@@ -123,13 +166,16 @@ test('a production walk cut at its budget does not blame the subtree it happened
   // goes by counts, and a walk stopped at 5,000 has all of Orders and a third of Metrics.
   const dashboard = () => root(rendered(Dashboard, rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000))));
   const whole = walkCommit(dashboard() as any, 10_000, 100, click, development);
-  assert.deepEqual(whole.hotPath, ['Dashboard', 'Metrics']);
+  assert.deepEqual([whole.hotPath, whole.pathStart, whole.truncated], [['Dashboard', 'Metrics'], 'only-root', false]);
   const cut = walkCommit(dashboard() as any, 5000, 100, click, development);
   assert.equal(cut.truncated, true);
   assert.deepEqual(cut.hotPath, ['Dashboard']);
+  // The one component that rendered at the top holds all of it, so the render started there, cut or not.
+  assert.deepEqual([cut.pathStart, leafName(cut as CommitSummary)], ['only-root', 'Dashboard']);
 
   // The same tree cut inside its first subtree still says nothing it cannot know about the second.
-  assert.deepEqual(walkCommit(dashboard() as any, 1000, 100, click, development).hotPath, ['Dashboard']);
+  const early = walkCommit(dashboard() as any, 1000, 100, click, development);
+  assert.deepEqual([early.hotPath, early.pathStart], [['Dashboard'], 'only-root']);
 
   // With React's durations, which are totals for each subtree walked or not, the path still chooses.
   const timed = dashboard();
@@ -138,7 +184,8 @@ test('a production walk cut at its budget does not blame the subtree it happened
   time(timed.child, 90);
   time(timed.child.child, 30);
   time(timed.child.child.sibling, 60);
-  assert.deepEqual(walkCommit(timed as any, 5000, 100, click, development).hotPath, ['Dashboard', 'Metrics']);
+  const timedCut = walkCommit(timed as any, 5000, 100, click, development);
+  assert.deepEqual([timedCut.hotPath, timedCut.pathStart, timedCut.truncated], [['Dashboard', 'Metrics'], 'only-root', true]);
 
   // Several roots, the walk cut in the first: named by the component they all sit under, not by the first.
   const passedThrough = (component: () => void, ...children: Record<string, unknown>[]) => fiber(0, component, children, 0);
@@ -146,9 +193,12 @@ test('a production walk cut at its budget does not blame the subtree it happened
   const several = walkCommit(roots() as any, 5000, 100, click, development);
   assert.deepEqual(several.roots, ['Orders', 'Metrics']);
   assert.deepEqual(several.hotPath, ['App']);
+  // App never rendered, and the work the walk did not reach need not be under it: the walk cannot tell where
+  // the render started, and the commit is named after nothing.
+  assert.deepEqual([several.pathStart, leafName(several as CommitSummary)], ['unknown-root', null]);
   // And by nothing where they sit under no component.
   const bare = walkCommit(root(element('main', rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000)))) as any, 5000, 100, click, development);
-  assert.deepEqual(bare.hotPath, []);
+  assert.deepEqual([bare.hotPath, bare.roots, bare.pathStart, leafName(bare as CommitSummary)], [[], ['Orders', 'Metrics'], 'unknown-root', null]);
 
   // The cut can land just past the one root it counted in full, before the next one: that root is still
   // not where the work was. App, Orders and 4,998 rows are the 5,000 components the budget allows.
@@ -156,24 +206,95 @@ test('a production walk cut at its budget does not blame the subtree it happened
   const reachedOne = walkCommit(root(passedThrough(App, ...beforeSecond())) as any, 5000, 100, click, development);
   assert.deepEqual([reachedOne.truncated, reachedOne.roots], [true, ['Orders']]);
   assert.deepEqual(reachedOne.hotPath, ['App']);
-  assert.deepEqual(walkCommit(root(element('main', ...beforeSecond())) as any, 5000, 100, click, development).hotPath, []);
+  assert.deepEqual([reachedOne.pathStart, leafName(reachedOne as CommitSummary)], ['unknown-root', null]);
+  const underMain = walkCommit(root(element('main', ...beforeSecond())) as any, 5000, 100, click, development);
+  // With no App to count, the budget reaches Metrics too, and the path is empty.
+  assert.deepEqual([underMain.hotPath, underMain.roots, underMain.pathStart, leafName(underMain as CommitSummary)], [[], ['Orders', 'Metrics'], 'unknown-root', null]);
   // A cut inside the first of two roots, the second never reached and half as big again: not the first,
   // however many rows it had before the cut.
   for (const first of [4998, 4999, 6000]) {
     const twoRoots = (wrap: (...kids: Record<string, unknown>[]) => Record<string, unknown>) =>
       walkCommit(root(wrap(rendered(Orders, ...rows(Order, first)), rendered(Metrics, ...rows(Metric, 9000)))) as any, 5000, 100, click, development);
-    assert.deepEqual(twoRoots((...kids) => passedThrough(App, ...kids)).hotPath, ['App'], `${first} rows first`);
-    assert.deepEqual(twoRoots((...kids) => element('main', ...kids)).hotPath, [], `${first} rows first, under main`);
+    const app = twoRoots((...kids) => passedThrough(App, ...kids));
+    assert.deepEqual([app.hotPath, app.pathStart, leafName(app as CommitSummary)], [['App'], 'unknown-root', null], `${first} rows first`);
+    const main = twoRoots((...kids) => element('main', ...kids));
+    assert.deepEqual([main.hotPath, main.roots, main.pathStart, leafName(main as CommitSummary)], [[], first < 4999 ? ['Orders', 'Metrics'] : ['Orders'], 'unknown-root', null], `${first} rows first, under main`);
   }
   // One list past the budget, with nothing rendered beside it (a footer that did not re-render): the list.
   const footer = element('footer', text());
   footer.alternate = { child: footer.child };
   const oneList = walkCommit(root(passedThrough(App, rendered(Orders, ...rows(Order, 6000)), footer)) as any, 5000, 100, click, development);
-  assert.deepEqual(oneList.hotPath, ['Orders']);
+  assert.deepEqual([oneList.hotPath, oneList.pathStart, oneList.truncated], [['Orders'], 'only-root', true]);
 
   // Several roots and nothing cut: the heaviest, as ever.
   const uncut = walkCommit(roots() as any, 10_000, 100, click, development);
-  assert.deepEqual(uncut.hotPath, ['Metrics']);
+  assert.deepEqual([uncut.hotPath, uncut.pathStart, leafName(uncut as CommitSummary)], [['Metrics'], 'heaviest-root', 'Metrics']);
+});
+
+test('a walk records where its path starts, from what it found, whatever the components are called', () => {
+  function App() {}
+  function Orders() {}
+  function Metrics() {}
+  function Row() {}
+  function Folder() {}
+  function Toaster() {}
+  function Toast() {}
+  const rows = (n: number) => Array.from({ length: n }, () => rendered(Row, element('li', text())));
+  const passedThrough = (component: () => void, ...children: Record<string, unknown>[]) => fiber(0, component, children, 0);
+  const time = (f: Record<string, any>, ms: number) => Object.assign(f, { actualDuration: ms, mode: 0b10 });
+  const walk = (tree: Record<string, unknown>, budget: number) => walkCommit(tree as any, budget, 100, click, development) as CommitSummary;
+  const said = (c: CommitSummary) => [c.pathStart, c.truncated, c.roots, c.hotPath, leafName(c)];
+
+  // A timed walk cut inside the one root it reached, with work beside it it never got to: it found one start.
+  const lighterBeside = root(passedThrough(App, time(rendered(Orders, ...rows(3000)), 70), time(rendered(Metrics, ...rows(6000)), 20)));
+  time(lighterBeside, 90);
+  assert.deepEqual(said(walk(lighterBeside, 1000)), ['only-root', true, ['Orders'], ['Orders'], 'Orders']);
+  // Cut inside the second of two roots it reached: the heaviest of them, by React's durations.
+  const heavierSecond = root(passedThrough(App, time(rendered(Orders, ...rows(3000)), 30), time(rendered(Metrics, ...rows(6000)), 60)));
+  time(heavierSecond, 90);
+  assert.deepEqual(said(walk(heavierSecond, 5000)), ['heaviest-root', true, ['Orders', 'Metrics'], ['Metrics'], 'Metrics']);
+
+  // Two starts of one name, which `roots` lists once: the heaviest, and the wrapper's check finds it by fiber.
+  const folders = walk(root(element('main', rendered(Folder, ...rows(3000)), rendered(Folder, ...rows(6000)))), 10_000);
+  assert.deepEqual([...said(folders), folders.startRendered], ['heaviest-root', false, ['Folder'], ['Folder'], 'Folder', 6001]);
+
+  // A sixth start, which `roots` leaves out, at the top of the path: by durations past a cut, and by counts past a
+  // branch deeper than the walk follows. Compared by name with `roots`, both read as a container.
+  const names = ['First', 'Second', 'Third', 'Fourth', 'Fifth'].map((n) => Object.assign(() => {}, { displayName: n }));
+  function Sixth() {}
+  const sixTimed = root(passedThrough(App, ...names.map((n) => time(rendered(n), 1)), time(rendered(Sixth, ...rows(2000)), 50)));
+  time(sixTimed, 55);
+  assert.deepEqual(said(walk(sixTimed, 1000)), ['heaviest-root', true, ['First', 'Second', 'Third', 'Fourth', 'Fifth'], ['Sixth'], 'Sixth']);
+  let deep = element('div');
+  for (let i = 0; i < 1100; i++) deep = element('div', deep);
+  const sixDeep = root(passedThrough(App, rendered(names[0]!, deep), ...names.slice(1).map((n) => rendered(n)), rendered(Sixth, ...rows(2000))));
+  assert.deepEqual(said(walk(sixDeep, 5000)), ['heaviest-root', true, ['First', 'Second', 'Third', 'Fourth', 'Fifth'], ['Sixth'], 'Sixth']);
+
+  // A Folder that did not render over two that did reads, by name, like one that rendered over the same two.
+  // Only the first is a container.
+  const two = () => [rendered(Folder, ...rows(3000)), rendered(Folder, ...rows(6000))];
+  assert.deepEqual(said(walk(root(passedThrough(Folder, ...two())), 5000)), ['unknown-root', true, ['Folder'], ['Folder'], null]);
+  assert.deepEqual(said(walk(root(rendered(Folder, ...two())), 5000)), ['only-root', true, ['Folder'], ['Folder'], 'Folder']);
+
+  // App beside a Toaster, both given a new theme: the walk runs out inside App and never reaches the Toaster,
+  // so App is not where the render started for all it knows, and nothing holds the two.
+  const toaster = walk(root(rendered(App, ...rows(6000)), rendered(Toaster, rendered(Toast))), 5000);
+  assert.deepEqual([...said(toaster), toaster.rendered], ['unknown-root', true, ['App'], [], null, 5000]);
+
+  // Cut before it reached a component that rendered, with React's durations or without.
+  const dashboard = () => root(rendered(App, rendered(Orders, ...rows(3000)), rendered(Metrics, ...rows(6000))));
+  const timed = dashboard();
+  time(timed, 90);
+  for (const tree of [dashboard(), timed]) {
+    const none = walk(tree, 0);
+    assert.deepEqual([...said(none), none.rendered], ['no-root', true, [], [], null, 0]);
+  }
+
+  // A branch deeper than the walk follows, with nothing beside it: one start, and the walk was cut.
+  function Runaway() {}
+  let nested = element('div');
+  for (let i = 0; i < 1100; i++) nested = element('div', nested);
+  assert.deepEqual(said(walk(root(rendered(Runaway, nested)), 5000)), ['only-root', true, ['Runaway'], ['Runaway'], 'Runaway']);
 });
 
 const named = (name: string) => Object.assign(() => {}, { displayName: name });
@@ -296,6 +417,8 @@ test('a walk cut short under several roots names the component above a styling w
   // Where nothing better sits above the roots, the wrapper is named as it stands.
   const only = walkCommit(root(fiber(11, styledDiv, [rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000))], 0)) as any, 5000, 100, click, development);
   assert.deepEqual(only.hotPath, ['styled.div']);
+  // On the path either way, as a fact about the tree, and the commit is named after neither: they only hold the roots.
+  assert.deepEqual([cut.pathStart, leafName(cut as CommitSummary), only.pathStart, leafName(only as CommitSummary)], ['unknown-root', null, 'unknown-root', null]);
 });
 
 test("@emotion/styled's Insertion is not counted as a component, whatever the minifier named it", () => {

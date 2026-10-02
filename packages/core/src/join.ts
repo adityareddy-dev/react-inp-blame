@@ -1149,7 +1149,8 @@ function ownRender(c: CommitSummary): { readonly name: string; readonly self: nu
  * "LineItem ×800" where LineItem was most of the commit (`dominantComponent`); "TableBody's own render" where
  * that was most of the time; else the component count, "812 of 1216 components" where the walk counted fewer
  * inside the component the commit is named after, unless `inside` is false, for a blame named after
- * something that holds them all. The panel's line for a later render says the same.
+ * something that holds them all. A walk cut short only ever gives the count, and it says so: "at least 1999
+ * components, the rest not walked". The panel's line for a later render says the same.
  */
 export function mostlyOf(c: CommitSummary, inside = true): string | null {
   if (c.rendered === 1) return null;
@@ -1157,7 +1158,8 @@ export function mostlyOf(c: CommitSummary, inside = true): string | null {
   if (top && top.count > 1) return `${top.name} ×${top.count}`;
   const own = ownRender(c);
   if (own) return `${own.name}'s own render`;
-  return inside ? countInside(c) : renderedCount(c);
+  const count = inside ? countInside(c) : renderedCount(c);
+  return c.truncated ? `${count}, the rest not walked` : count;
 }
 
 /** "812 of 1216 components" where the walk counted fewer inside the component the commit is named after, else "1216 components". */
@@ -1168,6 +1170,19 @@ export function countInside(c: CommitSummary): string {
 
 /** "at least " where the walk stopped before the end of the tree, so every count of it is a lower bound. */
 const atLeast = (c: CommitSummary): string => (c.truncated ? 'at least ' : '');
+
+/**
+ * What a render's cause says of a walk cut short, after the render's own sentence: what took the time past the
+ * cut was not seen, and where the walk could not tell where the render started (`leafName` gives none), that
+ * too. Empty for a walk that went to the end, and for one that reached nothing that rendered, which the note
+ * on the partial count covers.
+ */
+function walkStopped(c: CommitSummary): string {
+  if (!c.truncated || c.rendered === 0) return '';
+  return leafName(c) === null
+    ? " The walk stopped partway through that render, so where it started and which components took the time aren't known."
+    : " The walk stopped partway through that render, so which components took the time isn't known.";
+}
 
 /** "801 components"; "at least 5000 components" where the walk stopped before the end of the tree. */
 export function renderedCount(c: CommitSummary): string {
@@ -2326,6 +2341,9 @@ function explain(r: InteractionReport): Explanation {
   // The commit a sentence set React's render time across several commits beside, where the count it gave has the
   // note on how many times React rendered count the same renders.
   let saidAcross: CommitSummary | null = null;
+  // The commit whose render the cause says the walk stopped partway through, which the note on a partial count
+  // then leaves out.
+  let cutSaid: CommitSummary | null = null;
   // The render blame's commit spent most of its time in useEffect callbacks, which the sentence and detail lead with.
   let effectsLed = false;
   // The commit a layout blame's subtree is, which counts as a render however small, as a render blame's does.
@@ -2526,19 +2544,34 @@ function explain(r: InteractionReport): Explanation {
     // The ones that mounted are counted only where no component that rendered again had one to run too: a chart
     // drawing again beside two tooltips that mounted read as the tooltips' doing.
     const effectMounts = (rc.effectRuns ?? rc.effectMounts) === rc.effectMounts ? (rc.effectMounts ?? 0) : 0;
-    const mountedWith =
-      effectMounts === 1 && rc.effectMountName
+    // A walk cut short counted only the mounts it reached: the one it named can be one of several.
+    const mountedWith = rc.truncated
+      ? effectMounts > 0
+        ? ` At least ${plural(effectMounts, 'component')} mounted in that commit${effectMounts === 1 ? ' with' : ', each with'} a useEffect of its own.`
+        : ''
+      : effectMounts === 1 && rc.effectMountName
         ? ` ${rc.effectMountName} mounted in that commit with a useEffect of its own.`
         : effectMounts > 1
           ? ` ${effectMounts} components mounted in that commit, each with a useEffect of its own.`
           : '';
+    const effectsDetail = rc.truncated
+      ? effectMounts > 0
+        ? ` in at least ${plural(effectMounts, 'mounted component')}`
+        : ''
+      : effectMounts === 1 && rc.effectMountName
+        ? ` after mounting ${rc.effectMountName}`
+        : effectMounts > 1
+          ? ` in ${effectMounts} mounted components`
+          : '';
     const effectsFirst = `The commit's useEffect callbacks ${say(confidence, '', `${HEDGE} `)}ran for about ${ms(rcEffects)}${included(rc)} before the screen could update, after React spent ${renderAcross(rc, ms(rc.total))}.${mountedWith}`;
+    const stopped = walkStopped(rc);
+    if (stopped) cutSaid = rc;
     // A production build times the effects but not the render, so there the effects lead.
     cause = effectsLed
-      ? `${effectsFirst}${say(confidence, '', profiling)}`
+      ? `${effectsFirst}${stopped}${say(confidence, '', profiling)}`
       : !hasDurations && effectsThen
-        ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}`
-        : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.`, `${likely}${listByCount ? ` It could have been ${handler} instead.${tellApart}` : profiling}`);
+        ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${stopped}${profilingRender}`
+        : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.${stopped}`, `${likely}${stopped}${listByCount ? ` It could have been ${handler} instead.${tellApart}` : profiling}`);
     if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
     if (sayEffects && hasDurations && !effectsLed) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
     if (acrossCommits && hasDurations) cause += ` React also spent ${acrossCommits}.`;
@@ -2547,7 +2580,7 @@ function explain(r: InteractionReport): Explanation {
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
-    blame = { kind: 'render', name: leafOf(rc), detail: effectsLed ? `useEffect callbacks${effectMounts === 1 && rc.effectMountName ? ` after mounting ${rc.effectMountName}` : effectMounts > 1 ? ` in ${effectMounts} mounted components` : ''}` : mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
+    blame = { kind: 'render', name: leafOf(rc), detail: effectsLed ? `useEffect callbacks${effectsDetail}` : mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
   } else if (untimedHandler && !waitingWins) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list
     // among the components, and more of the working time than a tree accounts for.
@@ -2747,7 +2780,7 @@ function explain(r: InteractionReport): Explanation {
   // unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. Under a verdict that is the wait, it
   // is already said, and so it is under a script said to have run before the handler started.
   if (r.inputDelay > LONG_TASK_MS && !waitIsTheVerdict && !saidBehind) notes.push(`It also waited ${ms(r.inputDelay)} before the handler could start, because the main thread was busy.`);
-  if (c?.truncated) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
+  if (c?.truncated && c !== cutSaid) notes.push('The component count is partial: the walk stopped at its budget or at its depth limit.');
   const walked = [...r.commits, ...r.followUps];
   if (namesLookMinified(walked)) notes.push(MINIFIED_NAMES_NOTE);
   if (forcedAfterInput >= FORCED_LAYOUT_MIN_MS && blame.kind !== 'layout') {

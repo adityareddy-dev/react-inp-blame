@@ -1116,7 +1116,8 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // path that is not a layer, else the end of the path.
   let pathRendered = rendered;
   const onlyRoot = performedRoots.length === 1 ? performedRoots[0]! : null;
-  if (!hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber))) {
+  const fellBack = !hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber));
+  if (fellBack) {
     const shared = sharedAncestor(top);
     if (shared) hotPath.push(shared);
   } else if (performedRoots.length) {
@@ -1139,6 +1140,9 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     }
     pathRendered = (named ?? cur).rendered;
   }
+  // Where the path starts, from what the walk found rather than from names: `roots` is deduped and cut at five, and
+  // a component that did not render can share a name with the ones under it.
+  const pathStart: NonNullable<CommitWalk['pathStart']> = !performedRoots.length ? 'no-root' : fellBack ? 'unknown-root' : onlyRoot ? 'only-root' : 'heaviest-root';
 
   // Summed over a whole commit, readings of a coarse clock come out close; one component's do not.
   const perComponentTimes = hasDurations && !coarseClock;
@@ -1163,6 +1167,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     truncated,
     roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),
+    pathStart,
     startRendered,
     pathRendered,
     strictMode: strict,

@@ -66,9 +66,11 @@ export const passedLayer = (name: string): boolean => !readableName(name) || PRO
 /**
  * The component a commit is named after: the deepest name on its hot path that is not a layer
  * (`passedLayer`), else the end of its hot path, or its outermost root, as they stand, since the alternative
- * is inventing a name; null when it rendered none.
+ * is inventing a name; null when it rendered none, and where the walk could not tell where the render started
+ * (`pathStart`), whose path holds only a component the roots sit under.
  */
 export function leafName(c: CommitSummary): string | null {
+  if (c.pathStart === 'unknown-root' || c.pathStart === 'no-root') return null;
   for (let i = c.hotPath.length - 1; i >= 0; i--) if (!passedLayer(c.hotPath[i]!)) return c.hotPath[i]!;
   // A walk cut short with no durations to go by leaves no hot path where the work could be in more than one
   // subtree and nothing holds them all, and its first root is only the one the walk reached first.
