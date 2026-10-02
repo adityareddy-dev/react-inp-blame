@@ -2727,7 +2727,8 @@ function explain(r: InteractionReport): Explanation {
         : "No react-dom on this page is being read, so nothing React did is in this report: either no React DevTools hook is in use (hook: 'chain' found none to wrap), or stats().unsupportedReason says why (the page turns its DevTools hook off or locks it, or the react-dom that registered cannot be read).",
     );
   }
-  if (r.startedNavigation) notes.push(`It started a navigation to ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
+  // A report keeps a URL's path only, so a step that changed the query or the hash stays on the page it began on.
+  if (r.startedNavigation) notes.push(`It started a navigation ${r.startedNavigation.url === r.navigationURL ? 'within' : 'to'} ${linkText(r.startedNavigation.url, r.navigationURL)}.`);
   if (r.hydration?.kind === 'waited' && blame.kind !== 'hydration') {
     // Saying it was not what took the time is a measurement. Where the build records no durations
     // nobody measured it, and the sentence would be a guess dressed as a finding. Nor is it said where

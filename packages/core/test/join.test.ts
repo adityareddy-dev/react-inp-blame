@@ -3240,6 +3240,13 @@ test('a report is placed in the navigation its interaction began in, and names t
   // Only the press was slow enough to be observed; the click it released still names the navigation.
   assert.deepEqual(placeOf([entry('pointerdown', 990, 24, 991, 1006)]), { navigationURL: home.url, navigationType: 'navigate', startedNavigation: toCart });
   assert.deepEqual(placeOf([entry('click', 3000, 64, 3002, 3050)]), { navigationURL: cart.url, navigationType: 'soft-navigation', startedNavigation: null });
+
+  // The note names where it went. A query-routed step from ?step=1 to ?step=2 keeps the path, which is all a
+  // report keeps of either, and said "It started a navigation to /checkout." of the page the click was on.
+  const noteOf = (navigations: PageNavigation[]) => report([entry('click', 1000, 64, 1002, 1050)], [], [], [], 'attributes', navigations).explanation.notes.find((n) => n.startsWith('It started'));
+  assert.equal(noteOf([home, cart]), 'It started a navigation to /cart.');
+  const checkout = { ...home, url: 'https://shop.example/checkout' };
+  assert.equal(noteOf([checkout, { ...cart, url: checkout.url }]), 'It started a navigation within /checkout.');
 });
 
 test('a click that waited for React to hydrate the boundary it landed in is blamed on that, and the wait is part of the working time', () => {
