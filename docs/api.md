@@ -192,6 +192,8 @@ missing from this list.
 - `hydration.kind`: `'waited'`, `'not-hydrated'`
 - `hydration.scope`, and `hydratedTarget.scope` on each of `commits` and `followUps`: `'root'`, `'boundary'`
 - `joinedBy` on each of `commits` and `followUps` (`CommitSummary`): `'exact'`, `'overlap'`
+- `pathStart` on each of `commits` and `followUps` (`CommitSummary`): `'only-root'`, `'heaviest-root'`,
+  `'unknown-root'`, `'no-root'`
 - `stats().mode`: `'shim'`, `'chained'`, `'none'`, `'unsupported'`, `'sampled-out'`
 - `stats().unsupportedReason.kind` (`UnsupportedReason`): `'browser'`, `'another-copy'`, `'hook-disabled'`,
   `'react-version'`, `'fiber-shape'`, `'walk-threw'`
@@ -200,9 +202,10 @@ The same sets hold on the `react` object that [`react-inp-blame/web-vitals`](web
 adds, in its `blame.kind`, `blame.confidence` and `reactBuild`.
 
 `navigationType` has the values of web-vitals' own `navigationType`, so the two line up, but the set is this
-library's. The document's own load takes it from the browser's navigation entry, a soft navigation from the
-router or `announceNavigation`, and a restore from the back/forward cache from the page's `pageshow`. A
-navigation type a browser adds later reads as `'navigate'` until 2.0.0.
+library's. The document's own load takes it from the browser's navigation entry, or `'prerender'` and
+`'restore'` for a page that was prerendered or discarded and loaded again, a soft navigation from the router
+or `announceNavigation`, and `'back-forward-cache'` from the page's `pageshow`. A navigation type a browser
+adds later reads as `'navigate'` until 2.0.0.
 
 `startedNavigation.type` is the router's word for the navigation, and `announceNavigation` always gives
 `'push'`. A type the Next.js App Router passes that is none of these three reads as `'push'` too.
