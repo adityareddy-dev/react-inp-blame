@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { counter, documentNavigation, open, reportAfter, settle, showPanel } from './page'
+import { counter, documentNavigation, lastReportId, open, reportAfter, settle, showPanel } from './page'
 
 // A report keeps a URL's origin and path: the page opens on /?inp-blame, and its reports say /.
 const withoutQuery = (url: string) => url.replace(/[?#].*$/, '')
@@ -37,5 +37,52 @@ test('reports follow route changes, and the link click names the navigation it s
   await page.locator(`#react-inp-blame .panel .row[data-id="${link.interactionId}"] .toggle`).click()
   await expect(page.locator(`#react-inp-blame .panel .row[data-id="${link.interactionId}"] .more .note`, { hasText: 'It started a navigation to /second.' })).toBeVisible()
 
+  expect(problems).toEqual([])
+})
+
+// The three cases docs/install.md gives for checking the URL against the one last announced, and for waiting on
+// fromLocation. TanStack Router's own hrefChanged compares with the last route that finished loading, and is false
+// for Back before a slow loader and for a redirect to the page it was on, which left reports on a URL the page had
+// left. Under TanStack Start the server redirects to a default validateSearch fills in on the landing page, so the
+// first load is already at that URL and nothing here depends on fromLocation. Without Start, the router rewrites it.
+test('a validateSearch default filled in on the landing page announces nothing', async ({ page }) => {
+  const { problems } = await open(page, '/search?inp-blame')
+  await expect(page.getByRole('heading', { name: 'Search, all', exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/[?&]tab=all\b/)
+  const landed = await documentNavigation(page)
+  await page.getByRole('button', { name: 'Slow', exact: true }).click()
+  const slow = await reportAfter(page, null)
+  expect(slow.place).toEqual({ navigationURL: withoutQuery(landed.url), navigationType: landed.type, startedNavigation: null })
+  expect(problems).toEqual([])
+})
+
+test('Back pressed before a slow loader finished is announced', async ({ page }) => {
+  const { problems } = await open(page)
+  const home = await documentNavigation(page)
+  await page.getByRole('link', { name: 'Slow loader', exact: true }).click()
+  await expect(page).toHaveURL(/\/slow-loader$/)
+  await page.goBack()
+  await counter(page, 0).waitFor()
+  await settle(page)
+  const seen = await lastReportId(page)
+  await counter(page, 0).click()
+  const counted = await reportAfter(page, seen)
+  expect(counted.place).toEqual({ navigationURL: withoutQuery(home.url), navigationType: 'soft-navigation', startedNavigation: null })
+  // The loader had not finished: its page never showed.
+  await expect(page.getByRole('heading', { name: 'Slow loader', exact: true })).toHaveCount(0)
+  expect(problems).toEqual([])
+})
+
+test('a beforeLoad that redirects back to the page it was on is announced', async ({ page }) => {
+  const { problems } = await open(page)
+  const home = await documentNavigation(page)
+  await page.getByRole('link', { name: 'Bounce', exact: true }).click()
+  await expect(page).toHaveURL(new URL('/?inp-blame=', home.url).href)
+  await counter(page, 0).waitFor()
+  await settle(page)
+  const seen = await lastReportId(page)
+  await counter(page, 0).click()
+  const counted = await reportAfter(page, seen)
+  expect(counted.place).toEqual({ navigationURL: withoutQuery(home.url), navigationType: 'soft-navigation', startedNavigation: null })
   expect(problems).toEqual([])
 })
