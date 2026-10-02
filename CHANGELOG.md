@@ -6,6 +6,94 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+### Added
+
+- **Each commit says where its hot path starts, in `pathStart`.** Before, a reader could not tell a path that
+  starts where the render began from one that starts at a component the roots only sit under. Now every commit in
+  `commits` and `followUps` carries `'only-root'`, `'heaviest-root'`, `'unknown-root'` or `'no-root'`, the last
+  exactly where nothing rendered. It is absent only on a report from before 0.21.0, and `schemaVersion` stays 4.
+
+### Changed
+
+- **In a production build a walk cut at `walkBudget` names the app where it can't tell where the render started,
+  and says so.** Before, a render past the budget could be named after a component the subtrees only sit under, as
+  if the render came from it, with only a note that the count was partial. Now the blame names the component the
+  render started at only where one rendered at the top and holds everything the walk reached with nothing it didn't
+  reach rendered beside it, and otherwise 'the app'. The sentence says the walk stopped partway through, so which
+  components took the time isn't known, or where it started and which components took the time aren't known. A
+  development or profiling build that could tell where the render started keeps the note that the component count
+  is partial.
+- **In a development build a walk cut at `walkBudget` before it reaches a second root names the app where React's
+  total shows the part it missed took longer.** Before, it named the one subtree it reached, with that subtree's
+  time only. Now it reads 'the app' with React's figure for the whole render, and the sentence says where it
+  started and which components took the time aren't known. A commit's `total` is React's own figure for the render
+  on any walk cut at the budget on a root React timed. Where the root it reached took longer than the part it
+  missed, the blame keeps that root's name, and the figure is React's total for the whole render, which can include
+  the root it missed. Before, it gave the root's own time and called the rest committing. A root timed only under
+  `<Profiler>` keeps the sum of what was walked.
+- **A render or hydration blame on a walk cut short says the rest was not walked.** Its detail read 'at least 1998
+  of at least 5000 components' and now reads 'at least 1998 of at least 5000 components, the rest not walked'.
+  Where the useEffect callbacks lead, a cut walk no longer names the one mounted component it happened to reach,
+  and the detail reads 'useEffect callbacks in at least 1 mounted component'.
+- **A navigation type the browser adds later reads as `navigationType: 'navigate'`.** The document's own load took
+  its type straight from the browser's navigation entry, so a type a browser added later would have reached a
+  report outside the documented set (a `some_new_type` showed as 'some-new-type'). Now navigate, reload,
+  back_forward and prerender map as before, and anything else reads as 'navigate', so code switching on
+  `navigationType` never meets a value missing from the list. Since 0.1.0.
+- **What 1.x promises now says when the security backport and the Node floor apply.** SECURITY.md and the README
+  said security fixes go into the latest minor and the one before it for 90 days, which read as already in force.
+  Now both say it starts at 1.0.0, and until then every fix goes into the latest release only. The README also said
+  the build plugins run on Node 20.19 and later through all of 1.x. Now 20.19 is the floor at 1.0.0, a minor can
+  drop a Node line once it is past its end of life upstream, and the CHANGELOG says so under Changed, never in a
+  patch.
+- **The API page lists every fixed set of strings a report and `stats()` hold, each frozen for 1.x.** Before, the
+  README gave two examples (`blame.kind`, `stats().mode`) and no list. Now docs/api.md names each set with its
+  values, including `hydratedTarget.scope` and the `react` object `attributeINP` adds, and says a new value comes
+  only in 2.0.0. It also says `pointerType` is the browser's own string (an empty one reads as null), that `'the
+  app'` is the one fixed value of `blame.name`, taken by a render or layout blame whose commit's walk named no
+  component, and that `announceNavigation` for a change of query or hash alone still starts `inp()` over. The
+  README's Versions sentence links to the list.
+- **`/auto` is 34.4 KB gzipped, up from 34.1 KB, and the part of it that runs before react-dom is 11.6 KB, up from
+  11.5 KB.** Nearly all of `/auto`'s 0.28 KB went on the walk cut at `walkBudget`: 0.22 KB on recording where its
+  path starts and naming the app where it can't tell, and 0.04 KB on the development build's check against React's
+  total for the render. The navigation type mapping added 0.02 KB, and the other fixes came to about nothing
+  between them. The part before react-dom grew 0.09 KB, all of it the same walk: 0.04 KB for where the path starts
+  and 0.05 KB for the development build's check. The badge and panel stay at 7.1 KB, `react-inp-blame/otel` at 1.5
+  KB and `react-inp-blame/web-vitals` at 0.8 KB.
+
+### Fixed
+
+- **The panel row no longer says a root updated where the walk couldn't tell the render started there.** A
+  production render past the budget read 'App updated · at least 5000 components mounted inside the app' and now
+  reads 'at least 5000 components mounted inside the app'.
+- **A press whose pointer was not seen reads as a click in its headline, cause and verdict, as its panel row
+  already did.** Before, the verdict said '120 ms tap' while the row said click, for a press that could just as
+  well have been a mouse's. Now only a finger's or a pen's press is a tap.
+- **`inpBlameAttributes` gives an INP metric whose entries getter throws the `library-error` status.** Before, such
+  a metric got an empty object, so the INP event went out with no `react_inp_blame.status` at all. Now a metric
+  named INP counts as INP before its entries are read, and the throw is reported as `library-error`, or
+  `not-installed` where the library isn't on the page. Since 0.20.0.
+- **The production either-or cause gives the component count once.** Before, it read "The onClick handler or
+  React's render of StatsPanel (2 components) most likely took the 135 ms, the handler the likelier: React
+  re-rendered only 2 components." The count is now only in the reason the handler is the likelier. Since 0.20.0.
+- **A panel row whose useEffect detail names the component it blames leaves out 're-rendered'.** 'SalesChart
+  re-rendered · useEffect callbacks after mounting SalesChart' read as a contradiction, and now reads 'SalesChart ·
+  useEffect callbacks after mounting SalesChart'.
+- **A click that changed only the query or the hash says it started a navigation within the page.** A report keeps
+  only a URL's origin and path, so a query-routed step from ?step=1 to ?step=2 read "It started a navigation to
+  /checkout." about the page the click was already on. Now it reads "It started a navigation within /checkout."
+  Since 0.20.0.
+- **`startedNavigation.type` keeps to its fixed set.** The Next.js App Router integration passed the router's own
+  navigation type straight through, so a type other than push, replace or traverse (a refresh, say) landed in the
+  report as it was. It now reads as 'push', as `announceNavigation`'s always has. In 0.20.0 and before.
+
+### Security
+
+- **SECURITY.md says exactly what `clear()` and `dispose()` drop.** It said retained data lasts until dispose(),
+  clear() or unload. clear() drops only the commits, reports, quick interactions and Event Timing entries, and
+  dispose() drops the commits and the inputs with their elements, while the reports, frames and navigations stay
+  reachable through the object install() returned until the page lets go of it. It now says so.
+
 ## [0.20.0] - 2026-09-29
 
 ### Added
