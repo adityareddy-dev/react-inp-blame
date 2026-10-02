@@ -104,7 +104,9 @@ export function documentNavigation(): PageNavigation {
   if (entry) {
     if (doc.prerendering || (entry.activationStart ?? 0) > 0) type = 'prerender';
     else if (doc.wasDiscarded) type = 'restore';
-    else type = entry.type.replace(/_/g, '-') as NavigationType;
+    // A type a browser adds later reads as 'navigate', so a report keeps to the frozen set.
+    else if (entry.type === 'reload' || entry.type === 'prerender') type = entry.type;
+    else if (entry.type === 'back_forward') type = 'back-forward';
   }
   return { url: entry?.name || location.href, type, start: 0, router: null };
 }

@@ -558,11 +558,13 @@ export interface Explanation {
 }
 
 /**
- * How the page came to be at a URL, with the values of web-vitals' `Metric['navigationType']`. The set
- * is this library's own though, and stays as it is through 1.x: should web-vitals add a value during 1.x,
- * a report gives the nearest of these until 2.0.0. 'soft-navigation' is a client-side navigation a router
- * announced (the Next.js App Router through `react-inp-blame/next`, any other router through
- * `announceNavigation`); 'back-forward-cache' is a page restored from the back/forward cache.
+ * How the page came to be at a URL, with the values of web-vitals' `Metric['navigationType']`. The
+ * document's own load takes it from the browser's navigation entry, or 'prerender' and 'restore' for a
+ * page that was prerendered or discarded and loaded again. 'soft-navigation' is a client-side navigation
+ * a router announced (the Next.js App Router through `react-inp-blame/next`, any other router through
+ * `announceNavigation`), and 'back-forward-cache' is a page restored from the back/forward cache. The set
+ * is this library's own and stays as it is through 1.x: a navigation type a browser adds later reads as
+ * 'navigate' until 2.0.0.
  */
 export type NavigationType = 'navigate' | 'reload' | 'back-forward' | 'back-forward-cache' | 'prerender' | 'restore' | 'soft-navigation';
 

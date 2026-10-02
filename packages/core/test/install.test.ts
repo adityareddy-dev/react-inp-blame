@@ -2180,6 +2180,26 @@ test('a page restored from the back/forward cache starts its INP over, and its r
   });
 });
 
+test("the document's own navigation type comes from the browser's navigation entry, and a type the browser adds later reads as 'navigate'", async (t) => {
+  const typeOf = async (type: string) => {
+    let navigationType: string | undefined;
+    t.mock.method(performance, 'getEntriesByType', (name: string) => (name === 'navigation' ? [{ name: PAGE_URL, entryType: 'navigation', type, activationStart: 0 }] : []));
+    await inBrowser((page) => {
+      const api = install({ devtoolsTrack: false });
+      page.paint([slowClick(120)]);
+      navigationType = api.last()?.navigationType;
+      api.dispose();
+    });
+    t.mock.restoreAll();
+    return navigationType;
+  };
+  assert.equal(await typeOf('navigate'), 'navigate');
+  assert.equal(await typeOf('reload'), 'reload');
+  assert.equal(await typeOf('back_forward'), 'back-forward');
+  assert.equal(await typeOf('prerender'), 'prerender');
+  assert.equal(await typeOf('some_new_type'), 'navigate');
+});
+
 test('a slow click whose entry is still queued when the page is hidden has its report by the time web-vitals reports INP', async () => {
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false });
