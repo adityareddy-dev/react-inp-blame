@@ -606,7 +606,7 @@ export interface InteractionReport {
    * the badge's mark does, in whatever order they registered. A production and a profiling build say the same
    * there, and only a profiling build puts its roots in React's ProfileMode, so those two are told apart by the
    * page's first commit. Null where react-dom did not say, where no react-dom registered, and for a production
-   * or profiling build before the page's first commit.
+   * or profiling build before the page's first commit or that this library cannot read.
    */
   readonly reactBuild: 'development' | 'production' | 'profiling' | null;
   /**
