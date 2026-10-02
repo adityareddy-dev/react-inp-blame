@@ -670,8 +670,11 @@ function blameText(blame: Blame, rendered: string): Child[] {
   const ms = blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : '';
   const named = name ? [DOT, b(name)] : [];
   switch (blame.kind) {
-    case 'render':
-      return [b(name ?? 'the tree'), ` ${rendered}${detail ? `${DOT}${detail}` : ''}${ms}`];
+    case 'render': {
+      // "SalesChart re-rendered" beside "after mounting SalesChart" reads as a contradiction, so the detail says it alone.
+      const verb = detail === `useEffect callbacks after mounting ${name}` ? '' : ` ${rendered}`;
+      return [b(name ?? 'the tree'), `${verb}${detail ? `${DOT}${detail}` : ''}${ms}`];
+    }
     case 'handler': {
       const where = detail ? ` in ${detail}` : '';
       // A production build of React records no render times, so there is no figure to put beside the
