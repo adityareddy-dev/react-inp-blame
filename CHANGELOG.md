@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-01
+
 ### Added
 
 - **Each commit says where its hot path starts, in `pathStart`.** Before, a reader could not tell a path that
@@ -1946,7 +1948,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.17.0...v0.18.0
