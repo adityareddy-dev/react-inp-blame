@@ -87,7 +87,9 @@ export interface CommitSummary {
    * it renders) are on the chain but spend no step. For a production walk cut at `walkBudget`, whose counts
    * cannot choose among subtrees it reached in part or not at all, it stops at its one subtree where
    * nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
-   * under, or empty where they sit under none. `pathStart` says which.
+   * under, or empty where they sit under none. A timed walk cut there, which never reached the roots past
+   * the cut, does the same where React's total for the render says those took longer than the heaviest
+   * root it reached. `pathStart` says which.
    */
   readonly hotPath: readonly string[];
   /**
@@ -100,8 +102,9 @@ export interface CommitSummary {
    * heaviest one it reached. `roots` has up to five of their names.
    *
    * 'unknown-root': the walk reached components that rendered but stopped before it could tell which one
-   * held the render (in production at walkBudget), so the path starts at the nearest component they all sit
-   * under, or is empty when they share none.
+   * held the render (in production at walkBudget, in a development or profiling build when React's own total
+   * shows more of the render went unreached than the heaviest start it reached), so the path starts at the
+   * nearest component they all sit under, or is empty when they share none.
    *
    * 'no-root': the walk reached no component that rendered, either because the commit rendered none or
    * because it stopped first (then `truncated` is true). hotPath is empty and `rendered` is 0.
@@ -142,7 +145,10 @@ export interface CommitSummary {
    * close but not exact, and a blame built on it is `'inferred'`.
    */
   readonly coarseClock: boolean;
-  /** Total render time of the commit in ms when durations exist, else 0. */
+  /**
+   * Total render time of the commit in ms when durations exist, else 0. A walk cut at `walkBudget` on a root
+   * React timed takes the root's own figure, since the roots past the cut are in it and not in the walk.
+   */
   readonly total: number;
   /**
    * performance.now() when React began the render this commit came from, read from the root fiber.
