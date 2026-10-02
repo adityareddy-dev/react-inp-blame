@@ -81,12 +81,13 @@
   chooses among the subtrees the walk reached, but a subtree past the cut is in none of them, so it can name
   a component above the one past the cut that took the time. On a root React timed, React's total for the
   whole render is the render's time for any walk cut at the budget. Where it shows the part not reached took
-  longer than the heaviest part reached, a development build names the app the same way. A root timed only
-  under `<Profiler>` has no total of its own, and there the subtree the walk reached first can still be
-  named. A larger budget walks further, inside the interaction it measures: a sort of 18,456 cells took 12.6
-  ms to walk in full, against 1.7 ms capped. A branch more than 1,000 fibers deep is cut as well, and the
-  walk sees nothing below it, so a component that rendered down there is missed, and `'only-root'` can be one
-  start of two.
+  longer than the heaviest part reached, a development build names the app the same way. Where it does not,
+  the time the sentence gives inside the component it names is still React's total for the whole render, so
+  it can include a root beside it that the walk never reached. A root timed only under `<Profiler>` has no
+  total of its own, and there the subtree the walk reached first can still be named. A larger budget walks
+  further, inside the interaction it measures: a sort of 18,456 cells took 12.6 ms to walk in full, against
+  1.7 ms capped. A branch more than 1,000 fibers deep is cut as well, and the walk sees nothing below it, so
+  a component that rendered down there is missed, and `'only-root'` can be one start of two.
 - **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only. The
   browser counts style recalculation in the same figure, so a `'layout'` blame covers either. Its share of
   a script that ran on past the handlers is apportioned by time rather than measured, so such a blame is
