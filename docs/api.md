@@ -197,7 +197,9 @@ missing from this list.
   `'react-version'`, `'fiber-shape'`, `'walk-threw'`
 
 `navigationType` has the values of web-vitals' own `navigationType`, so the two line up, but the set is this
-library's. Should web-vitals add a value during 1.x, a report gives the nearest of these until 2.0.0.
+library's. The document's own load takes it from the browser's navigation entry, a soft navigation from the
+router or `announceNavigation`, and a restore from the back/forward cache from the page's `pageshow`. A
+navigation type a browser adds later reads as `'navigate'` until 2.0.0.
 
 `pointerType` is not on the list. It is the browser's own string, passed on as the event gave it: browsers
 give `'mouse'`, `'pen'` and `'touch'`, and a value a browser adds later would come through as it is.
