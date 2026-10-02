@@ -57,11 +57,11 @@
   not be tied to the interaction, since a script is what is left once React is ruled out and an unjoined
   commit is exactly what stops React from being ruled out.
   Where the count alone chose between the handler and the render beside it, the cause names both ("the
-  onClick handler or React's render of StatsPanel (2 components)") and says a profiling build can tell them
-  apart, and the blame keeps the count's pick: in three production runs of apps written to test this, it
-  picked wrong both ways. A list whose rows took 2 ms or less each decides it and names nothing else. Two
-  ways to a profiling build: in Vite, a `resolve.alias` from `react-dom/client` to `react-dom/profiling`, and
-  in Next.js, `next build --profile`. The Vite alias added 5.4 KB gzipped to one app. The runtime cost of
+  onClick handler or React's render of StatsPanel") and says a profiling build can tell them apart, and
+  the blame keeps the count's pick: in three production runs of apps written to test this, it picked wrong
+  both ways. A list whose rows took 2 ms or less each decides it and names nothing else. Two ways to a
+  profiling build: in Vite, a `resolve.alias` from `react-dom/client` to `react-dom/profiling`, and in
+  Next.js, `next build --profile`. The Vite alias added 5.4 KB gzipped to one app. The runtime cost of
   either is not measured yet.
 - **A commit past `walkBudget` (5000 components by default) is walked only in part**, and what took the time
   past the cut is not known. Its counts say "at least", and its blame's detail says the rest was not walked.
