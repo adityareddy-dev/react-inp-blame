@@ -190,11 +190,14 @@ missing from this list.
   `'prerender'`, `'restore'`, `'soft-navigation'`
 - `startedNavigation.type`: `'push'`, `'replace'`, `'traverse'`
 - `hydration.kind`: `'waited'`, `'not-hydrated'`
-- `hydration.scope`: `'root'`, `'boundary'`
+- `hydration.scope`, and `hydratedTarget.scope` on each of `commits` and `followUps`: `'root'`, `'boundary'`
 - `joinedBy` on each of `commits` and `followUps` (`CommitSummary`): `'exact'`, `'overlap'`
 - `stats().mode`: `'shim'`, `'chained'`, `'none'`, `'unsupported'`, `'sampled-out'`
 - `stats().unsupportedReason.kind` (`UnsupportedReason`): `'browser'`, `'another-copy'`, `'hook-disabled'`,
   `'react-version'`, `'fiber-shape'`, `'walk-threw'`
+
+The same sets hold on the `react` object that [`react-inp-blame/web-vitals`](web-vitals.md)' `attributeINP`
+adds, in its `blame.kind`, `blame.confidence` and `reactBuild`.
 
 `navigationType` has the values of web-vitals' own `navigationType`, so the two line up, but the set is this
 library's. The document's own load takes it from the browser's navigation entry, a soft navigation from the
