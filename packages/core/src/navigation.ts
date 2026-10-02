@@ -64,9 +64,11 @@ export function routerNavigated(navigation: RouterNavigation): void {
  * the page's URL, so include any base path. Reports of the interactions that begin after it carry the
  * URL, with `navigationType: 'soft-navigation'`, and the INP estimate starts over. Called while a click
  * or key press is being dispatched, that interaction's report names it in `startedNavigation`, as a
- * 'push'. Reports keep its origin and path. Does nothing before install(), on a page the sample left
- * out and on the server, and never throws. The Next.js App Router needs no call: `withInpBlame`
- * announces its navigations.
+ * 'push'. Reports keep its origin and path only, so a call for a change of query or hash alone still
+ * counts as a navigation: the INP estimate starts over, and `startedNavigation.url` is the same as the
+ * report's own `navigationURL`. Does nothing before install(), on a page the sample left out and on
+ * the server, and never throws. The Next.js App Router needs no call: `withInpBlame` announces its
+ * navigations.
  */
 export function announceNavigation(url: string | URL): void {
   if (typeof window === 'undefined' || !router.listener) return;

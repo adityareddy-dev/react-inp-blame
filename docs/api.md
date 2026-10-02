@@ -55,8 +55,10 @@ here and on [`react-inp-blame/web-vitals`](web-vitals.md): `generateTarget` retu
 Tells the library that your router changed the route in the page, to `url`. Reports of the interactions that
 begin after it carry that URL's origin and path in `navigationURL`, with `navigationType: 'soft-navigation'`,
 and `inp()` and the badge start over. Called while a click or key press is being dispatched, it is named on
-that interaction's report in `startedNavigation`, always with `type: 'push'`. The URL may be relative to the
-page, and should include any base path. From a React effect, call it in `useLayoutEffect`: a `useEffect` can
+that interaction's report in `startedNavigation`, always with `type: 'push'`. Since reports keep a URL's origin
+and path only, a navigation that changes only the query or the hash still counts as one: `inp()` starts over,
+and `startedNavigation.url` is the same as the report's `navigationURL`. The URL may be relative to the page,
+and should include any base path. From a React effect, call it in `useLayoutEffect`: a `useEffect` can
 run later, inside the next click, and name that click as the one that started the navigation. It does nothing
 before `install()`, on a page the sample left out, in a production build the plugin left the library out of,
 on the server and under `react-server`, and it never throws. Under the Next.js App Router `withInpBlame`
