@@ -651,7 +651,8 @@ function mayHaveRendered(c: CommitSummary, name: string): boolean {
  * The row's line for a render blame named after a component that did not render: where it started, when one
  * root did, and what rendered inside the named one, "PrefsProvider updated · ProductRow ×375 re-rendered inside
  * ProductList". What rendered is the commit's, never the blame's detail, and counts only what was inside. A root
- * that is the component said to have re-rendered, each row updating from its own store, is not said twice.
+ * that is the component said to have re-rendered, each row updating from its own store, is not said twice, and
+ * one the walk could not tell the render started at (`leafName` gives none) is not said at all.
  */
 function startedLine(blame: Blame, c: CommitSummary): Child[] {
   const top = dominantComponent(c);
@@ -659,7 +660,7 @@ function startedLine(blame: Blame, c: CommitSummary): Child[] {
   const within = insideCount(c);
   const many = top && top.count > 1 && (within == null || top.count <= within) ? top : null;
   const what = many ? `${many.name} ×${many.count}` : countInside(c);
-  const root = c.roots.length === 1 && c.roots[0] !== many?.name ? [b(c.roots[0]!), ` updated${DOT}`] : [];
+  const root = c.roots.length === 1 && c.roots[0] !== many?.name && leafName(c) !== null ? [b(c.roots[0]!), ` updated${DOT}`] : [];
   return [...root, `${what} ${renderedVerb(c)} inside `, b(blame.name!), blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : ''];
 }
 

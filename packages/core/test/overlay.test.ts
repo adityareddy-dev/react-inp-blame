@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { walkCommit } from '../src/fiber.ts';
 import { buildReport, laterRenderOf, renderedVerb, sealReport } from '../src/join.ts';
 import { blameLine, createOverlay, laterDetail, laterLead, laterWhen, titleFor } from '../src/overlay.ts';
 import type { CommitSummary, InteractionReport } from '../src/types.ts';
@@ -567,7 +568,11 @@ test('a render whose walk could not tell where it started is the tree in the pan
     roots: ['Orders', 'Metrics'],
     hotPath: ['App'],
     pathStart: 'unknown-root',
-    components: [{ name: 'Row', count: 4998, self: null, total: null }],
+    components: [
+      { name: 'Row', count: 4998, self: null, total: null },
+      { name: 'Orders', count: 1, self: null, total: null },
+      { name: 'Metrics', count: 1, self: null, total: null },
+    ],
     hasDurations: false,
     coarseClock: false,
     total: 0,
@@ -579,21 +584,52 @@ test('a render whose walk could not tell where it started is the tree in the pan
     didError: false,
     ...opts,
   });
-  for (const opts of [{}, { roots: ['App'], hotPath: [] }]) {
-    // Rendered in the working time, it is the row's blame.
-    const r = sealReport(buildReport([entry('click', 0, 400, 3, 390)], [cut(200, opts)], [], [click]));
+  const lineOf = (r: InteractionReport) => {
     const { restore } = panelDocument();
     try {
-      const line = blameLine(r).map((x) => (typeof x === 'string' ? x : x ? (x as unknown as Drawn).textContent : '')).join('');
-      assert.equal(line, 'most likely the app re-rendered · at least 5000 components, the rest not walked');
+      return blameLine(r).map((x) => (typeof x === 'string' ? x : x ? (x as unknown as Drawn).textContent : '')).join('');
     } finally {
       restore();
     }
+  };
+  // The second is App beside a Toaster the walk never reached: App is the one root it reached, and not said to
+  // have updated, since the walk can't tell that is where the render started.
+  for (const opts of [{}, { roots: ['App'], hotPath: [], components: [{ name: 'Row', count: 4999, self: null, total: null }, { name: 'App', count: 1, self: null, total: null }] }]) {
+    // Rendered in the working time, it is the row's blame.
+    const r = sealReport(buildReport([entry('click', 0, 400, 3, 390)], [cut(200, opts)], [], [click]));
+    assert.equal(lineOf(r), 'most likely at least 5000 components re-rendered inside the app');
     // After the paint, it is the row's later render.
     const later = sealReport(buildReport([entry('click', 0, 48, 3, 40)], [cut(600, opts)], [], [click]));
     assert.deepEqual(later.followUps.map((c) => c.at), [600]);
     assert.equal(byClass(panelFor(later), 'later')?.textContent, 'then the tree re-rendered after the paint · at least 5000 components, the rest not walked');
   }
+
+  // The same from walks of real trees.
+  function fiber(tag: number, type: unknown, children: Record<string, unknown>[] = [], flags = tag === 0 ? 1 : 0): Record<string, unknown> {
+    // Each one rendered before, so this is a re-render, not a mount.
+    const f: Record<string, unknown> = { tag, flags, mode: 0, elementType: type, type, memoizedProps: null, memoizedState: null, return: null, child: children[0] ?? null, sibling: null, alternate: { tag, child: {} } };
+    children.forEach((child, i) => Object.assign(child, { return: f, sibling: children[i + 1] ?? null }));
+    return f;
+  }
+  const named = (name: string) => Object.assign(() => {}, { displayName: name });
+  const rendered = (name: string, children: Record<string, unknown>[]) => fiber(0, named(name), children);
+  const rows = (name: string, n: number) => Array.from({ length: n }, () => rendered(name, [fiber(5, 'li')]));
+  const timed = (f: Record<string, unknown>, ms: number) => Object.assign(f, { actualDuration: ms, mode: 0b10 });
+  const walked = (budget: number, tree: Record<string, unknown>) => {
+    const w = walkCommit(tree as any, budget, 200, { ts: 0, type: 'click', gestureTs: 0 }, { profileMode: 0b10, strictMode: 0b1000, priority: undefined, didError: false, hydratedTarget: null });
+    return sealReport(buildReport([entry('click', 0, 400, 3, 390)], [{ ...w, at: 200, sinceInput: 200, walkMs: 0, inDispatch: true }], [], [click]));
+  };
+  // Production: App beside a Toaster, the walk out of budget inside App.
+  const beside = walked(5000, fiber(3, null, [rendered('App', rows('Row', 6000)), rendered('Toaster', [rendered('Toast', [])])]));
+  assert.equal(beside.commits[0]?.pathStart, 'unknown-root');
+  assert.equal(lineOf(beside), 'most likely at least 5000 components re-rendered inside the app');
+  // Development: Left reached, cheap, and Right never reached, heavy, under an App that did not render. React's
+  // total says the part past the cut took longer.
+  const left = timed(rendered('Left', rows('Item', 3000)), 20);
+  const right = timed(rendered('Right', rows('Heavy', 20)), 70);
+  const dev = walked(1000, timed(fiber(3, null, [fiber(0, named('App'), [left, right], 0)]), 90));
+  assert.equal(dev.commits[0]?.pathStart, 'unknown-root');
+  assert.doesNotMatch(lineOf(dev), /Left|App/);
 });
 
 test('under a development build of react-dom the badge is marked dev, and the panel says why its colours can run high', () => {

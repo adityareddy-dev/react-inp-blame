@@ -256,10 +256,12 @@ test('the interaction entry is named after the heaviest render before the paint,
 
 test('a render whose walk could not tell where it started is named after no component, though its path still shows the one the roots sit under', () => {
   // A production walk cut at its budget under an App that did not render, and beside a Toaster it never reached.
-  const cut = { rendered: 5000, truncated: true, pathStart: 'unknown-root' as const, components: [{ name: 'Row', count: 4998, self: null, total: null }] };
+  const cut = { rendered: 5000, truncated: true, pathStart: 'unknown-root' as const };
+  const row = (count: number) => ({ name: 'Row', count, self: null, total: null });
+  const one = (name: string) => ({ name, count: 1, self: null, total: null });
   for (const [opts, path] of [
-    [{ roots: ['Orders', 'Metrics'], hotPath: ['App'] }, ['Heaviest path', 'App']],
-    [{ roots: ['App'], hotPath: [] }, undefined],
+    [{ roots: ['Orders', 'Metrics'], hotPath: ['App'], components: [row(4998), one('Orders'), one('Metrics')] }, ['Heaviest path', 'App']],
+    [{ roots: ['App'], hotPath: [], components: [row(4999), one('App')] }, undefined],
   ] as const) {
     const r = report([commit(150, { ...cut, ...opts })]);
     const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
