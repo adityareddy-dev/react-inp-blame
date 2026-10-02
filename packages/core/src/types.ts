@@ -572,7 +572,11 @@ export type NavigationType = 'navigate' | 'reload' | 'back-forward' | 'back-forw
 export interface StartedNavigation {
   /** Where it went: an absolute URL without its query, fragment or password. */
   readonly url: string;
-  /** The router's word for it: 'push' or 'replace' for a link or `router.push()` / `router.replace()`, 'traverse' for back and forward. `announceNavigation` always records 'push'. */
+  /**
+   * The router's word for it: 'push' or 'replace' for a link or `router.push()` / `router.replace()`, 'traverse'
+   * for back and forward. `announceNavigation` always records 'push', and so does a type Next.js passes that is
+   * none of these three, so the set stays as it is through 1.x.
+   */
   readonly type: 'push' | 'replace' | 'traverse';
 }
 
