@@ -22,6 +22,10 @@
   [Install](install.md#install-with-react-router) shows: the announcement lets go of quiet interactions before
   React hands over the commit that holds the route. Keeping them past it would make the route Back or Forward
   goes back to a quiet click's later render.
+- **Back or Forward within `inputWindow` of a reported click can add the route it opens to that click's
+  report** (1.5 s from the paint unless you set it). The browser's own navigation is no input, so the route's
+  commit is taken for the click's, and the report gains "A second React render landed 780 ms after the screen
+  updated" while its `navigationURL` stays the page the person left.
 - React 18 and 19 development builds print "Download the React DevTools" on pages where the library created the
   hook: it has no `checkDCE`, which react-dom takes to mean React DevTools is there.
 - **Hydration is joined to an input only when React hydrated inside that input's dispatch**, which is what
