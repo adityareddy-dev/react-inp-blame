@@ -5255,7 +5255,7 @@ test('a render whose walk stopped at its budget says "at least", names no compon
   assert.ok(one.cause.includes('re-rendering at least 5000 components inside Dashboard, in the 387 ms of working time.'), one.cause);
   // The render started at Dashboard, and what inside it took the time is past the cut, which the sentence says
   // in place of the note.
-  assert.ok(one.cause.includes(" not measured. The walk stopped partway through that render, so which components took the time isn't known. A profiling build of React would give exact numbers."), one.cause);
+  assert.ok(one.cause.includes(" not measured. A profiling build of React would give exact numbers. The walk stopped partway through that render, so which components took the time isn't known."), one.cause);
   assert.doesNotMatch(one.cause, /mostly/);
   assert.ok(!one.notes.some((n) => n.startsWith('The component count is partial')), one.notes.join('\n'));
   // Several roots under no shared component: not the first root the walk reached. The name falls back to
@@ -5295,7 +5295,7 @@ test('a render whose walk stopped at its budget says "at least", names no compon
 });
 
 const CUT_UNKNOWN =
-  "React was most likely re-rendering at least 5000 components inside the app, in the 387 ms of working time. This React build records no render durations, so that is read from the component counts, not measured. The walk stopped partway through that render, so where it started and which components took the time aren't known. A profiling build of React would give exact numbers.";
+  "React was most likely re-rendering at least 5000 components inside the app, in the 387 ms of working time. This React build records no render durations, so that is read from the component counts, not measured. A profiling build of React would give exact numbers. The walk stopped partway through that render, so where it started and which components took the time aren't known.";
 
 test('a render the walk could not tell the start of is named after the app, from a walk of the tree', () => {
   function fiber(tag: number, type: unknown, children: Record<string, unknown>[] = [], flags = tag === 0 ? 1 : 0): Record<string, unknown> {
@@ -5810,7 +5810,7 @@ test("a minifier's name the report gives, in a build whose names are otherwise r
   // five readable names of the seven beside it.
   const records = named(['RecordTable', 'RecordTableRow', 'RecordTableCell', 'RecordTableCellDisplayMode', 'RecordShowPage', 'Wr', 'Qe', '(anonymous)']);
   const twenty = report(click, [walk({ rendered: 4917, truncated: true, roots: ['hl'], hotPath: ['hl'], pathStart: 'only-root', components: records })], []).explanation;
-  assert.match(twenty.cause, /^React was most likely re-rendering at least 4917 components inside hl, in the 97 ms of working time\. .* The walk stopped partway through that render, so which components took the time isn't known\. /);
+  assert.match(twenty.cause, /^React was most likely re-rendering at least 4917 components inside hl, in the 97 ms of working time\. .* A profiling build of React would give exact numbers\. The walk stopped partway through that render, so which components took the time isn't known\./);
   assert.equal(twenty.blame.name, 'hl');
   assert.ok(twenty.notes.includes(oddNote('hl')), twenty.notes.join('\n'));
   assert.ok(!twenty.notes.some((n) => n.startsWith('Most component names')));

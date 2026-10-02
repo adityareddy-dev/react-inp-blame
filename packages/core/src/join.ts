@@ -2564,12 +2564,13 @@ function explain(r: InteractionReport): Explanation {
     const effectsFirst = `The commit's useEffect callbacks ${say(confidence, '', `${HEDGE} `)}ran for about ${ms(rcEffects)}${included(rc)} before the screen could update, after React spent ${renderAcross(rc, ms(rc.total))}.${mountedWith}`;
     const stopped = walkStopped(rc);
     if (stopped) cutSaid = rc;
-    // A production build times the effects but not the render, so there the effects lead.
+    // A production build times the effects but not the render, so there the effects lead. Where the walk stopped,
+    // that comes after the profiling build, which goes with the sentence saying the build records no durations.
     cause = effectsLed
       ? `${effectsFirst}${stopped}${say(confidence, '', profiling)}`
       : !hasDurations && effectsThen
         ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${stopped}${profilingRender}`
-        : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.${stopped}`, `${likely}${stopped}${listByCount ? ` It could have been ${handler} instead.${tellApart}` : profiling}`);
+        : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.${stopped}`, `${likely}${listByCount ? `${stopped} It could have been ${handler} instead.${tellApart}` : `${profiling}${stopped}`}`);
     if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
     if (sayEffects && hasDurations && !effectsLed) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
     if (acrossCommits && hasDurations) cause += ` React also spent ${acrossCommits}.`;
