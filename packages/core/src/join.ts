@@ -2589,7 +2589,7 @@ function explain(r: InteractionReport): Explanation {
           ? `React ${renderedVerb(c)} only ${plural(c.rendered, 'component')}`
           : `React ${renderedVerb(c)} ${renderedWhere(c)}, none of them ${RENDER_MIN_COMPONENTS_BESIDE_HANDLER} times over, and ${ms(r.processing)} is more than ${RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER} ms for each of them`;
     const ranEffects = effects >= 1 ? ` and ran useEffect callbacks for ${ms(effects)}${heldAll}` : '';
-    if (countOnly) cause = `${cap(handler)} or React's render of ${leafOf(c)} (${plural(c.rendered, 'component')}) ${HEDGE} took ${untimedTook}, the handler the likelier: ${howLittle}${ranEffects}.${tellApart}`;
+    if (countOnly) cause = `${cap(handler)} or React's render of ${leafOf(c)} ${HEDGE} took ${untimedTook}, the handler the likelier: ${howLittle}${ranEffects}.${tellApart}`;
     else cause = `${cap(handler)} ${HEDGE} took ${untimedTook}: ${howLittle}${ranEffects}.${profiling}`;
     blame = { kind: 'handler', name: handlerName, detail: component, ms: null, confidence: 'inferred' };
   } else if (waitingWins) {
