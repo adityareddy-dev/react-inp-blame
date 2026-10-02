@@ -200,6 +200,9 @@ library's. Should web-vitals add a value during 1.x, a report gives the nearest 
 `pointerType` is not on the list. It is the browser's own string, passed on as the event gave it: browsers
 give `'mouse'`, `'pen'` and `'touch'`, and a value a browser adds later would come through as it is.
 
+`blame.name` is free text with one fixed value: `'the app'`, which a render blame takes where its commit named
+no component. That value stays the same through 1.x, and the commit's `pathStart` says why it named none.
+
 ## Labels and personal data
 
 `target.label` names the element by its tag and a name of at most 40 characters, and never reads a form
