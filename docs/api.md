@@ -202,7 +202,8 @@ router or `announceNavigation`, and a restore from the back/forward cache from t
 navigation type a browser adds later reads as `'navigate'` until 2.0.0.
 
 `pointerType` is not on the list. It is the browser's own string, passed on as the event gave it: browsers
-give `'mouse'`, `'pen'` and `'touch'`, and a value a browser adds later would come through as it is.
+give `'mouse'`, `'pen'` and `'touch'`, and a value a browser adds later would come through as it is. An empty
+string reads as null.
 
 `blame.name` is free text with one fixed value: `'the app'`, which a render or layout blame takes where its
 commit's walk gave no component to name it after, as when the walk could not tell where the render started.
