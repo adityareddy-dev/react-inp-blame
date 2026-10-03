@@ -6,6 +6,16 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-02
+
+### Changed
+
+- **A render the walk could not tell where it started is named 'the app' in Chrome's Performance panel, as the blame
+  sentence names it.** Before, a production render cut at `walkBudget` with no component to name read 'React render
+  · root (at least 5000 components, time not measured)' on its track while the blame said 'the app'. Now the track
+  reads 'React render · the app (at least 5000 components, time not measured)', and a hydration or a later render
+  reads the same way.
+
 ## [0.21.0] - 2026-10-01
 
 ### Added
@@ -1948,7 +1958,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.18.0...v0.19.0
