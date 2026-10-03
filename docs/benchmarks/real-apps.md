@@ -51,9 +51,9 @@ that do this, and the rest of the build plumbing, never reach the measured page.
 
 The blame was checked against each app's source at the commits above, with the libraries read in each app's
 `node_modules`: every verdict a one-run pass printed for an interaction of 100 ms or more, and the slowest of
-each pass. Each finding then went to a second reader whose job was to knock it down. Six changed grade that
-way, five of them for the worse. The 15-run pass printed the same blame for a step in nearly every run; where
-it split, that's said below.
+each pass. Each finding was then gone over again, more than once, to try to knock it down. Six changed grade
+that way, five of them for the worse. The 15-run pass printed the same blame for a step in nearly every run;
+where it split, that's said below.
 
 ## What it costs
 
@@ -358,8 +358,8 @@ to take: TanStack's row compare still reads each value twice per comparison unle
   A step that fetches is as fast as that server was.
 - **One warm-up per build and pass.** The first measured run of each build can still pay for a cold cache
   the others don't.
-- **The blame check read source, not traces, except where a trace is named.** A second reader tried to refute
-  every finding, and six grades moved. It is still a reading of the code, and one verdict stays unsettled.
+- **The blame check read source, not traces, except where a trace is named.** Every finding was gone over
+  again to try to refute it, and six grades moved. It is still a reading of the code, and one verdict stays unsettled.
 
 The harness is in [bench/](../../bench/README.md), with the commands for this run. twenty and cal.diy need a
 local account on your own seeded copy of each, as its README says.
