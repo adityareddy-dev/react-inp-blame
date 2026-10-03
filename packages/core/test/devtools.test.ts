@@ -267,7 +267,7 @@ test('a render whose walk could not tell where it started is named after no comp
     const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
     assert.deepEqual(
       drawn.map((d) => d.label),
-      ['200 ms click', 'React render · root (at least 5000 components, time not measured)'],
+      ['200 ms click', 'React render · the app (at least 5000 components, time not measured)'],
     );
     assert.deepEqual(drawn[0]?.properties?.find(([name]) => name === 'Heaviest path'), path);
     assert.equal(r.explanation.blame.name, 'the app');

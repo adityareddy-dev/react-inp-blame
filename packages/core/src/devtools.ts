@@ -136,7 +136,7 @@ function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boo
   // By where the report put it, not by the headline's paint: a press's render before a slower release is a
   // later render of the press's paint, and it would be drawn from the release's input back to itself.
   const later = r.followUps.includes(c);
-  const name = leafName(c) ?? 'root';
+  const name = leafName(c) ?? 'the app';
   const counted = `${c.truncated ? 'at least ' : ''}${c.rendered} components`;
   const label = `${later ? 'Later render' : c.hydrated ? 'Hydration' : 'React render'} · ${name} (${counted}${c.hasDurations ? '' : ', time not measured'})`;
   // A render the build did not time has no length: DevTools puts an entry's length before its name on hover, and
