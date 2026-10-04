@@ -506,7 +506,8 @@ export interface Blame {
    * How much of the interaction it accounts for, in ms; null for 'none', and for a render, a hydration
    * or a handler where the build records no durations and React committed in the working time. For a
    * render it is the named commit's render, plus committing it, plus its useEffect callbacks in the same
-   * task, and React's other commits in the interaction are not in it.
+   * task, and React's other commits in the interaction are not in it, except a render React committed inside
+   * those callbacks with no recorded start, which can't be taken out and which the sentence says is included.
    */
   readonly ms: number | null;
   /**

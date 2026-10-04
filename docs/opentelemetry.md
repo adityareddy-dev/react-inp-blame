@@ -210,8 +210,9 @@ On a production build of React the same click gave `inferred` and `production`, 
 
 `commits.ms` is React's render time alone, across every commit inside the interaction. A render blame's
 `blame.ms` is the named commit's render, plus committing it, plus its useEffect callbacks in the same task, and
-React's other commits are not in it. So it can be more than `commits.ms`, as it is in the example, or less
-where several commits rendered.
+React's other commits are not in it, except a render React committed inside those callbacks with no recorded
+start, which can't be taken out and which the sentence says is included. So it can be more than `commits.ms`,
+as it is in the example, or less where several commits rendered.
 
 Component names in production need the `displayName` transform, which the Next.js wrapper, the Vite plugin
 and the loader add wherever they run, `runtime: false` included
