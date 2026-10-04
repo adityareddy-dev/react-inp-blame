@@ -5328,6 +5328,39 @@ test('a render the walk could not tell the start of is named after the app, from
   }
 });
 
+test("a commit whose hot path ends in a root the walk found no name for is named after the app, never (anonymous) or another root", () => {
+  // A production build where the one root that rendered has no name the walk can read, and no child holds most
+  // of its 295 components, so the hot path stops at it. The walk writes such a root down as (anonymous).
+  const click = [entry('pointerdown', 0, 72, 1.1, 59.9)];
+  const unnamed = commit(30, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 295,
+    mounted: 0,
+    roots: ['(anonymous)', 'Toaster'],
+    hotPath: ['(anonymous)'],
+    pathStart: 'heaviest-root',
+    startRendered: 295,
+    pathRendered: 295,
+    components: [{ name: 'Item', count: 24, self: null, total: null }],
+  });
+  const forced = [frame(0, 64, [script('#document.onpointerdown', 1.9, 58, 44.4)])];
+  const layoutReport = report(click, [unnamed], forced, [input(0, 'pointerdown')]);
+  const layout = layoutReport.explanation;
+  assert.deepEqual(layout.blame, { kind: 'layout', name: 'the app', detail: '295 components', ms: 44.4, confidence: 'measured' });
+  assert.doesNotMatch(layout.cause, /\(anonymous\)|Toaster/);
+  assert.equal(blamedCommit(layoutReport), layoutReport.commits[0]);
+  const render = report([entry('pointerdown', 0, 400, 1.1, 390)], [unnamed], [], [input(0, 'pointerdown')]).explanation;
+  assert.deepEqual([render.blame.kind, render.blame.name], ['render', 'the app']);
+  assert.doesNotMatch(render.cause, /\(anonymous\)|Toaster/);
+  // A walk cut short with no durations keeps the end of its path as it is, unless that is the same placeholder,
+  // and the sentence says only that what took the time was past the cut: where the render started was read.
+  const cut = report([entry('pointerdown', 0, 400, 1.1, 390)], [commit(200, 0, { ...unnamed, truncated: true, rendered: 5000 })], [], [input(0, 'pointerdown')]).explanation;
+  assert.equal(cut.blame.name, 'the app');
+  assert.match(cut.cause, /The walk stopped partway through that render, so which components took the time isn't known\./);
+  assert.doesNotMatch(cut.cause, /where it started/);
+});
+
 test('a render is counted inside the component it is named after, from the one it started at where that holds them all, and is a mount where most of it was one', () => {
   // Opening a Sheet on the shadcn/ui docs, production build, modelled on a reading of the app's source rather
   // than on a walk of it. Radix's Portal renders null and sets mounted in a layout effect, so the sheet's

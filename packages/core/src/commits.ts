@@ -63,20 +63,27 @@ export const frameworkLayers = new Set<string>();
 export const frameworkWrappers = new Set<string>();
 export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name) || frameworkLayers.has(name);
 
+/** What the walk writes for a component it found no name for. */
+export const ANONYMOUS = '(anonymous)';
+/** A name as the walk wrote it, or null for none and for the placeholder it writes where it read none. */
+const named = (name: string | undefined): string | null => (name && name !== ANONYMOUS ? name : null);
+
 /**
  * The component a commit is named after: the deepest name on its hot path that is not a layer
  * (`passedLayer`), else the end of its hot path, or its outermost root, as they stand, since the alternative
- * is inventing a name; null when it rendered none, and where the walk could not tell where the render started
- * (`pathStart`), whose path holds only a component the roots sit under.
+ * is inventing a name; null when it rendered none, where that end is a component the walk found no name for
+ * (`(anonymous)`), and where the walk could not tell where the render started (`pathStart`), whose path holds
+ * only a component the roots sit under.
  */
 export function leafName(c: CommitSummary): string | null {
   if (c.pathStart === 'unknown-root' || c.pathStart === 'no-root') return null;
   for (let i = c.hotPath.length - 1; i >= 0; i--) if (!passedLayer(c.hotPath[i]!)) return c.hotPath[i]!;
+  const end = c.hotPath[c.hotPath.length - 1];
   // A walk cut short with no durations to go by leaves no hot path where the work could be in more than one
   // subtree and nothing holds them all, and its first root is only the one the walk reached first.
-  if (c.truncated && !c.hasDurations) return c.hotPath[c.hotPath.length - 1] || null;
+  if (c.truncated && !c.hasDurations) return named(end);
   // Not another root: the hot path starts at the heaviest, so any other root is a subtree beside the work.
-  return c.hotPath[c.hotPath.length - 1] || c.roots[0] || null;
+  return end ? named(end) : named(c.roots[0]);
 }
 
 /**
@@ -170,7 +177,7 @@ export function minifiedAmongReadable(commits: readonly CommitSummary[], name: s
 function namesIn(commits: readonly CommitSummary[]): Set<string> {
   const names = new Set<string>();
   for (const c of commits) for (const n of [...c.roots, ...c.hotPath, ...c.components.map((x) => x.name)]) names.add(n);
-  names.delete('(anonymous)');
+  names.delete(ANONYMOUS);
   return names;
 }
 
