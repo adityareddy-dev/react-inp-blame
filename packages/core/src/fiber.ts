@@ -1004,7 +1004,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
 
   function visit(f: Fiber, depth: number): Agg[] {
     const comp = countsAsComponent(f);
-    const bailedOut = f.alternate !== null && f.alternate.child === f.child;
+    const bailedOut = f.alternate?.child === f.child;
     const performed = comp && (f.flags & PerformedWork) !== 0;
     // Host and text fibers are most of any tree, and counting them cut every root-level update
     // short on a page of 5000 DOM nodes. They cost the walk no more than they cost React: a
@@ -1059,11 +1059,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     }
     let childSum = 0;
     if (!bailedOut) {
-      let c = f.child;
-      while (c !== null) {
-        childSum += c.actualDuration || 0;
-        c = c.sibling;
-      }
+      for (let c = f.child; c !== null; c = c.sibling) childSum += c.actualDuration || 0;
     }
     const self = Math.max(0, total - childSum);
     measured += self;
@@ -1096,6 +1092,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   const hasDurations = (rootFiber.mode & context.profileMode) !== 0 || measured > 0;
   const coarseClock = hasDurations && timed >= COARSE_CLOCK_SAMPLES && !fractional && renderTime / rendered < COARSE_CLOCK_MEAN_MS;
   const metric = (a: Agg) => (hasDurations ? a.total : a.rendered);
+  const carries = (a: Agg, b: Agg) => metric(a) >= HOT_PATH_SHARE * metric(b);
 
   // Hot path: from the heaviest root, keep descending while one child carries most of
   // the work. Pass-through components inside a rendered subtree are named on the way.
@@ -1136,7 +1133,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     let wrapped = false;
     for (let steps = 0; cur.kids.length && comparable(cur) && steps < HOT_PATH_STEPS; ) {
       const next = cur.kids.reduce((a, b) => (metric(b) > metric(a) ? b : a));
-      if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
+      if (!carries(next, cur)) break;
       if (next.name !== cur.name) hotPath.push(next.name);
       // A component that is all its parent rendered and hands the very children it was given to the one component
       // it renders, which carries most of its work, is passed, below a component the path can name: what is inside
@@ -1146,12 +1143,12 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       // Radix's), is named on the path but spends no step: the steps go on the components a reader could
       // search for, and the render is named after the deepest of them.
       const given = next.fiber.memoizedProps?.children;
-      if (named && given && cur.kids.length < 2 && next.kids.length === 1 && next.kids[0]!.fiber.memoizedProps?.children === given && metric(next.kids[0]!) >= HOT_PATH_SHARE * metric(next)) wrapped = true;
+      if (named && given && cur.kids.length < 2 && next.kids.length === 1 && next.kids[0]!.fiber.memoizedProps?.children === given && carries(next.kids[0]!, next)) wrapped = true;
       else if (!passedLayer(next.name) && next.name !== named?.name) {
         named = next;
         steps++;
-        upTo = hotPath.length;
         wrapped = false;
+        upTo = hotPath.length;
       }
       cur = next;
     }
