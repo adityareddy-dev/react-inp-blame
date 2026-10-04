@@ -4584,6 +4584,20 @@ test('a render is said to be mostly one component only where that component is h
   const nameless = counted(460, ['CommandList'], [['(anonymous)', 422], ['CommandItem', 20]]);
   assert.match(nameless.cause, /re-rendering 460 components inside CommandList, in the 97 ms of working time\. /);
   assert.equal(nameless.blame.detail, '460 components');
+  // Nor where most of the time was that component's own render.
+  const ownNameless = commit(40, 0, {
+    rendered: 5,
+    total: 30,
+    roots: ['(anonymous)'],
+    hotPath: ['(anonymous)'],
+    components: [
+      { name: '(anonymous)', count: 1, self: 25, total: 30 },
+      { name: 'Row', count: 4, self: 1, total: 1 },
+    ],
+  });
+  const sorted = report([entry('click', 0, 48, 3, 45)], [ownNameless], []).explanation;
+  assert.deepEqual([sorted.blame.kind, sorted.blame.name, sorted.blame.detail], ['render', 'the app', '5 components']);
+  assert.doesNotMatch([sorted.cause, ...sorted.notes].join(' '), /anonymous/);
   const rows = report(
     [entry('click', 0, 48, 3, 30)],
     [
