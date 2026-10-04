@@ -1215,14 +1215,17 @@ export function renderedVerb(c: CommitSummary): string {
 }
 
 /**
- * The commit a report's render blame was built from, for the panel's row to take its verb from: the one
- * whose name and detail the blame carries, the heaviest of them where several do. It is not always the
- * heaviest commit: a 5 ms render whose layout effects ran for 60 ms is named over a 20 ms mount beside it.
- * The heaviest where none matches, and null where the report holds no commit.
+ * The commit a report's render or layout blame was built from, for the panel's row to take its verb from: the
+ * one whose name and detail the blame carries, the heaviest of them where several do. It is not always the
+ * heaviest commit: a 5 ms render whose layout effects ran for 60 ms is named over a 20 ms mount beside it, and
+ * a layout blame names the commit whose time could hold the layout. A layout blame named from where the render
+ * started (`fromName`) is matched that way first. The heaviest where none matches, and null where the report
+ * holds no commit.
  */
 export function blamedCommit(r: InteractionReport): CommitSummary | null {
-  const { name, detail } = r.explanation.blame;
-  const named = r.commits.filter((x) => leafOf(x) === name && mostlyOf(x) === detail);
+  const { kind, name, detail } = r.explanation.blame;
+  const started = kind === 'layout' ? r.commits.filter((x) => fromName(x) !== null && fromName(x) === name && mostlyOf(x, false) === detail) : [];
+  const named = started.length ? started : r.commits.filter((x) => leafOf(x) === name && mostlyOf(x) === detail);
   return named.length ? heaviest(named) : r.commits.length ? heaviest(r.commits) : null;
 }
 
@@ -1935,6 +1938,8 @@ function explain(r: InteractionReport): Explanation {
     if (unspanned.length) rendersInside.set(span.commit, unspanned.length);
   }
   const effects = [...effectsOf.values()].reduce((a, x) => a + x, 0);
+  // React's own time for a commit: its render, committing it and its effects.
+  const own = (x: CommitSummary) => x.total + (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
   /**
    * Where the read that forced a layout could have been, for the sentence that says what forces one. It is
    * usually a layout effect's, and two records can rule that out. The browser charges forced layout to the
@@ -1983,9 +1988,10 @@ function explain(r: InteractionReport): Explanation {
     unseen || unjoined ? [] : parts.filter((p) => p.forcedLayout > 0 && p.script.invoker !== REACT_TASK && !r.commits.some((x) => committedIn(x, p.script)));
   /**
    * The sentence; whether the layout could still be in the subtree React rendered, which the blame names only
-   * then; and the commit in the scripts that forced it, whose subtree that is.
+   * then; the commit in the scripts that forced it, whose subtree that is; and whether several commits ran there
+   * and none could have held most of it (`untied`), where no subtree is named.
    */
-  const whereRead = (parts: readonly ScriptPart[]): { said: string; inTheSubtree: boolean; commit: CommitSummary | null } => {
+  const whereRead = (parts: readonly ScriptPart[]): { said: string; inTheSubtree: boolean; commit: CommitSummary | null; untied?: boolean } => {
     const usual = { said: USUAL_READ, inTheSubtree: true, commit: null };
     if (unseen || unjoined) return usual;
     const handlerOrListener = `code outside React, such as ${handler ?? `the ${kind} handler`} or a library's listener`;
@@ -2009,12 +2015,24 @@ function explain(r: InteractionReport): Explanation {
     // handlers, or what its commit took is not known. React's scheduler task forcing layout with no commit in
     // it held a render of unknown length, so then only the usual place is said too.
     const theirs = r.commits.filter((x) => forcing.some((p) => committedIn(x, p.script)));
-    const commit = theirs.length ? heaviest(theirs) : null;
-    const slice = forcing.some((p) => p.script.invoker === REACT_TASK && !theirs.some((x) => committedIn(x, p.script)));
-    if (!commit || slice || !theirs.every((x) => committingOf.has(x))) return { ...usual, commit };
-    const inReact = theirs.reduce((a, x) => a + (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0), 0);
+    if (!theirs.length) return usual;
     const inScripts = forced - forcedOutside;
-    if (inReact >= FORCED_LAYOUT_IN_REACT_SHARE * inScripts) return { ...usual, commit };
+    // Of several, the one whose time could hold most of the layout (`couldHold`), not the one that rendered most.
+    let commit: CommitSummary | null = theirs[0]!;
+    let untied = false;
+    if (theirs.length > 1) {
+      const held = theirs.map((x) => couldHold(x, theirs));
+      const most = held.indexOf(Math.max(...held));
+      untied = held[most]! < FORCED_LAYOUT_IN_REACT_SHARE * inScripts;
+      commit = untied ? null : theirs[most]!;
+    }
+    const scripts = forcing.filter((p) => theirs.some((x) => committedIn(x, p.script))).length === 1 ? 'the script' : 'the scripts';
+    const noneHeld = `React committed ${theirs.length} times in ${scripts} that forced it, and none of those commits took long enough to hold most of it, so which code read the size isn't known.`;
+    const tied = (said: string) => (untied ? { said: `${said} ${noneHeld}`, inTheSubtree: true, commit: null, untied } : { said, inTheSubtree: true, commit });
+    const slice = forcing.some((p) => p.script.invoker === REACT_TASK && !theirs.some((x) => committedIn(x, p.script)));
+    if (slice || !theirs.every((x) => committingOf.has(x))) return tied(untied ? `${READS_SIZE}.` : USUAL_READ);
+    const inReact = theirs.reduce((a, x) => a + (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0), 0);
+    if (inReact >= FORCED_LAYOUT_IN_REACT_SHARE * inScripts) return tied(untied ? `${READS_SIZE}.` : USUAL_READ);
     // React 17, and a commit with no useEffect, report no effects, so only the commit is said to be timed.
     const effectsTimed = theirs.some((x) => effectsOf.has(x));
     const one = theirs.length === 1;
@@ -2023,14 +2041,28 @@ function explain(r: InteractionReport): Explanation {
     // A render body can read a size too, and a render of r ms holds at most r ms of layout: where the render
     // could hold most of the rest it stays in what the rest could be, and so does its subtree in the blame.
     const renderMs = theirs.reduce((a, x) => a + x.total, 0);
-    if (inReact + renderMs >= FORCED_LAYOUT_IN_REACT_SHARE * inScripts) {
-      return { said: `${READS_SIZE}. ${bound}, and the rest in React's render or code outside React.`, inTheSubtree: true, commit };
-    }
+    if (inReact + renderMs >= FORCED_LAYOUT_IN_REACT_SHARE * inScripts) return tied(`${READS_SIZE}. ${bound}, and the rest in React's render or code outside React.`);
     const all =
       renderMs < 0.5
         ? bound
         : `React's ${one ? 'commit' : 'commits'}${effectsTimed ? ', effects' : ''} and ${one ? 'render' : 'renders'} took ${underOr(inReact + renderMs)} in all, so at most that much of the layout was in React`;
-    return { said: `${READS_SIZE}. ${all}, and the rest in ${handlerOrListener}.`, inTheSubtree: false, commit };
+    return { said: `${READS_SIZE}. ${all}, and the rest in ${handlerOrListener}.`, inTheSubtree: false, commit: commit ?? heaviest(theirs) };
+  };
+  /**
+   * The most of a forced layout a commit in the forcing scripts could have held. Timed, that is React's own time for
+   * it (`own`). Untimed, it is its effects and the gap since the commit before it in the same script and the same
+   * event's handlers, which holds its render, its committing, its layout effects and ref callbacks. The first
+   * commit there has nothing before it, so its gap runs from the start of the script or of the event's handlers,
+   * whichever is later: that holds the handler too, and is only an upper bound.
+   */
+  const couldHold = (x: CommitSummary, theirs: readonly CommitSummary[]): number => {
+    if (x.hasDurations) return own(x);
+    const script = holderOf(x);
+    const event = handlingAt(x.at, true);
+    let before: CommitSummary | null = null;
+    for (const o of theirs) if (o.at < x.at && holderOf(o) === script && handlingAt(o.at, true) === event && (!before || o.at > before.at)) before = o;
+    const from = before ? (before.effectsEndedAt ?? before.at + before.walkMs) : Math.max(script?.start ?? x.at, event?.processingStart ?? -Infinity);
+    return Math.max(0, x.at - from) + (effectsOf.get(x) ?? 0);
   };
   /** Where a commit's effects figure holds renders it could not take out: ", one more render included". */
   const includedN = (n: number) => (n === 0 ? '' : `, ${n === 1 ? 'one more render' : `${n} more renders`} included`);
@@ -2129,7 +2161,6 @@ function explain(r: InteractionReport): Explanation {
   // choose it where they are worth a mention at all, or a 1 ms render beside 30 ms of effects nobody
   // hears about is named over a 30 ms render. Without durations a commit is only named over the one
   // with the most components when its effects are what earned the blame.
-  const own = (x: CommitSummary) => x.total + (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
   const rc = c && (hasDurations ? committingMatters : effectsEarn) ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
   const rcCommitting = rc ? (committingOf.get(rc) ?? 0) : 0;
   const rcEffects = rc ? (effectsOf.get(rc) ?? 0) : 0;
@@ -2403,7 +2434,6 @@ function explain(r: InteractionReport): Explanation {
     const named = longest && longest.ms >= WAITED_BEHIND_MIN_SHARE * waitedBetween ? scriptName(longest.script) : null;
     blame = { kind: 'waiting', name: named, detail: onlyGap ? `between ${onlyGap.after} and ${onlyGap.before}` : 'between handlers', ms: heldGap ? waitedBetween : between, confidence: 'measured' };
   } else if (layoutMatters) {
-    saidAcross = c;
     // The number is the browser's and nothing React did changes it, so the confidence is about the
     // measurement alone: whether any of the total had to be apportioned across the edge of the window.
     const confidence = forcedLayoutMeasured(whileHandling) ? 'measured' : 'inferred';
@@ -2463,32 +2493,41 @@ function explain(r: InteractionReport): Explanation {
     // name beside it is read as owning all of it. Where the sentence puts it outside React, the subtree is
     // not where it happened, and the script is named, by its handler's name where it ran as the handler and no
     // commit in the same event's handlers ran outside it.
-    // The subtree is the one the commit in the forcing scripts rendered, where the sentence found one.
-    const own = read.commit ? (!unjoined && namesThisInteraction(read.commit) ? read.commit : null) : named;
-    const inTheSubtree = !!own && read.inTheSubtree;
-    if (inTheSubtree) layoutOwn = own;
+    // The subtree is the one the commit in the forcing scripts rendered, where the sentence found one. Where several
+    // ran there and none could have held most of it, no subtree and no script is named.
+    const subtree = read.untied ? null : read.commit ? (!unjoined && namesThisInteraction(read.commit) ? read.commit : null) : named;
+    const inTheSubtree = !!subtree && read.inTheSubtree;
+    if (inTheSubtree) layoutOwn = subtree;
+    // The commit the cause describes: the one named, else the one that rendered most.
+    const told = inTheSubtree ? subtree : c;
+    saidAcross = told;
     // The hot path says where the render went, not where the read was, so where the sentence says it went
     // from a component that holds the whole commit (`fromName`) that is the subtree named, with the whole count.
-    // Only where the forcing script's commit is the one the sentence describes: another commit's start is
-    // never said, so the blame would name a component the cause does not.
-    const whole = own && own === c ? fromName(own) : null;
-    const name = inTheSubtree ? (whole ?? leafOf(own)) : holdsMostOfIt && charged ? (read.inTheSubtree || committedBeside(charged.script) ? invoker : scriptBlameName(charged.script)) : null;
+    const whole = inTheSubtree ? fromName(subtree) : null;
+    const name = inTheSubtree
+      ? (whole ?? leafOf(subtree))
+      : !read.untied && holdsMostOfIt && charged
+        ? read.inTheSubtree || committedBeside(charged.script)
+          ? invoker
+          : scriptBlameName(charged.script)
+        : null;
     const onDocument = !!charged && charged.script.invoker.startsWith('#document.') && !page.named && (!page.roots.length || page.roots.includes('#document'));
     const dispatchedFrom = !!charged && (onDocument || reactsOwn(charged.script));
     const chargedTo = charged && invoker && (!dispatchedFrom || name === invoker) ? ` ${holdsMostOfIt ? 'It' : `${ms(charged.forcedLayout)} of it`} was charged to ${invoker}.` : '';
     // The clause about React is hedged on the same evidence the name is: a commit this interaction
     // cannot claim, and, where the clause prints a duration, a duration that is not a measurement.
     // A production build's component counts are measured by the walk, so they are not hedged here.
-    const reactSure = !!named && (!hasDurations || measuredFrom(named) === 'measured');
+    const sure = told && !unjoined && namesThisInteraction(told) ? told : null;
+    const reactSure = !!sure && (!hasDurations || measuredFrom(sure) === 'measured');
     const maybe = reactSure ? '' : `${HEDGE} `;
-    const rendered = c ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(c, underOr(renderSpent(c)))}` : `React was ${maybe}${renderPhrase(c)}`}.` : '';
+    const rendered = told ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(told, underOr(renderSpent(told)))}` : `React was ${maybe}${renderPhrase(told)}`}.` : '';
     // What forces a layout is said straight after the layout, and React's clause after that: put after the
     // clause, its "That happens" read as about the re-render.
     cause = `Of the ${window}, ${say(confidence, `the browser spent ${spent}.`, `the browser ${HEDGE} spent ${spent}.`)}${chargedTo} ${read.said}${rendered}`;
     blame = {
       kind: 'layout',
       name,
-      detail: inTheSubtree ? mostlyOf(own, !whole) : null,
+      detail: inTheSubtree ? mostlyOf(subtree, !whole) : null,
       ms: forcedWhileHandling,
       confidence,
     };

@@ -1,5 +1,5 @@
 import { heaviest, leafName } from './commits.js';
-import { ms, verdictCounts } from './join.js';
+import { blamedCommit, ms, verdictCounts } from './join.js';
 import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 import { parseReactVersion } from './version.js';
@@ -85,7 +85,8 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
   const x = r.explanation;
   // The commit the verdict's blame names, so the entry's name never contradicts its tooltip: where a layout
   // blame is named after the component that commit's render started at, that one.
-  const main = r.commits.length ? heaviest(r.commits) : null;
+  const heaviestCommit = r.commits.length ? heaviest(r.commits) : null;
+  const main = x.blame.kind === 'layout' ? blamedCommit(r) : heaviestCommit;
   const started = x.blame.kind === 'layout' && x.blame.name && main?.hotPath[0] === x.blame.name ? x.blame.name : null;
   const leaf = started ?? (main ? (leafName(main) ?? '') : '');
   const properties: [string, string][] = [
@@ -99,7 +100,7 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
     // Not "after the paint": a press's render before a slower release is one, and it came before this paint.
     ['Later React renders', String(r.followUps.length)],
   ];
-  if (main && main.hotPath.length) properties.push(['Heaviest path', main.hotPath.join(' > ')]);
+  if (heaviestCommit && heaviestCommit.hotPath.length) properties.push(['Heaviest path', heaviestCommit.hotPath.join(' > ')]);
   // From half a millisecond, where it rounds to 1 ms: under that the row read "0 ms".
   if (r.walkMs >= 0.5) properties.push(['react-inp-blame itself', ms(r.walkMs)]);
   measure(`${x.headline}${leaf ? ' · ' + leaf : ''}`, r.start, Math.max(r.end, r.start + 0.1), {

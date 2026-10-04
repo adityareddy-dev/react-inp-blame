@@ -1794,8 +1794,8 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
 - Each report is one entry in an "Interaction blame" track (not "Interactions", which is
   Chrome's own track), from the input to the paint, in `warning` like React's event spans, with
   the verdict as its tooltip and the phases as properties. It is named after the component the
-  heaviest commit's render went to, or since 0.20.0 after the component a layout blame is named
-  after where that is where the same commit's render started: the shadcn/ui Sheet's close read
+  heaviest commit's render went to (since 0.23.0, for a layout blame, the commit it names), or since 0.20.0
+  after the component a layout blame is named after where that is where the same commit's render started: the shadcn/ui Sheet's close read
   "160 ms click · DismissableLayer" beside a tooltip that blamed Dialog. It is a
   `performance.measure` with a `devtools` detail, because `console.timeStamp` carries no
   tooltip: a seventh argument reaches the trace as an empty field in Chromium 147. Its count of
@@ -2286,7 +2286,8 @@ the node itself: `"ProfilePage > PhotoTile (button.tile)"`, which web-vitals wri
 `attribution.interactionTarget` in place of its own CSS selector. It reads `fiberFromNode` and
 `ownersOf`, the same two lookups every report is built from, so there is one walk in the codebase, not
 two. `attributeINP(metric)` returns the metric's attribution with a frozen `react` field added: the
-blame with its confidence, the handler, the hot path, the heaviest commit's components (at most 5), and
+blame with its confidence, the handler, the hot path, the heaviest commit's components (at most 5; since
+0.23.0 a layout blame's own commit's), and
 what React rendered before and after the paint. It carries its own `schemaVersion`, separate from the
 report's, because it is a smaller and slower-moving shape than `InteractionReport`.
 

@@ -3859,6 +3859,8 @@ test('the renders a cause counts across commits are the renders the note says Re
   const forced = [frame(0, 200, [script('BUTTON.onclick', 2, 178, 120)])];
   const layout = report([entry('click', 0, 200, 2, 180)], [hydration(4), cart, commit(170, 0, { total: 15 })], forced, loginClick('handleSave'));
   assert.equal(layout.explanation.blame.kind, 'layout');
+  // Three commits in the script that forced 120 ms, none timed at half of it, so none is named.
+  assert.equal(layout.explanation.blame.name, null);
   assert.match(layout.explanation.cause, / React spent 34 ms rendering across 3 commits, 15 ms of it re-rendering 12 components inside Cart, /);
   for (const r of [handled, rendered, painted, layout]) assert.ok(r.explanation.notes.includes(times(3)), r.explanation.notes.join(' | '));
   // Under a hydration verdict, and in a production build, no sentence gives a count, and the note leaves the hydration
@@ -4229,6 +4231,8 @@ test("React's render time across several commits is said as their total with the
   const forced = [frame(0, 200, [script('BUTTON.onclick', 2, 178, 120)])];
   const layout = report([entry('click', 0, 200, 2, 180)], [list, sidebar], forced, loginClick('handleSave')).explanation;
   assert.equal(layout.blame.kind, 'layout');
+  // Two commits in the script that forced 120 ms, 30 and 25 ms of React's time: neither could hold most of it.
+  assert.equal(layout.blame.name, null);
   assert.match(layout.cause, new RegExp(` React spent ${across.replace(/[()]/g, '\\$&')}\\.$`));
   const rendered = report([entry('click', 0, 72, 2, 64)], [list, sidebar], [], [input(0, 'click')]).explanation;
   assert.deepEqual(rendered.blame, { kind: 'render', name: 'List', detail: 'Row ×30', ms: 30, confidence: 'measured' });
@@ -5541,14 +5545,18 @@ test('a layout blame is named after the component the render started at where th
   // and the component the render is named after is all there is to name.
   const part = report(close, [commit(60, 0, { ...sheet, roots: ['Dialog', 'Portal'], startRendered: 42 })], forced, [input(0, 'click')]).explanation;
   assert.deepEqual([part.blame.name, part.blame.detail], ['DismissableLayer', '15 of 56 components']);
-  // Where the commit in the forcing script is not the one the cause describes, a 500-row Table rendered in a later
-  // script, the cause never says "from Dialog down", so the blame keeps the name the render went to, as in 0.18.0.
+  // A larger render in a later script, a 500-row Table that forced nothing, is not where the layout was. The cause
+  // describes the forcing script's commit, the one the blame names, so it says "from Dialog down" and the blame
+  // names Dialog. Until 0.23.0 the cause described the Table and the blame kept DismissableLayer.
   const table = commit(190, 0, { hasDurations: false, total: 0, rendered: 500, mounted: 0, roots: ['Table'], hotPath: ['Table'], components: [{ name: 'TableRow', count: 500, self: null, total: null }] });
   const both = [frame(0, 320, [script('BODY.onclick', 3.2, 150, 130), script('BUTTON.onpointerup', 180, 40, 0)])];
-  const beside = report([entry('click', 0, 320, 3.2, 250)], [commit(100, 0, sheet), table], both, [input(0, 'click')]).explanation;
+  const besideReport = report([entry('click', 0, 320, 3.2, 250)], [commit(100, 0, sheet), table], both, [input(0, 'click')]);
+  const beside = besideReport.explanation;
   assert.equal(beside.blame.kind, 'layout');
-  assert.deepEqual([beside.blame.name, beside.blame.detail], ['DismissableLayer', '15 of 56 components']);
-  assert.doesNotMatch(beside.cause, /Dialog/);
+  assert.deepEqual([beside.blame.name, beside.blame.detail], ['Dialog', '56 components']);
+  assert.match(beside.cause, /56 components from Dialog down, 15 of them inside DismissableLayer\./);
+  assert.doesNotMatch(beside.cause, /Table/);
+  assert.equal(blamedCommit(besideReport), besideReport.commits[0]);
   // The Sheet's commit alone is the one the cause describes, and keeps its start.
   const alone = report([entry('click', 0, 320, 3.2, 250)], [commit(100, 0, sheet)], both, [input(0, 'click')]).explanation;
   assert.deepEqual([alone.blame.name, alone.blame.detail], ['Dialog', '56 components']);
@@ -5581,6 +5589,107 @@ test('a layout blame is named after the component the render started at where th
   const tab = report([entry('click', 0, 520, 3, 500)], [advanced], [frame(0, 520, [script('BUTTON.onclick', 3, 497, 400)])]).explanation;
   assert.deepEqual(tab.blame, { kind: 'layout', name: 'EventTypeWeb', detail: '1216 components', ms: 400, confidence: 'measured' });
   assert.match(tab.cause, /1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper\./);
+});
+
+test('a layout blame forced in a script several commits ran in names the commit whose time could hold it, not the one that rendered most', () => {
+  // A click that opens a menu, production build: one listener script holds 44 ms of forced layout and four
+  // commits. The first re-renders 295 components and its effects take 0.1 ms. The menu's commit renders 185, and
+  // from the end of the commit before it to the end of its own effects took 46 ms, where its layout effects read
+  // the menu items' sizes. Named after the most components, the blame sent a reader to the sidebar.
+  const click = [entry('pointerdown', 0, 72, 1.1, 59.9)];
+  const sidebar = commit(3.8, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 295,
+    mounted: 0,
+    roots: ['Sidebar'],
+    hotPath: ['Sidebar'],
+    startRendered: 295,
+    pathRendered: 295,
+    components: [{ name: 'NavItem', count: 24, self: null, total: null }],
+    effectsStartedAt: 4.6,
+    effectsEndedAt: 4.7,
+  });
+  const portal = commit(9.3, 0, { hasDurations: false, total: 0, rendered: 96, mounted: 95, roots: ['Portal'], hotPath: ['Portal'], components: [{ name: 'Slot', count: 9, self: null, total: null }], effectsStartedAt: 9.4, effectsEndedAt: 11.4 });
+  const menu = commit(36.5, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 185,
+    mounted: 0,
+    roots: ['Header'],
+    hotPath: ['Header', 'Menu', 'MenuContent'],
+    startRendered: 185,
+    pathRendered: 80,
+    components: [{ name: 'MenuItem', count: 13, self: null, total: null }],
+    effectsStartedAt: 36.8,
+    effectsEndedAt: 57.4,
+  });
+  const layer = commit(57.9, 0, { hasDurations: false, total: 0, rendered: 15, mounted: 0, roots: ['Layer'], hotPath: ['Layer'], components: [{ name: 'Slot', count: 3, self: null, total: null }], effectsStartedAt: 57.9, effectsEndedAt: 58 });
+  const forced = [frame(0, 64, [script('#document.onpointerdown', 1.9, 58, 44.4)])];
+  const opened = report(click, [sidebar, portal, menu, layer], forced, [input(0, 'pointerdown')]);
+  assert.deepEqual(opened.explanation.blame, { kind: 'layout', name: 'Header', detail: '185 components', ms: 44.4, confidence: 'measured' });
+  // The cause describes the commit the blame names, not the larger render.
+  assert.match(opened.explanation.cause, /185 components from Header down, 80 of them inside MenuContent\./);
+  assert.doesNotMatch(opened.explanation.cause, /Sidebar/);
+  // The panel, the DevTools track and the web-vitals attribution take the same commit.
+  assert.equal(blamedCommit(opened), opened.commits[2]);
+
+  // The same in a development build, where each commit is timed from its render's start to the end of its
+  // effects: the sidebar's 82 ms render and 11 ms after it, against the header's 48 ms render, 159 ms committing
+  // and 149 ms of effects.
+  const dev = (at: number, startedAt: number, total: number, effects: [number, number], opts: Partial<CommitSummary>) =>
+    commit(at, 0, { startedAt, total, effectsStartedAt: effects[0], effectsEndedAt: effects[1], mounted: 0, ...opts });
+  const devSidebar = dev(98.2, 12.3, 82, [103.4, 110.5], { rendered: 295, roots: ['Sidebar'], hotPath: ['Sidebar'], components: [{ name: 'NavItem', count: 24, self: 20, total: 20 }] });
+  const devHeader = dev(393.7, 186.3, 48.2, [395.1, 543.6], { rendered: 185, roots: ['Header'], hotPath: ['Header'], components: [{ name: 'MenuItem', count: 13, self: 10, total: 10 }] });
+  const devForced = [frame(0, 601.5, [script('#document.onpointerdown', 10.6, 562.3, 299.2)])];
+  const devOpened = report([entry('pointerdown', 0, 640, 6.7, 572.9)], [devSidebar, devHeader], devForced, [input(0, 'pointerdown')]);
+  assert.deepEqual(devOpened.explanation.blame, { kind: 'layout', name: 'Header', detail: '185 components', ms: 299.2, confidence: 'measured' });
+  assert.match(devOpened.explanation.cause, /48 ms of it re-rendering 185 components inside Header/);
+  assert.doesNotMatch(devOpened.explanation.cause, /Sidebar/);
+  assert.equal(blamedCommit(devOpened), devOpened.commits[1]);
+});
+
+test('a layout blame forced where a mount commit is followed by a small one in the same script still names the mount', () => {
+  // A popover's content mounts and its layout effect measures it, then the positioning library sets the
+  // position, a 3-component commit in the same listener script. Production build, so nothing times either
+  // render: the mount is the first commit in the script, and from the script's start to its stamp could hold it.
+  const click = [entry('click', 0, 104, 2, 90)];
+  const content = commit(70, 0, {
+    hasDurations: false,
+    total: 0,
+    rendered: 120,
+    mounted: 110,
+    roots: ['Popover'],
+    hotPath: ['Popover', 'PopoverContent'],
+    startRendered: 120,
+    pathRendered: 100,
+    components: [{ name: 'Option', count: 20, self: null, total: null }],
+    effectsStartedAt: 70.2,
+    effectsEndedAt: 71,
+  });
+  const position = commit(73, 0, { hasDurations: false, total: 0, rendered: 3, mounted: 0, roots: ['Popper'], hotPath: ['Popper'], components: [{ name: 'Arrow', count: 1, self: null, total: null }], effectsStartedAt: 73, effectsEndedAt: 73.1 });
+  const forced = [frame(0, 100, [script('BUTTON.onclick', 2, 88, 60)])];
+  const alone = report(click, [content], forced, [input(0, 'click')]).explanation;
+  const both = report(click, [content, position], forced, [input(0, 'click')]);
+  assert.equal(both.explanation.blame.kind, 'layout');
+  assert.deepEqual([both.explanation.blame.name, both.explanation.blame.detail], ['Popover', '120 components']);
+  assert.deepEqual([both.explanation.blame.name, both.explanation.blame.detail], [alone.blame.name, alone.blame.detail]);
+  assert.equal(blamedCommit(both), both.commits[0]);
+});
+
+test('a layout blame forced in a script several commits ran in, none of which took long enough to hold most of it, names no component', () => {
+  // Two small commits early in a 98 ms listener that forced 60 ms of layout, production build: from the script's
+  // start to the first one's stamp and its effects is 9 ms, and from there to the end of the second's effects 10.
+  const click = [entry('click', 0, 120, 2, 100)];
+  const a = commit(10, 0, { hasDurations: false, total: 0, rendered: 40, mounted: 0, roots: ['Cart'], hotPath: ['Cart'], components: [{ name: 'CartLine', count: 12, self: null, total: null }], effectsStartedAt: 10.2, effectsEndedAt: 11 });
+  const b = commit(20, 0, { hasDurations: false, total: 0, rendered: 8, mounted: 0, roots: ['Badge'], hotPath: ['Badge'], components: [{ name: 'Count', count: 1, self: null, total: null }], effectsStartedAt: 20.1, effectsEndedAt: 21 });
+  const forced = [frame(0, 110, [script('BUTTON.onclick', 2, 98, 60)])];
+  const r = report(click, [a, b], forced, [input(0, 'click')]).explanation;
+  assert.deepEqual(r.blame, { kind: 'layout', name: null, detail: null, ms: 60, confidence: 'measured' });
+  assert.match(r.cause, /React committed 2 times in the script that forced it/);
+  // One commit in the forcing script is named as before, however little of the time it could hold.
+  const one = report(click, [a], forced, [input(0, 'click')]).explanation;
+  assert.deepEqual([one.blame.kind, one.blame.name], ['layout', 'Cart']);
 });
 
 test('a layout blame names no start the cause does not, where the component rendered many times over is the one the render is named after', () => {
