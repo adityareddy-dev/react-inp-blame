@@ -24,7 +24,9 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 - Where React timed the render (a development or profiling build), a component of that shape whose own render took
   the time, a permission check round a fade or a highlighter handing on the string it was given, is named as in
   0.23.0. What the rule still can't tell: a production build has only counts, and there such a component is passed
-  over for the one above it all the same. A wrapper that wraps its children in an element of its own before handing
+  over all the same. That moves the name only where nothing below it is named, a dialog root whose own render was
+  slow say, which is then blamed on the component above it. A permission check round a fade or a highlighter
+  handing on its string gets the name 0.23.0 gave. A wrapper that wraps its children in an element of its own before handing
   them on is named as in 0.23.0, and where one of those (a Card, a layout) sits between the component that owns the
   state and a dialog root, the render is named after that one rather than the owner. On Cap, over six runs each of
   a development and a production build at full speed and at a quarter of it, every report that blamed a render on
