@@ -10,36 +10,40 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ### Changed
 
-- **A component that is all its parent rendered and hands the very children it was given to the one component
-  it renders is no longer the one a render or layout blame names.** Before, the walk went into it like any other,
-  so on Cap a sidebar component that keeps its popover's open state and wraps its whole return in Radix's Dialog
-  root was blamed as 'Dialog', '211 of 212 components', where the code to change is the sidebar component. Radix's
-  root hands its `children` to DialogProvider as it got them. Now such a component spends no step on the hot path
-  and is never the one named, where a component above it can be. Where something below it carries most of the
-  work the path goes on to that as before, and where nothing does it ends at the nearest component above it a
-  reader could search for, which the blame then names. `hotPath` in a report, web-vitals' `react.hotPath` and
-  OpenTelemetry's `react_inp_blame.hot_path` end there too. Having children isn't enough: a feed given its empty
-  state, a form given its submit row, a highlighter given its code and a table given a toolbar build what they
-  render themselves, and are named as before.
-- What the rule still can't tell: it reads props and the tree's shape, not time, so a component that hands its
-  children on unchanged and does heavy work of its own is passed over for the one above it all the same. A
-  wrapper that wraps its children in an element of its own before handing them on is named as in 0.23.0. The
-  rule is checked on trees built from Cap's in the tests. It changed no name on the demo apps, and hasn't been
-  run on Cap itself yet.
+- **A component that is all its parent rendered and hands the very children it was given to the one component it
+  renders, which carries most of its work, is no longer the one a render or layout blame names.** Before, the walk
+  went into it like any other, so on Cap a sidebar component that keeps its popover's open state and wraps its
+  whole return in Radix's Dialog root was blamed as 'Dialog', '211 of 212 components', where the code to change is
+  the sidebar component. Radix's root hands its `children` to DialogProvider as it got them. Now such a component
+  spends no step on the hot path and is never the one named, where a component above it can be. Where something
+  below it carries most of the work the path goes on to that as before, and where nothing does it ends at the
+  nearest component above it a reader could search for, which the blame then names. `hotPath` in a report,
+  web-vitals' `react.hotPath` and OpenTelemetry's `react_inp_blame.hot_path` end there too. Having children isn't
+  enough: a feed given its empty state, a form given its submit row, a highlighter given its code and a table given
+  a toolbar build what they render themselves, and are named as before.
+- Where React timed the render (a development or profiling build), a component of that shape whose own render took
+  the time, a permission check round a fade or a highlighter handing on the string it was given, is named as in
+  0.23.0. What the rule still can't tell: a production build has only counts, and there such a component is passed
+  over for the one above it all the same. A wrapper that wraps its children in an element of its own before handing
+  them on is named as in 0.23.0, and where one of those (a Card, a layout) sits between the component that owns the
+  state and a dialog root, the render is named after that one rather than the owner. On Cap, over six runs each of a
+  development and a production build at full speed and at a quarter of it, every report on the sidebar's collapse,
+  its popover's opening or the popover's close by Escape named AdminNavItems. The rule changed no name on the demo
+  apps.
 - **A render is said to be mounting only where nine in ten of its components rendered for the first time, and
   re-rendering only where one in ten or fewer did.** Before, it went by half, so on formbricks a render that
-  mounted 134 of 217 components read "mounting 217 components", and on Cap 160 components a Tooltip remounted
-  among 332 read "re-rendering 332 components". Between the two it now reads "rendering", and the badge panel's
-  rows say "rendered".
+  mounted 134 of 217 components read "mounting 217 components", and on Cap 160 components a Tooltip remounted among
+  332 read "re-rendering 332 components". Between the two it now reads "rendering", and the badge panel's rows say
+  "rendered".
 - `/auto` grew 0.05 KB and the part before react-dom 0.04 KB, both still within their budgets. The rest stay as
   they were.
 
 ### Blame changes
 
 - A render or layout blame whose path went into a component that was all its parent rendered and handed the very
-  children it was given to the one component it rendered, with nothing named below it and a component above it
-  that can be: `name` goes from that component to the nearest one above it ('AdminNavItems' where 0.23.0 gave
-  'Dialog'), and a count in `detail` is that one's.
+  children it was given to the one component it rendered, which carried most of its work, with nothing named below
+  it and a component above it that can be: `name` goes from that component to the nearest one above it
+  ('AdminNavItems' where 0.23.0 gave 'Dialog'), and a count in `detail` is that one's.
 - A render where more than one in ten and fewer than nine in ten of the components mounted: the cause's verb goes
   from "mounting" or "re-rendering" to "rendering". `name`, `detail` and `ms` don't change.
 
