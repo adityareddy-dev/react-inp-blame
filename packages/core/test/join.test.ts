@@ -7371,3 +7371,54 @@ test('a production render cut at its budget with useEffect callbacks after it sa
   const { cause } = report([entry('click', 1000, 330, 1003, 1320)], [cut], null, ring).explanation;
   assert.ok(cause.includes(" before the screen could update. A profiling build of React would time the render too. The walk stopped partway through that render, so which components took the time isn't known."), cause);
 });
+
+// Radix mounts a dialog's overlay and its content through a Portal each, so the commit that mounts them has two
+// roots and its hot path starts at the heavier. On plate's docs, opening the search dialog forced 100 to 975 ms of
+// whole-page restyles from Radix's Presence, FocusScope and scroll lock, all in that mount, and the layout was
+// named after the deepest component the render path reached, cmdk's CommandGroup, which only sets a class name.
+const dialogPath = ['Portal', 'Primitive.div', 'DialogContent', 'Presence', 'FocusScope', 'DismissableLayer', 'Primitive.div', 'Command', 'CommandList', 'CommandGroup', 'Primitive.div'];
+const dialogMount = (opts: Partial<CommitSummary> = {}) =>
+  commit(60, 0, { hasDurations: false, total: 0, rendered: 89, mounted: 87, roots: ['Portal'], hotPath: dialogPath, pathStart: 'heaviest-root', startRendered: 72, pathRendered: 27, above: 'DialogPortal', components: [{ name: 'Primitive.div', count: 13, self: null, total: null }], ...opts });
+const pageRerender = commit(124, 0, { hasDurations: false, total: 0, rendered: 559, roots: ['Toolbar'], hotPath: ['Toolbar'], pathStart: 'only-root', startRendered: 559, pathRendered: 559, components: [{ name: 'Comment', count: 123, self: null, total: null }] });
+const restyle = (commits: CommitSummary[]) => report([entry('click', 0, 128, 2, 118)], commits, [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 108)])], [input(0, 'click')]);
+
+test('a layout forced in a commit with several roots is named after the component they all sit under, with the whole count', () => {
+  const r = restyle([pageRerender, dialogMount()]);
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name, r.explanation.blame.detail], ['layout', 'DialogPortal', '89 components']);
+  // The panel takes its verb from that commit, not from the heavier re-render beside it.
+  assert.equal(blamedCommit(r), r.commits[1]);
+  assert.equal(renderedVerb(blamedCommit(r)!), 'mounted');
+  // A store update that re-renders a part of the page under each of two roots is the same: the read can be in either.
+  const split = restyle([commit(60, 0, { hasDurations: false, total: 0, rendered: 83, roots: ['Dashboard', 'Sidebar'], hotPath: ['Dashboard', 'Panel'], pathStart: 'heaviest-root', startRendered: 42, pathRendered: 41, above: 'App', components: [{ name: 'Bar', count: 40, self: null, total: null }] })]);
+  assert.deepEqual([split.explanation.blame.name, split.explanation.blame.detail], ['App', '83 components']);
+  // Where the roots sit under no component, the app holds them, as it does for a path that ends in no name.
+  const loose = restyle([dialogMount({ above: null })]);
+  assert.deepEqual([loose.explanation.blame.kind, loose.explanation.blame.name, loose.explanation.blame.detail], ['layout', 'the app', '89 components']);
+  // A report stored before the walk said what sits above the roots is named as it was.
+  const stored = restyle([dialogMount({ above: undefined })]);
+  assert.deepEqual([stored.explanation.blame.name, stored.explanation.blame.detail], ['CommandGroup', '27 of 89 components']);
+});
+
+test('a layout forced in a commit with one root keeps its name, and a render with several roots is still named where the render went', () => {
+  const one = restyle([commit(60, 0, { hasDurations: false, total: 0, rendered: 181, roots: ['Tabs'], hotPath: ['Tabs', 'TabsList'], pathStart: 'only-root', startRendered: 181, pathRendered: 170, above: 'Page', components: [{ name: 'TabsTrigger', count: 16, self: null, total: null }] })]);
+  assert.deepEqual([one.explanation.blame.name, one.explanation.blame.detail], ['Tabs', '181 components']);
+  // A render is where React's own time went, so the path's end is still the name: the component above the roots rendered nothing.
+  const split = commit(1035, 1000, { startedAt: 1003, total: 30, rendered: 83, roots: ['Dashboard', 'Sidebar'], hotPath: ['Dashboard', 'Panel'], pathStart: 'heaviest-root', startRendered: 42, pathRendered: 41, above: 'App', components: [{ name: 'Panel', count: 1, self: 1, total: 25 }, { name: 'Bar', count: 40, self: 0.5, total: 0.5 }] });
+  const r = report([entry('click', 1000, 64, 1003, 1040)], [split], null, [input(1000, 'click', { handler: 'onClick' })]);
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['render', 'Panel']);
+});
+
+// Closing plate's search dialog by Escape: React re-rendered the dialog in 3 ms and spent 27 ms more committing,
+// Radix's Presence reading styles in a layout effect and react-dom removing the portal. 0.24.0's wrapper rule left
+// a step for the path to reach cmdk's CommandGroup, and the render was named after it in 7 of 12 runs.
+test('a render whose commit took most of its time in committing is named where the render started, as a layout is', () => {
+  const closePath = ['CommandMenu', 'CommandMenuDialog', 'Dialog', 'DialogContent', 'Presence', 'FocusScope', 'DismissableLayer', 'Command', 'CommandList', 'CommandGroup', 'Primitive.div'];
+  const close = (total: number, startedAt: number) =>
+    commit(1033, 1000, { startedAt, total, rendered: 100, roots: ['CommandMenu'], hotPath: closePath, pathStart: 'only-root', startRendered: 100, pathRendered: 27, components: [{ name: 'CommandGroup', count: 1, self: 0.3, total: total * 0.6 }, { name: 'CommandItem', count: 27, self: 0.05, total: 0.05 }] });
+  const r = report([entry('click', 1000, 48, 1001, 1040)], [close(3, 1003)], null, [input(1000, 'click', { handler: 'onClick' })]);
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name, r.explanation.blame.detail], ['render', 'CommandMenu', '100 components']);
+  assert.equal(blamedCommit(r), r.commits[0]);
+  // The same render taking the time itself, with little committing after, is named where the render went.
+  const slow = report([entry('click', 1000, 48, 1001, 1040)], [close(29, 1003)], null, [input(1000, 'click', { handler: 'onClick' })]);
+  assert.deepEqual([slow.explanation.blame.kind, slow.explanation.blame.name, slow.explanation.blame.detail], ['render', 'CommandGroup', '27 of 100 components']);
+});
