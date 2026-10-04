@@ -116,6 +116,13 @@ export interface CommitSummary {
    */
   readonly pathStart?: 'only-root' | 'heaviest-root' | 'unknown-root' | 'no-root';
   /**
+   * The innermost component above every component that rendered, which did not render itself: a dialog's
+   * DialogPortal, above the Portal its overlay and its content each mount through. Null where the commit's
+   * roots sit under none, and where its one root rendered from the top. Absent on a report stored by an
+   * earlier release.
+   */
+  readonly above?: string | null;
+  /**
    * Of `rendered`, those inside the component `hotPath` starts from, that component included. Equal to
    * `rendered` where that is the commit's one root or the component every root sits under, and below it
    * where other roots rendered beside the one the path starts from, since the path starts at the heaviest
