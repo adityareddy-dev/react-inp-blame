@@ -5543,6 +5543,15 @@ test("a commit whose hot path ends in a root the walk found no name for is named
   assert.equal(cut.blame.name, 'the app');
   assert.match(cut.cause, /The walk stopped partway through that render, so which components took the time isn't known\./);
   assert.doesNotMatch(cut.cause, /where it started/);
+  // A path that ends in a component with no name under a provider: the app holds all of the render, so no part of
+  // the count is said to be inside it.
+  const layered = { hasDurations: false, total: 0, rendered: 300, roots: ['ThemeProvider'], hotPath: ['ThemeProvider', '(anonymous)'], pathStart: 'only-root' as const, startRendered: 300, pathRendered: 80, components: [{ name: 'Row', count: 40, self: null, total: null }, { name: '(anonymous)', count: 1, self: null, total: null }] };
+  const timedLayered = { ...layered, hasDurations: true, total: 40, startedAt: 20, components: [{ name: 'Row', count: 40, self: 10, total: 10 }, { name: '(anonymous)', count: 1, self: 1, total: 15 }] };
+  for (const opts of [layered, timedLayered]) {
+    const inApp = report([entry('click', 0, 80, 1, 70)], [commit(60, 0, opts)], [], [input(0, 'click')]).explanation;
+    assert.deepEqual([inApp.blame.kind, inApp.blame.name, inApp.blame.detail], ['render', 'the app', '300 components']);
+    assert.doesNotMatch(inApp.cause, /of them inside/);
+  }
 });
 
 test('a render is counted inside the component it is named after, from the one it started at where that holds them all, and is a mount where most of it was one', () => {
