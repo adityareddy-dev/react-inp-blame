@@ -167,8 +167,9 @@
   render is named after the nearest component above it a reader could search for, through any layers between.
   That is read from props, the tree's shape and React's times, not from who wrote what. Where React timed the
   render, a component of that shape whose own render is the heavy part is named. A production build has only
-  counts, and there it is still passed over for the one above it, a highlighter handing the code string it was
-  given to one inner component as much as a dialog root. A wrapper that wraps its children in an element of its
+  counts, and there it is passed over all the same. That moves the name only where nothing below it is named, a
+  dialog root whose own render was slow say, which is then blamed on the component above it. A highlighter handing
+  its code string to one inner component, or a permission check round a fade, gets the name 0.23.0 gave. A wrapper that wraps its children in an element of its
   own before handing them on isn't caught and is named as 0.23.0 named it, and so is one where the path starts
   at a layer with nothing above it to name. Where such a wrapper (a Card, an AppLayout putting its children in
   `<main>`) sits between the component that owns the state and a dialog root, the dialog root is passed and the
