@@ -2179,8 +2179,8 @@ function explain(r: InteractionReport): Explanation {
     const t = (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
     return t >= COMMIT_PHASES_MIN_MS && t >= COMMIT_PHASES_MIN_SHARE * own(x);
   };
-  // The commit a render blame names is the one React spent longest on, committing and effects included,
-  // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
+  // The commit a render blame names is the one React spent longest on, committing and effects included where
+  // they count (below), so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render. Where
   // no commit has a span this is the heaviest render, as everywhere else. A commit's committing and effects
   // only count for it where they are worth a mention, across the commits (`committingMatters`) or beside its
   // own render (`phasesWorthSaying`), or a 27 ms render with 4 ms of effects nobody hears about is named over a
