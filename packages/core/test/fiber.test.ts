@@ -360,10 +360,12 @@ test('a component that is all its parent rendered and renders the children it wa
   // Cap's sidebar: AdminNavItems keeps its org popover's open state and wraps its whole return in @cap/ui's
   // Dialog, which is Radix's Dialog root and renders only the children AdminNavItems gave it. Opening the
   // popover was named Dialog, '211 of 212 components', where the code to change is AdminNavItems.
-  const givenChildren = (f: Record<string, unknown>) => Object.assign(f, { memoizedProps: { children: {} } });
+  const givenChildren = (f: Record<string, unknown>, children: unknown = {}) => Object.assign(f, { memoizedProps: { children } });
   const many = (name: string, n: number, each = 0) => Array.from({ length: n }, () => chain([name], ...Array.from({ length: each }, () => rendered(named(`${name}Part`), element('i')))));
   const navItems = () => element('nav', ...many('Popover', 1, 19), ...many('NavItem', 5, 19), ...many('SpacesList', 1, 49), ...many('UsageButton', 1, 38));
-  const adminNav = () => rendered(named('AdminNavItems'), givenChildren(rendered(named('Dialog'), givenChildren(rendered(named('DialogProvider'), navItems())))));
+  // Radix's Dialog root hands DialogProvider the very children it was given.
+  const dialog = (inside: Record<string, unknown>, children = {}) => givenChildren(rendered(named('Dialog'), givenChildren(rendered(named('DialogProvider'), inside), children)), children);
+  const adminNav = () => rendered(named('AdminNavItems'), dialog(navItems()));
   const open = walk(adminNav());
   assert.deepEqual([open.rendered, open.hotPath, leafName(open), open.pathRendered], [212, ['AdminNavItems'], 'AdminNavItems', 212]);
   // The sidebar collapsing, from the context above it: the path goes down to AdminNavItems as before, through
@@ -382,6 +384,33 @@ test('a component that is all its parent rendered and renders the children it wa
   // Where something below the wrapper carries most of it, the path goes on to it and names it.
   const layout = walk(rendered(named('App'), givenChildren(rendered(named('Layout'), rendered(named('Header'), element('h1')), rendered(named('Orders'), ...many('Row', 200))))));
   assert.deepEqual([layout.hotPath, leafName(layout), layout.pathRendered], [['App', 'Layout', 'Orders'], 'Orders', 201]);
+});
+
+test('a component given children that builds what it renders from something else is named, as 0.23.0 named it', () => {
+  const given = (f: Record<string, unknown>, children: unknown = {}) => Object.assign(f, { memoizedProps: { children } });
+  const many = (name: string, n: number) => Array.from({ length: n }, () => rendered(named(name), element('div')));
+  const said = (c: CommitSummary) => `${leafName(c)} ${c.pathRendered}`;
+  // A feed given its empty state as children, rendering its posts through Radix's Primitive.div.
+  const feed = () => given(rendered(named('Feed'), given(rendered(named('Primitive.div'), ...many('Post', 100)), [])));
+  // A react-hook-form form given its submit row, rendering its own fields inside FormProvider.
+  const form = rendered(named('SettingsForm'), given(rendered(named('FormProvider'), element('form', ...many('Field', 40))), {}));
+  // A syntax highlighter given the code as a string, its time all its own, and react-markdown the same.
+  const highlighted = (outer: string, inner: string) => walkCommit(profiledRoot(timed(named(outer), 1, given(timed(named(inner), 90), 'const a = 1'))) as any, 5000, 100, click, development) as CommitSummary;
+  const code = highlighted('CodeBlock', 'SyntaxHighlighter');
+  // A list given its header, rendering its own items.
+  const list = rendered(named('FilterableList'), given(rendered(named('Primitive.ul'), ...many('Item', 60)), []));
+  assert.deepEqual(
+    [
+      said(walk(rendered(named('HomePage'), feed()))),
+      said(walk(rendered(named('SettingsPage'), given(form)))),
+      `${said(code)} ${code.components[0]!.name}`,
+      said(highlighted('Message', 'Markdown')),
+      said(walk(rendered(named('Sidebar'), given(list)))),
+      // With a Provider between, the feed was passed and the render named after the shell above the Provider.
+      said(walk(rendered(named('AppShell'), given(rendered(named('ThemeProvider'), feed()))))),
+    ],
+    ['Feed 102', 'SettingsForm 42', 'SyntaxHighlighter 1 SyntaxHighlighter', 'Markdown 1', 'FilterableList 62', 'Feed 102'],
+  );
 });
 
 test('a commit says how many components sit under the root its hot path starts from, which is one root among several', () => {
