@@ -4385,16 +4385,20 @@ test("React's render time across several commits is said as their total with the
 });
 
 test('effects too small to mention do not choose the commit a render blame names', () => {
-  // Chart's 4 ms of effects (under 5 ms) or 6 of 32 (under a fifth) are not said, so they don't put it over List's 30.
+  // Chart's 4 ms of effects (4 of 31) or 6 of 32 are under a fifth and not said, so they don't put it over List's 30.
   const list = commit(1035, 1000, { startedAt: 1005, total: 30, rendered: 31, roots: ['List'], hotPath: ['List'] });
   const click = [entry('click', 1000, 150, 1003, 1124)];
-  const under5 = commit(1063, 1000, { startedAt: 1036, total: 27, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1063, effectsEndedAt: 1067 });
-  const r = report(click, [list, under5], null, draw());
+  const underShare = commit(1063, 1000, { startedAt: 1036, total: 27, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1063, effectsEndedAt: 1067 });
+  const r = report(click, [list, underShare], null, draw());
   assert.equal(r.explanation.blame.kind, 'render');
   assert.equal(r.explanation.blame.name, 'List');
   assert.equal(r.explanation.blame.ms, 30);
   const underFifth = commit(1062, 1000, { startedAt: 1036, total: 26, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1062, effectsEndedAt: 1068 });
   assert.equal(report(click, [list, underFifth], null, draw()).explanation.blame.name, 'List');
+  // 4 ms beside a 10 ms render is over a fifth but under 5 ms, so a 12 ms List is still named.
+  const small = commit(1017, 1000, { startedAt: 1004, total: 12, rendered: 31, roots: ['List'], hotPath: ['List'] });
+  const under5 = commit(1028, 1000, { startedAt: 1018, total: 10, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1028, effectsEndedAt: 1032 });
+  assert.equal(report([entry('click', 1000, 60, 1003, 1033)], [small, under5], null, draw()).explanation.blame.name, 'List');
   // A 1 ms render with 30 ms of effects is worth saying, so it is named and its effects are said.
   const chart = commit(1037, 1000, { startedAt: 1036, total: 1, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1037, effectsEndedAt: 1067 });
   const said = report(click, [list, chart], null, draw()).explanation;
