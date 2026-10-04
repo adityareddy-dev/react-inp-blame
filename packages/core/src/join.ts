@@ -2251,7 +2251,7 @@ function explain(r: InteractionReport): Explanation {
     : worthSaying(committing - rcCommitting, effects - rcEffects);
   const others = !rc ? [] : figures(committing - rcCommitting, effects - rcEffects, othersSaid);
   const othersBusy = holding(othersSaid, rc).length;
-  const alsoOthers = others.length ? ` React also spent ${others.join(' and ')} in ${othersBusy === 1 ? 'another commit' : `${othersBusy} other commits`}.` : '';
+  const alsoOthers = others.length ? ` React also spent ${others.join(' and ')}${othersBusy === 1 ? ' in another commit' : othersBusy > 1 ? ` in ${othersBusy} other commits` : ''}.` : '';
   const extras = figures(rcCommitting, rcEffects, [sayCommitting, sayEffects], 'its ');
   if (sayEffects && rc) extras[extras.length - 1] += included(rc);
   // A figure that ends in the renders it holds takes a comma before the sentence goes on.
