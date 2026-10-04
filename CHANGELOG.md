@@ -6,6 +6,34 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-04
+
+### Changed
+
+- **A component that is all its parent rendered and renders the children it was given is no longer the one a
+  render or layout blame names.** Before, the walk went into it like any other, so on Cap a sidebar component
+  that keeps its popover's open state and wraps its whole return in Radix's Dialog root was blamed as 'Dialog',
+  '211 of 212 components', where the code to change is the sidebar component. Now such a component spends no step
+  on the hot path and is never the one named. Where something below it carries most of the work the path goes on
+  to that as before, and where nothing does it ends at the parent, which the blame then names.
+  `hotPath` in a report, web-vitals' `react.hotPath` and OpenTelemetry's `react_inp_blame.hot_path` end there too.
+  It goes by the tree's shape, a single child with `children` in its props, not by who wrote what.
+- **A render is said to be mounting only where nine in ten of its components rendered for the first time, and
+  re-rendering only where one in ten or fewer did.** Before, it went by half, so on formbricks a render that
+  mounted 134 of 217 components read "mounting 217 components", and on Cap 160 components a Tooltip remounted
+  among 332 read "re-rendering 332 components". Between the two it now reads "rendering", and the badge panel's
+  rows say "rendered".
+- `/auto` grew 0.05 KB and the part before react-dom 0.04 KB, both still within their budgets. The rest stay as
+  they were.
+
+### Blame changes
+
+- A render or layout blame whose path went into a component that was all its parent rendered and renders the
+  children it was given, with nothing named below it: `name` goes from that component to its parent ('AdminNavItems'
+  where 0.23.0 gave 'Dialog'), and a count in `detail` is the parent's.
+- A render where more than one in ten and fewer than nine in ten of the components mounted: the cause's verb goes
+  from "mounting" or "re-rendering" to "rendering". `name`, `detail` and `ms` don't change.
+
 ## [0.23.0] - 2026-10-03
 
 ### Changed
@@ -2071,7 +2099,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.20.0...v0.21.0
