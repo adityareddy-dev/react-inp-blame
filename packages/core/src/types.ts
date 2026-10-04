@@ -462,8 +462,9 @@ export interface Blame {
    * browser names it, or the boundary that was hydrated, and null when unknown. Which of them a report names
    * can change in a minor as the reading gets better, and the rest of this says how each kind picks one
    * today. A 'render' always has one: the subtree, or 'the app', the fixed value (the same through 1.x) a
-   * 'render' or a 'layout' takes where its commit's walk gave no component to name it after, as when it could
-   * not tell where the render started, and the commit's `pathStart` says why. For a 'layout' it is where the
+   * 'render' or a 'layout' takes where its commit's walk gave no component to name it after: where it could
+   * not tell where the render started, which the commit's `pathStart` says, or where the component the render
+   * is named after has no name it could read. For a 'layout' it is where the
    * layout was forced, never what forced it, because no source says that. That is the subtree
    * of a commit the interaction can claim: one joined by its own input stamp, walked to the end, with no
    * commit of the interaction left unjoined. Failing that it is the invoker the browser charged the script to
