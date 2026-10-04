@@ -449,15 +449,20 @@ test('a commit says how many components sit under the root its hot path starts f
   assert.deepEqual([split.roots, split.hotPath], [['Dashboard', 'Sidebar'], ['Dashboard', 'Panel']]);
   assert.deepEqual([split.rendered, split.startRendered, split.pathRendered], [83, 42, 41]);
   assert.equal(startName(split), null);
+  // The component every root sits under, which rendered nothing itself, holds them all.
+  assert.equal(split.above, 'App');
   // Two roots of one name, which `roots` lists once: Radix's DialogPortal gives a dialog's overlay and its
   // content a Portal each, and both mount in one commit.
   const portals = walk(passedThrough('DialogPortal', rendered(named('Portal'), rendered(named('Overlay'), ...many('Piece', 15))), rendered(named('Portal'), rendered(named('Content'), ...many('Field', 40)))));
   assert.deepEqual([portals.roots, portals.hotPath], [['Portal'], ['Portal', 'Content']]);
   assert.deepEqual([portals.rendered, portals.startRendered, portals.pathRendered], [59, 42, 41]);
   assert.equal(startName(portals), null);
+  assert.equal(portals.above, 'DialogPortal');
   // One root holds them all, and is where the render is said to have started.
   const one = walk(rendered(named('App'), rendered(named('Dashboard'), rendered(named('Panel'), ...many('Bar', 40))), rendered(named('Sidebar'), ...many('NavItem', 4))));
   assert.deepEqual([one.rendered, one.startRendered, one.pathRendered, startName(one)], [48, 48, 41, 'App']);
+  // Nothing sits above a root that rendered from the top.
+  assert.equal(one.above, null);
 });
 
 test('a commit counts the components rendering for the first time, and those inside the component its hot path ends on', () => {
