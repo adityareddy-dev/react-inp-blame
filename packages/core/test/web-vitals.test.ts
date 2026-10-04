@@ -560,6 +560,26 @@ test('a production build measures no render, so the summary says so rather than 
   assert.equal(react?.blame.confidence, 'inferred');
 });
 
+test("a layout blame's hot path and components are the commit it names, not the heaviest", (t) => {
+  // A click that opens a menu, production build: one script forced 44 ms of layout across four commits. The
+  // first rendered the most, 295 components; the menu's commit, 185, is the one whose effects could hold it.
+  const press = [{ name: 'pointerdown', interactionId: 7, startTime: 0, duration: 72, processingStart: 1.1, processingEnd: 59.9, target: null }];
+  const at = (at: number, opts: Partial<CommitSummary>) => commit({ at, sinceInput: at, inputTs: 0, gestureTs: 0, hasDurations: false, total: 0, mounted: 0, ...opts });
+  const one = (name: string, count: number) => [{ name, count, self: null, total: null }];
+  const sidebar = at(3.8, { rendered: 295, roots: ['Sidebar'], hotPath: ['Sidebar'], startRendered: 295, pathRendered: 295, components: one('NavItem', 24), effectsStartedAt: 4.6, effectsEndedAt: 4.7 });
+  const portal = at(9.3, { rendered: 96, mounted: 95, roots: ['Portal'], hotPath: ['Portal'], components: one('Slot', 9), effectsStartedAt: 9.4, effectsEndedAt: 11.4 });
+  const menu = at(36.5, { rendered: 185, roots: ['Header'], hotPath: ['Header', 'Menu', 'MenuContent'], startRendered: 185, pathRendered: 80, components: one('MenuItem', 13), effectsStartedAt: 36.8, effectsEndedAt: 57.4 });
+  const layer = at(57.9, { rendered: 15, roots: ['Layer'], hotPath: ['Layer'], components: one('Slot', 3), effectsStartedAt: 57.9, effectsEndedAt: 58 });
+  const forced = [{ start: 0, duration: 64, blocking: 14, forcedLayout: 44.4, scripts: [{ invoker: '#document.onpointerdown', name: '', source: 'app.js', start: 1.9, duration: 58, forcedLayout: 44.4 }], styleAndLayoutStart: null }];
+  const ring = [{ ts: 0, type: 'pointerdown', gestureTs: 0, press: undefined, target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const report = reportOf(press, [sidebar, portal, menu, layer], forced, ring);
+  t.after(installed([report]));
+  assert.deepEqual([report.explanation.blame.kind, report.explanation.blame.name], ['layout', 'Header']);
+  const { react } = attributeINP({ entries: press });
+  assert.deepEqual(react?.hotPath, ['Header', 'Menu', 'MenuContent']);
+  assert.deepEqual(react?.components.map((c) => c.name), ['MenuItem']);
+});
+
 test('the join is on the interactionId, which names one report among several', (t) => {
   const other = [{ name: 'keydown', interactionId: 21, startTime: 900, duration: 56, processingStart: 902, processingEnd: 940, target: null }];
   t.after(installed([reportOf(other, [commit({ at: 930, inputTs: 900, hotPath: ['SearchBox'] })], []), reportOf(CLICK, [commit()], [])]));
