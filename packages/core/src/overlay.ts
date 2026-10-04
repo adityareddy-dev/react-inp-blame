@@ -330,8 +330,9 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?
 
   function more(r: InteractionReport): HTMLElement {
     const x = r.explanation;
-    // Only a render with real work gets a component list; a status pill updating does not.
-    const main = r.commits.length ? heaviest(r.commits) : null;
+    // Only a render with real work gets a component list; a status pill updating does not. A layout blame's is the
+    // commit it names.
+    const main = x.blame.kind === 'layout' ? blamedCommit(r) : r.commits.length ? heaviest(r.commits) : null;
     const before = main && carriesWork(main) ? main : null;
     const later = laterRenderOf(r);
     const legend = x.phases.flatMap((p, i) => [swatch(`p${i}`, p), ...(p.parts ?? []).map((part) => swatch('ph', part))]);

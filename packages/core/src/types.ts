@@ -464,10 +464,11 @@ export interface Blame {
    * today. A 'render' always has one: the subtree, or 'the app', the fixed value (the same through 1.x) a
    * 'render' or a 'layout' takes where its commit's walk gave no component to name it after: where it could
    * not tell where the render started, which the commit's `pathStart` says, or where the component the render
-   * is named after has no name it could read. For a 'layout' it is where the
-   * layout was forced, never what forced it, because no source says that. That is the subtree
-   * of a commit the interaction can claim: one joined by its own input stamp, walked to the end, with no
-   * commit of the interaction left unjoined. Failing that it is the invoker the browser charged the script to
+   * is named after has no name it could read. For a 'layout' it is where the layout was forced, never what
+   * forced it, because no source says that. That is the subtree of a commit the interaction can claim: one
+   * joined by its own input stamp, walked to the end, with no commit of the interaction left unjoined. Of
+   * several commits in the scripts that forced it, it is the one whose time could hold most of the layout,
+   * and null where none could hold half. Failing that it is the invoker the browser charged the script to
    * ("DIV#root.onclick"), and only while one script holds nearly all of `ms`; where several scripts share the
    * total, no one of them is where the layout happened and this is null. The cause sentence names the largest
    * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script the
