@@ -1179,7 +1179,7 @@ const atLeast = (c: CommitSummary): string => (c.truncated ? 'at least ' : '');
 function walkStopped(c: CommitSummary): string {
   if (!c.truncated || c.rendered === 0) return '';
   // A path that ends in a component with no name still says where the render started.
-  const unnamedEnd = (c.hotPath[c.hotPath.length - 1] ?? c.roots[0]) === ANONYMOUS && c.pathStart !== 'unknown-root' && c.pathStart !== 'no-root';
+  const unnamedEnd = (c.hotPath[c.hotPath.length - 1] ?? (c.hasDurations ? c.roots[0] : undefined)) === ANONYMOUS && c.pathStart !== 'unknown-root' && c.pathStart !== 'no-root';
   if (leafName(c) === null && !unnamedEnd) return " The walk stopped partway through that render, so where it started and which components took the time aren't known.";
   return c.hasDurations ? '' : " The walk stopped partway through that render, so which components took the time isn't known.";
 }
