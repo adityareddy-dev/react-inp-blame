@@ -289,6 +289,11 @@ test("the interaction entry takes the start a layout blame is named after, where
   const render = sealReport(buildReport([close], [sheet], null));
   assert.deepEqual([render.explanation.blame.kind, render.explanation.blame.name], ['render', 'DismissableLayer']);
   assert.equal(label(render), '160 ms click · DismissableLayer');
+  // Where React's times show DismissableLayer took under half of it, the render blame takes the start, and so does the entry.
+  const timed = { ...sheet, hasDurations: true, total: 60, components: [{ name: 'Presence', count: 4, self: 5, total: 20 }, { name: 'Dialog', count: 1, self: 3, total: 60 }] };
+  const started = sealReport(buildReport([close], [timed], null));
+  assert.deepEqual([started.explanation.blame.kind, started.explanation.blame.name], ['render', 'Dialog']);
+  assert.equal(label(started), '160 ms click · Dialog');
 });
 
 test("the interaction's count of renders before the paint is the tooltip's, and says how many were too small to count", () => {
