@@ -5733,7 +5733,7 @@ test('a render is counted inside the component it is named after, from the one i
 });
 
 test("a render blame is named where the render started where the times on the hot path show the component at its end took under half of it", () => {
-  // Each name above PopupContent holds it, and the smallest, Popup, took 74 of 165 ms: PopupContent took less than half.
+  // Each name above PopupContent holds it, and the smallest, Primitive.div, took 73 of 165 ms: PopupContent took less than half.
   const menu = commit(200, 0, {
     rendered: 386,
     mounted: 0,
