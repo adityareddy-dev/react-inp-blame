@@ -26,10 +26,10 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
   0.23.0. What the rule still can't tell: a production build has only counts, and there such a component is passed
   over for the one above it all the same. A wrapper that wraps its children in an element of its own before handing
   them on is named as in 0.23.0, and where one of those (a Card, a layout) sits between the component that owns the
-  state and a dialog root, the render is named after that one rather than the owner. On Cap, over six runs each of a
-  development and a production build at full speed and at a quarter of it, every report on the sidebar's collapse,
-  its popover's opening or the popover's close by Escape named AdminNavItems. The rule changed no name on the demo
-  apps.
+  state and a dialog root, the render is named after that one rather than the owner. On Cap, over six runs each of
+  a development and a production build at full speed and at a quarter of it, every report that blamed a render on
+  the sidebar's collapse, its popover's opening or the popover's close by Escape named AdminNavItems. The rule
+  changed no name on the demo apps.
 - **A render is said to be mounting only where nine in ten of its components rendered for the first time, and
   re-rendering only where one in ten or fewer did.** Before, it went by half, so on formbricks a render that
   mounted 134 of 217 components read "mounting 217 components", and on Cap 160 components a Tooltip remounted among
