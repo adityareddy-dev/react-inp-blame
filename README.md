@@ -279,7 +279,7 @@ line's module stays, as an empty function); where it loads:
 | --- | --- | --- |
 | `react-inp-blame/auto`: everything that loads with the page | 100.5 KB | 35.5 KB |
 | The badge and panel, a chunk loaded by `import()` only when shown | 18.1 KB | 7.1 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.1 KB | 11.6 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.2 KB | 11.6 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.6 KB | 0.9 KB |
 | `react-inp-blame/otel`, on top of `/auto` | 3.5 KB | 1.6 KB |
 <!-- size:end -->
