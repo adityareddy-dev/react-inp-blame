@@ -1209,19 +1209,19 @@ export function insideCount(c: CommitSummary): number | null {
   return leafName(c) !== null && c.pathRendered != null && c.pathRendered < c.rendered ? c.pathRendered : null;
 }
 
-/** Whether most of what a commit rendered was rendering for the first time: mounted, not rendered again. */
-function mostlyMounted(c: CommitSummary): boolean {
-  return c.mounted != null && c.mounted * 2 > c.rendered;
-}
-
-/** "re-rendering"; "mounting" where most of the commit was components rendering for the first time; "hydrating" for a hydration. */
-function renderVerb(c: CommitSummary): string {
-  return c.hydrated ? 'hydrating' : mostlyMounted(c) ? 'mounting' : 're-rendering';
-}
-
-/** The same in the past tense, for the panel's rows. */
+/**
+ * For the panel's rows, "mounted" where nine in ten or more of the components rendered for the first time,
+ * "re-rendered" where one in ten or fewer did, "rendered" between, where either would call a mount a re-render
+ * or the other way round; "hydrated" for a hydration. A report an earlier release stored counted no mounts.
+ */
 export function renderedVerb(c: CommitSummary): string {
-  return c.hydrated ? 'hydrated' : mostlyMounted(c) ? 'mounted' : 're-rendered';
+  const m = c.mounted ?? 0;
+  return c.hydrated ? 'hydrated' : m && m * 10 >= c.rendered * 9 ? 'mounted' : m * 10 > c.rendered ? 'rendered' : 're-rendered';
+}
+
+/** The same as the sentence says it: "re-rendering", "mounting", "rendering", "hydrating". */
+function renderVerb(c: CommitSummary): string {
+  return `${renderedVerb(c).slice(0, -2)}ing`;
 }
 
 /**
