@@ -1739,6 +1739,24 @@ test("a render a key's press set off after it painted is a later render of the r
   assert.deepEqual(buildReport(keyed, [commit(150, 0, { inputType: 'keydown', rendered: 400, total: 60 })], [], gone).followUps.map((c) => c.at), [150]);
 });
 
+test("a render a key's press committed just before its release came, where the press painted in a frame of its own, is not the release's working time", () => {
+  // The press's handlers committed 39 components 0.8 ms before the key came up, and painted 37 ms before the release.
+  // The release's own 55 ms of working time rendered 2 components.
+  const ring = [input(0, 'keydown', { press: 'Enter' }), input(5, 'keyup', { press: 'Enter', gestureTs: 0 })];
+  const press = commit(4.2, 0, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 39, roots: ['Menu'], hotPath: ['Menu'], components: [] });
+  const own = commit(58, 5, { inputType: 'keyup', gestureTs: 0, hasDurations: false, total: 0, rendered: 2, roots: ['Tooltip'], hotPath: ['Tooltip'], components: [] });
+  const slow = report([entry('keydown', 0, 32, 0.1, 4.8), entry('keyup', 5, 64, 5.2, 60)], [press, own], [], ring);
+  // It stays in the report, for what the release's sentence can say of the press.
+  assert.deepEqual(slow.commits.map((x) => x.at), [4.2, 58]);
+  assert.deepEqual(slow.explanation.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
+  // Where the press painted with the release, it is one working time, and the render is counted in it.
+  const together = report([entry('keydown', 0, 64, 0.1, 4.8), entry('keyup', 5, 64, 5.2, 60)], [press, own], [], ring);
+  assert.deepEqual([together.explanation.blame.kind, together.explanation.blame.name], ['render', 'Menu']);
+  // So is one the release's own input is stamped on, however close to the press.
+  const released = commit(4.2, 5, { inputType: 'keyup', gestureTs: 0, hasDurations: false, total: 0, rendered: 39, roots: ['Menu'], hotPath: ['Menu'], components: [] });
+  assert.deepEqual(report([entry('keydown', 0, 32, 0.1, 4.8), entry('keyup', 5, 64, 5.2, 60)], [released, own], [], ring).explanation.blame.name, 'Menu');
+});
+
 test("a render a held pointer's press set off before the click is left out of the report, whether the press sent an entry or not", () => {
   // A sortable list dragged from 0 and dropped at 800. The hook stamps each move's render with the pointerdown
   // wherever it cannot tell a move from its press (React 18 and 19.0, a production build, touch), and nothing
