@@ -587,11 +587,11 @@ current:
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 97.3 KB | 34.4 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 100.5 KB | 35.5 KB |
 | The badge and panel, a chunk loaded by `import()` only when shown | 18.1 KB | 7.1 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.1 KB | 11.6 KB |
-| `react-inp-blame/web-vitals`, on top of `/auto` | 1.6 KB | 0.8 KB |
-| `react-inp-blame/otel`, on top of `/auto` | 3.5 KB | 1.5 KB |
+| `react-inp-blame/web-vitals`, on top of `/auto` | 1.6 KB | 0.9 KB |
+| `react-inp-blame/otel`, on top of `/auto` | 3.5 KB | 1.6 KB |
 <!-- size:end -->
 
 `react-inp-blame/web-vitals` pulls in none of the hook, the observers or the badge: an app that only wants
