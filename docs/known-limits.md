@@ -163,13 +163,16 @@
   after the component it renders) without spending one, and a render is named after the deepest searchable
   name on it, so it reaches the component below those layers where there is one. A component that is all its
   parent rendered and hands the very children it was given to the one component it renders, as Radix's Dialog
-  root does, is passed too, and where nothing below it is named the render is named after the nearest component
-  above it a reader could search for, through any layers between. That is read from props and the tree's shape,
-  not from time or from who wrote what. So a component of that shape whose own render is the heavy part is
-  still passed over for the one above it, a highlighter handing the code string it was given to one inner
-  component as much as a dialog root. A wrapper that wraps its children in an element of its own before
-  handing them on isn't caught and is named as 0.23.0 named it, and so is one where the path starts at a layer
-  with nothing above it to name. Where React's times on the
+  root does, is passed too where that one carries most of its work, and where nothing below it is named the
+  render is named after the nearest component above it a reader could search for, through any layers between.
+  That is read from props, the tree's shape and React's times, not from who wrote what. Where React timed the
+  render, a component of that shape whose own render is the heavy part is named. A production build has only
+  counts, and there it is still passed over for the one above it, a highlighter handing the code string it was
+  given to one inner component as much as a dialog root. A wrapper that wraps its children in an element of its
+  own before handing them on isn't caught and is named as 0.23.0 named it, and so is one where the path starts
+  at a layer with nothing above it to name. Where such a wrapper (a Card, an AppLayout putting its children in
+  `<main>`) sits between the component that owns the state and a dialog root, the dialog root is passed and the
+  render is named after the Card or the layout, not the owner above it. Where React's times on the
   path show that name took under half of the render (every name above it holds it, so the smallest of their
   totals bounds it), the render is named after the component it started from where that holds the whole commit
   and has a name worth searching for (the cause's "from ... down"), and the cause still says the deeper one.
