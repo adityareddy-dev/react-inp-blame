@@ -1749,8 +1749,10 @@ test("a render a key's press committed just before its release came, where the p
   // It stays in the report, for what the release's sentence can say of the press.
   assert.deepEqual(slow.commits.map((x) => x.at), [4.2, 58]);
   assert.deepEqual(slow.explanation.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
-  // Where the press painted with the release, it is one working time, and the render is counted in it.
-  const together = report([entry('keydown', 0, 64, 0.1, 4.8), entry('keyup', 5, 64, 5.2, 60)], [press, own], [], ring);
+  // Where the press painted with the release, it is one working time, and the render is counted in it. The release
+  // is the longer entry, so the press's commit comes before its input.
+  const together = report([entry('keydown', 0, 60, 0.1, 4.8), entry('keyup', 5, 61, 5.2, 60)], [press, own], [], ring);
+  assert.equal(together.start, 5);
   assert.deepEqual([together.explanation.blame.kind, together.explanation.blame.name], ['render', 'Menu']);
   // So is one the release's own input is stamped on, however close to the press.
   const released = commit(4.2, 5, { inputType: 'keyup', gestureTs: 0, hasDurations: false, total: 0, rendered: 39, roots: ['Menu'], hotPath: ['Menu'], components: [] });
