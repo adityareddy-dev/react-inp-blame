@@ -5869,6 +5869,31 @@ test('a layout blame names no start the cause does not, where the component rend
   assert.doesNotMatch(layout.cause, /Explorer/);
 });
 
+test('a render known only by its counts is blamed under a long task of working time where a long animation frame measured the handler script that held it, and not where nothing measured it', () => {
+  // Enter on a menu, production build at 4x: 0.2 ms of waiting, 49.4 of working time and 12.7 updating the screen.
+  // The keydown's handler script ran 31.6 ms, measured by a long animation frame, and held a commit of 386
+  // components and a smaller one of 39. The keyup's handlers came 17.7 ms after the keydown's.
+  const ring = [input(0, 'keydown', { press: 'Enter', handler: 'onKeyDown' }), input(33.5, 'keyup', { press: 'Enter', gestureTs: 0 })];
+  const shell = commit(25.5, 0, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 386, walkMs: 1.7, roots: ['Shell'], hotPath: ['Shell'], components: [] });
+  const menu = commit(32.1, 0, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 39, roots: ['Menu'], hotPath: ['Menu'], components: [] });
+  const keys = [entry('keydown', 0, 64, 0.2, 33), entry('keyup', 33.5, 32, 50.7, 51.3)];
+  const press = (frames: FrameSummary[] | null, commits = [shell, menu]) => report(keys, commits, frames, ring);
+  const measured = press([frame(0, 56, [script('#document.onkeydown', 1.2, 31.6, 2.7)])]);
+  assert.ok(Math.round(measured.processing) < 50);
+  assert.deepEqual(measured.explanation.blame, { kind: 'render', name: 'Shell', detail: '386 components', ms: null, confidence: 'inferred' });
+  assert.equal(blamedCommit(measured)?.at, shell.at);
+  // The count alone is still not a slow render: with no frame, or no record of frames, nothing measured the script.
+  for (const frames of [[], null]) assert.equal(press(frames).explanation.blame.kind, 'none');
+  // Nor where the script that held it was under 20 ms, forced a layout for half of its time or more, or did not hold
+  // the commit at all.
+  assert.equal(press([frame(0, 56, [script('#document.onkeydown', 10, 18)])]).explanation.blame.kind, 'none');
+  assert.equal(press([frame(0, 56, [script('#document.onkeydown', 1.2, 31.6, 16)])]).explanation.blame.kind, 'none');
+  assert.equal(press([frame(0, 56, [script('#document.onkeydown', 1.2, 22)])]).explanation.blame.kind, 'none');
+  // Nor where a frame measured a script the handlers waited behind that held the commit, not the handler's own.
+  const behind = report([entry('keydown', 0, 64, 26, 33), entry('keyup', 33.5, 32, 50.7, 51.3)], [{ ...shell, at: 25.5 }], [frame(0, 56, [script('setTimeout', 1, 25)])], ring);
+  assert.notEqual(behind.explanation.blame.kind, 'render');
+});
+
 test('a render known only by its counts is not blamed under a long task of working time, and where no frame covered the click the styles and layout it forced are said to be unmeasured', () => {
   // Finishing a rectangle in excalidraw, production build: 2.6 ms of waiting, 2.8 of working time and 34.4
   // updating the screen. Releasing the pointer re-rendered the chrome, 149 components inside
@@ -5986,19 +6011,19 @@ test('a render known only by its counts is not blamed under a long task of worki
   // the handler's own script held sat there, whatever its stamp: beside 150 rows committed in the handler, the 800
   // after it made the 28 ms handleSave the verdict, and so did 800 rows committed at 43 ms in a handler that ran to
   // 43.5, past the paint the duration's rounding put at 40, which also read as "After the 35 ms of working time". The
-  // sentence is about the count in the working time, too: the 150 rows, where it put the 800 after it and said the
-  // 150 nowhere. The 800 are the second of the two renders the note counts.
+  // render named is the count in the working time, too: the 150 rows the handler's script held, not the 800 after it.
+  // A long animation frame measured that script, so the 150 rows take the render (see `handled` below). The 800 are
+  // the second of the two renders the note counts.
   const counted = (at: number, rendered: number) => commit(at, 0, { hasDurations: false, total: 0, rendered, components: [{ name: 'Row', count: rendered, self: null, total: null }] });
-  const alsoInside = (frames: FrameSummary[] | null) => report([entry('click', 0, 72, 5, 35)], [counted(20, 150), rows], frames, loginClick('handleSave')).explanation;
-  assert.deepEqual(alsoInside(task).blame, afterShort([]).blame);
-  assert.equal(alsoInside(task).cause, 'In 30 ms of working time, short of a long task, React was re-rendering 150 components inside List, mostly Row (150 of them); the rest went to waiting and painting.');
-  assert.deepEqual(alsoInside(task).notes, ['React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.']);
-  assert.equal(alsoInside(null).cause, 'In 30 ms of working time, short of a long task, React was re-rendering 150 components inside List, mostly Row (150 of them); this browser does not report long tasks, so what else ran is unknown.');
+  const alsoInside = (frames: FrameSummary[] | null) => report([entry('click', 0, 72, 5, 35)], [counted(20, 150), rows], frames, loginClick('handleSave'));
+  assert.deepEqual(alsoInside(task).explanation.blame, { kind: 'render', name: 'List', detail: 'Row ×150', ms: null, confidence: 'inferred' });
+  assert.equal(blamedCommit(alsoInside(task))?.rendered, 150);
+  assert.deepEqual(alsoInside(task).explanation.notes, ['React rendered 2 times before the screen updated, which usually means a state update inside an effect or a chain of updates.']);
+  assert.equal(alsoInside(null).explanation.cause, 'In 30 ms of working time, short of a long task, React was re-rendering 150 components inside List, mostly Row (150 of them); this browser does not report long tasks, so what else ran is unknown.');
   // The click's own handler time holds the 800 rows committed at 43 ms, whether or not a frame recorded its script.
   const heldInside = (frames: FrameSummary[] | null) => report([entry('click', 0, 40, 5, 43.5)], [counted(43, 800)], frames, loginClick('handleSave')).explanation;
   const inHandler = heldInside([frame(0, 50, [script('BUTTON.onclick', 6, 37.5)])]);
-  assert.equal(inHandler.blame.kind, 'none');
-  assert.equal(inHandler.cause, 'In 35 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them); the rest went to waiting and painting.');
+  assert.deepEqual(inHandler.blame, { kind: 'render', name: 'List', detail: 'Row ×800', ms: null, confidence: 'inferred' });
   assert.equal(
     heldInside([]).cause,
     'In 35 ms of working time, short of a long task, React was re-rendering 800 components inside List, mostly Row (800 of them); the rest went to waiting and painting. No long animation frame covered the click, so how much of the working time went to any styles and layout it forced is unmeasured.',
@@ -6011,13 +6036,12 @@ test('a render known only by its counts is not blamed under a long task of worki
   }
   // A frame that covered the click and listed the handler's script: 300 components re-rendered inside List in
   // 45 ms of working time, with 45 ms charged to the root's click listener. That script holds React's render
-  // as well as the handler, so it is not measured in the render's place; the report blames nothing, as it
-  // does with no frame, rather than putting a measured 45 ms on onClick under the bar and an inferred
-  // render on List over it.
+  // as well as the handler, so it is not measured in the render's place. Until 0.23.0 the report blamed nothing
+  // here, as it does with no frame. The frame measured the script that held the render, though, which no frame
+  // does for the excalidraw and Sheet clicks above, so the count names the render in it, bounded by that script.
   const list = commit(20, 0, { hasDurations: false, total: 0, rendered: 300, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 100, self: null, total: null }] });
   const handled = report([entry('click', 0, 70, 2, 47)], [list], [frame(0, 70, [script('DIV#root.onclick', 2, 45, 0)])], [input(0, 'click', { handler: 'onClick' })]).explanation;
-  assert.deepEqual(handled.blame, { kind: 'none', name: null, detail: null, ms: null, confidence: 'measured' });
-  assert.equal(handled.cause, 'In 45 ms of working time, short of a long task, React was re-rendering 300 components inside List; the rest went to waiting and painting.');
+  assert.deepEqual(handled.blame, { kind: 'render', name: 'List', detail: '300 components', ms: null, confidence: 'inferred' });
   // The sentence is for a count that would have named the render but for the bar. A production commit under
   // the library's own count bars, or a build with durations whose render was under its time bar, reads as it did.
   const few = (rendered: number) => report([entry('click', 0, 48, 2, 7)], [commit(4, 0, { hasDurations: false, total: 0, rendered, roots: ['Badge'], hotPath: ['Badge'], components: [] })], [], [input(0, 'click')]).explanation;

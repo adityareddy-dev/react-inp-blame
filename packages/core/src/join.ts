@@ -66,7 +66,8 @@ const SCRIPT_MIN_MS = 20;
 // Waiting, the screen update, and working time without durations are blamed from 50 ms, the length
 // of a long task: the least the browser itself calls long. A render known only by its counts is
 // working time without durations, and is held to it (see `countEarns`). A wait Event Timing places
-// in an earlier entry's screen update can be blamed under it (`pressWaitLeads`).
+// in an earlier entry's screen update can be blamed under it (`pressWaitLeads`), and so can a count a
+// long animation frame measured the handler's script holding (`measuredHolder`).
 const LONG_TASK_MS = 50;
 // A script the input waited behind gives a waiting blame its name from half of the wait. Under that
 // the wait was mostly something the browser did not list (another frame's work, rendering, garbage
@@ -1528,19 +1529,44 @@ function explain(r: InteractionReport): Explanation {
   const countExplains = (x: CommitSummary) =>
     x.rendered >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER &&
     ((mostlyComponent(x)?.count ?? 0) >= RENDER_MIN_COMPONENTS_BESIDE_HANDLER || r.processing <= RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * x.rendered);
+  // A script is the handler only when it started while the input's handlers ran. One that was already
+  // running when the input came (the task the input waited behind), or that ran after the handlers, is
+  // named by what the browser says ran it. One that started on the timestamp they ended on came after them.
+  const ranAsHandler = (s: ScriptSummary) => s.start >= processingStart - STAMP_TOLERANCE && s.start < processingEnd && !startsInAGap(s.start);
+  // Each commit ran in the script whose span holds its stamp, after its start and up to its end, and in no other.
+  // In Chromium a commit stamped at the end of a listener's microtask is that listener's end exactly, and the next
+  // listener starts on the same tick or later. Long Animation Frames lists only scripts over 5 ms, so a short React
+  // listener can be missing, and its commit is then in no script listed, not in the one before or after it. A stamp
+  // on a script's first tick is that script's only where the effects React ran straight after it, a click's or a
+  // key's, ended inside it: React's own listener can commit on its first tick, and a commit stamped where the
+  // listener before it ended has run its effects by the time the next one starts. (The end is compared a hair
+  // wide, for a start and a duration that do not add up to the end exactly in floating point.)
+  const scriptsRun = (r.frames ?? []).flatMap((f) => f.scripts);
+  const holderOf = (x: CommitSummary) =>
+    scriptsRun.find((s) => {
+      const end = s.start + s.duration + 1e-6;
+      return x.at <= end && (x.at > s.start || (x.at === s.start && x.effectsEndedAt !== null && x.effectsEndedAt > s.start && x.effectsEndedAt <= end));
+    }) ?? null;
   // A count says what React rendered and nothing about how long it took, so a render known by its count
   // alone is held to the working time it sat in: a long task, the bar the handler is held to without
-  // durations (below) and the one LONG_TASK_MS promises. Under it the count is not a slow render, however
-  // large. excalidraw finishing a rectangle re-rendered 149 components in 2.8 ms of working time, with 34
-  // of the click's 40 ms on the screen update, and closing a shadcn/ui Sheet re-rendered 56 in 17 ms of
-  // working time, most of it one style recalculation that no frame under 50 ms reports; both read as the
-  // render. The same bar keeps a render out of the blame where its working time was the smaller part of
+  // durations (below) and the one LONG_TASK_MS promises. Under it, and with nothing that measured it, the count
+  // is not a slow render, however large. excalidraw finishing a rectangle re-rendered 149 components in 2.8 ms
+  // of working time, with 34 of the click's 40 ms on the screen update, and closing a shadcn/ui Sheet re-rendered
+  // 56 in 17 ms of working time, most of it one style recalculation that no frame under 50 ms reports; both read
+  // as the render. The same bar keeps a render out of the blame where its working time was the smaller part of
   // the interaction: a screen update longer than 50 ms of working time is over a long task itself, and
   // `screenOutranks` gives it the verdict. The bar is taken on the figure the sentence prints, or 49.6 ms
   // read as "50 ms of working time, short of a long task".
   const longTaskOfWork = Math.round(r.processing) >= LONG_TASK_MS;
   const countSays = (x: CommitSummary) => (handlerName ? countExplains(x) : x.rendered >= RENDER_MIN_COMPONENTS);
-  const countEarns = (x: CommitSummary) => longTaskOfWork && countSays(x);
+  // Under the bar, the handler's script a long animation frame measured holding the commit, 20 ms or more and not
+  // mostly forced layout. The frame measured that script and its layout, which no frame does for an unseen
+  // restyle like the Sheet's, so the count can take the render there, bounded by the script's measured time.
+  const measuredHolder = (x: CommitSummary) => {
+    const s = holderOf(x);
+    return s && ranAsHandler(s) && s.duration >= SCRIPT_MIN_MS && s.forcedLayout < FORCED_LAYOUT_MIN_SHARE * s.duration ? s : null;
+  };
+  const countEarns = (x: CommitSummary) => (longTaskOfWork || !!measuredHolder(x)) && countSays(x);
   // React's own listener times the render it holds the same way: Gboard fires a key's oninput after its
   // keydown's handlers, and React renders what the input changed in its root listener, between the handlers.
   // Only where the render's count earns it that time: the listener runs the page's onChange too, and 12
@@ -1569,10 +1595,6 @@ function explain(r: InteractionReport): Explanation {
     : onlyGap.after === onlyGap.before
       ? `between one ${onlyGap.after}'s handlers and the next's`
       : `between the ${onlyGap.after}'s handlers and the ${onlyGap.before}'s`;
-  // A script is the handler only when it started while the input's handlers ran. One that was already
-  // running when the input came (the task the input waited behind), or that ran after the handlers, is
-  // named by what the browser says ran it. One that started on the timestamp they ended on came after them.
-  const ranAsHandler = (s: ScriptSummary) => s.start >= processingStart - STAMP_TOLERANCE && s.start < processingEnd && !startsInAGap(s.start);
   const scriptPhrase = (s: ScriptSummary) => (handler && ranAsHandler(s) ? handler : aScript(s));
   const scriptBlameName = (s: ScriptSummary) => (handlerName && ranAsHandler(s) ? handlerName : scriptName(s));
 
@@ -1602,22 +1624,8 @@ function explain(r: InteractionReport): Explanation {
    * to it there either.
    */
   const screenOutranks = r.presentation > LONG_TASK_MS && r.presentation > r.processing;
-  // Each commit ran in the script whose span holds its stamp, after its start and up to its end, and in no other.
-  // In Chromium a commit stamped at the end of a listener's microtask is that listener's end exactly, and the next
-  // listener starts on the same tick or later. Long Animation Frames lists only scripts over 5 ms, so a short React
-  // listener can be missing, and its commit is then in no script listed, not in the one before or after it. A stamp
-  // on a script's first tick is that script's only where the effects React ran straight after it, a click's or a
-  // key's, ended inside it: React's own listener can commit on its first tick, and a commit stamped where the
-  // listener before it ended has run its effects by the time the next one starts. (The end is compared a hair
-  // wide, for a start and a duration that do not add up to the end exactly in floating point.)
-  const scriptsRun = (r.frames ?? []).flatMap((f) => f.scripts);
-  const holderOf = (x: CommitSummary) =>
-    scriptsRun.find((s) => {
-      const end = s.start + s.duration + 1e-6;
-      return x.at <= end && (x.at > s.start || (x.at === s.start && x.effectsEndedAt !== null && x.effectsEndedAt > s.start && x.effectsEndedAt <= end));
-    }) ?? null;
   // A stamp up to a millisecond either side of a script is its own where no other script the browser recorded
-  // holds it, by the rule above (`ranInside` says why). `from` moves the start side (`next` says why).
+  // holds it, by the rule in `holderOf` (`ranInside` says why). `from` moves the start side (`next` says why).
   const holds = (s: ScriptSummary, x: CommitSummary, from = s.start - STAMP_TOLERANCE) => x.at >= from && x.at <= s.start + s.duration + STAMP_TOLERANCE && (holderOf(x) ?? s) === s;
   /**
    * The next interaction's press, where the frame this one painted in waited on it: typing fast, the next
@@ -2159,8 +2167,11 @@ function explain(r: InteractionReport): Explanation {
   const idleHandler = reactIdle && !(framedHandlers && ledScript);
   const ranScript = (reactIdle && framedHandlers && ledScript) || (lateNoted ? ledScript : ownScript);
   const outsideMatters = (hasDurations || idleHandler) && outside >= HANDLER_MIN_MS && outside >= HANDLER_MIN_SHARE * r.processing;
+  // Under the bar, the commit a measured handler script held whose count earns the render, the largest where several do.
+  const heldEarning = !hasDurations && !longTaskOfWork ? inWorkingTime.filter(countEarns) : [];
+  const heldRender = heldEarning.length ? heaviest(heldEarning) : null;
   // Whether the render earns the blame: by its durations, by its effects, or by its count (`countEarns`, above).
-  const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : countEarns(c)));
+  const renderMatters = !!c && (effectsEarn || (hasDurations ? renderTotal >= RENDER_MIN_MS : countEarns(c) || !!heldRender));
   // A count the bar alone kept from naming the render. The rungs below the phase blames say so, with the
   // working time the count sat in, rather than calling the render small: nothing measured it, and a
   // count of 1298 is not small by the library's own bars. The time leads, so the count's own clauses
@@ -2179,7 +2190,7 @@ function explain(r: InteractionReport): Explanation {
   const sc = countedIn.length ? heaviest(countedIn) : c;
   const countAfter = !!sc && cameAfter(sc);
   const shortOf =
-    sc && !hasDurations && !longTaskOfWork && countSays(sc)
+    sc && !hasDurations && !longTaskOfWork && !heldRender && countSays(sc)
       ? countAfter
         ? `After the ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}, before the next frame`
         : `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}`
@@ -2197,7 +2208,7 @@ function explain(r: InteractionReport): Explanation {
   // 30 ms render. Without durations a commit is only named over the one with the most components when its
   // effects are what earned the blame.
   const ranked = (x: CommitSummary) => (committingMatters || phasesWorthSaying(x) ? own(x) : x.total);
-  const rc = !c ? c : hasDurations ? inWorkingTime.reduce((a, x) => (ranked(x) > ranked(a) ? x : a), c) : effectsEarn ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
+  const rc = !c ? c : hasDurations ? inWorkingTime.reduce((a, x) => (ranked(x) > ranked(a) ? x : a), c) : effectsEarn ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : (heldRender ?? c);
   const rcCommitting = rc ? (committingOf.get(rc) ?? 0) : 0;
   const rcEffects = rc ? (effectsOf.get(rc) ?? 0) : 0;
   // Of a committing figure and an effects figure, which to say: each that would be worth saying alone,
@@ -2598,6 +2609,9 @@ function explain(r: InteractionReport): Explanation {
   } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
     saidAcross = rc;
     const confidence = measuredFrom(rc);
+    // Under the bar the render is bounded by the script the frame measured holding it, not by the working time.
+    const heldBy = rc === heldRender ? measuredHolder(rc) : null;
+    const heldFor = heldBy ? `${ms(heldBy.duration)} a long animation frame measured for ${scriptPhrase(heldBy)}` : null;
     // Without durations the blame rests on the component count alone, which is why it is a reading:
     // 600 cheap components can outrank the one expensive component that actually took the time. The
     // working time is what the count is read against, so the sentence gives it: 55 ms hung on a render of
@@ -2611,7 +2625,7 @@ function explain(r: InteractionReport): Explanation {
         renderRan === 'in'
         ? `React ${HEDGE} spent about ${ms(rc.total)} of the ${ms(r.processing)} of working time ${renderPhrase(rc)}${inAll(rc)}.`
         : `React ${HEDGE} spent about ${ms(rc.total)} ${renderPhrase(rc)}${placed(' ', '')}${inAll(rc)}.`
-      : `React was ${HEDGE} ${renderPhrase(rc)}${placed(', ', `in the ${ms(r.processing)} of working time`)}. This React build records no render durations, so that is read from the component counts, not measured.`;
+      : `React was ${HEDGE} ${renderPhrase(rc)}${placed(', ', heldFor ? `within the ${heldFor}` : `in the ${ms(r.processing)} of working time`)}. This React build records no render durations, so that is read from the component counts, not measured.`;
     // A list is the render's at any length, but past 2 ms a row the handler could hold the time as well.
     const listByCount = countOnly && !effectsThen && rc.rendered > 0 && r.processing > RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER * rc.rendered;
     // Where the commit's useEffect callbacks took over half of it, they lead too, and are its detail: a chart that
@@ -2648,7 +2662,7 @@ function explain(r: InteractionReport): Explanation {
     cause = effectsLed
       ? `${effectsFirst}${stopped}${say(confidence, '', profiling)}`
       : !hasDurations && effectsThen
-        ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}${stopped}`
+        ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${heldFor ?? `${ms(r.processing)} of working time`}${effectsWhere}, before the screen could update.${profilingRender}${stopped}`
         : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.${stopped}`, `${likely}${listByCount ? `${stopped} It could have been ${handler} instead.${tellApart}` : `${profiling}${stopped}`}`);
     // The named commit's figures are said so they add up to the blame's milliseconds.
     const phasesSaid = hasDurations && phasesWorthSaying(rc);
@@ -2734,7 +2748,8 @@ function explain(r: InteractionReport): Explanation {
     // A script is what is left once React is ruled out, so a commit that could not be tied to the
     // interaction is exactly what stops this from being a finding. A script that ran as the handler holds
     // React's render as well (the blind rung above says why), so where the count would have named that
-    // render but for the bar, the script is not measured in its place: nothing under the bar is blamed.
+    // render but for the bar, the script is not measured in its place: nothing else under the bar is blamed.
+    // Where the frame measured that script holding the count, the render rung above took it (`measuredHolder`).
     // A count that committed after the handlers is not in that script, and leaves it the verdict: kept from
     // it, a 28 ms handleSave in 30 ms of working time was said nowhere, where beside no render it was named.
     // A count after the handlers does not leave it the verdict beside one that sat in the working time, though:

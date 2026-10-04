@@ -1460,7 +1460,8 @@ larger of two figures: each render's start to its commit's end, where the build 
 the render durations plus the forced layout), and only when that is a quarter of the working time
 (in a production build committing the demo's 1441-row list takes a fifth of it outside React's
 durations); a render from 5 ms with durations, or from 10 components by counts
-and 50 beside a named handler, and by counts never under 50 ms of working time; forced layout from 50 ms, or 25 ms without render durations, and half the
+and 50 beside a named handler, and by counts never under 50 ms of working time but where a long animation
+frame measured the handler's script holding the commit (since 0.23.0); forced layout from 50 ms, or 25 ms without render durations, and half the
 window it was counted across, and never over a long wait before the handlers, as above,
 with one script having to hold nine tenths of a window's forced layout before its name is used for
 all of it; a Long Animation
@@ -2019,7 +2020,10 @@ prints: excalidraw re-rendered 149 components in 2.8 ms of a 40 ms click and rea
 since the 34 ms screen update is only weighed from 50 ms, and a shadcn/ui Sheet closing re-rendered
 56 in 17 ms and read the same, when most of the 17 ms is a style recalculation Radix forces. Under
 the bar nothing in the working time is blamed, the handler's script included where a frame lists
-it, since that script holds React's render too. The cause leads with the working time and says the
+it, since that script holds React's render too. Since 0.23.0 the exception is a frame that measured
+the handler's script holding the commit, 20 ms or more and not mostly forced layout: the frame then
+measured the script and its layout, which it never did for the excalidraw and Sheet clicks, so the count
+names the render, bounded in the sentence by the script's measured time rather than the working time. The cause leads with the working time and says the
 count sat in it, short of a long task, rather than calling the render small; the sentence that does
 name a render by its count gives the working time the count is read against. A count that committed
 after the handlers is said to come after the working time instead, before the next frame, as the
