@@ -86,7 +86,7 @@ export interface CommitSummary {
    * library's layers between them (`Primitive.div`, a Slot, a Provider, a wrapper named after the component
    * it renders) are on the chain but spend no step. So does a component that is all its parent rendered and
    * hands the very children it was given to the one component it renders, as a dialog root round a component's
-   * whole return does, where a component above it can be named. Where nothing below it is named, the chain ends
+   * whole return does, where a component above it can be named and that one carries most of its work. Where nothing below it is named, the chain ends
    * at that one. For a production walk cut at `walkBudget`, whose counts
    * cannot choose among subtrees it reached in part or not at all, it stops at its one subtree where
    * nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
