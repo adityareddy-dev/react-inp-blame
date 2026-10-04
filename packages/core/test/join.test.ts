@@ -4081,12 +4081,13 @@ test("a click's useEffect callbacks are React's time, not the handler's, where R
 test("where a render's useEffect callbacks took most of its commit, the cause leads with them and the detail says so, not the parent's own render", () => {
   // The Chart button on a reports page: Reports renders for 60 ms, most of it its own, and mounts RevenueChart,
   // whose useEffect draws for 361 ms. The detail said Reports's own render, with advice about sorts and filters.
+  // One of the two re-rendered and one mounted, so the render is said as neither.
   const reports = (effectsEndedAt: number, effectMounts = 1, effectMountName: string | null = 'RevenueChart', effectRuns = effectMounts) =>
     commit(1070, 1000, { startedAt: 1008, total: 60, rendered: 2, mounted: 1, effectMounts, effectRuns, effectMountName, roots: ['Reports'], hotPath: ['Reports'], components: [{ name: 'Reports', count: 1, self: 55, total: 60 }, { name: 'RevenueChart', count: 1, self: 5, total: 5 }], effectsStartedAt: 1070, effectsEndedAt });
   const click = (end: number) => [entry('click', 1000, end - 1000 + 10, 1003, end)];
   const heavy = report(click(1435), [reports(1431)], null, draw({ owners: ['Reports'] })).explanation;
   assert.deepEqual(heavy.blame, { kind: 'render', name: 'Reports', detail: 'useEffect callbacks after mounting RevenueChart', ms: 423, confidence: 'measured' });
-  assert.match(heavy.cause, /^The commit's useEffect callbacks ran for about 361 ms before the screen could update, after React spent 60 ms re-rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. RevenueChart mounted in that commit with a useEffect of its own\. Committing it took about 2 ms more: the DOM changes, ref callbacks and layout effects\.$/);
+  assert.match(heavy.cause, /^The commit's useEffect callbacks ran for about 361 ms before the screen could update, after React spent 60 ms rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. RevenueChart mounted in that commit with a useEffect of its own\. Committing it took about 2 ms more: the DOM changes, ref callbacks and layout effects\.$/);
   // Several mounted with one are counted, and where none did, an update's effects are only said to be the commit's.
   const several = report(click(1435), [reports(1431, 3, null)], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(several.blame.detail, 'useEffect callbacks in 3 mounted components');
@@ -4112,7 +4113,7 @@ test("where a render's useEffect callbacks took most of its commit, the cause le
   // Effects that are a third of the commit leave it as it was.
   const light = report(click(1110), [reports(1100)], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(light.blame.detail, "Reports's own render");
-  assert.match(light.cause, /^React spent 60 ms re-rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. Committing it took about 2 ms more: the DOM changes, ref callbacks and layout effects\. The commit's useEffect callbacks then ran for about 30 ms more/);
+  assert.match(light.cause, /^React spent 60 ms rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. Committing it took about 2 ms more: the DOM changes, ref callbacks and layout effects\. The commit's useEffect callbacks then ran for about 30 ms more/);
 });
 
 test('a production build times the effects too, so a heavy useEffect is not read as the handler there', () => {
@@ -5617,8 +5618,11 @@ test('a render is counted inside the component it is named after, from the one i
   const render = report(open, [sheet], [], [input(0, 'click')]).explanation;
   assert.deepEqual(render.blame, { kind: 'render', name: 'DismissableLayer', detail: '31 of 59 components', ms: null, confidence: 'inferred' });
   assert.match(render.cause, /^React was most likely mounting 59 components, 31 of them inside DismissableLayer, in the 58 ms of working time\. /);
-  // Fewer than half mounted is a re-render, and a report an earlier release stored, which counted none of it, reads as it did.
-  assert.match(report(open, [commit(30, 0, { ...sheet, mounted: 20 })], [], [input(0, 'click')]).explanation.cause, /^React was most likely re-rendering 59 components, 31 of them inside DismissableLayer/);
+  // A mount is said where nine in ten or more mounted, a re-render where one in ten or fewer did, and a render
+  // between. On formbricks 134 of 217 mounted read "mounting 217 components", and on Cap 160 of 332 remounted
+  // under a Tooltip read "re-rendering 332". A report an earlier release stored, which counted none of it, reads as it did.
+  const verbFor = (mounted: number) => /^React was most likely (\S+) 59 components/.exec(report(open, [commit(30, 0, { ...sheet, mounted })], [], [input(0, 'click')]).explanation.cause)?.[1];
+  assert.deepEqual([54, 53, 30, 20, 6, 5, 0].map(verbFor), ['mounting', 'rendering', 'rendering', 'rendering', 'rendering', 're-rendering', 're-rendering']);
   const stored = { ...sheet } as { mounted?: number; startRendered?: number; pathRendered?: number };
   delete stored.mounted;
   delete stored.startRendered;

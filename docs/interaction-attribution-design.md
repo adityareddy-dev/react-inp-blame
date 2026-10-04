@@ -1618,7 +1618,9 @@ is named after is that component's own where the walk counted fewer there than i
 component the render started from named where it holds them all and a reader could search for it
 ("1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper", the 812 a read
 of cal.com's source rather than a run). A walk cut short says both counts as lower bounds, and a render
-is "mounting" where more than half of its components rendered for the first time. A hydration blame
+is "mounting" where nine in ten or more of its components rendered for the first time, "re-rendering"
+where one in ten or fewer did, and "rendering" between: 0.23.0 went by half, and called 134 mounts of
+217 on formbricks a mount of all 217, and 160 remounted under a Tooltip on Cap re-rendering. A hydration blame
 keeps the whole count, since the boundary or page it is named after holds every component hydrated,
 and so does a render named after the component it was mostly made of.
 `explanation.blame.confidence` says what the
