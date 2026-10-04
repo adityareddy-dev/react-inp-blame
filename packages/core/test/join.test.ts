@@ -5269,6 +5269,10 @@ test('a render whose walk stopped at its budget says "at least", names no compon
   assert.ok(several.cause.includes('inside the app'), several.cause);
   // Nor the one root it reached, when the walk says the work may be beside it (an empty hot path).
   assert.equal(blameOf({ roots: ['Orders'], hotPath: [], components }).blame.name, 'the app');
+  // A first root with no name changes none of that: the walk still could not tell where the render started.
+  const unnamedFirst = blameOf({ roots: ['(anonymous)', 'Metrics'], hotPath: [], components });
+  assert.equal(unnamedFirst.blame.name, 'the app');
+  assert.match(unnamedFirst.cause, /so where it started and which components took the time aren't known\./);
 
   // A component the roots sit under that did not render itself is not where the render started, and the work the
   // walk never reached need not be under it: the app, and nothing in the sentence or the detail names it.
