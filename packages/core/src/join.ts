@@ -2209,6 +2209,9 @@ function explain(r: InteractionReport): Explanation {
   // effects are what earned the blame.
   const ranked = (x: CommitSummary) => (committingMatters || phasesWorthSaying(x) ? own(x) : x.total);
   const rc = !c ? c : hasDurations ? inWorkingTime.reduce((a, x) => (ranked(x) > ranked(a) ? x : a), c) : effectsEarn ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : (heldRender ?? c);
+  // Under the bar the render is bounded by the script the frame measured holding it, not by the working time.
+  const heldBy = rc && rc === heldRender ? measuredHolder(rc) : null;
+  const heldFor = heldBy ? `${ms(heldBy.duration)} a long animation frame measured for ${scriptPhrase(heldBy)}` : null;
   const rcCommitting = rc ? (committingOf.get(rc) ?? 0) : 0;
   const rcEffects = rc ? (effectsOf.get(rc) ?? 0) : 0;
   // Of a committing figure and an effects figure, which to say: each that would be worth saying alone,
@@ -2363,6 +2366,8 @@ function explain(r: InteractionReport): Explanation {
    * `renderRan` puts it.
    */
   const spentIn = (when: string, lead: string) => placed(lead, `in the ${ms(r.processing)} of working time ${when}`);
+  // A count under the bar is placed in the script the frame measured holding it, as the render rung places it.
+  const heldIn = (when: string, lead: string) => (heldFor ? placed(lead, `within the ${heldFor} ${when}`) : spentIn(when, lead));
   /**
    * A render that ran after the handlers is said with its place alone, and not with what committing and effects took
    * beside it, which is only ever counted in the working time and so is another commit's there: said before the
@@ -2388,8 +2393,8 @@ function explain(r: InteractionReport): Explanation {
             hasDurations
               ? `React ${HEDGE} still spent about ${ms(rc.total)} ${renderPhrase(rc)}${spentWith(when)}${inAll(rc)}.`
               : effectsThen
-                ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${spentIn(when, heldAll ? ', ' : ' ')}.`
-                : `React was ${HEDGE} still ${renderPhrase(rc)}${spentIn(when, ', ')}.`,
+                ? `React was ${HEDGE} still ${renderPhrase(rc)}, then spent ${ms(effectsFigure)} running useEffect callbacks${effectsWhere}${heldIn(when, heldAll ? ', ' : ' ')}.`
+                : `React was ${HEDGE} still ${renderPhrase(rc)}${heldIn(when, ', ')}.`,
           )
         : untimedHandler
           ? `${cap(handler)} ${HEDGE} still took ${untimedTook} of working time ${when}.`
@@ -2609,9 +2614,6 @@ function explain(r: InteractionReport): Explanation {
   } else if (c && rc && renderMatters && !screenOutranks && !waitingWins) {
     saidAcross = rc;
     const confidence = measuredFrom(rc);
-    // Under the bar the render is bounded by the script the frame measured holding it, not by the working time.
-    const heldBy = rc === heldRender ? measuredHolder(rc) : null;
-    const heldFor = heldBy ? `${ms(heldBy.duration)} a long animation frame measured for ${scriptPhrase(heldBy)}` : null;
     // Without durations the blame rests on the component count alone, which is why it is a reading:
     // 600 cheap components can outrank the one expensive component that actually took the time. The
     // working time is what the count is read against, so the sentence gives it: 55 ms hung on a render of
