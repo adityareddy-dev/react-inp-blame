@@ -5623,6 +5623,9 @@ test('a render is counted inside the component it is named after, from the one i
   // under a Tooltip read "re-rendering 332". A report an earlier release stored, which counted none of it, reads as it did.
   const verbFor = (mounted: number) => /^React was most likely (\S+) 59 components/.exec(report(open, [commit(30, 0, { ...sheet, mounted })], [], [input(0, 'click')]).explanation.cause)?.[1];
   assert.deepEqual([54, 53, 30, 20, 6, 5, 0].map(verbFor), ['mounting', 'rendering', 'rendering', 'rendering', 'rendering', 're-rendering', 're-rendering']);
+  // Exactly nine in ten is a mount and exactly one in ten a re-render.
+  const ofTen = (mounted: number) => / (\S+) 10 components/.exec(report(open, [commit(30, 0, { ...sheet, rendered: 10, startRendered: 10, pathRendered: 10, mounted })], [], [input(0, 'click')]).explanation.cause)?.[1];
+  assert.deepEqual([10, 9, 8, 2, 1, 0].map(ofTen), ['mounting', 'mounting', 'rendering', 'rendering', 're-rendering', 're-rendering']);
   const stored = { ...sheet } as { mounted?: number; startRendered?: number; pathRendered?: number };
   delete stored.mounted;
   delete stored.startRendered;
