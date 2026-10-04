@@ -97,11 +97,16 @@
   named the render says how much of the working time went to any styles and layout the interaction forced
   is unmeasured, rather than blaming the render on its count: a style recalculation inside 17 ms of working
   time is invisible to the browser's own record. Nothing records *which* read forced the layout, so a
-  `'layout'` blame's `name` and `detail` say where it happened instead: the joined commit's subtree and
-  what it was mostly made of. Where the render started from a component that holds the whole commit (the
-  cause's "56 components from Dialog down", said where that commit is the one the cause describes), that
-  is the subtree named, since the component a render is named after holds only part of it and the read
-  can be anywhere in what React rendered. Its `detail` is then what a render's would be, many of one
+  `'layout'` blame's `name` and `detail` say where it happened instead: the subtree of the joined commit that
+  ran in the script that forced it, and what it was mostly made of. Where several commits ran in the scripts
+  that forced it, that is the one whose time could hold most of the layout: React's own time for it where the
+  build times renders, else its effects and the time since the commit before it in the same script, which for
+  the first commit there runs from the script's start and so holds the handler too. Where none could hold half
+  of it, `name` and `detail` are `null` and the cause says so. A long effect that read no size can still take
+  the name from the commit whose layout effect did. Where the render started from a component that holds the
+  whole commit (the cause's "56 components from Dialog down"), that is the subtree named, since the
+  component a render is named after holds only part of it and the read can be anywhere in what React
+  rendered. Its `detail` is then what a render's would be, many of one
   component or one component's own render, and where it is a count, the whole commit's ("56 components"),
   not "15 of 56". That name is dropped for the browser's own invoker where no commit joined, or where the
   one that did only overlapped the interaction in time, was walked short of the end, or sat beside
