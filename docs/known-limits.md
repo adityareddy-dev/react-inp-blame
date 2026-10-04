@@ -161,7 +161,10 @@
   commit's `components` and its `hotPath`; the path spends its twelve steps only on names a reader could
   search for, passing a library's layers between them (a Slot, `Primitive.div`, a Provider, a wrapper named
   after the component it renders) without spending one, and a render is named after the deepest searchable
-  name on it, so it reaches the component below those layers where there is one. Where React's times on the
+  name on it, so it reaches the component below those layers where there is one. A component that is all its
+  parent rendered and renders the children it was given is passed too, and where nothing below it is named, the
+  render is named after the parent. That is told from the tree's shape, not from who wrote what, so a component
+  of that shape whose own render is the heavy part is passed over for its parent all the same. Where React's times on the
   path show that name took under half of the render (every name above it holds it, so the smallest of their
   totals bounds it), the render is named after the component it started from where that holds the whole commit
   and has a name worth searching for (the cause's "from ... down"), and the cause still says the deeper one.
