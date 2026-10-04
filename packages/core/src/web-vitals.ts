@@ -82,9 +82,9 @@ export interface ReactAttribution {
   readonly blame: Blame;
   /** The React handler prop that ran, or the function behind it when its name survived minification. */
   readonly handler: string | null;
-  /** The chain carrying most of the rendering, outermost first, of the commit a 'layout' blame names where it is one; shorter or empty for a walk cut short, as `CommitSummary.hotPath` says. */
+  /** The chain carrying most of the rendering, outermost first, of the commit a 'layout' or 'render' blame names where it is one; shorter or empty for a walk cut short, as `CommitSummary.hotPath` says. */
   readonly hotPath: readonly string[];
-  /** The heaviest commit's components, or those of the commit a 'layout' blame names, at most 5. */
+  /** The heaviest commit's components, or those of the commit a 'layout' or 'render' blame names, at most 5. */
   readonly components: readonly RenderedComponent[];
   /** React's commits between the input and the paint INP measured. */
   readonly commits: ReactRenderSummary;
@@ -229,8 +229,8 @@ function describe(r: InteractionReport): ReactAttribution | null {
   // A report explains itself on first read, in this callback rather than in the one that built it.
   const { blame } = r.explanation;
   if (unexplainedReports.has(r)) return null;
-  // A layout blame's commit is the one it names, which need not be the heaviest.
-  const main = blame.kind === 'layout' ? blamedCommit(r) : r.commits.length ? heaviest(r.commits) : null;
+  // A layout or render blame's commit is the one it names, which need not be the heaviest.
+  const main = blame.kind === 'layout' || blame.kind === 'render' ? blamedCommit(r) : r.commits.length ? heaviest(r.commits) : null;
   return Object.freeze({
     schemaVersion: SCHEMA_VERSION,
     interactionId: r.interactionId,

@@ -1755,6 +1755,12 @@ test("a render a key's press committed just before its release came, where the p
   // So is one the release's own input is stamped on, however close to the press.
   const released = commit(4.2, 5, { inputType: 'keyup', gestureTs: 0, hasDurations: false, total: 0, rendered: 39, roots: ['Menu'], hotPath: ['Menu'], components: [] });
   assert.deepEqual(report([entry('keydown', 0, 32, 0.1, 4.8), entry('keyup', 5, 64, 5.2, 60)], [released, own], [], ring).explanation.blame.name, 'Menu');
+  // Where the release rendered enough of its own to be the blame, the panels take its commit, not the press's larger one.
+  const bigPress = { ...press, rendered: 300, components: [{ name: 'Item', count: 200, self: null, total: null }] };
+  const ownList = { ...own, rendered: 60, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 55, self: null, total: null }] };
+  const listed = report([entry('keydown', 0, 32, 0.1, 4.8), entry('keyup', 5, 64, 5.2, 60)], [bigPress, ownList], [], ring);
+  assert.deepEqual([listed.explanation.blame.kind, listed.explanation.blame.name, listed.explanation.blame.detail], ['render', 'List', 'Row ×55']);
+  assert.equal(blamedCommit(listed)?.at, 58);
 });
 
 test("a release that waited for its press's screen update, after the press's handlers and before its paint, is blamed on that wait where it leads, under a long task too", () => {

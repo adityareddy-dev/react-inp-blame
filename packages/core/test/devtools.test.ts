@@ -314,6 +314,21 @@ test('the interaction entry takes the commit a layout blame names where that is 
   assert.equal(row(interaction, 'Heaviest path'), 'Sidebar');
 });
 
+test('the interaction entry takes the commit a render blame names where that is not the heaviest', () => {
+  // Enter on a menu item, production build: the press rendered 300 components and painted on its own; the
+  // release's 55 ms of working time rendered 60 of its own, which the tooltip blames.
+  const key = (ts: number, type: string): InputRecord => ({ ts, type, gestureTs: 0, press: 'Enter', target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const down = { ...click, name: 'keydown', startTime: 0, duration: 32, processingStart: 0.1, processingEnd: 4.8 };
+  const up = { ...click, name: 'keyup', startTime: 5, duration: 64, processingStart: 5.2, processingEnd: 60 };
+  const press = commit(4.2, { inputType: 'keydown', rendered: 300, roots: ['Menu'], hotPath: ['Menu'], components: [{ name: 'Item', count: 200, self: null, total: null }] });
+  const own = commit(58, { inputTs: 5, sinceInput: 53, inputType: 'keyup', rendered: 60, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 55, self: null, total: null }] });
+  const r = sealReport(buildReport([down, up], [press, own], [], [key(0, 'keydown'), key(5, 'keyup')]));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['render', 'List']);
+  const [interaction] = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn;
+  assert.match(interaction?.label ?? '', / · List$/);
+  assert.equal(row(interaction, 'Heaviest path'), 'Menu');
+});
+
 test("the interaction's count of renders before the paint is the tooltip's, and says how many were too small to count", () => {
   // Shaped like opening the shadcn/ui Sheet: six commits before the paint, three with work in them, and an empty
   // one and two small ones beside them. The tooltip said React rendered 3 times and the Summary said 6.

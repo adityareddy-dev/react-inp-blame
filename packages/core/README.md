@@ -321,7 +321,7 @@ node has no React fiber or no named component above it, which is web-vitals' sig
 its own selector, and it never throws. `attributeINP(metric)` returns the
 metric's attribution (`{}` where there is none) with a frozen `react` field added, from this
 library's report for that interaction: the blame with its confidence, the handler, the hot path and
-components of the heaviest commit, or of the commit a layout blame names, and what React rendered
+components of the heaviest commit, or of the commit a layout or render blame names, and what React rendered
 before and after the paint. It is `null` when
 nothing is installed and when there is no report for that interaction, one that stayed under
 `threshold`, one already pushed out of the 50 a page keeps (never one of the ten slowest or one INP
