@@ -1138,7 +1138,10 @@ millisecond of slack there the handler's 290 ms read as the effects'. The commit
 timed on the same clock, so nothing of the handlers' own is stamped before them. The effects add to
 the commit's committing time for the 25 ms test, and the sentence says each of the two that would
 show alone, or both where only their sum does, or the totals across the commits where only those
-earned the blame. A production build has no render start, but the effects are measured all the same,
+earned the blame. Since 0.23.0 a render blame's sentence also says the named commit's two wherever
+together they reach 5 ms and a fifth of that commit's time, the bar that also lets them choose it, with
+what the other commits spent in place of the totals. Where some of its time would still go unsaid, it
+gives that commit's figure in all. A production build has no render start, but the effects are measured all the same,
 so there the render is named as a reading and the effects carry the figure. What is left of that
 build's working time is the handler and the render together, unsplit, so the effects take the blame
 there only where they are at least half of it, or where there is no handler's name to give the rest;

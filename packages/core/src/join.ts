@@ -55,6 +55,9 @@ const RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER = 2;
 // and gains nothing.
 const OWN_RENDER_MIN_MS = HANDLER_MIN_MS;
 const OWN_RENDER_MIN_SHARE = 0.5;
+// A commit's committing and effects are worth saying beside its render from 5 ms and a fifth of its time in all.
+const COMMIT_PHASES_MIN_MS = RENDER_MIN_MS;
+const COMMIT_PHASES_MIN_SHARE = 0.2;
 // A Long Animation Frames script is named from 20 ms of it inside the interaction: the API lists
 // scripts from 5 ms, and one under 20 did not make its frame long by itself (a long frame is over 50 ms).
 const SCRIPT_MIN_MS = 20;
@@ -2155,13 +2158,20 @@ function explain(r: InteractionReport): Explanation {
         ? `After the ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}, before the next frame`
         : `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}`
       : null;
+  // One bar both chooses the commit a render blame names and says its committing and effects.
+  const phasesWorthSaying = (x: CommitSummary) => {
+    const t = (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
+    return t >= COMMIT_PHASES_MIN_MS && t >= COMMIT_PHASES_MIN_SHARE * own(x);
+  };
   // The commit a render blame names is the one React spent longest on, committing and effects included,
   // so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render beside it. Where
-  // no commit has a span this is the heaviest render, as everywhere else. Committing and effects only
-  // choose it where they are worth a mention at all, or a 1 ms render beside 30 ms of effects nobody
-  // hears about is named over a 30 ms render. Without durations a commit is only named over the one
-  // with the most components when its effects are what earned the blame.
-  const rc = c && (hasDurations ? committingMatters : effectsEarn) ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
+  // no commit has a span this is the heaviest render, as everywhere else. A commit's committing and effects
+  // only count for it where they are worth a mention, across the commits (`committingMatters`) or beside its
+  // own render (`phasesWorthSaying`), or a 27 ms render with 4 ms of effects nobody hears about is named over a
+  // 30 ms render. Without durations a commit is only named over the one with the most components when its
+  // effects are what earned the blame.
+  const ranked = (x: CommitSummary) => (committingMatters || phasesWorthSaying(x) ? own(x) : x.total);
+  const rc = !c ? c : hasDurations ? inWorkingTime.reduce((a, x) => (ranked(x) > ranked(a) ? x : a), c) : effectsEarn ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : c;
   const rcCommitting = rc ? (committingOf.get(rc) ?? 0) : 0;
   const rcEffects = rc ? (effectsOf.get(rc) ?? 0) : 0;
   // Of a committing figure and an effects figure, which to say: each that would be worth saying alone,
@@ -2192,9 +2202,11 @@ function explain(r: InteractionReport): Explanation {
   const totalsSaid = worthSaying(committing, effects);
   const totals = sayTotals ? figures(committing, effects, totalsSaid) : [];
   const acrossCommits = totals.length ? `${totals.join(' and ')}${whereOf(rc, totalsSaid)}` : null;
-  // And where the named commit's are said, what the others spent beside them, where that is worth saying.
-  const othersSaid = worthSaying(committing - rcCommitting, effects - rcEffects);
-  const others = sayTotals || !rc ? [] : figures(committing - rcCommitting, effects - rcEffects, othersSaid);
+  // And what the others spent beside the named commit's, where worth saying or where the totals earned the blame.
+  const othersSaid: [boolean, boolean] = sayTotals
+    ? [totalsSaid[0] && committing - rcCommitting >= 1, totalsSaid[1] && effects - rcEffects >= 1]
+    : worthSaying(committing - rcCommitting, effects - rcEffects);
+  const others = !rc ? [] : figures(committing - rcCommitting, effects - rcEffects, othersSaid);
   const othersBusy = holding(othersSaid, rc).length;
   const alsoOthers = others.length ? ` React also spent ${others.join(' and ')} in ${othersBusy === 1 ? 'another commit' : `${othersBusy} other commits`}.` : '';
   const extras = figures(rcCommitting, rcEffects, [sayCommitting, sayEffects], 'its ');
@@ -2612,10 +2624,17 @@ function explain(r: InteractionReport): Explanation {
       : !hasDurations && effectsThen
         ? `React was ${HEDGE} ${renderPhrase(rc)}, then ran useEffect callbacks for about ${ms(effectsFigure)} of the ${ms(r.processing)} of working time${effectsWhere}, before the screen could update.${profilingRender}${stopped}`
         : say(confidence, `React spent ${renderAcross(rc, ms(rc.total))}.${stopped}`, `${likely}${listByCount ? `${stopped} It could have been ${handler} instead.${tellApart}` : `${profiling}${stopped}`}`);
-    if (sayCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
-    if (sayEffects && hasDurations && !effectsLed) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
-    if (acrossCommits && hasDurations) cause += ` React also spent ${acrossCommits}.`;
-    if (hasDurations) cause += alsoOthers;
+    // The named commit's figures are said so they add up to the blame's milliseconds.
+    const phasesSaid = hasDurations && phasesWorthSaying(rc);
+    const tellCommitting = sayCommitting || (phasesSaid && rcCommitting >= 1);
+    const tellEffects = sayEffects || (phasesSaid && rcEffects >= 1);
+    if (tellCommitting) cause += ` Committing it took about ${ms(rcCommitting)} more: the DOM changes, ref callbacks and layout effects.`;
+    if (tellEffects && hasDurations && !effectsLed) cause += ` The commit's useEffect callbacks then ran for about ${ms(rcEffects)} more${included(rc)}, before the screen could update.`;
+    const unsaid = own(rc) - rc.total - (tellCommitting ? rcCommitting : 0) - (tellEffects || effectsLed ? rcEffects : 0);
+    if (hasDurations && unsaid >= 1) cause += ` That commit took ${ms(own(rc))} with committing and effects.`;
+    // The totals only where none of the named commit's own figures are said.
+    if (acrossCommits && hasDurations && !tellCommitting && !tellEffects) cause += ` React also spent ${acrossCommits}.`;
+    else if (hasDurations) cause += alsoOthers;
     if (outsideMatters) cause += unlisted ? unaccounted : ` On top of that, ${outsideName} ran for about ${ms(outside)}.`;
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.

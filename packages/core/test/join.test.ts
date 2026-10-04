@@ -3781,7 +3781,8 @@ test("a render the verdict keeps from React's task after the handlers is said to
   assert.equal(early.explanation.cause, 'React most likely spent about 30 ms re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
   const handled = [frame(0, 70, [script('BUTTON.onclick', 5, 45)])];
   const inside = report([entry('click', 0, 70, 5, 50)], [commit(45, 0, { total: 30, startedAt: 12 })], handled, save, 'attributes', [], undefined, 'unreadable');
-  assert.equal(inside.explanation.cause, 'React most likely spent about 30 ms of the 45 ms of working time re-rendering 30 components inside List, mostly Row (30 of them, 20 ms).');
+  // Its 3 ms of committing are in the blame's 33 ms, so the sentence gives that figure too.
+  assert.equal(inside.explanation.cause, 'React most likely spent about 30 ms of the 45 ms of working time re-rendering 30 components inside List, mostly Row (30 of them, 20 ms). That commit took 33 ms with committing and effects.');
   assert.match(report([entry('click', 0, 116, 1, 61)], [commit(60, 0, rows)], task, save).explanation.cause, /mostly Row \(800 of them\), in the 60 ms of working time\. This React build/);
 });
 
@@ -4012,8 +4013,9 @@ test("a click's useEffect callbacks are React's time, not the handler's, where R
   assert.equal(r.explanation.blame.name, 'Chart');
   // The commit's milliseconds are its render, committing and effects together.
   assert.equal(r.explanation.blame.ms, 306);
-  assert.match(r.explanation.cause, /^The commit's useEffect callbacks ran for about 300 ms before the screen could update, after React spent 5 ms re-rendering Chart\.$/);
-  assert.doesNotMatch(r.explanation.cause, /onClick|Committing/);
+  // Its 1 ms of committing is in the 306 ms too, so it is said with them.
+  assert.match(r.explanation.cause, /^The commit's useEffect callbacks ran for about 300 ms before the screen could update, after React spent 5 ms re-rendering Chart\. Committing it took about 1 ms more: the DOM changes, ref callbacks and layout effects\.$/);
+  assert.doesNotMatch(r.explanation.cause, /onClick/);
   // Without the effects' times, as on React 17, the 300 ms is the handler's, as it was before.
   const noEffects = report(click, [{ ...chart, effectsStartedAt: null, effectsEndedAt: null }], null, tap);
   assert.equal(noEffects.explanation.blame.kind, 'handler');
@@ -4028,33 +4030,33 @@ test("where a render's useEffect callbacks took most of its commit, the cause le
   const click = (end: number) => [entry('click', 1000, end - 1000 + 10, 1003, end)];
   const heavy = report(click(1435), [reports(1431)], null, draw({ owners: ['Reports'] })).explanation;
   assert.deepEqual(heavy.blame, { kind: 'render', name: 'Reports', detail: 'useEffect callbacks after mounting RevenueChart', ms: 423, confidence: 'measured' });
-  assert.match(heavy.cause, /^The commit's useEffect callbacks ran for about 361 ms before the screen could update, after React spent 60 ms re-rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. RevenueChart mounted in that commit with a useEffect of its own\.$/);
+  assert.match(heavy.cause, /^The commit's useEffect callbacks ran for about 361 ms before the screen could update, after React spent 60 ms re-rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. RevenueChart mounted in that commit with a useEffect of its own\. Committing it took about 2 ms more: the DOM changes, ref callbacks and layout effects\.$/);
   // Several mounted with one are counted, and where none did, an update's effects are only said to be the commit's.
   const several = report(click(1435), [reports(1431, 3, null)], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(several.blame.detail, 'useEffect callbacks in 3 mounted components');
-  assert.match(several.cause, /\. 3 components mounted in that commit, each with a useEffect of its own\.$/);
+  assert.match(several.cause, /\. 3 components mounted in that commit, each with a useEffect of its own\. Committing it took about 2 ms more/);
   const updated = report(click(1435), [reports(1431, 0, null)], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(updated.blame.detail, 'useEffect callbacks');
-  assert.match(updated.cause, /own render\)\.$/);
+  assert.match(updated.cause, /own render\)\. Committing it took about 2 ms more/);
   // Nor are the ones that mounted counted where a component that rendered again had one to run too: a chart drawing
   // again beside two tooltips that mounted is not the tooltips' doing.
   const beside = report(click(1435), [reports(1431, 2, null, 3)], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(beside.blame.detail, 'useEffect callbacks');
-  assert.match(beside.cause, /own render\)\.$/);
+  assert.match(beside.cause, /own render\)\. Committing it took about 2 ms more/);
   // A walk cut short counted only the mounts it reached, so none is named, and the count is a lower bound.
   const cut = (effectMounts: number) => report(click(1435), [{ ...reports(1431, effectMounts), truncated: true, pathStart: 'only-root' }], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(cut(1).blame.detail, 'useEffect callbacks in at least 1 mounted component');
-  assert.match(cut(1).cause, /\. At least 1 component mounted in that commit with a useEffect of its own\.$/);
+  assert.match(cut(1).cause, /\. At least 1 component mounted in that commit with a useEffect of its own\. Committing it took about 2 ms more/);
   assert.doesNotMatch(cut(1).cause, /RevenueChart/);
   assert.equal(cut(3).blame.detail, 'useEffect callbacks in at least 3 mounted components');
-  assert.match(cut(3).cause, /\. At least 3 components mounted in that commit, each with a useEffect of its own\.$/);
+  assert.match(cut(3).cause, /\. At least 3 components mounted in that commit, each with a useEffect of its own\. Committing it took about 2 ms more/);
   assert.equal(cut(0).blame.detail, 'useEffect callbacks');
   assert.doesNotMatch(heavy.cause, /then ran for about/);
   assert.ok(!heavy.notes.some((n) => n.includes('own render')), heavy.notes.join(' | '));
   // Effects that are a third of the commit leave it as it was.
   const light = report(click(1110), [reports(1100)], null, draw({ owners: ['Reports'] })).explanation;
   assert.equal(light.blame.detail, "Reports's own render");
-  assert.match(light.cause, /^React spent 60 ms re-rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. The commit's useEffect callbacks then ran for about 30 ms more/);
+  assert.match(light.cause, /^React spent 60 ms re-rendering 2 components inside Reports \(55 ms of it in Reports's own render\)\. Committing it took about 2 ms more: the DOM changes, ref callbacks and layout effects\. The commit's useEffect callbacks then ran for about 30 ms more/);
 });
 
 test('a production build times the effects too, so a heavy useEffect is not read as the handler there', () => {
@@ -4115,7 +4117,7 @@ test('a handler has to outrun all of React to be the blame, effects included, an
   const chart = commit(1110, 1000, { startedAt: 1104, total: 5, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1110, effectsEndedAt: 1310 });
   const r = report([entry('click', 1000, 330, 1003, 1320)], [chart], null, draw({ owners: ['Chart'] }));
   assert.equal(r.explanation.blame.kind, 'render');
-  assert.match(r.explanation.cause, /^The commit's useEffect callbacks ran for about 200 ms before the screen could update, after React spent 5 ms re-rendering Chart\. On top of that, the onClick handler ran for about 1\d\d ms\./);
+  assert.match(r.explanation.cause, /^The commit's useEffect callbacks ran for about 200 ms before the screen could update, after React spent 5 ms re-rendering Chart\. Committing it took about 1 ms more: the DOM changes, ref callbacks and layout effects\. On top of that, the onClick handler ran for about 1\d\d ms\./);
 });
 
 test('a root an effect flushes with flushSync is its own time, not the effects of the commit that ran it', () => {
@@ -4149,14 +4151,15 @@ test('committing and effects too small to mention alone are both said where toge
   assert.match(r.explanation.cause, /Committing it took about 15 ms more: the DOM changes, ref callbacks and layout effects\. The commit's useEffect callbacks then ran for about 15 ms more/);
 });
 
-test("where only the effects of several commits together earned React the blame, the sentence gives the totals", () => {
+test("where only the effects of several commits together earned React the blame, the sentence gives all of them", () => {
   // Two commits, each with 15 ms of effects, in 40 ms of working time: neither alone is worth saying.
   const first = commit(1010, 1000, { startedAt: 1009, total: 1, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1010, effectsEndedAt: 1025 });
   const second = commit(1027, 1000, { startedAt: 1026, total: 1, rendered: 1, roots: ['Legend'], hotPath: ['Legend'], effectsStartedAt: 1027, effectsEndedAt: 1042 });
   const click = [entry('click', 1000, 60, 1003, 1043)];
   const dev = report(click, [first, second], null, draw());
   assert.equal(dev.explanation.blame.kind, 'render');
-  assert.match(dev.explanation.cause, /React spent 2 ms rendering across 2 commits, 1 ms of it re-rendering \w+\. React also spent 30 ms running useEffect callbacks across 2 commits\./);
+  // The named commit's 15 ms are most of its 16, so they are said as its own, and the other commit's beside them.
+  assert.match(dev.explanation.cause, /^The commit's useEffect callbacks ran for about 15 ms before the screen could update, after React spent 2 ms rendering across 2 commits, 1 ms of it re-rendering \w+\. React also spent 15 ms running useEffect callbacks in another commit\.$/);
   const strip = (x: CommitSummary): CommitSummary => ({ ...x, hasDurations: false, total: 0, startedAt: null, components: [] });
   const production = report(click, [strip(first), strip(second)], null, draw());
   assert.equal(production.explanation.blame.kind, 'render');
@@ -4272,12 +4275,73 @@ test("React's render time across several commits is said as their total with the
 });
 
 test('effects too small to mention do not choose the commit a render blame names', () => {
-  // List renders for 30 ms; Chart renders for 1 ms and runs 30 ms of effects, under a quarter of the 121 ms.
+  // Chart's 4 ms of effects (under 5 ms) or 6 of 32 (under a fifth) are not said, so they don't put it over List's 30.
   const list = commit(1035, 1000, { startedAt: 1005, total: 30, rendered: 31, roots: ['List'], hotPath: ['List'] });
-  const chart = commit(1037, 1000, { startedAt: 1036, total: 1, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1037, effectsEndedAt: 1067 });
-  const r = report([entry('click', 1000, 150, 1003, 1124)], [list, chart], null, draw());
+  const click = [entry('click', 1000, 150, 1003, 1124)];
+  const under5 = commit(1063, 1000, { startedAt: 1036, total: 27, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1063, effectsEndedAt: 1067 });
+  const r = report(click, [list, under5], null, draw());
   assert.equal(r.explanation.blame.kind, 'render');
   assert.equal(r.explanation.blame.name, 'List');
+  assert.equal(r.explanation.blame.ms, 30);
+  const underFifth = commit(1062, 1000, { startedAt: 1036, total: 26, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1062, effectsEndedAt: 1068 });
+  assert.equal(report(click, [list, underFifth], null, draw()).explanation.blame.name, 'List');
+  // A 1 ms render with 30 ms of effects is worth saying, so it is named and its effects are said.
+  const chart = commit(1037, 1000, { startedAt: 1036, total: 1, rendered: 1, roots: ['Chart'], hotPath: ['Chart'], effectsStartedAt: 1037, effectsEndedAt: 1067 });
+  const said = report(click, [list, chart], null, draw()).explanation;
+  assert.equal(said.blame.name, 'Chart');
+  assert.equal(said.blame.ms, 31);
+  assert.ok(said.cause.includes('30 ms'), said.cause);
+});
+
+/** Whether a cause gives each of these figures, rounded as it says them. */
+const givesAll = (cause: string, figures: number[]) => figures.every((n) => new RegExp(`(?<![\\d.])${Math.round(n)} ms`).test(cause));
+
+test("committing and effects worth saying beside a commit's render choose it, where a larger render's are not", () => {
+  // Nav: 14.2 ms render, 2 ms committing and effects. Toolbar: 8.8 ms render, 4.4 committing, 4 effects.
+  const nav = commit(16, 0, { startedAt: 1.3, total: 14.2, effectsStartedAt: 16.2, effectsEndedAt: 17.7, rendered: 295, roots: ['Nav'], hotPath: ['Nav'], components: [{ name: 'Nav', count: 1, self: 2.9, total: 14.2 }] });
+  const menu = commit(23.2, 0, { startedAt: 18.2, total: 4, effectsStartedAt: 23.3, effectsEndedAt: 24.3, rendered: 96, mounted: 95, roots: ['Menu'], hotPath: ['Menu'], components: [{ name: 'Menu', count: 1, self: 0.2, total: 4 }] });
+  const toolbar = commit(37.6, 0, { startedAt: 24.4, total: 8.8, effectsStartedAt: 37.7, effectsEndedAt: 41.7, rendered: 185, roots: ['Toolbar'], hotPath: ['Toolbar'], components: [{ name: 'Toolbar', count: 1, self: 0.8, total: 8.8 }] });
+  const click = [entry('click', 0, 48, 0.8, 45.4)];
+  const r = report(click, [nav, menu, toolbar], [], [input(0, 'click')]).explanation;
+  assert.equal(r.blame.kind, 'render');
+  assert.deepEqual([r.blame.name, r.blame.detail], ['Toolbar', '185 components']);
+  assert.ok(Math.abs(r.blame.ms! - 17.2) < 0.01, String(r.blame.ms));
+  // Its render, committing and effects are each said.
+  assert.ok(givesAll(r.cause, [8.8, 4.4, 4]), r.cause);
+  // Toolbar at 15.5 ms in all still beats Nav at 16.2, since Nav's 2 ms are not worth saying.
+  const smaller = report(click, [nav, menu, { ...toolbar, startedAt: 26.1, total: 7.5 }], [], [input(0, 'click')]).explanation;
+  assert.equal(smaller.blame.name, 'Toolbar');
+});
+
+test("a render blame says the named commit's committing and effects wherever they are worth saying beside its render", () => {
+  // Toolbar: 9 ms render, 28.7 committing, 22.6 effects. The 22.6 went unsaid though they are in its 60.3 ms.
+  const nav = commit(25, 0, { startedAt: 2, total: 23, rendered: 295, roots: ['Nav'], hotPath: ['Nav'], components: [{ name: 'Nav', count: 1, self: 3, total: 23 }] });
+  const toolbar = commit(70.7, 0, { startedAt: 33, total: 9, effectsStartedAt: 71, effectsEndedAt: 93.6, rendered: 185, roots: ['Toolbar'], hotPath: ['Toolbar'], components: [{ name: 'Toolbar', count: 1, self: 1, total: 9 }] });
+  const r = report([entry('click', 0, 112, 2, 103.7)], [nav, toolbar], [], [input(0, 'click')]).explanation;
+  assert.equal(r.blame.name, 'Toolbar');
+  assert.ok(Math.abs(r.blame.ms! - 60.3) < 0.01, String(r.blame.ms));
+  assert.ok(givesAll(r.cause, [9, 28.7, 22.6]), r.cause);
+  // Only the totals across commits clear the handler's bar: Nav 79.6 + 4 + 6.7, Toolbar 41.2 + 26.8 + 27.4.
+  const big = commit(88.6, 0, { startedAt: 5, total: 79.6, effectsStartedAt: 88.6, effectsEndedAt: 95.3, rendered: 295, roots: ['Nav'], hotPath: ['Nav'], components: [{ name: 'Nav', count: 1, self: 3, total: 79.6 }] });
+  const header = commit(168, 0, { startedAt: 100, total: 41.2, effectsStartedAt: 168, effectsEndedAt: 195.4, rendered: 185, roots: ['Toolbar'], hotPath: ['Toolbar'], components: [{ name: 'Toolbar', count: 1, self: 1, total: 41.2 }] });
+  const both = report([entry('click', 0, 248, 2, 232)], [big, header], [], [input(0, 'click')]).explanation;
+  assert.equal(both.blame.name, 'Toolbar');
+  assert.ok(Math.abs(both.blame.ms! - 95.4) < 0.01, String(both.blame.ms));
+  assert.ok(givesAll(both.cause, [41.2, 26.8, 27.4]), both.cause);
+  // Not the totals across both commits, 31 ms committing and 34 of effects.
+  assert.ok(!givesAll(both.cause, [30.8]) && !givesAll(both.cause, [34.1]), both.cause);
+});
+
+test("a render blame gives the named commit's time in all where some of it would go unsaid", () => {
+  // Catalog: 80.6 ms render, 8.4 committing, 2.4 effects, under a fifth of its 91.4 ms, so neither is said.
+  const list = commit(97, 0, { startedAt: 8, total: 80.6, effectsStartedAt: 97.1, effectsEndedAt: 99.5, rendered: 1899, roots: ['Catalog'], hotPath: ['Catalog'], components: [{ name: 'Catalog', count: 1, self: 5, total: 80.6 }] });
+  const r = report([entry('click', 0, 120, 2, 104)], [list], [], [input(0, 'click')]).explanation;
+  assert.equal(r.blame.name, 'Catalog');
+  assert.ok(Math.abs(r.blame.ms! - 91.4) < 0.01, String(r.blame.ms));
+  assert.ok(givesAll(r.cause, [80.6, 91.4]), r.cause);
+  // A commit with nothing left out says no more than its render.
+  const plain = report([entry('click', 0, 120, 2, 104)], [{ ...list, startedAt: 16.4, effectsStartedAt: null, effectsEndedAt: null }], [], [input(0, 'click')]).explanation;
+  assert.ok(!plain.cause.includes('91 ms'), plain.cause);
 });
 
 test("in a production build, effects that together are most of the working time are said together", () => {
@@ -6295,7 +6359,7 @@ test('a screen update over 100 ms gets its note under another verdict where the 
       [input(0, 'click')],
     ).explanation;
   const onscroll = checkbox(288);
-  assert.equal(onscroll.cause, 'React spent 129 ms re-rendering 737 components inside TableBody.');
+  assert.equal(onscroll.cause, 'React spent 129 ms re-rendering 737 components inside TableBody. That commit took 132 ms with committing and effects.');
   assert.deepEqual(onscroll.notes, [
     'After the handler finished, the screen took another 142 ms to update, mostly because a script (DIV.onscroll, app.js) ran for 130 ms before the next frame, and React rendered inside it: 89 ms re-rendering 721 components inside TableBody.',
   ]);
