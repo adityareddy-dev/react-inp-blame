@@ -1780,9 +1780,13 @@ function explain(r: InteractionReport): Explanation {
       ? `. Scripts ran for ${ms(lateScripted)} of it${lateScript ? `, the longest ${aScript(lateScript.script)} for ${ms(lateScript.ms)}${renderedInside('that one')}` : ''}.`
       : `${browserClause ?? '.'}${longestSaid(lateScript, lateRenderSaid, true)}`;
 
+  // Renders an earlier entry made before this one's input, where that entry painted in a frame of its own: a key's
+  // press committed a moment before its slower release. They are the press's work and none of this entry's.
+  const earlier = r.entries.filter((e) => e.startTime < r.start && Math.abs(e.startTime + e.duration - r.end) > RENDER_GROUP_MS);
+  const pressed = r.commits.filter((x) => x.at < r.start && !near(x.inputTs, r.start) && earlier.some((e) => near(x.inputTs, e.startTime)));
   // The commits of the working time. One the screen update's clause ties to the script it ran in is that
   // script's, or the same render is said twice, once as the script's and once as the handlers'.
-  const inWorkingTime = insideLate.length ? r.commits.filter((x) => !insideLate.includes(x)) : r.commits;
+  const inWorkingTime = r.commits.filter((x) => !insideLate.includes(x) && !pressed.includes(x));
   const c = inWorkingTime.length ? heaviest(inWorkingTime) : null;
   const renderTotal = inWorkingTime.reduce((a, x) => a + x.total, 0);
   /**
@@ -1802,7 +1806,7 @@ function explain(r: InteractionReport): Explanation {
    * counted, though the note is not said for one. The sentences about the working time leave out a render the
    * screen update's clause says was inside a script after it, which the note still counts.
    */
-  const rendersAll = r.commits.filter((x) => !forcedByScript.includes(x) && (x.hasDurations ? x.total > 0 || x.rendered > 0 : carriesWork(x)));
+  const rendersAll = r.commits.filter((x) => !forcedByScript.includes(x) && !pressed.includes(x) && (x.hasDurations ? x.total > 0 || x.rendered > 0 : carriesWork(x)));
   const renders = rendersAll.filter((x) => !insideLate.includes(x));
   const rendersMs = renders.reduce((a, x) => a + x.total, 0);
   /**
@@ -1867,7 +1871,7 @@ function explain(r: InteractionReport): Explanation {
   // render, just not in the working time, and a verdict that names no render says that much. So it does where
   // a press rendered after it painted, before a slower release: the later render's note, right after it, says
   // that render, and said bare the two sentences read as React rendering nothing and then something.
-  const workingOnly = (lateOnly || (!c && r.followUps.some((x) => x.at < r.end))) && !unjoined;
+  const workingOnly = (lateOnly || (!c && (pressed.length > 0 || r.followUps.some((x) => x.at < r.end)))) && !unjoined;
   const noneWorking = workingOnly ? "React didn't render anything in the working time" : renderedNothing;
   /**
    * The window the scripts, and so the forced layout, were counted across. It runs to the end of the
@@ -2838,11 +2842,11 @@ function explain(r: InteractionReport): Explanation {
   const counts = (x: CommitSummary) =>
     carriesWork(x) || committingShows((committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0)) || (blame.kind === 'render' && x === rc) || (blame.kind === 'layout' && x === layoutOwn);
   // The renders the sentences count, and one that counts though the build gave it no time.
-  const counted = r.commits.filter((x) => rendersAll.includes(x) || (!forcedByScript.includes(x) && counts(x)));
+  const counted = r.commits.filter((x) => rendersAll.includes(x) || (!forcedByScript.includes(x) && !pressed.includes(x) && counts(x)));
   const reRenders = counted.filter((x) => x.hydratedTarget == null);
   const rendersSaid = saidAcross && severalRenders(saidAcross) ? counted : reRenders;
   // The Performance panel's Summary gives the same count, and says why it leaves out the rest.
-  const left = r.commits.filter((x) => !rendersSaid.includes(x));
+  const left = r.commits.filter((x) => !rendersSaid.includes(x) && !pressed.includes(x));
   const hydrations = left.filter((x) => x.hydratedTarget != null).length;
   const forced = left.filter((x) => x.hydratedTarget == null && forcedByScript.includes(x)).length;
   countsByReport.set(r, { renders: rendersSaid.length, hydrations, forced, small: left.length - hydrations - forced, between, whereBetween });
