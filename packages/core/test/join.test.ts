@@ -4438,6 +4438,13 @@ test("a render blame says the named commit's committing and effects wherever the
   assert.ok(givesAll(both.cause, [41.2, 26.8, 27.4]), both.cause);
   // Not the totals across both commits, 31 ms committing and 34 of effects.
   assert.ok(!givesAll(both.cause, [30.8]) && !givesAll(both.cause, [34.1]), both.cause);
+  // What the other commits spent, under 1 ms in each of 20, is said without a count of none of them.
+  const board = commit(28, 0, { startedAt: 2, total: 20, effectsStartedAt: 28, effectsEndedAt: 29.5, rendered: 40, roots: ['Board'], hotPath: ['Board'], components: [{ name: 'Board', count: 1, self: 5, total: 20 }] });
+  const cells = Array.from({ length: 20 }, (_, i) => commit(31.4 + 1.5 * i, 0, { startedAt: 30 + 1.5 * i, total: 0.5, rendered: 2, roots: ['Cell'], hotPath: ['Cell'], components: [{ name: 'Cell', count: 2, self: 0.5, total: 0.5 }] }));
+  const spread = report([entry('click', 0, 70, 1, 61)], [board, ...cells], [], [input(0, 'click')]).explanation;
+  assert.equal(spread.blame.name, 'Board');
+  assert.ok(givesAll(spread.cause, [6, 18]), spread.cause);
+  assert.doesNotMatch(spread.cause, /in 0 other/);
 });
 
 test("a render blame gives the named commit's time in all where some of it would go unsaid", () => {
