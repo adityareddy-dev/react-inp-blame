@@ -376,6 +376,9 @@ test('a component that is all its parent rendered and renders the children it wa
   assert.deepEqual([table.hotPath, leafName(table)], [['Page', 'Table'], 'Table']);
   const card = walk(rendered(named('Page'), givenChildren(rendered(named('Card'), ...many('Row', 200))), rendered(named('Footer'), element('p'))));
   assert.deepEqual([card.hotPath, leafName(card)], [['Page', 'Card'], 'Card']);
+  // Nor is one given a toolbar as children that renders its own rows beside it.
+  const grid = walk(rendered(named('Page'), givenChildren(rendered(named('DataTable'), rendered(named('Toolbar'), element('div')), ...many('Row', 200)))));
+  assert.deepEqual([grid.hotPath, leafName(grid)], [['Page', 'DataTable'], 'DataTable']);
   // Where something below the wrapper carries most of it, the path goes on to it and names it.
   const layout = walk(rendered(named('App'), givenChildren(rendered(named('Layout'), rendered(named('Header'), element('h1')), rendered(named('Orders'), ...many('Row', 200))))));
   assert.deepEqual([layout.hotPath, leafName(layout), layout.pathRendered], [['App', 'Layout', 'Orders'], 'Orders', 201]);
