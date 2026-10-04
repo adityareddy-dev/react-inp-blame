@@ -1775,7 +1775,7 @@ function explain(r: InteractionReport): Explanation {
     frameLayout >= browserShare
       ? `, mostly the browser recalculating styles and layout and painting the frame: ${ms(frameLayout)}.`
       : unscripted >= browserShare
-        ? `${lateScript ? ':' : '. No script ran for long in that time:'} ${ms(unscripted)} of it was the browser's own work on the main thread, ${HEDGE} recalculating styles and layout for what changed.`
+        ? `${lateScript ? ':' : '. No script ran for long in that time:'} ${ms(unscripted)} of it was the browser's own work on the main thread, ${HEDGE} recalculating styles and layout.`
         : null;
   // The script is what the screen update waited on from half of it. Under that it is said after the
   // browser's own work, with any render inside it, and said where the browser gave it no name too: a 20 ms

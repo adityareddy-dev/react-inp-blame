@@ -841,7 +841,7 @@ test("where the working time was longer, the screen update's note says the frame
       const unheld = quickKeys(44, next, at, [...late]);
       assert.deepEqual([unheld.blame, unheld.cause], [held.blame, held.cause], `at ${at}`);
       assert.deepEqual(unheld.notes, [
-        "After the handler finished, the screen took another 90 ms to update: 46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 44 ms.",
+        "After the handler finished, the screen took another 90 ms to update: 46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout. The longest script the browser recorded in that time was DIV#root.onkeydown (app.js), 44 ms.",
       ], `at ${at}`);
     }
   }
@@ -851,7 +851,7 @@ test("where the working time was longer, the screen update's note says the frame
   // this key's script.
   const two = { inputType: 'keydown', hasDurations: false, total: 0, rendered: 2, roots: ['Editor'], hotPath: ['Editor'], components: [{ name: 'Row', count: 2, self: null, total: null }] };
   for (const [ms, said] of [
-    [44, "46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed."],
+    [44, "46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout."],
     [60, 'the frame waited on the next key press, which the page handled first.'],
   ] as const) {
     for (const [at, stamp] of [[1186.2, commit(1185.9, 1000, two)], [1182.3, commit(1181.9, 1060, { ...two, inputType: 'keyup' })]] as const) {
@@ -1262,7 +1262,7 @@ test("where the working time was longer, the screen update's note says the frame
     const under = dispatched(invoker, [mouse], 44);
     assert.deepEqual([under.blame, under.cause], [held.blame, held.cause], invoker);
     assert.deepEqual(under.notes, [
-      `After the handler finished, the screen took another 90 ms to update: 46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was ${invoker} (app.js), 44 ms.`,
+      `After the handler finished, the screen took another 90 ms to update: 46 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout. The longest script the browser recorded in that time was ${invoker} (app.js), 44 ms.`,
     ], invoker);
     const clicked = checkbox(56, [], invoker, 106);
     assert.deepEqual(clicked.blame, { kind: 'script', name: invoker, detail: null, ms: 56, confidence: 'measured' }, invoker);
@@ -3036,7 +3036,7 @@ test('a click whose only render ran after the handlers is weighed as one React r
   assert.deepEqual(passedOver.blame, { ...handler, kind: 'script', ms: 22 });
   assert.equal(passedOver.cause, "React didn't render anything; the click handler handleSave ran for 22 ms.");
   assert.deepEqual(passedOver.notes, [
-    "After the handler finished, the screen took another 100 ms to update: 50 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 49 ms.",
+    "After the handler finished, the screen took another 100 ms to update: 50 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 49 ms.",
   ]);
 });
 
@@ -6381,7 +6381,7 @@ test('a screen update no script took is put on the browser recalculating styles 
   const click = report([entry('click', 0, 232, 1, 2)], [], [frame(0, 214, [], 214)], [input(0, 'click')]);
   assert.equal(
     click.explanation.cause,
-    "After the click was handled, the screen took another 230 ms to update. No script ran for long in that time: 212 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed.",
+    "After the click was handled, the screen took another 230 ms to update. No script ran for long in that time: 212 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout.",
   );
 
   // Where the frames saw less than half of it, nothing is said of why, as before.
@@ -6429,7 +6429,7 @@ test('a script after the handlers is what held the screen update only from half 
   assert.equal(unscripted.explanation.blame.name, null);
   assert.equal(
     unscripted.explanation.cause,
-    "After the click was handled, the screen took another 370 ms to update: 220 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 150 ms.",
+    "After the click was handled, the screen took another 370 ms to update: 220 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout. The longest script the browser recorded in that time was TimerHandler:setTimeout (app.js), 150 ms.",
   );
   // A script the browser gave no name is said all the same, with no render inside it.
   const unnamed = report(
@@ -6854,7 +6854,7 @@ test("a verdict does not say no long task was recorded where the screen update's
   assert.equal(part.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 30 ms before the handler started.");
   assert.deepEqual(part.notes, [
     'It also waited 120 ms before the handler could start, because the main thread was busy.',
-    "After the handler finished, the screen took another 130 ms to update: 90 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout for what changed. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms.",
+    "After the handler finished, the screen took another 130 ms to update: 90 ms of it was the browser's own work on the main thread, most likely recalculating styles and layout. The longest script the browser recorded in that time was DIV.onscroll (app.js), 40 ms.",
   ]);
   const most = timerIn(115);
   assert.equal(most.cause, "React didn't render anything; a script (TimerHandler:setTimeout, app.js) ran for 115 ms before the handler started.");
