@@ -161,11 +161,13 @@
   commit's `components` and its `hotPath`; the path spends its twelve steps only on names a reader could
   search for, passing a library's layers between them (a Slot, `Primitive.div`, a Provider, a wrapper named
   after the component it renders) without spending one, and a render is named after the deepest searchable
-  name on it, so it reaches the component below those layers where there is
-  one. Where React's times on the path show that name took under half of the render (every name above it
-  holds it, so the smallest of their totals bounds it), the render is named after the component it started
-  from, and the cause still says the deeper one. A build with no durations always takes the deepest name. A name with the `$1` that Vite's development server and Rolldown add to one that clashes
-  (`Dt$1`) is judged without it. The component emotion renders beside every element @emotion/styled or the
+  name on it, so it reaches the component below those layers where there is one. Where React's times on the
+  path show that name took under half of the render (every name above it holds it, so the smallest of their
+  totals bounds it), the render is named after the component it started from, and the cause still says the
+  deeper one. A build with no durations always takes the deepest name. A component the walk found no name
+  for is never the name: a render or layout whose path ends there with nothing above it to take is named
+  `'the app'`, and nothing is said to be mostly made of it. A name with the `$1` that Vite's development
+  server and Rolldown add to one that clashes (`Dt$1`) is judged without it. The component emotion renders beside every element @emotion/styled or the
   `css` prop styles, to insert its styles, is not counted.
 - **A styling library's wrapper is named the way the library names one it was given no label for**, whatever
   label it has: MUI's `MuiButtonBaseRoot` reads `Styled(button)`, a styled-components wrapper its Babel or SWC

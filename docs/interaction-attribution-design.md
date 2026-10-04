@@ -1466,13 +1466,16 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   the verdict as its tooltip and the phases as properties. It is named after the component the
   heaviest commit's render went to (since 0.23.0, for a layout blame, the commit it names), or since 0.20.0
   after the component a layout blame is named after where that is where the same commit's render started: the shadcn/ui Sheet's close read
-  "160 ms click · DismissableLayer" beside a tooltip that blamed Dialog. It is a
+  "160 ms click · DismissableLayer" beside a tooltip that blamed Dialog. Since 0.23.0 a render blame named where
+  its render started takes that name too. It is a
   `performance.measure` with a `devtools` detail, because `console.timeStamp` carries no
   tooltip: a seventh argument reaches the trace as an empty field in Chromium 147. Its count of
   renders before the paint is the one the verdict's "React rendered 3 times" makes, which
   `join.ts` works out once for both, and it says what that leaves out and why ("2, a hydration,
   and 3 too small to count"): on the shadcn/ui Sheet the tooltip said 3 and the Summary 6, for
-  the six commits the renders track drew. A render whose committing or effects were worth
+  the six commits the renders track drew. Since 0.23.0 a render a key's press committed just before its
+  release, where the press painted in a frame of its own, is in neither the count nor what it leaves out,
+  since it is the press's work, though the renders track still draws it. A render whose committing or effects were worth
   saying, or the one a render blame names, or a layout blame's subtree is, is never too small to
   count, or a 3 ms render whose useEffect ran for 300 ms was blamed in the tooltip and too small
   in the Summary. Its handlers and React rendering row is the working time, with this library's
