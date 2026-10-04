@@ -2199,18 +2199,18 @@ function explain(r: InteractionReport): Explanation {
         : `In ${ms(r.processing)} of working time, short of a long task, React was ${renderPhrase(sc)}`
       : null;
   // One bar both chooses the commit a render blame names and says its committing and effects.
-  const phasesWorthSaying = (x: CommitSummary) => {
-    const t = (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
-    return t >= COMMIT_PHASES_MIN_MS && t >= COMMIT_PHASES_MIN_SHARE * own(x);
-  };
+  const afterRender = (x: CommitSummary) => (committingOf.get(x) ?? 0) + (effectsOf.get(x) ?? 0);
+  const phasesWorthSaying = (x: CommitSummary) => afterRender(x) >= COMMIT_PHASES_MIN_MS && afterRender(x) >= COMMIT_PHASES_MIN_SHARE * own(x);
   // The commit a render blame names is the one React spent longest on, committing and effects included where
   // they count (below), so a 1 ms render whose layout effects ran for 200 ms is named over a 30 ms render. Where
   // no commit has a span this is the heaviest render, as everywhere else. A commit's committing and effects
   // only count for it where they are worth a mention, across the commits (`committingMatters`) or beside its
   // own render (`phasesWorthSaying`), or a 27 ms render with 4 ms of effects nobody hears about is named over a
-  // 30 ms render. Without durations a commit is only named over the one with the most components when its
-  // effects are what earned the blame.
-  const ranked = (x: CommitSummary) => (committingMatters || phasesWorthSaying(x) ? own(x) : x.total);
+  // 30 ms render. Once one commit's are, any commit's from 5 ms count for it too, so a larger render never loses
+  // its own for being larger. Without durations a commit is only named over the one with the most components
+  // when its effects are what earned the blame.
+  const anyWorth = inWorkingTime.some(phasesWorthSaying);
+  const ranked = (x: CommitSummary) => (committingMatters || (anyWorth && afterRender(x) >= COMMIT_PHASES_MIN_MS) ? own(x) : x.total);
   const rc = !c ? c : hasDurations ? inWorkingTime.reduce((a, x) => (ranked(x) > ranked(a) ? x : a), c) : effectsEarn ? inWorkingTime.reduce((a, x) => (own(x) > own(a) ? x : a), c) : (heldRender ?? c);
   // Under the bar the render is bounded by the script the frame measured holding it, not by the working time.
   const heldBy = rc && rc === heldRender ? measuredHolder(rc) : null;
