@@ -4419,6 +4419,14 @@ test("committing and effects worth saying beside a commit's render choose it, wh
   // Toolbar at 15.5 ms in all still beats Nav at 16.2, since Nav's 2 ms are not worth saying.
   const smaller = report(click, [nav, menu, { ...toolbar, startedAt: 26.1, total: 7.5 }], [], [input(0, 'click')]).explanation;
   assert.equal(smaller.blame.name, 'Toolbar');
+  // Both commits' 9 ms of committing or effects count once either's are worth saying, so the grid's larger render
+  // is not named under the filters' just for being larger: 40 + 9 against 32 + 9.
+  const grid = commit(51, 0, { startedAt: 2, total: 40, rendered: 300, roots: ['Grid'], hotPath: ['Grid'], components: [{ name: 'Grid', count: 1, self: 3, total: 40 }] });
+  const filters = commit(84, 0, { startedAt: 52, total: 32, effectsStartedAt: 84, effectsEndedAt: 93, rendered: 120, roots: ['Filters'], hotPath: ['Filters'], components: [{ name: 'Filters', count: 1, self: 2, total: 32 }] });
+  const larger = report([entry('click', 0, 112, 1, 95)], [grid, filters], [], [input(0, 'click')]).explanation;
+  assert.equal(larger.blame.name, 'Grid');
+  assert.ok(Math.abs(larger.blame.ms! - 49) < 0.01, String(larger.blame.ms));
+  assert.ok(givesAll(larger.cause, [40, 49]), larger.cause);
 });
 
 test("a render blame says the named commit's committing and effects wherever they are worth saying beside its render", () => {
