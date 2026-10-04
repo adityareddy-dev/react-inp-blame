@@ -320,8 +320,9 @@ tree loses the page and the layout rather than the component that renders what w
 node has no React fiber or no named component above it, which is web-vitals' signal to fall back to
 its own selector, and it never throws. `attributeINP(metric)` returns the
 metric's attribution (`{}` where there is none) with a frozen `react` field added, from this
-library's report for that interaction: the blame with its confidence, the handler, the hot path, the
-heaviest commit's components, and what React rendered before and after the paint. It is `null` when
+library's report for that interaction: the blame with its confidence, the handler, the hot path and
+components of the heaviest commit, or of the commit a layout blame names, and what React rendered
+before and after the paint. It is `null` when
 nothing is installed and when there is no report for that interaction, one that stayed under
 `threshold`, one already pushed out of the 50 a page keeps (never one of the ten slowest or one INP
 can still point at), or one the library dropped after an error of its own. It is `null` too for a
