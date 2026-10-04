@@ -84,7 +84,9 @@ export interface CommitSummary {
    * The chain that carries most of the work, outermost first, every name on it as it stands. It spends at
    * most twelve steps below the component it starts from, on the components a reader could search for: a
    * library's layers between them (`Primitive.div`, a Slot, a Provider, a wrapper named after the component
-   * it renders) are on the chain but spend no step. For a production walk cut at `walkBudget`, whose counts
+   * it renders) are on the chain but spend no step. So does a component that is all its parent rendered and
+   * renders the children it was given, such as a dialog root round a component's whole return, and where
+   * nothing below it is named the chain ends at that parent. For a production walk cut at `walkBudget`, whose counts
    * cannot choose among subtrees it reached in part or not at all, it stops at its one subtree where
    * nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
    * under, or empty where they sit under none. A timed walk cut there, which never reached the roots past
