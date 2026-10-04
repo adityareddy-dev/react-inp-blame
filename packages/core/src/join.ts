@@ -1234,7 +1234,7 @@ function renderVerb(c: CommitSummary): string {
  */
 export function blamedCommit(r: InteractionReport): CommitSummary | null {
   const { kind, name, detail } = r.explanation.blame;
-  const fromStart = (x: CommitSummary) => (kind === 'layout' || (kind === 'render' && namedFromStart(x))) && fromName(x) !== null && fromName(x) === name && mostlyOf(x, false) === detail;
+  const fromStart = (x: CommitSummary) => (kind === 'layout' ? layoutFrom(x) : kind === 'render' && fromName(x)) === name && mostlyOf(x, false) === detail;
   const started = r.commits.filter(fromStart);
   const named = started.length ? started : r.commits.filter((x) => leafOf(x) === name && mostlyOf(x) === detail);
   return named.length ? heaviest(named) : r.commits.length ? heaviest(r.commits) : null;
@@ -1263,6 +1263,14 @@ function fromName(c: CommitSummary): string | null {
   const top = dominantComponent(c);
   return insideCount(c) != null && !(top && top.count > 1 && top.name === leafOf(c)) ? startName(c) : null;
 }
+
+/**
+ * What a layout blame is named after where something holds the whole commit, since nothing names the read that
+ * forced the layout and it can be anywhere React rendered: where the render started (`fromName`), else, where
+ * several roots rendered, the component they all sit under (`above`), the app where they sit under none.
+ * Undefined where the end of the path is all there is to go on, as on a report stored before `above`.
+ */
+const layoutFrom = (c: CommitSummary): string | undefined => fromName(c) ?? (c.pathStart === 'heaviest-root' ? (c.above === null ? 'the app' : c.above) : undefined);
 
 /** Whether a render blame is named where the render started: the times on its hot path show its end took under half of it. */
 function namedFromStart(c: CommitSummary): boolean {
@@ -2560,7 +2568,7 @@ function explain(r: InteractionReport): Explanation {
     saidAcross = told;
     // The hot path says where the render went, not where the read was, so where the sentence says it went
     // from a component that holds the whole commit (`fromName`) that is the subtree named, with the whole count.
-    const whole = inTheSubtree ? fromName(subtree) : null;
+    const whole = inTheSubtree ? layoutFrom(subtree) : null;
     const name = inTheSubtree
       ? (whole ?? leafOf(subtree))
       : !read.untied && holdsMostOfIt && charged
@@ -2684,7 +2692,10 @@ function explain(r: InteractionReport): Explanation {
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
-    const fromStart = namedFromStart(rc);
+    // As a layout is, where React's render was under half of what its commit took: the committing and the effects
+    // can be anywhere it rendered. On plate, a 3 ms close of a dialog whose commit took 27 ms more was named after
+    // a list group deep inside it.
+    const fromStart = namedFromStart(rc) || (hasDurations && rc.total * 2 < own(rc) && fromName(rc) !== null);
     blame = { kind: 'render', name: fromStart ? fromName(rc)! : leafOf(rc), detail: effectsLed ? `useEffect callbacks${effectsDetail}` : mostlyOf(rc, !fromStart), ms: hasDurations ? own(rc) : null, confidence };
   } else if (untimedHandler && !waitingWins) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list

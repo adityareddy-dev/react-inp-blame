@@ -1120,9 +1120,9 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   const fellBack =
     rootTotal - renderTime > performedRoots.reduce((a, t) => Math.max(a, t.total), 0) ||
     (!hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber)));
+  const above = sharedAncestor(top);
   if (fellBack) {
-    const shared = sharedAncestor(top);
-    if (shared) hotPath.push(shared);
+    if (above) hotPath.push(above);
   } else if (performedRoots.length) {
     let cur = performedRoots.reduce((a, b) => (metric(b) > metric(a) ? b : a));
     hotPath.push(cur.name);
@@ -1184,6 +1184,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     roots: Object.freeze([...new Set(performedRoots.map((a) => a.name))].slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),
     pathStart,
+    above,
     startRendered,
     pathRendered,
     strictMode: strict,
