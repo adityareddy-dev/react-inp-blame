@@ -110,7 +110,8 @@ they share none. `'no-root'`: the walk reached no component that rendered, eithe
 none or because it stopped first (then `truncated` is true). hotPath is empty and `rendered` is 0. It is
 absent only on a report from before 0.21.0 (0.20.0 and 0.21.0 share schemaVersion 4). These four are all
 there are in 1.x. A render blame built on a commit whose `pathStart` is `'unknown-root'` or `'no-root'` is
-named `'the app'`.
+named `'the app'`, and so is one whose path, or its first root where the path is empty, ends in a component
+the walk found no name for, where nothing else on the path is a name the blame would take.
 
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when that
 function has no name worth printing. An inline `onClick={() => ...}` therefore reads as `onClick`, and so

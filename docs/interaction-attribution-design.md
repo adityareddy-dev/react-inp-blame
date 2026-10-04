@@ -1003,10 +1003,13 @@ DismissableLayer, and until 2026-09-28 the layout was named after DismissableLay
 components". The read was Radix's `Presence` reading `animationName` in a layout effect, in four
 Presences, and none of them is inside DismissableLayer: the content's own sits above it and the
 overlay's beside it. It is named after Dialog now, with "56 components".
-Since 0.20.0 that is only where the commit in the scripts that forced the layout is the one the
-sentence describes. Beside a 500-row Table rendered in a later script the cause says only the Table's
-render, so a blame named after Dialog named a component the cause never mentions, and the component
-the render is named after is kept there, as in 0.18.0.
+From 0.20.0 to 0.22.0 that was only where the commit in the scripts that forced the layout was the one
+the sentence described. Beside a 500-row Table rendered in a later script the cause said only the Table's
+render, so a blame named after Dialog named a component the cause never mentioned, and the component
+the render is named after was kept there, as in 0.18.0. Since 0.23.0 the sentence describes the commit the
+blame names, so beside that Table it reads Dialog again and says Dialog's render. Where several commits ran
+in the scripts that forced the layout, the one named is the one whose time could hold most of it, and where
+none could hold half of it no subtree is named.
 Where the path starts at one that does not hold the whole commit (the Sheet's opening, whose path
 starts at one of two Portals) or at a name a reader could not search for, the component the render
 is named after is kept, and so it is where that one holds all of it itself, or is the one rendered
@@ -1802,13 +1805,16 @@ panel (128+) draws as custom tracks, in a "react-inp-blame" group beside React's
   the verdict as its tooltip and the phases as properties. It is named after the component the
   heaviest commit's render went to (since 0.23.0, for a layout blame, the commit it names), or since 0.20.0
   after the component a layout blame is named after where that is where the same commit's render started: the shadcn/ui Sheet's close read
-  "160 ms click · DismissableLayer" beside a tooltip that blamed Dialog. It is a
+  "160 ms click · DismissableLayer" beside a tooltip that blamed Dialog. Since 0.23.0 a render blame named where
+  its render started takes that name too. It is a
   `performance.measure` with a `devtools` detail, because `console.timeStamp` carries no
   tooltip: a seventh argument reaches the trace as an empty field in Chromium 147. Its count of
   renders before the paint is the one the verdict's "React rendered 3 times" makes, which
   `join.ts` works out once for both, and it says what that leaves out and why ("2, a hydration,
   and 3 too small to count"): on the shadcn/ui Sheet the tooltip said 3 and the Summary 6, for
-  the six commits the renders track drew. A render whose committing or effects were worth
+  the six commits the renders track drew. Since 0.23.0 a render a key's press committed just before its
+  release, where the press painted in a frame of its own, is in neither the count nor what it leaves out,
+  since it is the press's work, though the renders track still draws it. A render whose committing or effects were worth
   saying, or the one a render blame names, or a layout blame's subtree is, is never too small to
   count, or a 3 ms render whose useEffect ran for 300 ms was blamed in the tooltip and too small
   in the Summary. Its handlers and React rendering row is the working time, with this library's
