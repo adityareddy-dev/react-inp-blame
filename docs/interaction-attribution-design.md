@@ -1467,7 +1467,9 @@ all of it; a Long Animation
 Frames script from 20 ms; waiting, painting and
 working time known only by counts from 50 ms, the length of a long task, with painting blamed under that
 only where the frame waited on the next interaction's press, as above, and the screen update was the
-larger part of the interaction. The screen update's sentence says what held it where a long animation frame
+larger part of the interaction, and waiting blamed under that only where the whole wait came after the handlers
+of an earlier entry of the interaction that painted on its own, and before that paint, and the wait was the
+largest phase and at least half the interaction (since 0.23.0). The screen update's sentence says what held it where a long animation frame
 saw it: the longest script after the handlers, from 20 ms and half the screen update, with any React render
 that committed inside it and began there (a render react-virtual's scroll listener forced with `flushSync`,
 which is then not counted in the working time before it); or, with no such script, the browser's own work from
