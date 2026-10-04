@@ -1139,13 +1139,13 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
       if (next.name !== cur.name) hotPath.push(next.name);
       // A component that is all its parent rendered and hands the very children it was given to the one component
-      // it renders is passed: what is inside it is the parent's. On Cap, Radix's Dialog root round AdminNavItems' whole
-      // return was named.
+      // it renders is passed, below a component the path can name: what is inside it is that one's. On Cap, Radix's
+      // Dialog root round AdminNavItems' whole return was named.
       // A library's layer, and a wrapper named after the component it renders (shadcn's Label over
       // Radix's), is named on the path but spends no step: the steps go on the components a reader could
       // search for, and the render is named after the deepest of them.
       const given = next.fiber.memoizedProps?.children;
-      if (given && cur.kids.length < 2 && next.kids.length === 1 && next.kids[0]!.fiber.memoizedProps?.children === given) wrapped = true;
+      if (named && given && cur.kids.length < 2 && next.kids.length === 1 && next.kids[0]!.fiber.memoizedProps?.children === given) wrapped = true;
       else if (!passedLayer(next.name) && next.name !== named?.name) {
         named = next;
         steps++;

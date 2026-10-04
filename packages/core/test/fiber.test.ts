@@ -413,6 +413,15 @@ test('a component given children that builds what it renders from something else
   );
 });
 
+test('where the path starts at a Provider round a wrapper, the render is named after the wrapper and counted inside it', () => {
+  // ThemeProvider > Radix's Dialog root > DialogProvider > the dialog's 30 components. Nothing above the Dialog
+  // could be named, so the path was cut back to ThemeProvider, counting 31 of the 33 it holds.
+  const children = {};
+  const dialog = Object.assign(rendered(named('Dialog'), Object.assign(rendered(named('DialogProvider'), element('div', ...Array.from({ length: 30 }, () => rendered(named('Item'))))), { memoizedProps: { children } })), { memoizedProps: { children } });
+  const c = walk(rendered(named('ThemeProvider'), dialog));
+  assert.deepEqual([c.hotPath, leafName(c), c.pathRendered, c.rendered], [['ThemeProvider', 'Dialog', 'DialogProvider'], 'Dialog', 32, 33]);
+});
+
 test('a commit says how many components sit under the root its hot path starts from, which is one root among several', () => {
   // A store with a subscriber in each part of the page (jotai, Redux, Zustand) re-renders each from its own
   // root in one commit. The path starts at the heaviest, so "from Dashboard down" would claim the count.
