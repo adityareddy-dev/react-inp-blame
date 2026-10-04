@@ -110,6 +110,8 @@ const FORCED_LAYOUT_MIN_MS_NO_DURATIONS = HANDLER_MIN_MS;
 const FORCED_LAYOUT_ONE_SCRIPT_SHARE = 0.9;
 // The screen update gets a note of its own over 100 ms, half of INP's 200 ms budget for "good".
 const PRESENTATION_NOTE_MS = 100;
+// A render under a long task that the screen update outran gets a note where the working time was half of that update.
+const OUTRAN_RENDER_MIN_SHARE = 0.5;
 // Where no script after the handlers held half of the screen update, it is put on the browser's own work
 // from half of it, the share that lets a script name a wait.
 const BROWSER_WORK_MIN_SHARE = 0.5;
@@ -2891,6 +2893,8 @@ function explain(r: InteractionReport): Explanation {
   // and its own time is already in the cause. It goes ahead of the wait's note, so its "before that" is not read
   // as before the wait.
   if (closedByTheScreen && blame.kind === 'painting') notes.push(closedByTheScreen);
+  // Short of a long task the count has no rung to stand in for, so it is said as it is.
+  else if (blame.kind === 'painting' && shortOf && r.processing >= OUTRAN_RENDER_MIN_SHARE * r.presentation) notes.push(`${shortOf}.`);
   // A long wait under any other verdict is said whatever React rendered: a 70 ms wait before a 98 ms handler went
   // unsaid beside a 2 ms render, or none, and was said beside a 10 ms one. Under a verdict that is the wait, it
   // is already said, and so it is under a script said to have run before the handler started.

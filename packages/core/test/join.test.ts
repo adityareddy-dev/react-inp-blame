@@ -2343,6 +2343,8 @@ test('two interactions of the same shape get the same verdict, whatever the comp
   assert.deepEqual(calendar.explanation.blame, painting);
   assert.deepEqual(theme.explanation.blame, painting);
   assert.equal(calendar.explanation.cause, theme.explanation.cause);
+  // Nor do the notes say the count: 5 ms of working time is not half of the screen update.
+  assert.ok(!calendar.explanation.notes.some((n) => n.includes('short of a long task')), calendar.explanation.notes.join(' | '));
 
   // A render is still the answer where the working time is what the interaction spent.
   const working = report([entry('click', 0, 120, 3, 100)], [paging], [], ring);
@@ -4230,11 +4232,65 @@ test("the note under a screen update reads as a sentence for a production build'
   const r = report([entry('click', 1000, 250, 1003, 1063)], [rows], null, draw({ owners: ['Table'] }));
   assert.equal(r.explanation.blame.kind, 'painting');
   assert.ok(r.explanation.notes.some((n) => /^React was most likely still re-rendering 400 components inside Table.* in the 60 ms of working time before that\./.test(n)), r.explanation.notes.join(' | '));
-  // Under a long task of working time the count would not have named the render, so there is no rung for
-  // the note to stand in for.
+  // Under a long task of working time and a screen update more than twice as long, the count is not said.
   const quick = report([entry('click', 1000, 250, 1003, 1043)], [rows], null, draw({ owners: ['Table'] }));
   assert.equal(quick.explanation.blame.kind, 'painting');
-  assert.ok(!quick.explanation.notes.some((n) => n.includes('still re-rendering')), quick.explanation.notes.join(' | '));
+  assert.ok(!quick.explanation.notes.some((n) => n.includes('still re-rendering') || n.includes('short of a long task')), quick.explanation.notes.join(' | '));
+});
+
+test("a screen update that outran a production render under a long task says that render where the working time was at least half of it", () => {
+  const painting = (ms: number) => ({ kind: 'painting', name: null, detail: null, ms, confidence: 'measured' });
+  // 49 ms of working time once the 1.6 ms walk is taken off, then 61 ms of screen update, and nothing measured the handler.
+  const tiles = commit(1071.3, 1000, { hasDurations: false, total: 0, rendered: 1899, roots: ['Results'], hotPath: ['Results'], components: [{ name: 'Tile', count: 278, self: null, total: null }], walkMs: 1.6 });
+  for (const frames of [[], null]) {
+    const r = report([entry('click', 1000, 136, 1024.3, 1075)], [tiles], frames, draw({ owners: ['Results'] }));
+    assert.equal(Math.round(r.processing * 10) / 10, 49.1);
+    assert.deepEqual(r.explanation.blame, painting(61));
+    assert.ok(r.explanation.notes.some((n) => /^In 49 ms of working time, short of a long task, React was re-rendering 1899 components inside Results.*\.$/.test(n)), r.explanation.notes.join(' | '));
+  }
+  // 49 and 50 ms of working time under a 76 ms screen update both say the 400 rows.
+  const rows = commit(1030, 1000, { hasDurations: false, total: 0, rendered: 400, roots: ['Table'], hotPath: ['Table'], components: [{ name: 'Row', count: 400, self: null, total: null }] });
+  const under = report([entry('click', 1000, 128, 1003, 1052)], [rows], null, draw({ owners: ['Table'] }));
+  assert.equal(under.explanation.blame.kind, 'painting');
+  assert.ok(under.explanation.notes.some((n) => /^In 49 ms of working time, short of a long task, React was re-rendering 400 components inside Table/.test(n)), under.explanation.notes.join(' | '));
+  const over = report([entry('click', 1000, 128, 1003, 1053)], [rows], null, draw({ owners: ['Table'] }));
+  assert.equal(over.explanation.blame.kind, 'painting');
+  assert.ok(over.explanation.notes.some((n) => /still re-rendering 400 components inside Table/.test(n)), over.explanation.notes.join(' | '));
+  // 22 ms of working time under a 114 ms screen update is less than half of it: the count is not said.
+  const nameless = commit(1016.4, 1000, {
+    hasDurations: false,
+    total: 0,
+    rendered: 386,
+    roots: ['(anonymous)'],
+    hotPath: ['(anonymous)'],
+    components: [
+      { name: '(anonymous)', count: 300, self: null, total: null },
+      { name: 'Presence', count: 25, self: null, total: null },
+    ],
+  });
+  const closed = report([entry('click', 1000, 136, 1000, 1022)], [nameless], [], draw());
+  assert.deepEqual(closed.explanation.blame, painting(114));
+  assert.ok(!closed.explanation.notes.some((n) => n.includes('short of a long task')), closed.explanation.notes.join(' | '));
+  // At 40 of 56 ms it is said, and a render the walk found no name for is never said as (anonymous).
+  const open = report([entry('click', 1000, 96, 1000, 1040)], [nameless], [], draw());
+  assert.equal(open.explanation.blame.kind, 'painting');
+  assert.ok(open.explanation.notes.some((n) => /^In 40 ms of working time, short of a long task, React was re-rendering 386 components inside the app/.test(n)), open.explanation.notes.join(' | '));
+  assert.doesNotMatch([open.explanation.cause, ...open.explanation.notes].join(' '), /anonymous/);
+});
+
+test("a screen update that waited on the next key press says a production render under a long task where the working time was at least half of it", () => {
+  // A keyup with 25 ms of handlers and 46 ms of screen update, which the next key's render filled from the end of the handlers.
+  const rows = commit(1120, 1100, { inputType: 'keyup', hasDurations: false, total: 0, rendered: 400, roots: ['Table'], hotPath: ['Table'], components: [{ name: 'Row', count: 400, self: null, total: null }] });
+  const ring = [input(1000, 'keydown'), input(1100, 'keyup', { gestureTs: 1000, handler: 'onKeyUp', owners: ['Table'] }), input(1127, 'keydown', worked(1165))];
+  const keyup = (end: number) => report([entry('keyup', 1100, 72, 1101, end)], [rows], [], ring).explanation;
+  const waited = keyup(1126);
+  assert.deepEqual(waited.blame, { kind: 'painting', name: null, detail: null, ms: 46, confidence: 'measured' });
+  assert.match(waited.cause, /waited on the next key press/);
+  assert.ok(waited.notes.some((n) => /^In 25 ms of working time, short of a long task, React was re-rendering 400 components inside Table/.test(n)), waited.notes.join(' | '));
+  // 20 ms of handlers under a 51 ms screen update is less than half of it.
+  const short = keyup(1121);
+  assert.equal(short.blame.kind, 'painting');
+  assert.ok(!short.notes.some((n) => n.includes('short of a long task')), short.notes.join(' | '));
 });
 
 test('in a production build, effects that are a minority of the working time leave the handler the blame and come off its time', () => {
@@ -4515,9 +4571,13 @@ test('a render is said to be mostly one component only where that component is h
   assert.match(presence.cause, /^React was most likely re-rendering 56 components inside Presence, in the 97 ms of working time\. /);
 
   // Half of the components is enough, and so is half of the render's time.
-  assert.match(counted(460, ['CommandList'], [['(anonymous)', 422], ['CommandItem', 20]]).cause, /re-rendering 460 components inside CommandList, mostly \(anonymous\) \(422 of them\), in the 97 ms of working time\. /);
-  const typed = report(click, [commit(50, 0, { hasDurations: false, total: 0, rendered: 4, roots: ['CommandInput'], hotPath: ['CommandInput'], components: [{ name: '(anonymous)', count: 2, self: null, total: null }, { name: 'Primitive.input', count: 1, self: null, total: null }] })], []).explanation;
-  assert.match(typed.cause, /re-rendering 4 components inside CommandInput, mostly \(anonymous\) \(2 of them\)\)/);
+  assert.match(counted(460, ['CommandList'], [['CommandRow', 422], ['CommandItem', 20]]).cause, /re-rendering 460 components inside CommandList, mostly CommandRow \(422 of them\), in the 97 ms of working time\. /);
+  const typed = report(click, [commit(50, 0, { hasDurations: false, total: 0, rendered: 4, roots: ['CommandInput'], hotPath: ['CommandInput'], components: [{ name: 'CommandIcon', count: 2, self: null, total: null }, { name: 'Primitive.input', count: 1, self: null, total: null }] })], []).explanation;
+  assert.match(typed.cause, /re-rendering 4 components inside CommandInput, mostly CommandIcon \(2 of them\)\)/);
+  // Not where that component is one the walk found no name for: the count is said in its place.
+  const nameless = counted(460, ['CommandList'], [['(anonymous)', 422], ['CommandItem', 20]]);
+  assert.match(nameless.cause, /re-rendering 460 components inside CommandList, in the 97 ms of working time\. /);
+  assert.equal(nameless.blame.detail, '460 components');
   const rows = report(
     [entry('click', 0, 48, 3, 30)],
     [
