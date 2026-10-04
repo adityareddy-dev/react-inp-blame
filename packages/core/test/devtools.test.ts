@@ -296,6 +296,24 @@ test("the interaction entry takes the start a layout blame is named after, where
   assert.equal(label(started), '160 ms click · Dialog');
 });
 
+test('the interaction entry takes the commit a layout blame names where that is not the heaviest, and the heaviest path stays the heaviest', () => {
+  // Opening a menu, production build: 44 ms of layout forced in one script across four commits. The menu's
+  // commit could hold it; the sidebar's rendered the most.
+  const press = { ...click, name: 'pointerdown', duration: 72, processingStart: 1.1, processingEnd: 59.9 };
+  const one = (name: string, count: number) => [{ name, count, self: null, total: null }];
+  const sidebar = commit(3.8, { rendered: 295, mounted: 0, roots: ['Sidebar'], hotPath: ['Sidebar'], startRendered: 295, pathRendered: 295, components: one('NavItem', 24), effectsStartedAt: 4.6, effectsEndedAt: 4.7 });
+  const portal = commit(9.3, { rendered: 96, mounted: 95, roots: ['Portal'], hotPath: ['Portal'], components: one('Slot', 9), effectsStartedAt: 9.4, effectsEndedAt: 11.4 });
+  const menu = commit(36.5, { rendered: 185, mounted: 0, roots: ['Header'], hotPath: ['Header', 'Menu', 'MenuContent'], startRendered: 185, pathRendered: 80, components: one('MenuItem', 13), effectsStartedAt: 36.8, effectsEndedAt: 57.4 });
+  const layer = commit(57.9, { rendered: 15, mounted: 0, roots: ['Layer'], hotPath: ['Layer'], components: one('Slot', 3), effectsStartedAt: 57.9, effectsEndedAt: 58 });
+  const forced = [{ start: 0, duration: 64, blocking: 14, forcedLayout: 44.4, scripts: [{ invoker: '#document.onpointerdown', name: '', source: 'app.js', start: 1.9, duration: 58, forcedLayout: 44.4 }], styleAndLayoutStart: null }];
+  const ring: InputRecord[] = [{ ts: 0, type: 'pointerdown', gestureTs: 0, press: undefined, target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const r = sealReport(buildReport([press], [sidebar, portal, menu, layer], forced, ring));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'Header']);
+  const [interaction] = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn;
+  assert.equal(interaction?.label, '72 ms click · Header');
+  assert.equal(row(interaction, 'Heaviest path'), 'Sidebar');
+});
+
 test("the interaction's count of renders before the paint is the tooltip's, and says how many were too small to count", () => {
   // Shaped like opening the shadcn/ui Sheet: six commits before the paint, three with work in them, and an empty
   // one and two small ones beside them. The tooltip said React rendered 3 times and the Summary said 6.
