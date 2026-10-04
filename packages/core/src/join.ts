@@ -1202,10 +1202,10 @@ export function renderedCount(c: CommitSummary): string {
  * How many of the components rendered sit inside the one the commit is named after, where the walk counted
  * them and they are fewer than the commit's (`pathRendered`): what "inside" can claim of a count. Where the
  * walk was cut both counts are lower bounds, and the one inside is said as one. Null where they are all of
- * them, and on a report an earlier release stored.
+ * them, on a report an earlier release stored, and where the commit is named the app, which holds them all.
  */
 export function insideCount(c: CommitSummary): number | null {
-  return c.pathRendered != null && c.pathRendered < c.rendered ? c.pathRendered : null;
+  return leafName(c) !== null && c.pathRendered != null && c.pathRendered < c.rendered ? c.pathRendered : null;
 }
 
 /** Whether most of what a commit rendered was rendering for the first time: mounted, not rendered again. */
