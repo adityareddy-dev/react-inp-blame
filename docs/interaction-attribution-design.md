@@ -513,7 +513,11 @@ minifier's) or a Provider or a Context, and the same for a wrapper named after t
 renders (shadcn's `TabsList` over Radix's). Every name spent a step before this, so on the shadcn/ui
 docs Radix's layers alone spent the twelve and a render of the install tabs was named after
 RovingFocusGroupCollectionProviderProvider, and on cal.com a provider and a minified name spent the
-two that would have reached the tab below the form. The walk also counts the components rendering
+two that would have reached the tab below the form. A component that is all its parent rendered
+and renders the children it was given spends no step either and is never the one named: on Cap,
+AdminNavItems keeps its popover's state and wraps its whole return in Radix's Dialog root, and 0.23.0
+named that render Dialog. Where nothing below such a wrapper is named, the path ends at its parent.
+The walk also counts the components rendering
 for the first time (`mounted`, a fiber with no alternate), and beside the commit's count keeps two
 more: those under the component the path starts from (`startRendered`, the whole where one root
 rendered or the roots share it, less where other roots rendered beside it) and those inside the

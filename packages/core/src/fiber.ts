@@ -1131,19 +1131,29 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     hotPath.push(cur.name);
     startRendered = cur.rendered;
     let named: Agg | null = passedLayer(cur.name) ? null : cur;
+    // How long the path is up to the component it names, and whether it passed a wrapper below that one.
+    let upTo = 1;
+    let wrapped = false;
     for (let steps = 0; cur.kids.length && comparable(cur) && steps < HOT_PATH_STEPS; ) {
       const next = cur.kids.reduce((a, b) => (metric(b) > metric(a) ? b : a));
       if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
       if (next.name !== cur.name) hotPath.push(next.name);
+      // A component that is all its parent rendered and renders the children it was given is passed: what is
+      // inside it is the parent's. On Cap, Radix's Dialog root round AdminNavItems' whole return was named.
       // A library's layer, and a wrapper named after the component it renders (shadcn's Label over
       // Radix's), is named on the path but spends no step: the steps go on the components a reader could
       // search for, and the render is named after the deepest of them.
-      if (!passedLayer(next.name) && next.name !== named?.name) {
+      if (cur.kids.length < 2 && next.fiber.memoizedProps?.children) wrapped = true;
+      else if (!passedLayer(next.name) && next.name !== named?.name) {
         named = next;
         steps++;
+        upTo = hotPath.length;
+        wrapped = false;
       }
       cur = next;
     }
+    // Where nothing below such a wrapper was named, the path ends at the component it names.
+    if (wrapped) hotPath.length = upTo;
     pathRendered = (named ?? cur).rendered;
   }
   // Where the path starts, from what the walk found rather than from names: `roots` is deduped and cut at five, and

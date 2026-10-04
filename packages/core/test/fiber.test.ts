@@ -356,6 +356,31 @@ test("the hot path names every component on the chain and spends its steps on th
   assert.deepEqual([flat.hotPath, flat.rendered, flat.startRendered, flat.pathRendered], [['List'], 6, 6, 6]);
 });
 
+test('a component that is all its parent rendered and renders the children it was given is passed, so the render is named after the parent', () => {
+  // Cap's sidebar: AdminNavItems keeps its org popover's open state and wraps its whole return in @cap/ui's
+  // Dialog, which is Radix's Dialog root and renders only the children AdminNavItems gave it. Opening the
+  // popover was named Dialog, '211 of 212 components', where the code to change is AdminNavItems.
+  const givenChildren = (f: Record<string, unknown>) => Object.assign(f, { memoizedProps: { children: {} } });
+  const many = (name: string, n: number, each = 0) => Array.from({ length: n }, () => chain([name], ...Array.from({ length: each }, () => rendered(named(`${name}Part`), element('i')))));
+  const navItems = () => element('nav', ...many('Popover', 1, 19), ...many('NavItem', 5, 19), ...many('SpacesList', 1, 49), ...many('UsageButton', 1, 38));
+  const adminNav = () => rendered(named('AdminNavItems'), givenChildren(rendered(named('Dialog'), givenChildren(rendered(named('DialogProvider'), navItems())))));
+  const open = walk(adminNav());
+  assert.deepEqual([open.rendered, open.hotPath, leafName(open), open.pathRendered], [212, ['AdminNavItems'], 'AdminNavItems', 212]);
+  // The sidebar collapsing, from the context above it: the path goes down to AdminNavItems as before, through
+  // motion's aside, and stops there.
+  const desktopNav = rendered(named('DesktopNav'), givenChildren(fiber(0, named('motion.aside'), [element('aside', ...many('Logo', 1, 3), adminNav())])));
+  const collapse = walk(rendered(named('DashboardContexts'), desktopNav, ...many('DashboardSearch', 2, 20), ...many('Top', 1, 30), ...many('Caps', 1, 39)));
+  assert.deepEqual([collapse.rendered, collapse.hotPath, leafName(collapse), collapse.pathRendered], [332, ['DashboardContexts', 'DesktopNav', 'motion.aside', 'AdminNavItems'], 'AdminNavItems', 212]);
+  // A component that renders its own rows is no such wrapper, nor is one with children beside a sibling.
+  const table = walk(rendered(named('Page'), rendered(named('Table'), ...many('Row', 200))));
+  assert.deepEqual([table.hotPath, leafName(table)], [['Page', 'Table'], 'Table']);
+  const card = walk(rendered(named('Page'), givenChildren(rendered(named('Card'), ...many('Row', 200))), rendered(named('Footer'), element('p'))));
+  assert.deepEqual([card.hotPath, leafName(card)], [['Page', 'Card'], 'Card']);
+  // Where something below the wrapper carries most of it, the path goes on to it and names it.
+  const layout = walk(rendered(named('App'), givenChildren(rendered(named('Layout'), rendered(named('Header'), element('h1')), rendered(named('Orders'), ...many('Row', 200))))));
+  assert.deepEqual([layout.hotPath, leafName(layout), layout.pathRendered], [['App', 'Layout', 'Orders'], 'Orders', 201]);
+});
+
 test('a commit says how many components sit under the root its hot path starts from, which is one root among several', () => {
   // A store with a subscriber in each part of the page (jotai, Redux, Zustand) re-renders each from its own
   // root in one commit. The path starts at the heaviest, so "from Dashboard down" would claim the count.
