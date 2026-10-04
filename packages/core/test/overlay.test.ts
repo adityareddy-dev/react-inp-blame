@@ -48,7 +48,7 @@ test("a panel row says tap for a finger's click and click for a mouse's", () => 
 
 test("the panel's line for a later render says what the render was made of in the verdict's words", () => {
   const later = (rendered: number, components: [string, number, number?][], total = 0) =>
-    ({ rendered, truncated: false, hasDurations: total > 0, total, components: components.map(([name, count, self]) => ({ name, count, self: self ?? null, total: self ?? null })) }) as unknown as CommitSummary;
+    ({ rendered, truncated: false, hasDurations: total > 0, total, roots: ['Form'], hotPath: ['Form'], components: components.map(([name, count, self]) => ({ name, count, self: self ?? null, total: self ?? null })) }) as unknown as CommitSummary;
   // Four Labels are not what a render of 59 components was made of.
   assert.equal(laterDetail(later(59, [['Label', 4], ['Button', 3]])), '59 components');
   assert.equal(laterDetail(later(801, [['LineItem', 800], ['OrderSummary', 1]])), 'LineItem ×800');
