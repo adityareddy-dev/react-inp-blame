@@ -5582,6 +5582,44 @@ test('a render is counted inside the component it is named after, from the one i
   assert.equal(blamedCommit(cutReport), cutReport.commits[0]);
 });
 
+test("a render blame is named where the render started where the times on the hot path show the component at its end took under half of it", () => {
+  // Each name above PopupContent holds it, and the smallest, Popup, took 74 of 165 ms: PopupContent took less than half.
+  const menu = commit(200, 0, {
+    rendered: 386,
+    mounted: 0,
+    total: 165,
+    roots: ['Shell'],
+    hotPath: ['Shell', 'Header', 'Dropdown', 'Primitive.div', 'Popup', 'PopupContent'],
+    pathStart: 'only-root',
+    startRendered: 386,
+    pathRendered: 81,
+    components: [
+      { name: 'Primitive.div', count: 21, self: 55, total: 73 },
+      { name: 'Item', count: 60, self: 30, total: 1 },
+      { name: 'Shell', count: 1, self: 20, total: 165 },
+      { name: 'Header', count: 1, self: 5, total: 105 },
+      { name: 'Dropdown', count: 14, self: 3, total: 78 },
+      { name: 'Popup', count: 7, self: 2, total: 74 },
+    ],
+  });
+  const click = [entry('click', 0, 220, 3, 210)];
+  const closed = report(click, [menu], [], [input(0, 'click')]);
+  assert.deepEqual([closed.explanation.blame.name, closed.explanation.blame.detail, closed.explanation.blame.ms], ['Shell', '386 components', 165]);
+  assert.match(closed.explanation.cause, /386 components from Shell down, 81 of them inside PopupContent/);
+  assert.equal(blamedCommit(closed), closed.commits[0]);
+  // Where every name above it took at least half, nothing shows it took less, and it keeps the name.
+  const held = { ...menu, components: menu.components.map((x) => (x.total > 1 ? { ...x, total: Math.max(x.total, 84) } : x)) };
+  const near = report(click, [held], [], [input(0, 'click')]);
+  assert.deepEqual([near.explanation.blame.name, near.explanation.blame.detail], ['PopupContent', '81 of 386 components']);
+  assert.equal(blamedCommit(near), near.commits[0]);
+  // A layer under PopupContent sits inside it, so its time bounds nothing.
+  const under = { ...held, hotPath: [...held.hotPath, 'Slot'], components: [...held.components, { name: 'Slot', count: 3, self: 0.1, total: 10 }] };
+  assert.equal(report(click, [under], [], [input(0, 'click')]).explanation.blame.name, 'PopupContent');
+  // A build with no durations has no times to show it.
+  const production = { ...menu, hasDurations: false, total: 0, components: menu.components.map((x) => ({ ...x, self: null, total: null })) };
+  assert.equal(report(click, [production], [], [input(0, 'click')]).explanation.blame.name, 'PopupContent');
+});
+
 test('a layout blame is named after the component the render started at where that holds the whole commit, and after the one the render is named after where none does', () => {
   // Closing a Sheet on the shadcn/ui docs, production build, as the 0.13.0 retake read it on every run: 87 ms
   // of layout forced in BODY.onclick, and 56 components re-rendered from Dialog, the one root, 15 of them

@@ -58,6 +58,8 @@ const OWN_RENDER_MIN_SHARE = 0.5;
 // A commit's committing and effects are worth saying beside its render from 5 ms and a fifth of its time in all.
 const COMMIT_PHASES_MIN_MS = RENDER_MIN_MS;
 const COMMIT_PHASES_MIN_SHARE = 0.2;
+// A render is named where it started where the end of its hot path is shown to have taken under half of it.
+const LEAF_MAX_SHARE = 0.5;
 // A Long Animation Frames script is named from 20 ms of it inside the interaction: the API lists
 // scripts from 5 ms, and one under 20 did not make its frame long by itself (a long frame is over 50 ms).
 const SCRIPT_MIN_MS = 20;
@@ -1221,13 +1223,14 @@ export function renderedVerb(c: CommitSummary): string {
  * The commit a report's render or layout blame was built from, for the panel's row to take its verb from: the
  * one whose name and detail the blame carries, the heaviest of them where several do. It is not always the
  * heaviest commit: a 5 ms render whose layout effects ran for 60 ms is named over a 20 ms mount beside it, and
- * a layout blame names the commit whose time could hold the layout. A layout blame named from where the render
- * started (`fromName`) is matched that way first. The heaviest where none matches, and null where the report
+ * a layout blame names the commit whose time could hold the layout. A layout or render blame named from where the
+ * render started (`fromName`) is matched that way first. The heaviest where none matches, and null where the report
  * holds no commit.
  */
 export function blamedCommit(r: InteractionReport): CommitSummary | null {
   const { kind, name, detail } = r.explanation.blame;
-  const started = kind === 'layout' ? r.commits.filter((x) => fromName(x) !== null && fromName(x) === name && mostlyOf(x, false) === detail) : [];
+  const fromStart = (x: CommitSummary) => (kind === 'layout' || (kind === 'render' && namedFromStart(x))) && fromName(x) !== null && fromName(x) === name && mostlyOf(x, false) === detail;
+  const started = r.commits.filter(fromStart);
   const named = started.length ? started : r.commits.filter((x) => leafOf(x) === name && mostlyOf(x) === detail);
   return named.length ? heaviest(named) : r.commits.length ? heaviest(r.commits) : null;
 }
@@ -1254,6 +1257,19 @@ function renderedWhere(c: CommitSummary): string {
 function fromName(c: CommitSummary): string | null {
   const top = dominantComponent(c);
   return insideCount(c) != null && !(top && top.count > 1 && top.name === leafOf(c)) ? startName(c) : null;
+}
+
+/** Whether a render blame is named where the render started: the times on its hot path show its end took under half of it. */
+function namedFromStart(c: CommitSummary): boolean {
+  const leaf = leafName(c);
+  if (!c.hasDurations || leaf === null || fromName(c) === null) return false;
+  // Each name at or above the end holds it, and a name's total is its heaviest one's, so the least of them bounds it.
+  let bound = Infinity;
+  for (const name of c.hotPath.slice(0, c.hotPath.lastIndexOf(leaf) + 1)) {
+    const total = c.components.find((x) => x.name === name)?.total;
+    if (total != null) bound = Math.min(bound, total);
+  }
+  return bound < LEAF_MAX_SHARE * c.total;
 }
 
 /**
@@ -2639,7 +2655,8 @@ function explain(r: InteractionReport): Explanation {
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
-    blame = { kind: 'render', name: leafOf(rc), detail: effectsLed ? `useEffect callbacks${effectsDetail}` : mostlyOf(rc), ms: hasDurations ? own(rc) : null, confidence };
+    const fromStart = namedFromStart(rc);
+    blame = { kind: 'render', name: fromStart ? fromName(rc)! : leafOf(rc), detail: effectsLed ? `useEffect callbacks${effectsDetail}` : mostlyOf(rc, !fromStart), ms: hasDurations ? own(rc) : null, confidence };
   } else if (untimedHandler && !waitingWins) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list
     // among the components, and more of the working time than a tree accounts for.
