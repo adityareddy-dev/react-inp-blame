@@ -10,15 +10,22 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ### Changed
 
-- **A component that is all its parent rendered, is given children and renders one component at most is no
-  longer the one a render or layout blame names.** Before, the walk went into it like any other, so on Cap a sidebar component
-  that keeps its popover's open state and wraps its whole return in Radix's Dialog root was blamed as 'Dialog',
-  '211 of 212 components', where the code to change is the sidebar component. Now such a component spends no step
-  on the hot path and is never the one named. Where something below it carries most of the work the path goes on
-  to that as before, and where nothing does it ends at the parent, which the blame then names.
-  `hotPath` in a report, web-vitals' `react.hotPath` and OpenTelemetry's `react_inp_blame.hot_path` end there too.
-  It goes by the tree's shape, a single child with `children` in its props and no more than one component below
-  it, not by who wrote what, so a table given a toolbar as children beside its own rows is still named.
+- **A component that is all its parent rendered and hands the very children it was given to the one component
+  it renders is no longer the one a render or layout blame names.** Before, the walk went into it like any other,
+  so on Cap a sidebar component that keeps its popover's open state and wraps its whole return in Radix's Dialog
+  root was blamed as 'Dialog', '211 of 212 components', where the code to change is the sidebar component. Radix's
+  root hands its `children` to DialogProvider as it got them. Now such a component spends no step on the hot path
+  and is never the one named, where a component above it can be. Where something below it carries most of the
+  work the path goes on to that as before, and where nothing does it ends at the nearest component above it a
+  reader could search for, which the blame then names. `hotPath` in a report, web-vitals' `react.hotPath` and
+  OpenTelemetry's `react_inp_blame.hot_path` end there too. Having children isn't enough: a feed given its empty
+  state, a form given its submit row, a highlighter given its code and a table given a toolbar build what they
+  render themselves, and are named as before.
+- What the rule still can't tell: it reads props and the tree's shape, not time, so a component that hands its
+  children on unchanged and does heavy work of its own is passed over for the one above it all the same. A
+  wrapper that wraps its children in an element of its own before handing them on is named as in 0.23.0. The
+  rule is checked on trees built from Cap's in the tests. It changed no name on the demo apps, and hasn't been
+  run on Cap itself yet.
 - **A render is said to be mounting only where nine in ten of its components rendered for the first time, and
   re-rendering only where one in ten or fewer did.** Before, it went by half, so on formbricks a render that
   mounted 134 of 217 components read "mounting 217 components", and on Cap 160 components a Tooltip remounted
@@ -29,9 +36,10 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ### Blame changes
 
-- A render or layout blame whose path went into a component that was all its parent rendered, was given children
-  and rendered one component at most, with nothing named below it: `name` goes from that component to its parent ('AdminNavItems'
-  where 0.23.0 gave 'Dialog'), and a count in `detail` is the parent's.
+- A render or layout blame whose path went into a component that was all its parent rendered and handed the very
+  children it was given to the one component it rendered, with nothing named below it and a component above it
+  that can be: `name` goes from that component to the nearest one above it ('AdminNavItems' where 0.23.0 gave
+  'Dialog'), and a count in `detail` is that one's.
 - A render where more than one in ten and fewer than nine in ten of the components mounted: the cause's verb goes
   from "mounting" or "re-rendering" to "rendering". `name`, `detail` and `ms` don't change.
 
