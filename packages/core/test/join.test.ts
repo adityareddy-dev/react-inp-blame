@@ -1757,6 +1757,34 @@ test("a render a key's press committed just before its release came, where the p
   assert.deepEqual(report([entry('keydown', 0, 32, 0.1, 4.8), entry('keyup', 5, 64, 5.2, 60)], [released, own], [], ring).explanation.blame.name, 'Menu');
 });
 
+test("a release that waited for its press's screen update, after the press's handlers and before its paint, is blamed on that wait where it leads, under a long task too", () => {
+  // Enter on a menu item, production build: the press's handlers ended as the key came up, the press painted 13 ms
+  // before the release, and the release waited 22 of its 40 ms to start its 0.2 ms of handlers, then 17.6 to paint.
+  const ring = [input(0, 'keydown', { press: 'Enter' }), input(5, 'keyup', { press: 'Enter', gestureTs: 0 })];
+  const press = commit(4.2, 0, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 39, roots: ['Menu'], hotPath: ['Menu'], components: [] });
+  const own = commit(31.4, 5, { inputType: 'keyup', gestureTs: 0, hasDurations: false, total: 0, rendered: 2, roots: ['Tooltip'], hotPath: ['Tooltip'], components: [] });
+  const keys = (up: ReturnType<typeof entry>, down = entry('keydown', 0, 32, 0.1, 4.8), frames: FrameSummary[] | null = []) => report([down, up], [press, own], frames, ring);
+  const waited = keys(entry('keyup', 5, 40, 27.2, 27.4));
+  assert.deepEqual(waited.explanation.blame, { kind: 'waiting', name: null, detail: null, ms: waited.inputDelay, confidence: 'measured' });
+  assert.ok(waited.inputDelay > 22 && waited.inputDelay < 22.5);
+  // Event Timing alone says where the wait went, so a browser without long animation frames says the same.
+  assert.deepEqual(keys(entry('keyup', 5, 40, 27.2, 27.4), undefined, null).explanation.blame, waited.explanation.blame);
+  // The wait leads where it is the largest phase and at least half the interaction: 20 of 40 ms does, and 18 of
+  // 40 does not, though it is still the largest beside 10 ms of handlers and 12 of painting.
+  assert.equal(keys(entry('keyup', 5, 40, 25, 25.2)).explanation.blame.kind, 'waiting');
+  const short = keys(entry('keyup', 5, 40, 23, 33));
+  assert.deepEqual([short.inputDelay, short.processing, short.presentation], [18, 10, 12]);
+  assert.equal(short.explanation.blame.kind, 'none');
+  // Nor where the screen update is the larger phase.
+  assert.equal(keys(entry('keyup', 5, 40, 24, 24.2)).explanation.blame.kind, 'none');
+  // Nothing proves the wait was the press's where its handlers were still running when the key came up, where it
+  // painted before the release's handlers began, where it painted with the release, or where there was no press.
+  assert.equal(keys(entry('keyup', 5, 40, 27.2, 27.4), entry('keydown', 0, 32, 0.1, 8)).explanation.blame.kind, 'none');
+  assert.equal(keys(entry('keyup', 5, 40, 27.2, 27.4), entry('keydown', 0, 16, 0.1, 4.8)).explanation.blame.kind, 'none');
+  assert.equal(keys(entry('keyup', 5, 40, 27.2, 27.4), entry('keydown', 0, 40, 0.1, 4.8)).explanation.blame.kind, 'none');
+  assert.equal(report([entry('keyup', 5, 40, 27.2, 27.4)], [own], [], ring).explanation.blame.kind, 'none');
+});
+
 test("a render a held pointer's press set off before the click is left out of the report, whether the press sent an entry or not", () => {
   // A sortable list dragged from 0 and dropped at 800. The hook stamps each move's render with the pointerdown
   // wherever it cannot tell a move from its press (React 18 and 19.0, a production build, touch), and nothing

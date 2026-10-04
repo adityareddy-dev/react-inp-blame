@@ -65,7 +65,8 @@ const LEAF_MAX_SHARE = 0.5;
 const SCRIPT_MIN_MS = 20;
 // Waiting, the screen update, and working time without durations are blamed from 50 ms, the length
 // of a long task: the least the browser itself calls long. A render known only by its counts is
-// working time without durations, and is held to it (see `countEarns`).
+// working time without durations, and is held to it (see `countEarns`). A wait Event Timing places
+// in an earlier entry's screen update can be blamed under it (`pressWaitLeads`).
 const LONG_TASK_MS = 50;
 // A script the input waited behind gives a waiting blame its name from half of the wait. Under that
 // the wait was mostly something the browser did not list (another frame's work, rendering, garbage
@@ -1784,6 +1785,11 @@ function explain(r: InteractionReport): Explanation {
   // press committed a moment before its slower release. They are the press's work and none of this entry's.
   const earlier = r.entries.filter((e) => e.startTime < r.start && Math.abs(e.startTime + e.duration - r.end) > RENDER_GROUP_MS);
   const pressed = r.commits.filter((x) => x.at < r.start && !near(x.inputTs, r.start) && earlier.some((e) => near(x.inputTs, e.startTime)));
+  // Such an entry whose handlers had ended when this input came and which painted only after this one's handlers
+  // began: the whole wait before them was that entry's screen update, as Event Timing alone shows.
+  const waitedOnPress = earlier.find((e) => e.processingEnd <= r.start + STAMP_TOLERANCE && e.startTime + e.duration >= processingStart - STAMP_TOLERANCE) ?? null;
+  // At half the interaction the wait outweighs the other two phases together, so nothing else can be what took it.
+  const pressWaitLeads = !!waitedOnPress && r.inputDelay >= r.processing && r.inputDelay >= r.presentation && r.inputDelay >= r.duration / 2;
   // The commits of the working time. One the screen update's clause ties to the script it ran in is that
   // script's, or the same render is said twice, once as the script's and once as the handlers'.
   const inWorkingTime = r.commits.filter((x) => !insideLate.includes(x) && !pressed.includes(x));
@@ -2753,6 +2759,17 @@ function explain(r: InteractionReport): Explanation {
     const ran = `${scriptPhrase(s)} ran for ${ms(ranScript.ms)}${ofIt}${where}`;
     cause = say(confidence, `${small}; ${ran}.`, `${small}; ${HEDGE} ${ran}.`);
     blame = { kind: 'script', name: scriptBlameName(ranScript.script), detail: ranAsHandler(ranScript.script) ? component : null, ms: ranScript.ms, confidence };
+  } else if (pressWaitLeads && waitedOnPress) {
+    // Under a long task the wait is still the answer where Event Timing places all of it in the press's screen
+    // update and it leads: a release that waited 22 of its 40 ms for the menu its press opened was put down to nothing.
+    // Said in the event's own words where both are a key press.
+    const released = r.type === 'keyup' ? 'key release' : kind;
+    const press = kindOf(waitedOnPress.name, r.pointerType) === released ? waitedOnPress.name : kindOf(waitedOnPress.name, r.pointerType);
+    const pressRender = pressed.filter(carriesWork);
+    const by = pressRender.length ? ` by ${renderPhrase(heaviest(pressRender))}` : '';
+    const unbroken = r.frames?.length === 0 ? ' No long animation frame covered it, so what the browser did in that time is not broken down.' : '';
+    cause = `The ${released} waited ${ms(r.inputDelay)} for the ${press}'s screen update before its handler could start: ${HEDGE} the browser restyling and painting what the ${press} changed${by}.${unbroken}`;
+    blame = { kind: 'waiting', name: null, detail: null, ms: r.inputDelay, confidence: 'measured' };
   } else if (r.frames) {
     // Long Animation Frames lists frames of 50 ms and up, so no frame over the interaction says its frame
     // was under one, and that what the browser spent in it recalculating styles and layout was never
