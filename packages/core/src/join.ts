@@ -1,4 +1,4 @@
-import { dominantComponent, frameworkLayers, frameworkWrappers, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
+import { ANONYMOUS, dominantComponent, frameworkLayers, frameworkWrappers, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, INPUT_TYPES, joinWindow, type InputRecord, type ReactPage } from './hook.js';
@@ -1178,7 +1178,9 @@ const atLeast = (c: CommitSummary): string => (c.truncated ? 'at least ' : '');
  */
 function walkStopped(c: CommitSummary): string {
   if (!c.truncated || c.rendered === 0) return '';
-  if (leafName(c) === null) return " The walk stopped partway through that render, so where it started and which components took the time aren't known.";
+  // A path that ends in a component with no name still says where the render started.
+  const unnamedEnd = (c.hotPath[c.hotPath.length - 1] ?? c.roots[0]) === ANONYMOUS && c.pathStart !== 'unknown-root' && c.pathStart !== 'no-root';
+  if (leafName(c) === null && !unnamedEnd) return " The walk stopped partway through that render, so where it started and which components took the time aren't known.";
   return c.hasDurations ? '' : " The walk stopped partway through that render, so which components took the time isn't known.";
 }
 
