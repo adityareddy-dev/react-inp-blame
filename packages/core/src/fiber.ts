@@ -1181,7 +1181,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     hydrated: hydrated || hydratedTarget != null,
     hydratedTarget: hydratedTarget && Object.freeze(hydratedTarget),
     truncated,
-    roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, MAX_ROOTS)),
+    roots: Object.freeze([...new Set(performedRoots.map((a) => a.name))].slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),
     pathStart,
     startRendered,
@@ -1239,8 +1239,4 @@ function sharedAncestor(top: Agg[]): string | null {
 function renderStartOf(rootFiber: Fiber, at: number): number | null {
   const t = rootFiber.actualStartTime;
   return typeof t === 'number' && t >= 0 && t <= at ? t : null;
-}
-
-function dedupe(xs: string[]): string[] {
-  return xs.filter((x, i) => xs.indexOf(x) === i);
 }
