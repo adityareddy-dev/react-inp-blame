@@ -51,8 +51,11 @@
   50 ms of working time, the length of a long task, and its sentence gives the working time the count is
   read against, or says the render ran after the handlers where it did. Under that the count is not a
   slow render, however large: the cause leads with the working time and says the count sat in it, or
-  came after it, short of a long task, before what else the report knows. A hydration the interaction
-  waited for is still named by its count at any working time, as before.
+  came after it, short of a long task, before what else the report knows. The exception is a commit held
+  by the handler's own script where a long animation frame measured that script at 20 ms or more, not mostly
+  forced layout: there the count names the render, and its sentence gives the script's measured time
+  instead of the working time. A hydration the interaction waited for is still named by its count at any
+  working time, as before.
   The exceptions are what the browser times itself and the build cannot change: waiting, the screen update,
   a Long Animation Frames script, and forced layout inside the handlers, which stay `'measured'` in a
   production build. So does a handler where React rendered nothing in the working time, on a page where it
