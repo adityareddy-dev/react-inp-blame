@@ -5873,7 +5873,10 @@ test('a render known only by its counts is blamed under a long task of working t
   // Enter on a menu, production build at 4x: 0.2 ms of waiting, 49.4 of working time and 12.7 updating the screen.
   // The keydown's handler script ran 31.6 ms, measured by a long animation frame, and held a commit of 386
   // components and a smaller one of 39. The keyup's handlers came 17.7 ms after the keydown's.
-  const ring = [input(0, 'keydown', { press: 'Enter', handler: 'onKeyDown' }), input(33.5, 'keyup', { press: 'Enter', gestureTs: 0 })];
+  const ring = [
+    input(0, 'keydown', { press: 'Enter', target: element('div', []) as unknown as Node, owners: ['Menu'], handler: 'onKeyDown' }),
+    input(33.5, 'keyup', { press: 'Enter', gestureTs: 0 }),
+  ];
   const shell = commit(25.5, 0, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 386, walkMs: 1.7, roots: ['Shell'], hotPath: ['Shell'], components: [] });
   const menu = commit(32.1, 0, { inputType: 'keydown', hasDurations: false, total: 0, rendered: 39, roots: ['Menu'], hotPath: ['Menu'], components: [] });
   const keys = [entry('keydown', 0, 64, 0.2, 33), entry('keyup', 33.5, 32, 50.7, 51.3)];
@@ -5890,8 +5893,15 @@ test('a render known only by its counts is blamed under a long task of working t
   assert.equal(press([frame(0, 56, [script('#document.onkeydown', 1.2, 31.6, 16)])]).explanation.blame.kind, 'none');
   assert.equal(press([frame(0, 56, [script('#document.onkeydown', 1.2, 22)])]).explanation.blame.kind, 'none');
   // Nor where a frame measured a script the handlers waited behind that held the commit, not the handler's own.
-  const behind = report([entry('keydown', 0, 64, 26, 33), entry('keyup', 33.5, 32, 50.7, 51.3)], [{ ...shell, at: 25.5 }], [frame(0, 56, [script('setTimeout', 1, 25)])], ring);
-  assert.notEqual(behind.explanation.blame.kind, 'render');
+  const behind = report([entry('keydown', 0, 64, 26, 33), entry('keyup', 33.5, 32, 50.7, 51.3)], [shell], [frame(0, 56, [script('setTimeout', 1, 25)])], ring);
+  assert.deepEqual([behind.explanation.blame.kind, behind.explanation.blame.name], ['script', 'setTimeout']);
+  // Where the screen update outran the working time it keeps the verdict, and the render the frame measured is the
+  // note the closed render rung leaves, bounded by the script's 23 ms as the render rung would be, not the 28 ms of working time.
+  const painted = (frames: FrameSummary[]) => report([entry('keydown', 0, 144, 0.1, 29), entry('keyup', 29.4, 136, 144.7, 145.7)], [{ ...shell, at: 20.3, walkMs: 1.1 }, { ...menu, at: 25.8 }], frames, ring).explanation;
+  const screen = painted([frame(0.1, 117.6, [script('#document.onkeydown', 3.4, 23.1)])]);
+  assert.equal(screen.blame.kind, 'painting');
+  assert.equal(screen.notes.length, painted([]).notes.length + 1);
+  assert.ok(screen.notes.some((n) => n.includes('386 components') && n.includes('23 ms') && !n.includes('28 ms')), screen.notes.join(' | '));
 });
 
 test('a render known only by its counts is not blamed under a long task of working time, and where no frame covered the click the styles and layout it forced are said to be unmeasured', () => {
