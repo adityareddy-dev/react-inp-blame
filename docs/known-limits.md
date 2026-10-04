@@ -131,6 +131,14 @@
   accounted for. Where that time outruns React's render, the handler still has the verdict, measured, though
   it may have been a layout. A development build warns once, at the second such interaction whose handlers
   ran for 50 ms or more ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
+- **A `painting` blame after a menu or a dialog closes cannot name a restyle of the whole page that a write
+  to `body` or `html` set off.** Closing one often writes a style or a class there (a scroll lock, the
+  `pointer-events` a modal put on the page, a theme class), and the browser can then recalculate styles for
+  every element under it. That is a common cause of a slow screen update after a close, and the report cannot
+  see it: it keeps no record of writes to `body` or `html`, and the restyle runs as the browser's own work,
+  with no script for Long Animation Frames to list. So the cause puts that time on the browser "most likely
+  recalculating styles and layout", `blame.name` stays null, and a note about a render in the handlers can
+  sit beside it though that render may not be what made the frame slow.
 - **The next press's work is told from the interaction's own by a listener of that press the browser
   recorded.** Typing or clicking fast, the frame an interaction paints in can hold the next press's handlers
   too, and Long Animation Frames lists only scripts over 5 ms, which in a React app often leaves out the next
