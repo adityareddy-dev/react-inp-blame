@@ -1143,13 +1143,14 @@ function leafOf(c: CommitSummary): string {
 /**
  * The component whose own render, its time less the components it rendered, was most of a commit React
  * timed: rendered once, beside others, from `OWN_RENDER_MIN_MS` and `OWN_RENDER_MIN_SHARE` of the commit's
- * render time. Undefined where no one component was, and where the build timed no single component.
+ * render time. Undefined where no one component was, where that one has no name, and where the build timed no
+ * single component.
  */
 function ownRender(c: CommitSummary): { readonly name: string; readonly self: number } | undefined {
   const top = mostlyComponent(c);
   // A root outside ProfileMode with a `<Profiler>` under it is timed only below the Profiler, so the commit's
   // total can come to less than one component's own time, and "of it" would claim more than the whole.
-  if (c.rendered < 2 || top?.count !== 1 || top.self == null || top.self > c.total) return undefined;
+  if (c.rendered < 2 || top?.count !== 1 || top.name === ANONYMOUS || top.self == null || top.self > c.total) return undefined;
   return top.self >= OWN_RENDER_MIN_MS && top.self >= OWN_RENDER_MIN_SHARE * c.total ? { name: top.name, self: top.self } : undefined;
 }
 
