@@ -580,6 +580,23 @@ test("a layout blame's hot path and components are the commit it names, not the 
   assert.deepEqual(react?.components.map((c) => c.name), ['MenuItem']);
 });
 
+test("a render blame's hot path and components are the commit it names, not the heaviest", (t) => {
+  // Enter on a menu item, production build: the press rendered 300 components and painted on its own; the
+  // release's 55 ms of working time rendered 60 of its own, which the blame names.
+  const key = (ts: number, type: string) => ({ ts, type, gestureTs: 0, press: 'Enter', target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const down = { name: 'keydown', interactionId: 7, startTime: 0, duration: 32, processingStart: 0.1, processingEnd: 4.8, target: null };
+  const up = { name: 'keyup', interactionId: 7, startTime: 5, duration: 64, processingStart: 5.2, processingEnd: 60, target: null };
+  const none = { hasDurations: false, total: 0 };
+  const press = commit({ ...none, at: 4.2, sinceInput: 4.2, inputTs: 0, gestureTs: 0, inputType: 'keydown', rendered: 300, roots: ['Menu'], hotPath: ['Menu'], components: [{ name: 'Item', count: 200, self: null, total: null }] });
+  const own = commit({ ...none, at: 58, sinceInput: 53, inputTs: 5, gestureTs: 0, inputType: 'keyup', rendered: 60, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 55, self: null, total: null }] });
+  const report = reportOf([down, up], [press, own], [], [key(0, 'keydown'), key(5, 'keyup')]);
+  t.after(installed([report]));
+  assert.deepEqual([report.explanation.blame.kind, report.explanation.blame.name], ['render', 'List']);
+  const { react } = attributeINP({ entries: [up] });
+  assert.deepEqual(react?.hotPath, ['List']);
+  assert.deepEqual(react?.components.map((c) => c.name), ['Row']);
+});
+
 test('the join is on the interactionId, which names one report among several', (t) => {
   const other = [{ name: 'keydown', interactionId: 21, startTime: 900, duration: 56, processingStart: 902, processingEnd: 940, target: null }];
   t.after(installed([reportOf(other, [commit({ at: 930, inputTs: 900, hotPath: ['SearchBox'] })], []), reportOf(CLICK, [commit()], [])]));

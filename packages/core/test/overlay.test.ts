@@ -718,6 +718,42 @@ test("an open row lists the components of the commit a layout blame names, not t
   assert.equal(byClass(more, 'comp')?.childNodes[0].textContent, 'MenuItem');
 });
 
+test("an open row lists the components of the commit a render blame names, not the heaviest one's", () => {
+  // Enter on a menu item, production build: the press rendered 300 components and painted on its own; the
+  // release's 55 ms of working time rendered 60 of its own, which the blame names.
+  const entry = (name: string, startTime: number, duration: number, processingStart: number, processingEnd: number) => ({ name, interactionId: 7, startTime, duration, processingStart, processingEnd, target: null });
+  const key = (ts: number, type: string) => ({ ts, type, gestureTs: 0, press: 'Enter', target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const rendered = (at: number, inputTs: number, inputType: string, rendered: number, root: string, name: string, count: number): CommitSummary => ({
+    at,
+    sinceInput: at - inputTs,
+    inputTs,
+    gestureTs: 0,
+    inputType,
+    rendered,
+    hydrated: false,
+    hydratedTarget: null,
+    truncated: false,
+    roots: [root],
+    hotPath: [root],
+    components: [{ name, count, self: null, total: null }],
+    hasDurations: false,
+    coarseClock: false,
+    total: 0,
+    startedAt: null,
+    effectsStartedAt: null,
+    effectsEndedAt: null,
+    walkMs: 0,
+    priority: undefined,
+    didError: false,
+  });
+  const commits = [rendered(4.2, 0, 'keydown', 300, 'Menu', 'Item', 200), rendered(58, 5, 'keyup', 60, 'List', 'Row', 55)];
+  const r = sealReport(buildReport([entry('keydown', 0, 32, 0.1, 4.8), entry('keyup', 5, 64, 5.2, 60)], commits, [], [key(0, 'keydown'), key(5, 'keyup')]));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['render', 'List']);
+  const more = byClass(panelFor(r), 'more')!;
+  assert.equal(byClass(more, 'h')?.textContent, 'Rendered before the paint · 60 components');
+  assert.equal(byClass(more, 'comp')?.childNodes[0].textContent, 'Row');
+});
+
 test('under a development build of react-dom the badge is marked dev, and the panel says why its colours can run high', () => {
   // A 608 ms INP: the badge and the panel's head, drawn with react-dom of `bundleType` registered.
   const drawnUnder = (bundleType: number) => {
