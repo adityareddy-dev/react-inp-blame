@@ -215,8 +215,9 @@ give `'mouse'`, `'pen'` and `'touch'`, and a value a browser adds later would co
 string reads as null.
 
 `blame.name` is free text with one fixed value: `'the app'`, which a render or layout blame takes where its
-commit's walk gave no component to name it after, as when the walk could not tell where the render started.
-That value stays the same through 1.x, and the commit's `pathStart` says why there was none.
+commit's walk gave no component to name it after: where the walk could not tell where the render started,
+which the commit's `pathStart` says, or where the component the render is named after has no name it could
+read. That value stays the same through 1.x.
 
 ## Labels and personal data
 
