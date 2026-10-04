@@ -413,6 +413,24 @@ test('a component given children that builds what it renders from something else
   );
 });
 
+test('a wrapper that hands on its children but whose own render took the time is named, as 0.23.0 named it', () => {
+  const given = (f: Record<string, unknown>, children: unknown) => Object.assign(f, { memoizedProps: { children } });
+  const said = (tree: Record<string, unknown>) => {
+    const c = walkCommit(profiledRoot(tree) as any, 5000, 100, click, development) as CommitSummary;
+    return `${c.hotPath.join(' > ')} | ${leafName(c)} | ${c.components[0]!.name}`;
+  };
+  // A permission check that takes 60 ms itself, round a fade over ten light rows.
+  const k = {};
+  const rows = Object.assign(element('div', ...Array.from({ length: 10 }, () => timed(named('Row'), 0.1))), { mode: 0b10, actualDuration: 1 });
+  const gate = timed(named('Panel'), 0.3, given(timed(named('PermissionGate'), 60, given(timed(named('Fade'), 0.3, rows), k)), k));
+  // A highlighter that takes 80 ms itself and hands the same string to Text.
+  const highlight = timed(named('ChatPanel'), 0.3, timed(named('Message'), 0.2, given(timed(named('Highlight'), 80, given(timed(named('Text'), 0.2), 'hello')), 'hello')));
+  assert.deepEqual(
+    [said(gate), said(highlight)],
+    ['Panel > PermissionGate | PermissionGate | PermissionGate', 'ChatPanel > Message > Highlight | Highlight | Highlight'],
+  );
+});
+
 test('where the path starts at a Provider round a wrapper, the render is named after the wrapper and counted inside it', () => {
   // ThemeProvider > Radix's Dialog root > DialogProvider > the dialog's 30 components. Nothing above the Dialog
   // could be named, so the path was cut back to ThemeProvider, counting 31 of the 33 it holds.
