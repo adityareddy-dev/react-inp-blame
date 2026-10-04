@@ -675,6 +675,49 @@ test('a render whose walk could not tell where it started is the tree in the pan
   assert.doesNotMatch(lineOf(dev), /Left|App/);
 });
 
+test("an open row lists the components of the commit a layout blame names, not the heaviest one's", () => {
+  // Opening a menu, production build: 44 ms of layout forced in one script across four commits. The menu's
+  // commit could hold it; the sidebar's rendered the most.
+  const press = { name: 'pointerdown', interactionId: 7, startTime: 0, duration: 72, processingStart: 1.1, processingEnd: 59.9, target: null };
+  const at = (at: number, opts: Partial<CommitSummary>): CommitSummary => ({
+    at,
+    sinceInput: at,
+    inputTs: 0,
+    gestureTs: 0,
+    inputType: 'pointerdown',
+    rendered: 15,
+    mounted: 0,
+    hydrated: false,
+    hydratedTarget: null,
+    truncated: false,
+    roots: ['Layer'],
+    hotPath: ['Layer'],
+    components: [],
+    hasDurations: false,
+    coarseClock: false,
+    total: 0,
+    startedAt: null,
+    effectsStartedAt: null,
+    effectsEndedAt: null,
+    walkMs: 0,
+    priority: undefined,
+    didError: false,
+    ...opts,
+  });
+  const one = (name: string, count: number) => [{ name, count, self: null, total: null }];
+  const sidebar = at(3.8, { rendered: 295, roots: ['Sidebar'], hotPath: ['Sidebar'], startRendered: 295, pathRendered: 295, components: one('NavItem', 24), effectsStartedAt: 4.6, effectsEndedAt: 4.7 });
+  const portal = at(9.3, { rendered: 96, mounted: 95, roots: ['Portal'], hotPath: ['Portal'], components: one('Slot', 9), effectsStartedAt: 9.4, effectsEndedAt: 11.4 });
+  const menu = at(36.5, { rendered: 185, roots: ['Header'], hotPath: ['Header', 'Menu', 'MenuContent'], startRendered: 185, pathRendered: 80, components: one('MenuItem', 13), effectsStartedAt: 36.8, effectsEndedAt: 57.4 });
+  const layer = at(57.9, { components: one('Slot', 3), effectsStartedAt: 57.9, effectsEndedAt: 58 });
+  const forced = [{ start: 0, duration: 64, blocking: 14, forcedLayout: 44.4, scripts: [{ invoker: '#document.onpointerdown', name: '', source: 'app.js', start: 1.9, duration: 58, forcedLayout: 44.4 }], styleAndLayoutStart: null }];
+  const ring = [{ ts: 0, type: 'pointerdown', gestureTs: 0, press: undefined, target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const r = sealReport(buildReport([press], [sidebar, portal, menu, layer], forced, ring));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'Header']);
+  const more = byClass(panelFor(r), 'more')!;
+  assert.equal(byClass(more, 'h')?.textContent, 'Rendered before the paint · 185 components');
+  assert.equal(byClass(more, 'comp')?.childNodes[0].textContent, 'MenuItem');
+});
+
 test('under a development build of react-dom the badge is marked dev, and the panel says why its colours can run high', () => {
   // A 608 ms INP: the badge and the panel's head, drawn with react-dom of `bundleType` registered.
   const drawnUnder = (bundleType: number) => {
