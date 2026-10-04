@@ -6,6 +6,119 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-03
+
+### Changed
+
+- **A render or layout blame whose commit's path ends in a component the walk found no name for is named 'the
+  app'.** Before, a root written as an anonymous function, with no child holding most of what it rendered, gave a
+  blame named '(anonymous)', and a render where such a component was half the commit was "mostly (anonymous)",
+  with '(anonymous) ×300' as its detail, or "(anonymous)'s own render" where most of its time was its own. Now the
+  blame reads 'the app', the fixed value for a walk that gives no component to name, and the detail is the
+  commit's count, with no part of it said to be inside the app. The sentence no longer says where the render started
+  isn't known where only the name was missing, and a production walk cut at `walkBudget` whose first root has no
+  name still says it.
+- **A layout forced in a script several React commits ran in is named after the commit whose time could hold
+  it.** Before, the blame took the subtree of the commit that rendered most, so a menu opening in a production
+  build, with four commits in one listener and 44 ms of forced layout, was named after a 295-component list whose
+  effects took 0.1 ms rather than the 185-component menu whose layout effects measured its items. Now each commit
+  there is weighed by React's own time for it (render, committing and effects) where the build times renders, and
+  otherwise by its effects plus the time since the commit before it in the same script, which for the first one
+  runs from the script's start or the handlers', whichever is later, and so holds the handler too. The largest
+  names the layout where it could hold at least half of it. Where none could, `name` and `detail` are null and the
+  cause says React committed that many times there and none took long enough to hold most of it. One commit in the
+  forcing script is named as before. The cause describes the commit the blame names, so a Sheet closing inside the
+  forcing script beside a 500-row Table rendered later reads Dialog with '56 components' again, and the sentence
+  says the Sheet's render rather than the Table's.
+- **The Performance panel's entry, the badge panel's component list and web-vitals' `hotPath` and `components`
+  follow the commit a layout or render blame names.** Before, all three took the heaviest commit, which could be a
+  render the blame doesn't name, such as a key press's larger render beside a blame on its release's own. Now a
+  layout or render blame's commit is the one it names, where its name and detail tell which commit that is, and the
+  Performance panel's Heaviest path row still shows the heaviest. For `attributeINP`, `react.hotPath` and
+  `react.components` on a layout or render blame now come from that commit, and so does OpenTelemetry's
+  `react_inp_blame.hot_path`, which is read from them. The `react` object stays at `schemaVersion: 1`.
+- **A render blame names the commit whose committing and effects are worth saying beside its render, and says
+  them.** Before, in a build that times renders, a commit's committing and effects counted towards naming it only
+  where they were worth a mention across all the commits, so a Toolbar that rendered for 7.5 ms and then spent 8
+  more committing and running useEffect callbacks lost to a Nav that rendered for 14.2 ms with 2 more. The sentence
+  gave the render alone, so most of `blame.ms` could go unsaid. Now committing and effects that reach 5 ms and a
+  fifth of a commit's time count for it, and once one commit's do, any other commit's from 5 ms count for that one
+  too, so a larger render never loses the name for being larger. The sentence says each of them from 1 ms. Where
+  some of the commit's time would still go unsaid, it adds "That commit took 91 ms with committing and effects",
+  and beside the named commit's figures it gives what the other commits spent rather than the totals across all
+  of them.
+- **A render blame whose hot path ends in a component React's times show took under half of the render is named
+  where the render started.** Before, a render of 386 components from Shell down was named after PopupContent, at
+  the end of a path through a dropdown's layers, though the times on that path showed PopupContent held at most 73
+  of its 165 ms. Now each name above the end holds it, so the smallest of their totals bounds it, and where that is
+  under half the render and the render started from one component that holds the whole commit, the blame is named
+  after Shell with the whole commit's count. The sentence still says how many were inside PopupContent. A build
+  with no durations keeps the deepest name, and the Performance panel's entry takes the start name too.
+- **A production render held by the handler's script that a long animation frame measured is blamed under 50 ms
+  of working time.** Before, a count under a long task of working time was never a slow render, so an Enter press
+  with 49 ms of working time, whose `onKeyDown` script a long animation frame measured at 32 ms and which
+  re-rendered 386 components, read as nothing that stood out. Now, where a frame
+  measured the handler's own script holding the commit at 20 ms or more, and not mostly forced layout, the count
+  names that commit's render, and the sentence gives the script's measured time in place of the working time. A
+  screen update that outran such a render says it the same way in its note. Without a frame, or under a script that
+  doesn't hold the commit, it reads as before.
+- **A key release that waited for its press's screen update is blamed on that wait, under 50 ms too.** Before, a
+  40 ms release that waited 22 ms for the menu its press had just opened to paint read as nothing that stood out.
+  Now, where the press's handlers had ended when the key came up and its paint came only after the release's
+  handlers began, and the wait is the largest phase and at least half the interaction, the blame is `waiting`, with
+  the input delay as its `ms` and no name. The sentence names the press's render where it carried work.
+- **A render a key's press committed just before its release is the press's, where the press painted on its own.**
+  Before, a commit stamped with the press, landing a moment before a slower release, counted in the release's
+  working time, its render count and its "React rendered N times" note, and could be the render the release was
+  blamed on. Now it is left out of all three, and of the Performance panel's counts, though it stays in `commits`
+  and on the panel's renders track. A press painted together with its release still counts.
+- **A screen update that outran a production render short of a long task says that render where the working time
+  was at least half of the update.** Before, the count was said only where the working time reached 50 ms, so the
+  same 400-row render showed under a 76 ms screen update at 50 ms of working time and not at 49. Now it shows at
+  both, wherever the working time is half the screen update or more.
+- **The browser's own work after the handlers reads "recalculating styles and layout".** It read "recalculating
+  styles and layout for what changed", which pointed at the interaction's own changes where a restyle a write to
+  `body` or `html` set off is as likely. Known limits says that restyle can't be named.
+- **The docs define a render blame's `ms`.** The API page, the `Blame.ms` JSDoc and the OpenTelemetry page now
+  say it is the named commit's render, plus committing it, plus its useEffect callbacks in the same task, with no
+  other commit in it except a render committed inside those callbacks that can't be taken out, which the sentence
+  says. So it can be more or less than `commits.ms`.
+- **`/auto` is 35.5 KB gzipped, up from 34.4 KB, `react-inp-blame/otel` is 1.6 KB, up from 1.5 KB, and
+  `react-inp-blame/web-vitals` is 0.9 KB, up from 0.8 KB.** Of
+  `/auto`'s 1.1 KB, naming a layout across several commits took 0.36 KB, a release's wait for its press 0.18 KB,
+  committing and effects choosing a render 0.14 KB, the measured handler script 0.13 KB and naming a render where
+  it started 0.10 KB. Naming the app for a component with no name took 0.07 KB, the measured script's note 0.06
+  KB, leaving the press's render out of the release 0.05 KB, and the screen update's note short of a long task
+  0.03 KB. `otel` grew 0.03 KB and `react-inp-blame/web-vitals` 0.02 KB, from web-vitals' attribution taking the
+  commit a layout or render blame names, which `otel` carries. The part before react-dom stays at 11.6 KB and the
+  badge and panel at 7.1 KB.
+
+### Blame changes
+
+- A render or layout blame whose commit's path ends in a component the walk found no name for, with no other name
+  on it to take: `name` goes from '(anonymous)' to 'the app'.
+- A render blame where a component the walk found no name for was half the commit, or half its time in its own
+  render: `detail` goes from '(anonymous) ×N' or "(anonymous)'s own render" to the commit's count.
+- A render or layout blame named 'the app' for a path ending in a component with no name, where the walk counted
+  fewer components inside that one than in the commit: `detail` goes from 'M of N components' to 'N components'.
+- A layout forced in a script several commits ran in: `name` and `detail` go from the commit that rendered most to
+  the one whose time could hold most of the layout, or to null where none could hold half of it.
+- A layout forced in a script one commit ran in, beside a larger render in a later script: `name` and `detail` go
+  back to where that commit's render started, with the whole commit's count ('Dialog', '56 components' where 0.20.0
+  to 0.22.0 gave 'DismissableLayer', '15 of 56 components').
+- A render blame in a build that times renders, where a commit's committing and effects reach 5 ms and a fifth of
+  its time: that commit can now be the one named over one that rendered longer but took less time in all, with
+  each commit's committing and effects counted where they reach 5 ms, and `ms` is its own.
+- A render blame whose hot path ends in a component React's times show took under half of the render: `name` goes
+  to the component the render started at, and `detail` to the whole commit's count.
+- A release that waited at least half its time, and longer than any other phase, for its press's screen update,
+  after the press's handlers ended: `kind` goes from `none` to `waiting`, at any duration.
+- A production render known by its counts, under 50 ms of working time, held by the handler's own script that a
+  long animation frame measured at 20 ms or more and not mostly forced layout: `kind` goes from `none` to `render`,
+  named after the commit the script held.
+- A render a key's press committed just before its release, where the press painted in a frame of its own: it is
+  no longer the release's render, so a release blamed on it gets another blame, `none` where nothing else stood out.
+
 ## [0.22.0] - 2026-10-02
 
 ### Changed
@@ -1958,7 +2071,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.19.0...v0.20.0
