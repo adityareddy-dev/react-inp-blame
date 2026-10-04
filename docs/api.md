@@ -157,7 +157,9 @@ the time is charged to: a subtree that re-rendered, a handler that ran, what ran
 it, or the boundary that was hydrated, and null when unknown. Which of them a report names can change in a
 minor as the reading gets better. `blame.ms` is how much of the interaction the blame accounts for. For a
 render it is the named commit's render, plus committing it, plus its useEffect callbacks in the same task, and
-React's other commits in the interaction are not in it. `blame.detail` is display text, like the headline.
+React's other commits in the interaction are not in it, except a render React committed inside those callbacks
+with no recorded start, which can't be taken out and which the sentence says is included. `blame.detail` is
+display text, like the headline.
 
 `duration` is the longest single Event Timing entry, as web-vitals measures it; `holdMs` is how much longer
 the span from press to release ran. Reports are frozen: a late entry, frame or render that joins one reaches
