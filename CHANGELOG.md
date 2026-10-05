@@ -6,6 +6,15 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+### Changed
+
+- A layout forced in a commit with several roots is named after the component they all sit under, with the whole
+  commit's count. A Radix dialog mounts its overlay and its content as two portals under DialogPortal, so on plate
+  the search dialog's opening was blamed on CommandGroup, the end of the path through the content, where the read
+  that forced the layout can be in either. It now reads "mounting 89 components inside DialogPortal", and the
+  devtools entry names DialogPortal too. Where the roots sit under no component it names the app. `hotPath` is
+  unchanged, and a report stored by an earlier release is named as before.
+
 ## [0.24.0] - 2026-10-04
 
 ### Changed
