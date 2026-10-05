@@ -196,7 +196,7 @@ build.
 | `react_inp_blame.blame.confidence` | `measured` or `inferred` | `measured` | yes |
 | `react_inp_blame.handler` | The React handler that ran | `add` | yes |
 | `react_inp_blame.target.components` | Up to four components around the element, outermost first | `App > Lab > ContextStorm` | yes |
-| `react_inp_blame.hot_path` | The path down to where the render spent its time. On a render or layout blame it follows the commit the blame names, otherwise the heaviest. Without the `displayName` transform in production, the minifier's names, which change with each build (below) | `ContextStorm > OrderSummary` | yes |
+| `react_inp_blame.hot_path` | The path down to where the render spent its time. On a render or layout blame it follows the commit the blame names, otherwise the heaviest. On a layout blame in a commit with several roots, named after the component they all sit under, it starts at the heaviest root below that one and can run well past it. Without the `displayName` transform in production, the minifier's names, which change with each build (below) | `ContextStorm > OrderSummary` | yes |
 | `react_inp_blame.react_status` | Whether the library could see React: `reading`, `waiting`, `installed-late` or `unreadable` | `reading` | yes |
 | `react_inp_blame.react_build` | The build of react-dom that measured it. A `development` one reads high | `development` | yes, and filter it out |
 | `react_inp_blame.commits.count` | React commits inside the interaction | `1` | no |
