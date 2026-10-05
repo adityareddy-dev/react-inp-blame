@@ -5633,7 +5633,7 @@ test("a commit whose hot path ends in a root the walk found no name for is named
   }
 });
 
-test('a render is counted inside the component it is named after, from the one it started at where that holds them all, and is a mount where most of it was one', () => {
+test('a render is counted inside the component it is named after, from the one it started at where that holds them all, and is a mount where all of it was one', () => {
   // Opening a Sheet on the shadcn/ui docs, production build, modelled on a reading of the app's source rather
   // than on a walk of it. Radix's Portal renders null and sets mounted in a layout effect, so the sheet's
   // overlay and its content each mount in a commit of their own from a Portal of their own, the two of them
@@ -5657,18 +5657,20 @@ test('a render is counted inside the component it is named after, from the one i
   assert.deepEqual(layout.blame, { kind: 'layout', name: 'DismissableLayer', detail: '31 of 59 components', ms: 51, confidence: 'measured' });
   // After the sentence on what forces a layout, so its "That happens" is not read as about the mount.
   // The document's listener it was charged to is not said, which is the browser's answer and no help.
-  assert.match(layout.cause, / the click handler together\. That happens when code reads an element's size right after changing styles, often in a layout effect\. React was (most likely )?mounting 59 components, 31 of them inside DismissableLayer\.$/);
+  // Rendering, not mounting: 57 of the 59 mounted, and "mounting 59" is read as 59 mounts.
+  assert.match(layout.cause, / the click handler together\. That happens when code reads an element's size right after changing styles, often in a layout effect\. React was (most likely )?rendering 59 components, 31 of them inside DismissableLayer\.$/);
   const render = report(open, [sheet], [], [input(0, 'click')]).explanation;
   assert.deepEqual(render.blame, { kind: 'render', name: 'DismissableLayer', detail: '31 of 59 components', ms: null, confidence: 'inferred' });
-  assert.match(render.cause, /^React was most likely mounting 59 components, 31 of them inside DismissableLayer, in the 58 ms of working time\. /);
-  // A mount is said where nine in ten or more mounted, a re-render where one in ten or fewer did, and a render
-  // between. On formbricks 134 of 217 mounted read "mounting 217 components", and on Cap 160 of 332 remounted
-  // under a Tooltip read "re-rendering 332". A report an earlier release stored, which counted none of it, reads as it did.
+  assert.match(render.cause, /^React was most likely rendering 59 components, 31 of them inside DismissableLayer, in the 58 ms of working time\. /);
+  // A mount is said where every component mounted, a re-render where one in ten or fewer did, and a render
+  // between. On formbricks 134 of 217 mounted read "mounting 217 components", on Cap 160 of 332 remounted
+  // under a Tooltip read "re-rendering 332", and on plate 1838 of 1959 mounted read "mounting 1959 components".
+  // A report an earlier release stored, which counted none of it, reads as it did.
   const verbFor = (mounted: number) => /^React was most likely (\S+) 59 components/.exec(report(open, [commit(30, 0, { ...sheet, mounted })], [], [input(0, 'click')]).explanation.cause)?.[1];
-  assert.deepEqual([54, 53, 30, 20, 6, 5, 0].map(verbFor), ['mounting', 'rendering', 'rendering', 'rendering', 'rendering', 're-rendering', 're-rendering']);
-  // Exactly nine in ten is a mount and exactly one in ten a re-render.
+  assert.deepEqual([59, 58, 54, 30, 20, 6, 5, 0].map(verbFor), ['mounting', 'rendering', 'rendering', 'rendering', 'rendering', 'rendering', 're-rendering', 're-rendering']);
+  // Nine in ten is a render now, ten in ten a mount, and exactly one in ten still a re-render.
   const ofTen = (mounted: number) => / (\S+) 10 components/.exec(report(open, [commit(30, 0, { ...sheet, rendered: 10, startRendered: 10, pathRendered: 10, mounted })], [], [input(0, 'click')]).explanation.cause)?.[1];
-  assert.deepEqual([10, 9, 8, 2, 1, 0].map(ofTen), ['mounting', 'mounting', 'rendering', 'rendering', 're-rendering', 're-rendering']);
+  assert.deepEqual([10, 9, 8, 2, 1, 0].map(ofTen), ['mounting', 'rendering', 'rendering', 'rendering', 're-rendering', 're-rendering']);
   const stored = { ...sheet } as { mounted?: number; startRendered?: number; pathRendered?: number };
   delete stored.mounted;
   delete stored.startRendered;
@@ -6126,7 +6128,7 @@ test('a render known only by its counts is not blamed under a long task of worki
   // The time leads the sentence, so "31 of them inside DismissableLayer" is not read as what took the 31 ms.
   assert.equal(
     phoneOpen.cause,
-    'In 31 ms of working time, short of a long task, React was mounting 59 components, 31 of them inside DismissableLayer; the rest went to waiting and painting. No long animation frame covered the click, so how much of the working time went to any styles and layout it forced is unmeasured.',
+    'In 31 ms of working time, short of a long task, React was rendering 59 components, 31 of them inside DismissableLayer; the rest went to waiting and painting. No long animation frame covered the click, so how much of the working time went to any styles and layout it forced is unmeasured.',
   );
   // And closing it on the phone: 17.3 waiting, 7.2 working, 15.4 on the screen; at 4x, 25.4, 37.1 and 16.1.
   assert.equal(report([entry('click', 0, 40, 17.3, 24.5)], [presence], [], [input(0, 'click')]).explanation.blame.kind, 'none');
@@ -6251,7 +6253,8 @@ test('a render known only by its counts is not blamed under a long task of worki
 test("the panel's row takes its verb from the commit the blame names, which is not always the heaviest", () => {
   const click = [entry('click', 0, 120, 3, 100)];
   // A dialog opening: its content mounts in the heaviest commit, and a second commit's layout effects ran for
-  // 60 ms, which names that one. The row says "re-rendered" of it, as the cause does, not "mounted" of the other.
+  // 60 ms, which names that one. The row says "re-rendered" of it, as the cause does, not "rendered" of the other,
+  // which mounted 57 of its 59.
   const mount = commit(25, 0, { total: 20, rendered: 59, mounted: 57, roots: ['Portal'], hotPath: ['Portal', 'DismissableLayer'], startRendered: 59, pathRendered: 31, components: [{ name: 'Label', count: 4, self: 2, total: 2 }] });
   const effects = commit(95, 0, { startedAt: 30, total: 5, rendered: 12, mounted: 0, roots: ['Panel'], hotPath: ['Panel'], startRendered: 12, pathRendered: 12, components: [{ name: 'Row', count: 5, self: 1, total: 1 }] });
   const r = report(click, [mount, effects], []);
@@ -6264,7 +6267,7 @@ test("the panel's row takes its verb from the commit the blame names, which is n
     assert.match(unmeasured.explanation.cause, /^React spent 20 ms rendering across 2 commits, under 1 ms of it re-rendering 12 components inside Panel\. Committing it took about 65 ms more/);
   }
   assert.equal(heaviest(r.commits).at, mount.at);
-  assert.equal(renderedVerb(mount), 'mounted');
+  assert.equal(renderedVerb(mount), 'rendered');
   assert.equal(blamedCommit(r)?.at, effects.at);
   assert.equal(renderedVerb(blamedCommit(r)!), 're-rendered');
   // With one commit, or a blame the commits cannot be matched to, the heaviest stands for it.
@@ -7441,12 +7444,12 @@ const restyle = (commits: CommitSummary[]) => report([entry('click', 0, 128, 2, 
 test('a layout forced in a commit with several roots is named after the component they all sit under, with the whole count', () => {
   const r = restyle([pageRerender, under('DialogPortal', dialogMount())]);
   assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name, r.explanation.blame.detail], ['layout', 'DialogPortal', '89 components']);
-  // The sentence names the same place, and nothing inside it.
-  assert.ok(r.explanation.cause.includes('mounting 89 components inside DialogPortal.'), r.explanation.cause);
+  // The sentence names the same place, and nothing inside it. Rendering, since 87 of the 89 mounted.
+  assert.ok(r.explanation.cause.includes('rendering 89 components inside DialogPortal.'), r.explanation.cause);
   assert.doesNotMatch(r.verdict, /CommandGroup/);
   // The panel takes its verb from that commit, not from the heavier re-render beside it.
   assert.equal(blamedCommit(r), r.commits[1]);
-  assert.equal(renderedVerb(blamedCommit(r)!), 'mounted');
+  assert.equal(renderedVerb(blamedCommit(r)!), 'rendered');
   // A store update that re-renders a part of the page under each of two roots is the same: the read can be in either.
   const split = restyle([under('App', commit(60, 0, { hasDurations: false, total: 0, rendered: 83, roots: ['Dashboard', 'Sidebar'], hotPath: ['Dashboard', 'Panel'], pathStart: 'heaviest-root', startRendered: 42, pathRendered: 41, components: [{ name: 'Bar', count: 40, self: null, total: null }] }))]);
   assert.deepEqual([split.explanation.blame.name, split.explanation.blame.detail], ['App', '83 components']);
@@ -7454,7 +7457,7 @@ test('a layout forced in a commit with several roots is named after the componen
   // Where the roots sit under no component, the app holds them, as it does for a path that ends in no name.
   const loose = restyle([under(null, dialogMount())]);
   assert.deepEqual([loose.explanation.blame.kind, loose.explanation.blame.name, loose.explanation.blame.detail], ['layout', 'the app', '89 components']);
-  assert.ok(loose.explanation.cause.includes('mounting 89 components inside the app.'), loose.explanation.cause);
+  assert.ok(loose.explanation.cause.includes('rendering 89 components inside the app.'), loose.explanation.cause);
   // A commit the walk recorded nothing for, as one revived from JSON, is named as before, and its sentence agrees.
   const stored = restyle([dialogMount()]);
   assert.deepEqual([stored.explanation.blame.name, stored.explanation.blame.detail], ['CommandGroup', '27 of 89 components']);
@@ -7497,4 +7500,21 @@ test("plate's search dialog, walked: a Presence and a Portal mount under DialogP
   assert.ok(r.explanation.cause.includes('mounting 44 components inside DialogPortal.'), r.explanation.cause);
   assert.doesNotMatch(`${r.verdict} ${r.explanation.notes.join(' ')}`, /CommandGroup/);
   assert.equal(blamedCommit(r), r.commits[0]);
+});
+
+test('a render is said to be mounting only where every component it rendered mounted', () => {
+  // Plate's search dialog on a development build: the render after the paint rendered 1959 components and mounted
+  // 1838 of them, and the note read "75 ms mounting 1959 components", which claims 121 mounts that were re-renders.
+  const data = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], [], [input(0, 'click')]);
+  const lateList = (mounted: number) =>
+    commit(400, 0, { total: 75, rendered: 1959, mounted, roots: ['CommandMenu'], hotPath: ['CommandMenu', 'CommandMenuDialog', 'Command', 'CommandList'], pathStart: 'only-root', startRendered: 1959, pathRendered: 1890, components: [{ name: 'CommandItems', count: 264, self: 21, total: 13 }] });
+  const note = (mounted: number) => sealReport(attachLaterRender(data, lateList(mounted), [])!).explanation.notes.find((n) => n.includes('second React render'))!;
+  assert.doesNotMatch(note(1838), /mounting/);
+  assert.match(note(1838), /: 75 ms rendering 1959 components from CommandMenu down, 1890 of them inside CommandList/);
+  assert.match(note(1959), /: 75 ms mounting 1959 components from CommandMenu down/);
+  // The cause's own render the same: the dialog's mount rendered 89 and mounted 87, two of them re-rendered.
+  const r = restyle([pageRerender, under('DialogPortal', dialogMount())]);
+  assert.ok(r.explanation.cause.includes('rendering 89 components inside DialogPortal.'), r.explanation.cause);
+  assert.equal(renderedVerb(blamedCommit(r)!), 'rendered');
+  assert.ok(restyle([pageRerender, under('DialogPortal', dialogMount({ mounted: 89 }))]).explanation.cause.includes('mounting 89 components inside DialogPortal.'));
 });
