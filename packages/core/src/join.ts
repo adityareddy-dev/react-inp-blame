@@ -1283,7 +1283,7 @@ function namedFromStart(c: CommitSummary): boolean {
 /**
  * "re-rendering 801 components inside OrderSummary, mostly LineItem (800 of them, 161 ms)"; "re-rendering 637
  * components inside TableBody (257 ms of it in TableBody's own render)" where one component's own render was
- * most of it (`ownRender`); "mounting" where most of the components were rendering for the first time;
+ * most of it (`ownRender`); "mounting" where every component was rendering for the first time;
  * "hydrating" for a hydration.
  */
 function renderPhrase(c: CommitSummary, at?: string): string {
@@ -2525,7 +2525,7 @@ function explain(r: InteractionReport): Explanation {
     // timed higher than that remainder: the browser charges forced layout to the script it happened
     // in, and that can be a render body reading geometry, so the two overlap and the remainder bounds
     // nothing. Claiming it did would contradict the sentence about the render next.
-    const left = Math.max(0, handledWindow - forcedWhileHandling);
+    const left = Math.max(0, Math.round(handledWindow) - Math.round(forcedWhileHandling));
     // The remainder covers the walk because the window it came from does. Naming the walk only when
     // it is worth a whole millisecond keeps it out of the sentence for every ordinary interaction.
     const ourRead = r.walkMs >= 0.5 ? ", this library's read of what React rendered" : '';
@@ -2586,7 +2586,7 @@ function explain(r: InteractionReport): Explanation {
     const reactSure = !!sure && (!hasDurations || measuredFrom(sure) === 'measured');
     const maybe = reactSure ? '' : `${HEDGE} `;
     // A total over what was left says where the rest went, or 62 ms of rendering beside 28 ms left reads as a contradiction.
-    const gapSaid = !overlapping && hasDurations && rendersMs > left && told && severalRenders(told) ? ` Of the ${ms(rendersMs)}, ${ms(gapRender)} came ${whereBetween}, outside the ${ms(handledWindow)}.` : '';
+    const gapSaid = !overlapping && hasDurations && Math.round(rendersMs) > left && told && severalRenders(told) ? ` Of the ${ms(rendersMs)}, ${ms(gapRender)} came ${whereBetween}, outside the ${ms(handledWindow)}.` : '';
     const rendered = told ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(told, underOr(renderSpent(told)), at)}` : `React was ${maybe}${renderPhrase(told, at)}`}.${gapSaid}` : '';
     // What forces a layout is said straight after the layout, and React's clause after that: put after the
     // clause, its "That happens" read as about the re-render.

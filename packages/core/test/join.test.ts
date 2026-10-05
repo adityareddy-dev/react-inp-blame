@@ -7523,7 +7523,7 @@ test("renders between one event's handlers and the next's are not set against th
   // Plate's search dialog, development build: of 168 ms handling the click the layout took 140, leaving 28. React
   // rendered 62 ms across the interaction, but 45 of it ran between the pointerdown's handlers and the pointerup's,
   // outside the 168, and the click's own renders were 17 ms. The cause said the layout overlapped React's render.
-  // Here with no walk of the library's own, so 29 ms are left, and the renders come to 60 ms, 44 of them in the gap.
+  // Here the 168 and the 140 are whole before one is taken from the other, so 28 ms are left as on plate, and the renders come to 60 ms, 44 of them in the gap.
   const press = [entry('pointerdown', 0, 256, 1.1, 1.9), entry('pointerup', 0, 256, 75.1, 75.3), entry('click', 0, 256, 76.1, 242.6)];
   const ring = [input(0, 'pointerdown'), input(0, 'pointerup'), input(0, 'click', { handler: 'onClick' })];
   const at = (t: number, type: string, opts: Partial<CommitSummary>) => ({ ...commit(t, 0, opts), inputType: type });
@@ -7537,10 +7537,31 @@ test("renders between one event's handlers and the next's are not set against th
   const frames = [frame(0, 256, [script('BUTTON.onclick', 76.1, 166.5, 139.7)])];
   const { cause } = report(press, commits, frames, ring).explanation;
   assert.doesNotMatch(cause, /overlaps React's own render/);
-  assert.match(cause, /^Of the 168 ms it took to handle the click, the browser spent 140 ms recalculating styles and layout, leaving 29 ms for React's render and commit, /);
-  // And the render's total after it says where the rest of it went, or 60 ms of rendering beside 29 ms left reads as a contradiction.
+  assert.match(cause, /^Of the 168 ms it took to handle the click, the browser spent 140 ms recalculating styles and layout, leaving 28 ms for React's render and commit, /);
+  // And the render's total after it says where the rest of it went, or 60 ms of rendering beside 28 ms left reads as a contradiction.
   assert.match(cause, /React spent 60 ms rendering across 5 commits, .*\. Of the 60 ms, 44 ms came between the pointerdown's handlers and the pointerup's, outside the 168 ms\.$/);
   // Where the render inside the window is over what was left, it is the overlap it was.
   const inside = commits.map((c) => (c.inputType === 'click' ? { ...c, total: c.total * 4 } : c));
   assert.match(report(press, inside, frames, ring).explanation.cause, /which overlaps React's own render/);
+});
+
+test('a render total that rounds to the time left beside a forced layout is not said to have run over it', () => {
+  // The same click with the renders cut to 28.3 ms, 0.3 over the 28 left. Both print as 28 ms, so a line saying
+  // where the rest went would be about a rest the sentence can't show.
+  const press = [entry('pointerdown', 0, 256, 1.1, 1.9), entry('pointerup', 0, 256, 75.1, 75.3), entry('click', 0, 256, 76.1, 242.6)];
+  const ring = [input(0, 'pointerdown'), input(0, 'pointerup'), input(0, 'click', { handler: 'onClick' })];
+  const at = (t: number, type: string, opts: Partial<CommitSummary>) => ({ ...commit(t, 0, opts), inputType: type });
+  const commits = [
+    at(24.4, 'pointerdown', { startedAt: 18.4, total: 6, rendered: 347, roots: ['Slate'], hotPath: ['Slate'], components: [{ name: 'Leaf', count: 300, self: 4, total: 4 }] }),
+    at(69, 'pointerdown', { startedAt: 62.4, total: 6.6, rendered: 559, roots: ['Toolbar'], hotPath: ['Toolbar'], components: [{ name: 'ToolbarButton', count: 40, self: 4, total: 4 }] }),
+    at(87.6, 'click', { startedAt: 79.9, total: 7.7, rendered: 89, mounted: 87, roots: ['Portal'], hotPath: ['Portal', 'DialogContent'], components: [{ name: 'Primitive.div', count: 13, self: 2, total: 2 }] }),
+    at(180.4, 'click', { startedAt: 176.8, total: 3.6, rendered: 98, roots: ['CommandMenuDialog'], hotPath: ['CommandMenuDialog'], components: [{ name: 'Item', count: 9, self: 1, total: 1 }] }),
+    at(241.1, 'click', { startedAt: 236.7, total: 4.4, rendered: 73, roots: ['DismissableLayer'], hotPath: ['DismissableLayer'], components: [{ name: 'Row', count: 9, self: 1, total: 1 }] }),
+  ];
+  const frames = [frame(0, 256, [script('BUTTON.onclick', 76.1, 166.5, 139.7)])];
+  const { cause } = report(press, commits, frames, ring).explanation;
+  assert.match(cause, /leaving 28 ms for React's render and commit, /);
+  assert.match(cause, /React spent 28 ms rendering across 5 commits/);
+  assert.doesNotMatch(cause, /came between/);
+  assert.doesNotMatch(cause, /overlaps React's own render/);
 });
