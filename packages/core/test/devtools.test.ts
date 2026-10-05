@@ -344,14 +344,15 @@ test('the interaction entry takes the commit a render blame names where that is 
 });
 
 test("the interaction's count of renders before the paint is the tooltip's, and says how many were too small to count", () => {
-  // Shaped like opening the shadcn/ui Sheet: six commits before the paint, three with work in them, and an empty
-  // one and two small ones beside them. The tooltip said React rendered 3 times and the Summary said 6.
+  // Shaped like opening the shadcn/ui Sheet: six commits before the paint, three with work in them, two small ones
+  // and an empty one beside them. The tooltip said React rendered 3 times and the Summary said 6. Five rendered
+  // something, and the empty one is the one left out.
   const small = (at: number, rendered: number) => commit(at, { rendered, roots: rendered ? ['Presence'] : [], hotPath: rendered ? ['Presence'] : [], components: rendered ? [{ name: 'Presence', count: rendered, self: null, total: null }] : [] });
   const r = report([commit(20), small(30, 0), commit(60), small(70, 2), commit(100), small(110, 3)]);
-  assert.match(r.verdict, / React rendered 3 times before the screen updated,/);
+  assert.match(r.verdict, / React rendered 5 times before the screen updated,/);
   const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
   const count = (d: Drawn | undefined) => d?.properties?.find(([name]) => name === 'React renders before the paint')?.[1];
-  assert.equal(count(drawn[0]), '3, and 3 too small to count');
+  assert.equal(count(drawn[0]), '5, and 1 too small to count');
   // Every one of them is still drawn.
   assert.equal(drawn.filter((d) => d.track === 'React renders').length, 6);
   // Where every render counts, the count is the number alone.
