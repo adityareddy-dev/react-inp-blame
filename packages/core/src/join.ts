@@ -1,4 +1,4 @@
-import { ANONYMOUS, dominantComponent, frameworkLayers, frameworkWrappers, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
+import { aboveRoots, ANONYMOUS, dominantComponent, frameworkLayers, frameworkWrappers, heaviest, leafName, MINIFIED_NAMES_NOTE, minifiedAmongReadable, mostlyComponent, namesLookMinified, readableName, startName } from './commits.js';
 import { controlAround, elementOf, selector } from './element.js';
 import { fiberFromNode, handlerOf, namingFiber, ownersOf } from './fiber.js';
 import { DEFAULT_INPUT_WINDOW, INPUT_TYPES, joinWindow, type InputRecord, type ReactPage } from './hook.js';
@@ -1229,12 +1229,12 @@ function renderVerb(c: CommitSummary): string {
  * one whose name and detail the blame carries, the heaviest of them where several do. It is not always the
  * heaviest commit: a 5 ms render whose layout effects ran for 60 ms is named over a 20 ms mount beside it, and
  * a layout blame names the commit whose time could hold the layout. A layout or render blame named from where the
- * render started (`fromName`) is matched that way first. The heaviest where none matches, and null where the report
- * holds no commit.
+ * render started (`fromName`), or a layout from what several roots sit under (`fromAbove`), is matched that way first.
+ * The heaviest where none matches, and null where the report holds no commit.
  */
 export function blamedCommit(r: InteractionReport): CommitSummary | null {
   const { kind, name, detail } = r.explanation.blame;
-  const fromStart = (x: CommitSummary) => (kind === 'layout' ? layoutFrom(x) : kind === 'render' && fromName(x)) === name && mostlyOf(x, false) === detail;
+  const fromStart = (x: CommitSummary) => name !== null && (kind === 'layout' || (kind === 'render' && namedFromStart(x))) && (fromAbove(x) ?? fromName(x)) === name && mostlyOf(x, false) === detail;
   const started = r.commits.filter(fromStart);
   const named = started.length ? started : r.commits.filter((x) => leafOf(x) === name && mostlyOf(x) === detail);
   return named.length ? heaviest(named) : r.commits.length ? heaviest(r.commits) : null;
@@ -1245,11 +1245,11 @@ export function blamedCommit(r: InteractionReport): CommitSummary | null {
  * where the walk counted fewer inside the component the render is named after than in the commit
  * (`insideCount`), from the component the render started at where that holds them all and has a name worth
  * saying (`startName`); "at least 5000 components, at least 800 of them inside Heavy" where the walk was
- * cut.
+ * cut; "89 components inside DialogPortal" where a layout is named after `at`.
  */
-function renderedWhere(c: CommitSummary): string {
+function renderedWhere(c: CommitSummary, at?: string): string {
   const inside = insideCount(c);
-  if (inside == null) return `${renderedCount(c)} inside ${leafOf(c)}`;
+  if (at || inside == null) return `${renderedCount(c)} inside ${at ?? leafOf(c)}`;
   const from = startName(c);
   return `${renderedCount(c)}${from ? ` from ${from} down` : ''}, ${atLeast(c)}${inside} of them inside ${leafOf(c)}`;
 }
@@ -1264,13 +1264,8 @@ function fromName(c: CommitSummary): string | null {
   return insideCount(c) != null && !(top && top.count > 1 && top.name === leafOf(c)) ? startName(c) : null;
 }
 
-/**
- * What a layout blame is named after where something holds the whole commit, since nothing names the read that
- * forced the layout and it can be anywhere React rendered: where the render started (`fromName`), else, where
- * several roots rendered, the component they all sit under (`above`), the app where they sit under none.
- * Undefined where the end of the path is all there is to go on, as on a report stored before `above`.
- */
-const layoutFrom = (c: CommitSummary): string | undefined => fromName(c) ?? (c.pathStart === 'heaviest-root' ? (c.above === null ? 'the app' : c.above) : undefined);
+/** What a layout in a commit with several roots is named after: the component the walk found them all under, else the app. */
+export const fromAbove = (c: CommitSummary): string | undefined => (aboveRoots.has(c.hotPath) ? (aboveRoots.get(c.hotPath) ?? 'the app') : undefined);
 
 /** Whether a render blame is named where the render started: the times on its hot path show its end took under half of it. */
 function namedFromStart(c: CommitSummary): boolean {
@@ -1291,9 +1286,9 @@ function namedFromStart(c: CommitSummary): boolean {
  * most of it (`ownRender`); "mounting" where most of the components were rendering for the first time;
  * "hydrating" for a hydration.
  */
-function renderPhrase(c: CommitSummary): string {
+function renderPhrase(c: CommitSummary, at?: string): string {
   const verb = renderVerb(c);
-  const leaf = leafOf(c);
+  const leaf = at ?? leafOf(c);
   const top = dominantComponent(c);
   // React commits with nothing rendered: a retry that found the boundary still blocked, or an update
   // every component bailed out of. Calling that a re-render of no components reads as a bug in the
@@ -1313,7 +1308,7 @@ function renderPhrase(c: CommitSummary): string {
     // a committing or effects figure after it reads as the next part of the whole rather than more of "it".
     mostly = ` (${ms(own.self)} of it in ${own.name}'s own render)`;
   }
-  return `${verb} ${renderedWhere(c)}${mostly}`;
+  return `${verb} ${renderedWhere(c, at)}${mostly}`;
 }
 
 /**
@@ -1846,10 +1841,10 @@ function explain(r: InteractionReport): Explanation {
    */
   const severalRenders = (named: CommitSummary) => renders.length > 1 && renders.includes(named) && Math.round(rendersMs) - Math.round(named.total) >= 1;
   const renderSpent = (named: CommitSummary) => (renders.includes(named) ? rendersMs : named.total);
-  const renderAcross = (named: CommitSummary, alone: string) =>
+  const renderAcross = (named: CommitSummary, alone: string, at?: string) =>
     severalRenders(named)
-      ? `${underOr(rendersMs)} rendering across ${plural(renders.length, 'commit')}, ${underOr(named.total)} of it ${renderPhrase(named)}`
-      : `${alone} ${renderPhrase(named)}`;
+      ? `${underOr(rendersMs)} rendering across ${plural(renders.length, 'commit')}, ${underOr(named.total)} of it ${renderPhrase(named, at)}`
+      : `${alone} ${renderPhrase(named, at)}`;
   // The same total, for a sentence that leads with the named commit's figure and keeps its word order. It goes
   // after the working time, so only the named render is set against it: led with the total, a note put 35 ms of
   // rendering, some of it after the handlers, in 25 ms of working time. It says what it totals, or after "30 ms
@@ -2568,7 +2563,9 @@ function explain(r: InteractionReport): Explanation {
     saidAcross = told;
     // The hot path says where the render went, not where the read was, so where the sentence says it went
     // from a component that holds the whole commit (`fromName`) that is the subtree named, with the whole count.
-    const whole = inTheSubtree ? layoutFrom(subtree) : null;
+    // Where several roots rendered, the one they sit under, and the sentence says it too.
+    const at = inTheSubtree ? fromAbove(subtree) : undefined;
+    const whole = inTheSubtree ? (at ?? fromName(subtree)) : null;
     const name = inTheSubtree
       ? (whole ?? leafOf(subtree))
       : !read.untied && holdsMostOfIt && charged
@@ -2585,7 +2582,7 @@ function explain(r: InteractionReport): Explanation {
     const sure = told && !unjoined && namesThisInteraction(told) ? told : null;
     const reactSure = !!sure && (!hasDurations || measuredFrom(sure) === 'measured');
     const maybe = reactSure ? '' : `${HEDGE} `;
-    const rendered = told ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(told, underOr(renderSpent(told)))}` : `React was ${maybe}${renderPhrase(told)}`}.` : '';
+    const rendered = told ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(told, underOr(renderSpent(told)), at)}` : `React was ${maybe}${renderPhrase(told, at)}`}.` : '';
     // What forces a layout is said straight after the layout, and React's clause after that: put after the
     // clause, its "That happens" read as about the re-render.
     cause = `Of the ${window}, ${say(confidence, `the browser spent ${spent}.`, `the browser ${HEDGE} spent ${spent}.`)}${chargedTo} ${read.said}${rendered}`;
@@ -2692,10 +2689,7 @@ function explain(r: InteractionReport): Explanation {
     // The milliseconds are the commit's in all, its render, committing and effects, which is what it
     // accounts for; the render alone was 5 ms for a commit whose effects ran for 300.
     // Never null: a reader written against 0.3.0 dereferences the name of a render blame.
-    // As a layout is, where React's render was under half of what its commit took: the committing and the effects
-    // can be anywhere it rendered. On plate, a 3 ms close of a dialog whose commit took 27 ms more was named after
-    // a list group deep inside it.
-    const fromStart = namedFromStart(rc) || (hasDurations && rc.total * 2 < own(rc) && fromName(rc) !== null);
+    const fromStart = namedFromStart(rc);
     blame = { kind: 'render', name: fromStart ? fromName(rc)! : leafOf(rc), detail: effectsLed ? `useEffect callbacks${effectsDetail}` : mostlyOf(rc, !fromStart), ms: hasDurations ? own(rc) : null, confidence };
   } else if (untimedHandler && !waitingWins) {
     // Past the count that would have blamed the render, what kept it from the blame is said: no list

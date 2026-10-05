@@ -1,5 +1,5 @@
 import { heaviest, leafName } from './commits.js';
-import { blamedCommit, ms, verdictCounts } from './join.js';
+import { blamedCommit, fromAbove, ms, verdictCounts } from './join.js';
 import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 import { parseReactVersion } from './version.js';
@@ -84,10 +84,10 @@ export function createTimeline(renderers: () => RendererInfo[]): Timeline {
 function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void {
   const x = r.explanation;
   // The commit the verdict's blame names, so the entry's name never contradicts its tooltip: where a layout
-  // or render blame is named after the component that commit's render started at, that one.
+  // or render blame is named after the component that commit's render started at, or its roots sit under, that one.
   const heaviestCommit = r.commits.length ? heaviest(r.commits) : null;
   const main = x.blame.kind === 'layout' || x.blame.kind === 'render' ? blamedCommit(r) : heaviestCommit;
-  const started = (x.blame.kind === 'layout' || x.blame.kind === 'render') && x.blame.name && main?.hotPath[0] === x.blame.name ? x.blame.name : null;
+  const started = (x.blame.kind === 'layout' || x.blame.kind === 'render') && x.blame.name && main && (main.hotPath[0] === x.blame.name || fromAbove(main) === x.blame.name) ? x.blame.name : null;
   const leaf = started ?? (main ? (leafName(main) ?? '') : '');
   const properties: [string, string][] = [
     ['Total', ms(r.duration)],

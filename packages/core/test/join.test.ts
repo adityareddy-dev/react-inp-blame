@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { heaviest, mostlyComponent } from '../src/commits.ts';
+import { aboveRoots, heaviest, mostlyComponent } from '../src/commits.ts';
 import { walkCommit } from '../src/fiber.ts';
 import type { InputRecord } from '../src/hook.ts';
 import { attachLaterRender, blamedCommit, buildReport, carriesWork, isLaterRender, refreshReport, renderedVerb, sealReport, verdictCounts, type LabelSource } from '../src/join.ts';
@@ -7377,48 +7377,70 @@ test('a production render cut at its budget with useEffect callbacks after it sa
 // whole-page restyles from Radix's Presence, FocusScope and scroll lock, all in that mount, and the layout was
 // named after the deepest component the render path reached, cmdk's CommandGroup, which only sets a class name.
 const dialogPath = ['Portal', 'Primitive.div', 'DialogContent', 'Presence', 'FocusScope', 'DismissableLayer', 'Primitive.div', 'Command', 'CommandList', 'CommandGroup', 'Primitive.div'];
+// What the walk records of a commit with several roots: the component they all sit under, null for none.
+const under = (above: string | null, c: CommitSummary) => (aboveRoots.set(c.hotPath, above), c);
 const dialogMount = (opts: Partial<CommitSummary> = {}) =>
-  commit(60, 0, { hasDurations: false, total: 0, rendered: 89, mounted: 87, roots: ['Portal'], hotPath: dialogPath, pathStart: 'heaviest-root', startRendered: 72, pathRendered: 27, above: 'DialogPortal', components: [{ name: 'Primitive.div', count: 13, self: null, total: null }], ...opts });
+  commit(60, 0, { hasDurations: false, total: 0, rendered: 89, mounted: 87, roots: ['Portal'], hotPath: [...dialogPath], pathStart: 'heaviest-root', startRendered: 72, pathRendered: 27, components: [{ name: 'Primitive.div', count: 13, self: null, total: null }], ...opts });
 const pageRerender = commit(124, 0, { hasDurations: false, total: 0, rendered: 559, roots: ['Toolbar'], hotPath: ['Toolbar'], pathStart: 'only-root', startRendered: 559, pathRendered: 559, components: [{ name: 'Comment', count: 123, self: null, total: null }] });
 const restyle = (commits: CommitSummary[]) => report([entry('click', 0, 128, 2, 118)], commits, [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 108)])], [input(0, 'click')]);
 
 test('a layout forced in a commit with several roots is named after the component they all sit under, with the whole count', () => {
-  const r = restyle([pageRerender, dialogMount()]);
+  const r = restyle([pageRerender, under('DialogPortal', dialogMount())]);
   assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name, r.explanation.blame.detail], ['layout', 'DialogPortal', '89 components']);
+  // The sentence names the same place, and nothing inside it.
+  assert.ok(r.explanation.cause.includes('mounting 89 components inside DialogPortal.'), r.explanation.cause);
+  assert.doesNotMatch(r.verdict, /CommandGroup/);
   // The panel takes its verb from that commit, not from the heavier re-render beside it.
   assert.equal(blamedCommit(r), r.commits[1]);
   assert.equal(renderedVerb(blamedCommit(r)!), 'mounted');
   // A store update that re-renders a part of the page under each of two roots is the same: the read can be in either.
-  const split = restyle([commit(60, 0, { hasDurations: false, total: 0, rendered: 83, roots: ['Dashboard', 'Sidebar'], hotPath: ['Dashboard', 'Panel'], pathStart: 'heaviest-root', startRendered: 42, pathRendered: 41, above: 'App', components: [{ name: 'Bar', count: 40, self: null, total: null }] })]);
+  const split = restyle([under('App', commit(60, 0, { hasDurations: false, total: 0, rendered: 83, roots: ['Dashboard', 'Sidebar'], hotPath: ['Dashboard', 'Panel'], pathStart: 'heaviest-root', startRendered: 42, pathRendered: 41, components: [{ name: 'Bar', count: 40, self: null, total: null }] }))]);
   assert.deepEqual([split.explanation.blame.name, split.explanation.blame.detail], ['App', '83 components']);
+  assert.ok(split.explanation.cause.includes('83 components inside App.'), split.explanation.cause);
   // Where the roots sit under no component, the app holds them, as it does for a path that ends in no name.
-  const loose = restyle([dialogMount({ above: null })]);
+  const loose = restyle([under(null, dialogMount())]);
   assert.deepEqual([loose.explanation.blame.kind, loose.explanation.blame.name, loose.explanation.blame.detail], ['layout', 'the app', '89 components']);
-  // A report stored before the walk said what sits above the roots is named as it was.
-  const stored = restyle([dialogMount({ above: undefined })]);
+  assert.ok(loose.explanation.cause.includes('mounting 89 components inside the app.'), loose.explanation.cause);
+  // A commit the walk recorded nothing for, as one revived from JSON, is named as before, and its sentence agrees.
+  const stored = restyle([dialogMount()]);
   assert.deepEqual([stored.explanation.blame.name, stored.explanation.blame.detail], ['CommandGroup', '27 of 89 components']);
+  assert.ok(stored.explanation.cause.includes('27 of them inside CommandGroup.'), stored.explanation.cause);
 });
 
-test('a layout forced in a commit with one root keeps its name, and a render with several roots is still named where the render went', () => {
-  const one = restyle([commit(60, 0, { hasDurations: false, total: 0, rendered: 181, roots: ['Tabs'], hotPath: ['Tabs', 'TabsList'], pathStart: 'only-root', startRendered: 181, pathRendered: 170, above: 'Page', components: [{ name: 'TabsTrigger', count: 16, self: null, total: null }] })]);
-  assert.deepEqual([one.explanation.blame.name, one.explanation.blame.detail], ['Tabs', '181 components']);
+test('a render with several roots is still named where the render went, not after what they sit under', () => {
   // A render is where React's own time went, so the path's end is still the name: the component above the roots rendered nothing.
-  const split = commit(1035, 1000, { startedAt: 1003, total: 30, rendered: 83, roots: ['Dashboard', 'Sidebar'], hotPath: ['Dashboard', 'Panel'], pathStart: 'heaviest-root', startRendered: 42, pathRendered: 41, above: 'App', components: [{ name: 'Panel', count: 1, self: 1, total: 25 }, { name: 'Bar', count: 40, self: 0.5, total: 0.5 }] });
+  const split = under('App', commit(1035, 1000, { startedAt: 1003, total: 30, rendered: 83, roots: ['Dashboard', 'Sidebar'], hotPath: ['Dashboard', 'Panel'], pathStart: 'heaviest-root', startRendered: 42, pathRendered: 41, components: [{ name: 'Panel', count: 1, self: 1, total: 25 }, { name: 'Bar', count: 40, self: 0.5, total: 0.5 }] }));
   const r = report([entry('click', 1000, 64, 1003, 1040)], [split], null, [input(1000, 'click', { handler: 'onClick' })]);
   assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['render', 'Panel']);
+  assert.ok(r.explanation.cause.includes('41 of them inside Panel'), r.explanation.cause);
+  assert.equal(blamedCommit(r), r.commits[0]);
 });
 
-// Closing plate's search dialog by Escape: React re-rendered the dialog in 3 ms and spent 27 ms more committing,
-// Radix's Presence reading styles in a layout effect and react-dom removing the portal. 0.24.0's wrapper rule left
-// a step for the path to reach cmdk's CommandGroup, and the render was named after it in 7 of 12 runs.
-test('a render whose commit took most of its time in committing is named where the render started, as a layout is', () => {
-  const closePath = ['CommandMenu', 'CommandMenuDialog', 'Dialog', 'DialogContent', 'Presence', 'FocusScope', 'DismissableLayer', 'Command', 'CommandList', 'CommandGroup', 'Primitive.div'];
-  const close = (total: number, startedAt: number) =>
-    commit(1033, 1000, { startedAt, total, rendered: 100, roots: ['CommandMenu'], hotPath: closePath, pathStart: 'only-root', startRendered: 100, pathRendered: 27, components: [{ name: 'CommandGroup', count: 1, self: 0.3, total: total * 0.6 }, { name: 'CommandItem', count: 27, self: 0.05, total: 0.05 }] });
-  const r = report([entry('click', 1000, 48, 1001, 1040)], [close(3, 1003)], null, [input(1000, 'click', { handler: 'onClick' })]);
-  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name, r.explanation.blame.detail], ['render', 'CommandMenu', '100 components']);
+test("plate's search dialog, walked: a Presence and a Portal mount under DialogPortal, and the layout and its sentence name DialogPortal", () => {
+  // A production build's mount: nothing timed, and nothing rendered before.
+  function fiber(tag: number, type: unknown, children: Record<string, unknown>[] = [], flags = tag === 0 ? 1 : 0): Record<string, unknown> {
+    const f: Record<string, unknown> = { tag, flags, mode: 0, elementType: type, type, memoizedProps: null, memoizedState: null, return: null, child: children[0] ?? null, sibling: null, alternate: null };
+    children.forEach((child, i) => Object.assign(child, { return: f, sibling: children[i + 1] ?? null }));
+    return f;
+  }
+  const named = (name: string) => Object.assign(() => {}, { displayName: name });
+  const rendered = (name: string, ...kids: Record<string, unknown>[]) => fiber(0, named(name), kids);
+  const passed = (name: string, ...kids: Record<string, unknown>[]) => fiber(0, named(name), kids, 0);
+  const many = (name: string, n: number) => Array.from({ length: n }, () => rendered(name, fiber(5, 'div')));
+  const chain = (names: string[], ...leaves: Record<string, unknown>[]): Record<string, unknown> => names.reduceRight((kids, n) => [rendered(n, ...kids)], leaves)[0]!;
+  const production = { profileMode: 0b10, strictMode: 0b1000, priority: undefined, didError: false, hydratedTarget: null };
+  const dialog = passed(
+    'DialogPortal',
+    rendered('Presence', chain(['Portal', 'DialogOverlay'], ...many('Piece', 15))),
+    passed('Presence', chain(['Portal', 'DialogContent', 'FocusScope', 'Command', 'CommandList', 'CommandGroup'], ...many('CommandItem', 20))),
+  );
+  // Copied the way the hook copies a walk, and again as the report joins it.
+  const walked: CommitSummary = { ...walkCommit(fiber(3, null, [dialog]) as any, 5000, 60, { ts: 0, type: 'click', gestureTs: 0 }, production), walkMs: 0 };
+  assert.deepEqual([walked.roots, walked.pathStart, walked.rendered], [['Presence', 'Portal'], 'heaviest-root', 44]);
+  const r = restyle([walked]);
+  assert.notEqual(r.commits[0], walked);
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name, r.explanation.blame.detail], ['layout', 'DialogPortal', '44 components']);
+  assert.ok(r.explanation.cause.includes('mounting 44 components inside DialogPortal.'), r.explanation.cause);
+  assert.doesNotMatch(`${r.verdict} ${r.explanation.notes.join(' ')}`, /CommandGroup/);
   assert.equal(blamedCommit(r), r.commits[0]);
-  // The same render taking the time itself, with little committing after, is named where the render went.
-  const slow = report([entry('click', 1000, 48, 1001, 1040)], [close(29, 1003)], null, [input(1000, 'click', { handler: 'onClick' })]);
-  assert.deepEqual([slow.explanation.blame.kind, slow.explanation.blame.name, slow.explanation.blame.detail], ['render', 'CommandGroup', '27 of 100 components']);
 });

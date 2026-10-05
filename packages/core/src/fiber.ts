@@ -1,4 +1,4 @@
-import { passedLayer } from './commits.js';
+import { aboveRoots, passedLayer } from './commits.js';
 import { CONTROL_TAGS, iconAround, isControl } from './element.js';
 import type { InputStamp } from './hook.js';
 import type { CommitSummary, HydrationBoundary, RenderedComponent } from './types.js';
@@ -1120,10 +1120,12 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   const fellBack =
     rootTotal - renderTime > performedRoots.reduce((a, t) => Math.max(a, t.total), 0) ||
     (!hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber)));
-  const above = sharedAncestor(top);
   if (fellBack) {
-    if (above) hotPath.push(above);
+    const shared = sharedAncestor(top);
+    if (shared) hotPath.push(shared);
   } else if (performedRoots.length) {
+    // What several roots sit under, for a layout named after it.
+    if (!onlyRoot) aboveRoots.set(hotPath, sharedAncestor(top));
     let cur = performedRoots.reduce((a, b) => (metric(b) > metric(a) ? b : a));
     hotPath.push(cur.name);
     startRendered = cur.rendered;
@@ -1184,7 +1186,6 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     roots: Object.freeze([...new Set(performedRoots.map((a) => a.name))].slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),
     pathStart,
-    above,
     startRendered,
     pathRendered,
     strictMode: strict,
