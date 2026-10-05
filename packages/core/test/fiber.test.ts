@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { leafName, startName } from '../src/commits.ts';
+import { aboveRoots, leafName, startName } from '../src/commits.ts';
 import { dehydratedAround, fiberFromNode, handlerOf, hydratedSince, nextDevToolsRoot, ownersOf, rootShapeProblem, walkCommit as walkTree, type FiberRoot } from '../src/fiber.ts';
 import type { CommitSummary } from '../src/types.ts';
 
@@ -450,19 +450,30 @@ test('a commit says how many components sit under the root its hot path starts f
   assert.deepEqual([split.rendered, split.startRendered, split.pathRendered], [83, 42, 41]);
   assert.equal(startName(split), null);
   // The component every root sits under, which rendered nothing itself, holds them all.
-  assert.equal(split.above, 'App');
+  assert.equal(aboveRoots.get(split.hotPath), 'App');
   // Two roots of one name, which `roots` lists once: Radix's DialogPortal gives a dialog's overlay and its
   // content a Portal each, and both mount in one commit.
   const portals = walk(passedThrough('DialogPortal', rendered(named('Portal'), rendered(named('Overlay'), ...many('Piece', 15))), rendered(named('Portal'), rendered(named('Content'), ...many('Field', 40)))));
   assert.deepEqual([portals.roots, portals.hotPath], [['Portal'], ['Portal', 'Content']]);
   assert.deepEqual([portals.rendered, portals.startRendered, portals.pathRendered], [59, 42, 41]);
   assert.equal(startName(portals), null);
-  assert.equal(portals.above, 'DialogPortal');
+  assert.equal(aboveRoots.get(portals.hotPath), 'DialogPortal');
+  // plate's search dialog: the overlay's Presence rendered, the content's did not and its Portal did, so the roots
+  // are a Presence and a Portal, both under DialogPortal.
+  const plate = walk(
+    passedThrough(
+      'DialogPortal',
+      rendered(named('Presence'), rendered(named('Portal'), rendered(named('DialogOverlay'), ...many('Piece', 15)))),
+      passedThrough('Presence', chain(['Portal', 'DialogContent', 'FocusScope', 'Command', 'CommandList', 'CommandGroup'], ...many('CommandItem', 20))),
+    ),
+  );
+  assert.deepEqual([plate.roots, plate.pathStart, leafName(plate), plate.rendered], [['Presence', 'Portal'], 'heaviest-root', 'CommandGroup', 44]);
+  assert.equal(aboveRoots.get(plate.hotPath), 'DialogPortal');
   // One root holds them all, and is where the render is said to have started.
   const one = walk(rendered(named('App'), rendered(named('Dashboard'), rendered(named('Panel'), ...many('Bar', 40))), rendered(named('Sidebar'), ...many('NavItem', 4))));
   assert.deepEqual([one.rendered, one.startRendered, one.pathRendered, startName(one)], [48, 48, 41, 'App']);
-  // Nothing sits above a root that rendered from the top.
-  assert.equal(one.above, null);
+  // Nothing is recorded for a commit with one root.
+  assert.equal(aboveRoots.has(one.hotPath), false);
 });
 
 test('a commit counts the components rendering for the first time, and those inside the component its hot path ends on', () => {

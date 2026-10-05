@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { aboveRoots } from '../src/commits.ts';
 import { createTimeline } from '../src/devtools.ts';
 import type { InputRecord } from '../src/hook.ts';
 import { attachLaterRender, buildReport, sealReport } from '../src/join.ts';
@@ -294,6 +295,19 @@ test("the interaction entry takes the start a layout blame is named after, where
   const started = sealReport(buildReport([close], [timed], null));
   assert.deepEqual([started.explanation.blame.kind, started.explanation.blame.name], ['render', 'Dialog']);
   assert.equal(label(started), '160 ms click · Dialog');
+});
+
+test('the interaction entry takes the component a layout blame names above several roots, as the tooltip does', () => {
+  // plate's search dialog opening: a Presence and a Portal mount under Radix's DialogPortal. The path ends at cmdk's
+  // CommandGroup, and the tooltip names DialogPortal.
+  const open = { ...click, duration: 160, processingStart: 3.2, processingEnd: 105 };
+  const dialog = commit(60, { rendered: 89, mounted: 87, roots: ['Presence', 'Portal'], hotPath: ['Portal', 'DialogContent', 'FocusScope', 'Command', 'CommandList', 'CommandGroup'], pathStart: 'heaviest-root', startRendered: 72, pathRendered: 27, components: [{ name: 'Primitive.div', count: 13, self: null, total: null }] });
+  aboveRoots.set(dialog.hotPath, 'DialogPortal');
+  const frames = [{ start: 0, duration: 160, blocking: 110, forcedLayout: 87, scripts: [{ invoker: 'BODY.onclick', name: '', source: 'app.js', start: 3.2, duration: 101.8, forcedLayout: 87 }], styleAndLayoutStart: null }];
+  const r = sealReport(buildReport([open], [dialog], frames));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'DialogPortal']);
+  assert.match(r.verdict, /mounting 89 components inside DialogPortal\./);
+  assert.equal(recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn[0]?.label, '160 ms click · DialogPortal');
 });
 
 test('the interaction entry takes the commit a layout blame names where that is not the heaviest, and the heaviest path stays the heaviest', () => {

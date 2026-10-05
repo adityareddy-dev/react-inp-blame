@@ -63,6 +63,9 @@ export const frameworkLayers = new Set<string>();
 export const frameworkWrappers = new Set<string>();
 export const passedLayer = (name: string): boolean => !readableName(name) || PROVIDER.test(name) || frameworkLayers.has(name);
 
+/** By a walk's hot path, which every copy of its commit shares: the component its several roots sit under, null for none. */
+export const aboveRoots = new WeakMap<readonly string[], string | null>();
+
 /** What the walk writes for a component it found no name for. */
 export const ANONYMOUS = '(anonymous)';
 /** A name as the walk wrote it, or null for none and for the placeholder it writes where it read none. */
