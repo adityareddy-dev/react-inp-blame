@@ -306,7 +306,8 @@ test('the interaction entry takes the component a layout blame names above sever
   const frames = [{ start: 0, duration: 160, blocking: 110, forcedLayout: 87, scripts: [{ invoker: 'BODY.onclick', name: '', source: 'app.js', start: 3.2, duration: 101.8, forcedLayout: 87 }], styleAndLayoutStart: null }];
   const r = sealReport(buildReport([open], [dialog], frames));
   assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'DialogPortal']);
-  assert.match(r.verdict, /mounting 89 components inside DialogPortal\./);
+  // 87 of the 89 mounted, so it is rendering 89, not mounting 89.
+  assert.match(r.verdict, /rendering 89 components inside DialogPortal\./);
   assert.equal(recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn[0]?.label, '160 ms click · DialogPortal');
 });
 

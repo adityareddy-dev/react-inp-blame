@@ -1210,13 +1210,13 @@ export function insideCount(c: CommitSummary): number | null {
 }
 
 /**
- * For the panel's rows, "mounted" where nine in ten or more of the components rendered for the first time,
- * "re-rendered" where one in ten or fewer did, "rendered" between, where either would call a mount a re-render
- * or the other way round; "hydrated" for a hydration. A report an earlier release stored counted no mounts.
+ * For the panel's rows, "mounted" where every component rendered for the first time, since "mounting 1959
+ * components" is read as 1959 mounts, "re-rendered" where one in ten or fewer did, "rendered" between;
+ * "hydrated" for a hydration. A report an earlier release stored counted no mounts.
  */
 export function renderedVerb(c: CommitSummary): string {
   const m = c.mounted ?? 0;
-  return c.hydrated ? 'hydrated' : m && m * 10 >= c.rendered * 9 ? 'mounted' : m * 10 > c.rendered ? 'rendered' : 're-rendered';
+  return c.hydrated ? 'hydrated' : m && m >= c.rendered ? 'mounted' : m * 10 > c.rendered ? 'rendered' : 're-rendered';
 }
 
 /** The same as the sentence says it: "re-rendering", "mounting", "rendering", "hydrating". */
