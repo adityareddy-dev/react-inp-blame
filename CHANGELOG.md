@@ -26,7 +26,7 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 - A forced layout is said to overlap React's render only where the render inside the time it was counted across is
   more than what the layout left of it. Before, the render set against that time took in commits between one event's
   handlers and the next's, which the time leaves out, so on plate's search dialog 62 ms of rendering, 45 of it between
-  the pointerdown's handlers and the pointerup's, was set against the 29 ms left and the cause said the layout
+  the pointerdown's handlers and the pointerup's, was set against the 28 ms left and the cause said the layout
   overlapped React's render. The click's own renders were 17 ms. It now says what was left, and where React's total
   is more than that, how much of it came between the handlers: "Of the 62 ms, 45 ms came between the pointerdown's
   handlers and the pointerup's, outside the 168 ms."
