@@ -200,7 +200,7 @@ export const isPointerEvent = (type: string): boolean => POINTER_EVENTS.includes
 /** A later render worth a sentence, rather than the page settling after the paint. */
 const worthMentioning = (c: CommitSummary) => (c.hasDurations ? c.total >= LATER_MIN_MS : c.rendered >= LATER_MIN_COMPONENTS);
 
-/** A render with real work in it, the kind the blame and the "rendered N times" note count; a status pill updating is not one. */
+/** A render with real work in it, the kind the blame weighs and the "rendered N times" note needs two of to be said; a status pill updating is not one. */
 export const carriesWork = (c: CommitSummary) => (c.hasDurations ? c.total >= RENDER_MIN_MS : c.rendered >= RENDER_MIN_COMPONENTS);
 
 /** A commit whose numbers stand on their own: durations measured on a clock fine enough for them, joined by its exact input stamp, walked in full. */
@@ -1821,12 +1821,13 @@ function explain(r: InteractionReport): Explanation {
    * React's renders, one set for every sentence that counts them and for the "React rendered N times" note: every
    * commit that rendered at all but a render a script forced. Counted apart, a cause read "rendering across 3
    * commits" beside a note saying React "rendered 2 times": the note left out a 3 ms render the total had. A build
-   * that records no durations counts only a render with real work in it, as the note did, and the note adds one
-   * whose committing or effects were worth saying, or that the render blame names. A hydration is rendering and is
+   * that records no durations counts every commit that rendered a component too, or plate's search dialog read
+   * "React rendered 8 times" where 13 commits rendered. Its renders have no times, so no sentence totals them. The
+   * note adds one whose committing or effects were worth saying, or that the render blame names. A hydration is rendering and is
    * counted, though the note is not said for one. The sentences about the working time leave out a render the
    * screen update's clause says was inside a script after it, which the note still counts.
    */
-  const rendersAll = r.commits.filter((x) => !forcedByScript.includes(x) && !pressed.includes(x) && (x.hasDurations ? x.total > 0 || x.rendered > 0 : carriesWork(x)));
+  const rendersAll = r.commits.filter((x) => !forcedByScript.includes(x) && !pressed.includes(x) && (x.hasDurations ? x.total > 0 || x.rendered > 0 : x.rendered > 0));
   const renders = rendersAll.filter((x) => !insideLate.includes(x));
   const rendersMs = renders.reduce((a, x) => a + x.total, 0);
   /**

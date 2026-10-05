@@ -1196,7 +1196,13 @@ render the screen update's clause says ran inside a script after the handlers, w
 the working time leave to that clause. A hydration is not a re-render, so the note leaves it out, except
 where a sentence gave React's render time across commits with the hydration among them: there it counts
 what that sentence counted, and "React rendered 2 times" never sits beside "rendering across 3 commits".
-In a production build no sentence gives a count, and the note leaves the hydration out there too. Until
+In a production build no sentence gives a count, and the note leaves the hydration out there too. Since
+2026-10-05 the note counts every commit that rendered a component in a production build as well. Before, it
+counted only those of 10 components or more there, so plate's search dialog read "React rendered 8 times"
+where 13 commits rendered, and readers grading the report called it wrong. Whether the note is said still asks
+for two renders with work in them (`carriesWork`), so a 300-row render beside three commits of one component
+each gets no note at all. With no times in that build no sentence totals the renders, and none says
+"across 13 commits". Until
 2026-09-27 the note counted only renders of 5 ms or more, and the handler and layout sentences put the
 total beside the one commit's phrase, which gave List a 500-component Sidebar's 25 ms. The render
 verdict said only the commit it named, so three 3 ms renders that earned it together read as 3 ms, under

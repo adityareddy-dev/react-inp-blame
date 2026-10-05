@@ -3947,6 +3947,49 @@ test('the renders a cause counts across commits are the renders the note says Re
   for (const r of [hydrated, production]) assert.ok(r.explanation.notes.includes(times(2)), r.explanation.notes.join(' | '));
 });
 
+// The same commits as a development build gives them, or as a production build does, with counts and no times.
+const built = (dev: boolean, at: number, rendered: number, ms: number) =>
+  commit(at, 0, dev ? { rendered, total: ms, components: [{ name: 'Row', count: rendered, self: ms, total: ms }] } : { rendered, hasDurations: false, total: 0, components: [{ name: 'Row', count: rendered, self: null, total: null }] });
+const renderedTimes = (r: InteractionReport) => r.explanation.notes.find((n) => n.startsWith('React rendered '))?.match(/^React rendered (\d+) times/)?.[1];
+
+test('one render with work in it beside renders of a component or two is not said to be several renders', () => {
+  // A list of 300 rows, then three commits of one component each, a status line or a focus ring.
+  for (const dev of [true, false]) {
+    const r = report([entry('click', 0, 216, 2, 200)], [built(dev, 60, 300, 40), built(dev, 90, 1, 0.2), built(dev, 120, 1, 0.1), built(dev, 150, 1, 0.3)], [], loginClick('handleSave'));
+    assert.equal(renderedTimes(r), undefined, `${dev ? 'development' : 'production'}: ${r.explanation.notes.join(' | ')}`);
+  }
+});
+
+test('the note counts every commit that rendered anything, on a production build as on a development one', () => {
+  // Shaped like plate's search dialog opening: 13 commits before the paint, four with work in them and nine of a
+  // component or a few. A production build said "React rendered 4 times" here, and 8 on plate where 13 rendered.
+  const sizes: [number, number][] = [[89, 20], [3, 0.3], [1, 0.1], [12, 6], [2, 0.2], [1, 0.1], [40, 9], [4, 0.4], [1, 0.1], [2, 0.2], [15, 7], [1, 0.1], [3, 0.3]];
+  for (const dev of [true, false]) {
+    const r = report([entry('click', 0, 216, 2, 200)], sizes.map(([n, ms], i) => built(dev, 10 + i * 14, n, ms)), [], loginClick('handleSave'));
+    assert.equal(r.commits.length, 13);
+    assert.equal(renderedTimes(r), '13', `${dev ? 'development' : 'production'}: ${r.explanation.notes.join(' | ')}`);
+    assert.equal(verdictCounts(r).renders, 13);
+  }
+});
+
+test('a production build says no render time across commits, where it counts all of them', () => {
+  // A render verdict, and a painting one whose note gives React's render time in all. The development build says
+  // both totals; the production build has no times to total, and counting its small renders gives it none.
+  const across = /across \d+ commits/;
+  const said = (r: InteractionReport) => [r.explanation.cause, ...r.explanation.notes].join(' ');
+  const commits = (dev: boolean) => [built(dev, 40, 300, 30), built(dev, 55, 2, 0.4), built(dev, 70, 200, 20), built(dev, 74, 1, 0.2)];
+  const rendered = (dev: boolean) => report([entry('click', 0, 96, 2, 77)], commits(dev), []);
+  const painted = (dev: boolean) => report([entry('click', 0, 300, 2, 77)], commits(dev), []);
+  assert.equal(rendered(true).explanation.blame.kind, 'render');
+  assert.match(said(rendered(true)), across);
+  assert.equal(painted(true).explanation.blame.kind, 'painting');
+  assert.match(said(painted(true)), /of rendering in all across \d+ commits/);
+  for (const r of [rendered(false), painted(false)]) {
+    assert.doesNotMatch(said(r), across, said(r));
+    assert.equal(renderedTimes(r), '4');
+  }
+});
+
 test("a render between one event's handlers and the next's is working time a long wait before them has to outlast", () => {
   // Typing fast: the key press waited 60 ms behind the last key's work, then React rendered for 85 ms before the
   // keyup was handled, all in one frame. The render is the verdict, as it is after a 45 ms wait, and the wait is

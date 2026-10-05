@@ -14,6 +14,10 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
   that forced the layout can be in either. It now reads "mounting 89 components inside DialogPortal", and the
   devtools entry names DialogPortal too. Where the roots sit under no component it names the app. `hotPath` is
   unchanged, and a report stored by an earlier release is named as before.
+- "React rendered N times before the screen updated" counts every commit that rendered a component on a production
+  build too, as it has on a development build since 0.19.0. Before, a production build counted only commits of 10
+  components or more, so plate's search dialog read "React rendered 8 times" where 13 commits rendered. The note is
+  still said only where two of those renders had work in them, and the Performance panel's Summary count moves with it.
 
 ## [0.24.0] - 2026-10-04
 
