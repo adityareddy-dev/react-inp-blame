@@ -2529,7 +2529,9 @@ function explain(r: InteractionReport): Explanation {
     // The remainder covers the walk because the window it came from does. Naming the walk only when
     // it is worth a whole millisecond keeps it out of the sentence for every ordinary interaction.
     const ourRead = r.walkMs >= 0.5 ? ", this library's read of what React rendered" : '';
-    const overlapping = hasDurations && renderTotal > left;
+    // Only the render inside that window can overlap it: one between one event's handlers and the next's is left out of both.
+    const gapRender = inWorkingTime.filter((x) => inAGap(x.at)).reduce((a, x) => a + x.total, 0);
+    const overlapping = hasDurations && renderTotal - gapRender > left;
     const rest = overlapping
       ? "which overlaps React's own render: geometry read inside a render body is charged to both"
       : `leaving ${ms(left)} for React's render and commit, its layout effects${ourRead} and the ${kind} handler together`;
@@ -2583,7 +2585,9 @@ function explain(r: InteractionReport): Explanation {
     const sure = told && !unjoined && namesThisInteraction(told) ? told : null;
     const reactSure = !!sure && (!hasDurations || measuredFrom(sure) === 'measured');
     const maybe = reactSure ? '' : `${HEDGE} `;
-    const rendered = told ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(told, underOr(renderSpent(told)), at)}` : `React was ${maybe}${renderPhrase(told, at)}`}.` : '';
+    // A total over what was left says where the rest went, or 62 ms of rendering beside 28 ms left reads as a contradiction.
+    const gapSaid = !overlapping && hasDurations && rendersMs > left && told && severalRenders(told) ? ` Of the ${ms(rendersMs)}, ${ms(gapRender)} came ${whereBetween}, outside the ${ms(handledWindow)}.` : '';
+    const rendered = told ? ` ${hasDurations ? `React ${maybe}spent ${renderAcross(told, underOr(renderSpent(told)), at)}` : `React was ${maybe}${renderPhrase(told, at)}`}.${gapSaid}` : '';
     // What forces a layout is said straight after the layout, and React's clause after that: put after the
     // clause, its "That happens" read as about the re-render.
     cause = `Of the ${window}, ${say(confidence, `the browser spent ${spent}.`, `the browser ${HEDGE} spent ${spent}.`)}${chargedTo} ${read.said}${rendered}`;
