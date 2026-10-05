@@ -605,6 +605,13 @@ test("a later render is said to force only the layout of the script it ran in, n
   assert.doesNotMatch(laterOf(0), /recalculate styles and layout/);
   // Its own task's forced layout is still said, and only that.
   assert.match(laterOf(6), /, and it made the browser recalculate styles and layout for 6 ms on the way\. /);
+  // Effects run in a later task of React's count, a callback between the two still does not.
+  const split = sealReport(
+    attachLaterRender(data, commit(400, 0, { total: 75, startedAt: 321, effectsStartedAt: 430, effectsEndedAt: 436 }), [
+      frame(320, 132, [script('MessagePort.onmessage', 321, 80), script('FrameRequestCallback', 405, 6.9, 6.8), script('MessagePort.onmessage', 428, 10, 5)], 453),
+    ])!,
+  ).verdict;
+  assert.match(split, /, and it made the browser recalculate styles and layout for 5 ms on the way\. /);
 });
 
 test('later renders attach only by an exact stamp', () => {
