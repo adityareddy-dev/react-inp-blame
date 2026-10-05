@@ -591,6 +591,22 @@ test("the browser's forced layout is said as styles and layout, since its one fi
   assert.match(thrash.cause, /^Of the 116 ms it took to handle the click, the browser spent 108 ms recalculating styles and layout, leaving 8 ms for React's render and commit/);
 });
 
+test("a later render is said to force only the layout of the script it ran in, not another script's in the same frame", () => {
+  // Plate's search dialog in dev: the render committed in React's task, which forced none, and a dev overlay's
+  // FrameRequestCallback 38 ms after its effects forced 6.8 ms in the same frame.
+  const data = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
+  const laterOf = (reactForced: number) =>
+    sealReport(
+      attachLaterRender(data, commit(400, 0, { total: 75, startedAt: 321, effectsStartedAt: 401, effectsEndedAt: 408 }), [
+        frame(320, 132, [script('MessagePort.onmessage', 321, 88.7, reactForced), script('FrameRequestCallback', 446, 6.9, 6.8)], 453),
+      ])!,
+    ).verdict;
+  assert.match(laterOf(0), /A second React render landed 280 ms after the screen updated: 75 ms re-rendering/);
+  assert.doesNotMatch(laterOf(0), /recalculate styles and layout/);
+  // Its own task's forced layout is still said, and only that.
+  assert.match(laterOf(6), /, and it made the browser recalculate styles and layout for 6 ms on the way\. /);
+});
+
 test('later renders attach only by an exact stamp', () => {
   const r = buildReport([entry('click', 0, 120, 3, 100)], [], []);
   assert.equal(isLaterRender(r, commit(400, 0)), true);
