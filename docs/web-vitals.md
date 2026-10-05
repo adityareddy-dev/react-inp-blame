@@ -40,7 +40,8 @@ above it, which is web-vitals' signal to fall back to its own selector, and it n
 `useReportWebVitals`) with a `react` field added: `{ schemaVersion, interactionId, blame, handler,
 hotPath, components, commits, followUps, reactBuild, strictMode }`, frozen, from this library's own
 report for that interaction. `hotPath` and `components` come from one commit: on a render or layout blame the
-one the blame names, otherwise the heaviest. `reactBuild` is the build of react-dom that measured it, and a development
+one the blame names, otherwise the heaviest. On a layout blame in a commit with several roots, named after the
+component they all sit under, `hotPath` starts at the heaviest root below it and can run well past it. `reactBuild` is the build of react-dom that measured it, and a development
 build's numbers run high ([why](install.md#numbers-in-development)). `strictMode` says whether StrictMode
 rendered it twice there, and is `null` under any other build.
 It is `null` when nothing is installed on the page, and when there is no report for the interaction:

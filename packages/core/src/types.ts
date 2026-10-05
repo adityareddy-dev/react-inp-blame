@@ -92,7 +92,9 @@ export interface CommitSummary {
    * nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
    * under, or empty where they sit under none. A timed walk cut there, which never reached the roots past
    * the cut, does the same where React's total for the render says those took longer than the heaviest
-   * root it reached. `pathStart` says which.
+   * root it reached. `pathStart` says which. On a layout blame in a commit with several roots, which is named
+   * after the component they all sit under, the chain starts at the heaviest root below that one and can run
+   * well past it.
    */
   readonly hotPath: readonly string[];
   /**
