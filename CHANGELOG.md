@@ -30,6 +30,10 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
   overlapped React's render. The click's own renders were 17 ms. It now says what was left, and where React's total
   is more than that, how much of it came between the handlers: "Of the 62 ms, 45 ms came between the pointerdown's
   handlers and the pointerup's, outside the 168 ms."
+- A later render is said to have made the browser recalculate styles and layout only for what the scripts it
+  committed or ran its effects in forced. Before, it took every script in its frames, so on plate's search dialog in
+  development a dev overlay's animation frame callback, which forced 7 ms (45 ms at 4x CPU throttling) after React's
+  task had forced none, was put on the render. That clause is gone there.
 
 ## [0.24.0] - 2026-10-04
 
