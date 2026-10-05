@@ -6230,6 +6230,17 @@ test("the panel's row takes its verb from the commit the blame names, which is n
   assert.equal(blamedCommit(report(click, [], [])), null);
 });
 
+test('a lighter commit that starts at the component a render is named after, but took most of its time further down, is not the blamed one', () => {
+  const click = [entry('click', 0, 120, 3, 100)];
+  // Panel is the end of the heavier commit's path, 45 components and none counted inside it.
+  const ended = commit(60, 0, { total: 55, rendered: 45, roots: ['Panel'], hotPath: ['Panel'], startRendered: 45, pathRendered: 45, components: [{ name: 'Panel', count: 1, self: 2, total: 55 }] });
+  // The lighter one starts at Panel and reads the same 45 components, though List below it took 30 of its 35 ms.
+  const below = commit(98, 0, { total: 35, rendered: 45, roots: ['Panel'], hotPath: ['Panel', 'List'], startRendered: 45, pathRendered: 30, components: [{ name: 'Panel', count: 1, self: 1, total: 35 }, { name: 'List', count: 1, self: 1, total: 30 }] });
+  const r = report(click, [ended, below], []);
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name, r.explanation.blame.detail], ['render', 'Panel', '45 components']);
+  assert.equal(blamedCommit(r)?.at, ended.at);
+});
+
 test('names that look minified get a note, and readable or styled names mixed with a few short ones do not', () => {
   const noteOf = (names: string[]) =>
     report([entry('click', 0, 120, 3, 100)], [commit(50, 0, { hasDurations: false, total: 0, rendered: 40, roots: [names[0]!], hotPath: [names[0]!], components: names.map((name) => ({ name, count: 8, self: null, total: null })) })], [], [])
