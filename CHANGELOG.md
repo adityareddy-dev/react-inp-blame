@@ -23,6 +23,13 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
   and 121 re-rendered, and that reads as 1959 mounts. The count was right and the verb wasn't. It now reads
   "rendering 1959 components", the dialog's own mount of 89 with 87 new reads "rendering 89 components" too, and the
   badge panel's rows say "rendered". A render where every component mounted still reads "mounting".
+- A forced layout is said to overlap React's render only where the render inside the time it was counted across is
+  more than what the layout left of it. Before, the render set against that time took in commits between one event's
+  handlers and the next's, which the time leaves out, so on plate's search dialog 62 ms of rendering, 45 of it between
+  the pointerdown's handlers and the pointerup's, was set against the 29 ms left and the cause said the layout
+  overlapped React's render. The click's own renders were 17 ms. It now says what was left, and where React's total
+  is more than that, how much of it came between the handlers: "Of the 62 ms, 45 ms came between the pointerdown's
+  handlers and the pointerup's, outside the 168 ms."
 
 ## [0.24.0] - 2026-10-04
 
