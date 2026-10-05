@@ -11,13 +11,18 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 - A layout forced in a commit with several roots is named after the component they all sit under, with the whole
   commit's count. A Radix dialog mounts its overlay and its content as two portals under DialogPortal, so on plate
   the search dialog's opening was blamed on CommandGroup, the end of the path through the content, where the read
-  that forced the layout can be in either. It now reads "mounting 89 components inside DialogPortal", and the
+  that forced the layout can be in either. It now reads "rendering 89 components inside DialogPortal", and the
   devtools entry names DialogPortal too. Where the roots sit under no component it names the app. `hotPath` is
   unchanged, and a report stored by an earlier release is named as before.
 - "React rendered N times before the screen updated" counts every commit that rendered a component on a production
   build too, as it has on a development build since 0.19.0. Before, a production build counted only commits of 10
   components or more, so plate's search dialog read "React rendered 8 times" where 13 commits rendered. The note is
   still said only where two of those renders had work in them, and the Performance panel's Summary count moves with it.
+- A render is said to be mounting only where every component it rendered mounted. 0.24.0 drew the line at nine in
+  ten, so on plate the render after the search dialog opened read "75 ms mounting 1959 components" where 1838 mounted
+  and 121 re-rendered, and that reads as 1959 mounts. The count was right and the verb wasn't. It now reads
+  "rendering 1959 components", the dialog's own mount of 89 with 87 new reads "rendering 89 components" too, and the
+  badge panel's rows say "rendered". A render where every component mounted still reads "mounting".
 
 ## [0.24.0] - 2026-10-04
 
