@@ -102,7 +102,8 @@ interface InteractionReport {
 Each commit in `commits` and `followUps` says where its `hotPath` starts, as the walk found it, in `pathStart`.
 `'only-root'`: the walk found one component where this render started, and the path starts at it.
 `'heaviest-root'`: the walk found several components where renders started, and the path starts at the
-heaviest one it reached. `roots` has up to five of their names. `'unknown-root'`: the walk reached components
+heaviest one it reached. `roots` has up to five of their names. On a layout blame in such a commit, named after
+the component they all sit under, the path starts at the heaviest root below that one and can run well past it. `'unknown-root'`: the walk reached components
 that rendered but stopped before it could tell which one held the render (in production at walkBudget, in a
 development or profiling build when React's own total shows more of the render went unreached than the
 heaviest start it reached), so the path starts at the nearest component they all sit under, or is empty when
