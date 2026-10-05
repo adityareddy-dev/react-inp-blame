@@ -2925,7 +2925,9 @@ function explain(r: InteractionReport): Explanation {
   const f = laterRenderOf(r);
   if (f) {
     const what = f.hasDurations ? `${ms(f.total)} ${renderPhrase(f)}` : renderPhrase(f);
-    const laterForced = r.laterFrames ? r.laterFrames.reduce((a, x) => a + x.forcedLayout, 0) : 0;
+    // Only the scripts it committed or ran its effects in: a frame's other scripts force layout of their own.
+    const ranIn = (s: ScriptSummary, t: number | null) => t !== null && t > s.start && t <= s.start + s.duration + 1e-6;
+    const laterForced = (r.laterFrames ?? []).flatMap((x) => x.scripts).reduce((a, s) => a + (ranIn(s, f.at) || ranIn(s, f.effectsEndedAt) ? s.forcedLayout : 0), 0);
     const layout = laterForced >= FORCED_LAYOUT_MIN_MS ? `, and it made the browser recalculate styles and layout for ${ms(laterForced)} on the way` : '';
     const uncounted = !timed(f, r.entries);
     // One before the headline's input landed after the press painted, before the release, and is said so:
