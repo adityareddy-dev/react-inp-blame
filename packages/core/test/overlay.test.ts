@@ -58,9 +58,10 @@ test("the panel's line for a later render says what the render was made of in th
   assert.equal(laterDetail(later(1, [['Toast', 1, 30]], 30)), '1 component');
   // The count inside the component the row names, where the walk counted fewer there than in the commit.
   assert.equal(laterDetail({ ...later(59, [['Label', 4]]), pathRendered: 31 }), '31 of 59 components');
-  // A row's verb, the way the verdict says it: mounted where nine in ten did, re-rendered where one in ten or
+  // A row's verb, the way the verdict says it: mounted where all of them did, re-rendered where one in ten or
   // fewer did, rendered between.
-  assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 57 }), 'mounted');
+  assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 59 }), 'mounted');
+  assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 57 }), 'rendered');
   assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 20 }), 'rendered');
   assert.equal(renderedVerb({ ...later(59, [['Label', 4]]), mounted: 5 }), 're-rendered');
   assert.equal(renderedVerb(later(59, [['Label', 4]])), 're-rendered');
