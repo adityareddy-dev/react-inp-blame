@@ -138,9 +138,11 @@
   on 16) the frame over the wait lists no scripts, as above, so `name` is null and the cause says the main thread was
   busy with something else. React's commits don't say it either: a render the tap's own update interrupts is thrown
   away and started again, so none of it commits, and only commits are read. On a Next.js 15.5 page whose next/dynamic
-  grid rendered for 320 ms as its boundary hydrated, all 28 taps that landed in it under webpack had a null name and
-  all 12 under Turbopack were named `MessagePort.onmessage`. Where the time is the grid's chunk itself running as it
-  loads, the wait is named after the chunk's file.
+  grid rendered for 320 ms as its boundary hydrated, all 28 taps that landed in it under webpack's development build
+  had a null name and all 12 under Turbopack were named `MessagePort.onmessage`. In a production build (`next build`,
+  webpack as well) of the same page, with the grid's chunk held back 1.5 s so taps land in its render, all 10 that did
+  were named `MessagePort.onmessage`. Where the time is the grid's chunk itself running as it loads, the wait is named
+  after the chunk's file.
 - **A `painting` blame after a menu or a dialog closes cannot name a restyle of the whole page that a write
   to `body` or `html` set off.** Closing one often writes a style or a class there (a scroll lock, the
   `pointer-events` a modal put on the page, a theme class), and the browser can then recalculate styles for
