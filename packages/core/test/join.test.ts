@@ -636,6 +636,16 @@ test("a later render is said to force only the layout of the script it ran in, n
   );
 });
 
+test('a later render whose walk was cut is said by its count, not after the name the walk stopped at', () => {
+  const data = buildReport([entry('click', 0, 120, 3, 100)], [commit(50, 0)], []);
+  const cut = sealReport(attachLaterRender(data, commit(400, 0, { rendered: 4983, truncated: true, hotPath: ['DBSearchPageContent'], components: [] }), [])!).verdict;
+  assert.match(cut, /A second React render landed 280 ms after the screen updated: (\d+ ms )?[a-z-]+ at least 4983 components\. /);
+  assert.doesNotMatch(cut, /inside DBSearchPageContent/);
+  // One that went to the end keeps its name.
+  const whole = sealReport(attachLaterRender(data, commit(400, 0, { rendered: 300, hotPath: ['DBSearchPageContent'], components: [] }), [])!).verdict;
+  assert.match(whole, /300 components inside DBSearchPageContent/);
+});
+
 test('later renders attach only by an exact stamp', () => {
   const r = buildReport([entry('click', 0, 120, 3, 100)], [], []);
   assert.equal(isLaterRender(r, commit(400, 0)), true);
