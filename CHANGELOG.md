@@ -13,6 +13,18 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
   when it landed, and on hyperdx the render there was a live tail's timer, a route change, or React preparing hidden
   content. The render itself is still reported with its count and its time, and a render INP did time is said as
   before.
+- Every render inside the script the screen update waited on is counted there, not only the ones with work in them.
+  On kaneo a menu's FrameRequestCallback held 8 renders and the note said 4, then put the other 4 in the working
+  time as "13 ms of rendering in all across 5 commits".
+- A later render is said to force layout only where its script held no other commit. A long animation frame gives
+  one forced layout figure per script, and on hyperdx the later render was given its whole task's 12 ms where a
+  trace put 1.5 ms of it on that render. Where the script held another commit too, the layout clause is left out.
+- A later render whose walk ran out of budget is said by its count alone, "rendering at least 4983 components",
+  not "inside DBSearchPageContent". The name was where the walk stopped, not where the render went.
+- On a production build a render of 1000 components or more takes the blame without a long task of working time,
+  where the working time was the larger part of the interaction. hyperdx re-rendered 3104 components in 38 ms of a
+  40 ms click and the sentence said the rest went to waiting and painting. A shadcn/ui Sheet's 59 components and
+  excalidraw's 149 stay under the line, and a screen update longer than the working time keeps the verdict.
 
 ## [0.25.0] - 2026-10-05
 
