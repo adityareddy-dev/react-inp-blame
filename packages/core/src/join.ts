@@ -2928,7 +2928,10 @@ function explain(r: InteractionReport): Explanation {
   // did time a render the release made inside its own entry, so for that one the note says where it ran.
   const f = laterRenderOf(r);
   if (f) {
-    const what = f.hasDurations ? `${ms(f.total)} ${renderPhrase(f)}` : renderPhrase(f);
+    // A walk cut short with no count inside its last name stopped at that name, which is where the budget ran out, not
+    // where the render went: hyperdx's note named the page root of a cut 4983-component render. The count is said alone.
+    const phrase = f.truncated && f.rendered > 0 && insideCount(f) == null ? `${renderVerb(f)} ${renderedCount(f)}` : renderPhrase(f);
+    const what = f.hasDurations ? `${ms(f.total)} ${phrase}` : phrase;
     // Only the scripts it committed or ran its effects in: a frame's other scripts force layout of their own.
     const ranIn = (s: ScriptSummary, t: number | null) => t !== null && t > s.start && t <= s.start + s.duration + 1e-6;
     // A script that also holds another commit's stamp or effects' end has one figure for both, which can't be split,
