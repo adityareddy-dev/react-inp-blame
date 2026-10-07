@@ -37,6 +37,8 @@ const RENDER_MIN_COMPONENTS = 10;
 // From 50 when a handler is named, since counts cannot weigh a render against a slow handler: the
 // demo's password field re-renders 2 components beside a handler that runs for 110 ms.
 const RENDER_MIN_COMPONENTS_BESIDE_HANDLER = 50;
+
+const RENDER_MIN_COMPONENTS_UNMEASURED = 1000;
 // Past that line the count has to explain the working time as well, in one of two ways. Fifty of one
 // component is a list, and a list costs its row times its length whatever the row costs: 150 SlowRow in
 // 160 ms, 250 Section in 2.5 s. Fifty different components rendered once each are a tree, whose cost is
@@ -1552,7 +1554,7 @@ function explain(r: InteractionReport): Explanation {
     const s = holderOf(x);
     return s && ranAsHandler(s) && s.duration >= SCRIPT_MIN_MS && s.forcedLayout < FORCED_LAYOUT_MIN_SHARE * s.duration ? s : null;
   };
-  const countEarns = (x: CommitSummary) => (longTaskOfWork || !!measuredHolder(x)) && countSays(x);
+  const countEarns = (x: CommitSummary) => (longTaskOfWork || !!measuredHolder(x) || (x.rendered >= RENDER_MIN_COMPONENTS_UNMEASURED && r.processing >= r.presentation)) && countSays(x);
   // React's own listener times the render it holds the same way: Gboard fires a key's oninput after its
   // keydown's handlers, and React renders what the input changed in its root listener, between the handlers.
   // Only where the render's count earns it that time: the listener runs the page's onChange too, and 12
