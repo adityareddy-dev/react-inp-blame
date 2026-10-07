@@ -612,6 +612,28 @@ test("a later render is said to force only the layout of the script it ran in, n
     ])!,
   ).verdict;
   assert.match(split, /, and it made the browser recalculate styles and layout for 5 ms on the way\. /);
+  // A task that held another walked commit too has one figure for both, so none is said for this one.
+  const twoInTask = (at: number) =>
+    sealReport(
+      attachLaterRender(
+        attachLaterRender(data, commit(400, 0, { total: 75, startedAt: 321, effectsStartedAt: 401, effectsEndedAt: 408 }), [])!,
+        commit(at, 0, { total: 30, startedAt: 410, effectsStartedAt: at + 1, effectsEndedAt: at + 3 }),
+        [frame(320, 132, [script('MessagePort.onmessage', 321, 120, 12)], 453)],
+      )!,
+    ).verdict;
+  assert.match(twoInTask(430), /A second React render landed 280 ms after the screen updated: 75 ms re-rendering/);
+  assert.doesNotMatch(twoInTask(430), /recalculate styles and layout/);
+  // The other commit in a task of its own leaves this one's figure said.
+  assert.match(
+    sealReport(
+      attachLaterRender(
+        attachLaterRender(data, commit(400, 0, { total: 75, startedAt: 321, effectsStartedAt: 401, effectsEndedAt: 408 }), [])!,
+        commit(470, 0, { total: 30, startedAt: 460, effectsStartedAt: 471, effectsEndedAt: 473 }),
+        [frame(320, 160, [script('MessagePort.onmessage', 321, 120, 12), script('MessagePort.onmessage', 455, 20, 3)], 480)],
+      )!,
+    ).verdict,
+    /, and it made the browser recalculate styles and layout for 12 ms on the way\. /,
+  );
 });
 
 test('later renders attach only by an exact stamp', () => {
