@@ -131,6 +131,16 @@
   accounted for. Where that time outruns React's render, the handler still has the verdict, measured, though
   it may have been a layout. A development build warns once, at the second such interaction whose handlers
   ran for 50 ms or more ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
+- **A tap that waits behind React's own task is not named after what React was rendering.** A tap that lands while
+  React hydrates a Suspense boundary waits for React's scheduler task, and a `waiting` blame takes its name from the
+  script Long Animation Frames recorded over the wait. Under Turbopack that is `MessagePort.onmessage`, which says
+  React was working but not on what. Under webpack's development build (`next dev` on Next.js 15, `next dev --webpack`
+  on 16) the frame over the wait lists no scripts, as above, so `name` is null and the cause says the main thread was
+  busy with something else. React's commits don't say it either: a render the tap's own update interrupts is thrown
+  away and started again, so none of it commits, and only commits are read. On a Next.js 15.5 page whose next/dynamic
+  grid rendered for 320 ms as its boundary hydrated, all 28 taps that landed in it under webpack had a null name and
+  all 12 under Turbopack were named `MessagePort.onmessage`. Where the time is the grid's chunk itself running as it
+  loads, the wait is named after the chunk's file.
 - **A `painting` blame after a menu or a dialog closes cannot name a restyle of the whole page that a write
   to `body` or `html` set off.** Closing one often writes a style or a class there (a scroll lock, the
   `pointer-events` a modal put on the page, a theme class), and the browser can then recalculate styles for
