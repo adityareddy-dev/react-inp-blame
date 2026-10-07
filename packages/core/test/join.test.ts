@@ -1547,7 +1547,7 @@ test("the render a held press's release made inside its own entry is not said to
   // heavier the release's own was.
   const heavyRelease = commit(70, 60, { gestureTs: 0, inputType: 'pointerup', total: 60 });
   const effect = commit(400, 60, { gestureTs: 0, inputType: 'pointerup', total: 40 });
-  assert.match(note(report(pressed, [heavyRelease, effect], [], ring)), /^A second React render landed 368 ms after the screen updated: 40 ms .* INP doesn't count it, but people still wait for it\.$/);
+  assert.match(note(report(pressed, [heavyRelease, effect], [], ring)), /^A second React render landed 368 ms after the screen updated: 40 ms .* INP doesn't count it, and what started it can't be told\.$/);
 });
 
 test("a render that began after the release came and committed before its handlers ran is inside the release's entry", () => {
@@ -1641,7 +1641,7 @@ test("a render a key press set off after it painted is still a later render once
   assert.deepEqual(next.followUps.map((c) => c.at), [150]);
   // Measured from the keydown's paint, the one it came after, and said as the press's: it is not a second
   // render after the screen the report is about updated.
-  assert.match(note(next), /^A React render landed 126 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it, but people still wait for it\.$/);
+  assert.match(note(next), /^A React render landed 126 ms after the press updated the screen, before the release: 60 ms .* INP doesn't count it, and what started it can't be told\.$/);
   // The keyup's working time is what the cause is about, and the render was not in it. Said bare, the cause
   // told the reader React didn't render anything and the next sentence that it did.
   assert.match(next.explanation.cause, /; React didn't render anything in the working time\.$/);

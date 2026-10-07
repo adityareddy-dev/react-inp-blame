@@ -6,6 +6,14 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+### Changed
+
+- Behaviour change: the note on a later render INP didn't time no longer says "people still wait for it". It now
+  reads "INP doesn't count it, and what started it can't be told." Nothing ties that render to the interaction but
+  when it landed, and on hyperdx the render there was a live tail's timer, a route change, or React preparing hidden
+  content. The render itself is still reported with its count and its time, and a render INP did time is said as
+  before.
+
 ## [0.25.0] - 2026-10-05
 
 ### Changed
