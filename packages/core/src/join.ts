@@ -2931,7 +2931,12 @@ function explain(r: InteractionReport): Explanation {
     const what = f.hasDurations ? `${ms(f.total)} ${renderPhrase(f)}` : renderPhrase(f);
     // Only the scripts it committed or ran its effects in: a frame's other scripts force layout of their own.
     const ranIn = (s: ScriptSummary, t: number | null) => t !== null && t > s.start && t <= s.start + s.duration + 1e-6;
-    const laterForced = (r.laterFrames ?? []).flatMap((x) => x.scripts).reduce((a, s) => a + (ranIn(s, f.at) || ranIn(s, f.effectsEndedAt) ? s.forcedLayout : 0), 0);
+    // A script that also holds another commit's stamp or effects' end has one figure for both, which can't be split,
+    // so nothing is said: hyperdx's later render was given its whole task's 12 ms where the trace had 1.5 ms of it.
+    const holding = (x: CommitSummary, s: ScriptSummary) => ranIn(s, x.at) || ranIn(s, x.effectsEndedAt);
+    const others = [...r.commits, ...r.followUps].filter((x) => x !== f);
+    const held = (r.laterFrames ?? []).flatMap((x) => x.scripts).filter((s) => holding(f, s));
+    const laterForced = held.some((s) => others.some((x) => holding(x, s))) ? 0 : held.reduce((a, s) => a + s.forcedLayout, 0);
     const layout = laterForced >= FORCED_LAYOUT_MIN_MS ? `, and it made the browser recalculate styles and layout for ${ms(laterForced)} on the way` : '';
     const uncounted = !timed(f, r.entries);
     // One before the headline's input landed after the press painted, before the release, and is said so:
