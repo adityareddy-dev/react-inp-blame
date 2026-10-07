@@ -1738,7 +1738,7 @@ function explain(r: InteractionReport): Explanation {
    * is left where it was: it has a sentence of its own.
    */
   const ranInside = (x: CommitSummary, s: ScriptSummary) =>
-    carriesWork(x) &&
+    (x.hasDurations ? x.total > 0 || x.rendered > 0 : x.rendered > 0) &&
     x.hydratedTarget == null &&
     x.at > processingEnd + STAMP_TOLERANCE &&
     holds(s, x) &&
@@ -1746,7 +1746,11 @@ function explain(r: InteractionReport): Explanation {
     (!x.hasDurations || x.total <= s.duration + STAMP_TOLERANCE);
   // Not where the note says the frame waited on the next press, whose render it would be: where it does not, a render
   // inside the script is said inside it, not counted as a second render beside the handlers'.
-  const ranInLate = lateScript && !nextNoted ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  // Once one render with work in it is inside, every render inside is counted there: kept to those with work, a
+  // Base UI frame callback holding 8 commits read "React rendered inside it 4 times", and the other 4 were put
+  // in the working time as renders after the handlers.
+  const ranInScript = lateScript && !nextNoted ? r.commits.filter((x) => ranInside(x, lateScript.script)) : [];
+  const ranInLate = ranInScript.some(carriesWork) ? ranInScript : [];
   const insideLate = screenOutranks || lateScript?.script.invoker !== REACT_TASK ? ranInLate : [];
   const lateRender = ranInLate.length ? heaviest(ranInLate) : null;
   // Said right after the script, the render is "inside it". After all the scripts together, "inside that one".

@@ -6464,6 +6464,19 @@ test('a render that committed inside the script the screen update waited on is s
   assert.match(twice.explanation.cause, /React rendered inside it 2 times, the heaviest 150 ms re-rendering 721 components inside TableBody\.$/);
   assert.deepEqual(twice.explanation.notes, ['React still spent 160 ms re-rendering 721 components inside TableBody in the 169 ms of working time before that.']);
 
+  // Small renders inside it are counted with it, not left as renders after the handlers.
+  const withSmall = report(
+    [entry('click', 0, 368, 2, 171)],
+    [handled, forced, commit(345, 0, { rendered: 40, total: 20, hotPath: ['App'] }), commit(346, 0, { rendered: 3, total: 2, hotPath: ['App'] }), commit(347, 0, { rendered: 1, total: 1, hotPath: ['App'] })],
+    frames,
+    [input(0, 'click')],
+  );
+  assert.match(withSmall.explanation.cause, /React rendered inside it 4 times, the heaviest 150 ms re-rendering 721 components inside TableBody\.$/);
+  assert.deepEqual(withSmall.explanation.notes, twice.explanation.notes);
+  // With only small ones inside, the script holds no render worth its clause.
+  const onlySmall = report([entry('click', 0, 368, 2, 171)], [handled, commit(346, 0, { rendered: 3, total: 2, hotPath: ['App'] })], frames, [input(0, 'click')]);
+  assert.doesNotMatch(onlySmall.explanation.cause, /React rendered inside it/);
+
   // A hydration keeps its own sentence, and is not tied to the script.
   const hydrated = report(
     [entry('click', 0, 368, 2, 171)],
