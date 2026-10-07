@@ -2910,7 +2910,9 @@ function explain(r: InteractionReport): Explanation {
       f.at < r.end
         ? `A React render landed ${ms(f.at - paintBefore(r.entries, f.at))} after the press updated the screen, before the release`
         : `A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}`;
-    notes.push(`${landed}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
+    // Nothing ties a render INP didn't time to the interaction but its timing: on hyperdx a live tail's timer, a route
+    // change and React preparing hidden content all landed there, so the note doesn't say people wait for it.
+    notes.push(`${landed}: ${what}${layout}.${uncounted ? " INP doesn't count it, and what started it can't be told." : ''}`);
   }
 
   if ((r.presentation > PRESENTATION_NOTE_MS || insideLate.length || (nextNoted && lateScript && !clickOnly) || ((blame.kind === 'script' || (blame.kind === 'none' && !unseen)) && lateScript && lateScript.ms > (ranScript?.ms ?? 0))) && blame.kind !== 'painting') {
