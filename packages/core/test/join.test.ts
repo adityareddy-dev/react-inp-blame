@@ -2061,6 +2061,11 @@ test('without render durations a forced layout under a long task still takes the
   const quick = report([entry('click', 0, 40, 2, 32)], [counted], [frame(0, 40, [script('#document.onclick', 2, 30, 24)])], [input(0, 'click')]);
   assert.equal(quick.explanation.blame.kind, 'none');
   assert.match(quick.explanation.cause, /^In 30 ms of working time, short of a long task, React was re-rendering 59 components inside DismissableLayer.*; the rest went to waiting and painting\.$/);
+  // A count in the thousands is the render, long task or not: no frame covered a 40 ms click that re-rendered 3104.
+  const page = commit(30, 0, { hasDurations: false, total: 0, rendered: 3104, roots: ['DBSearchPageContent'], hotPath: ['DBSearchPageContent', 'RawLogTable'] });
+  const big = report([entry('click', 0, 40, 2, 40)], [page], [], [input(0, 'click')]).explanation;
+  assert.equal(big.blame.kind, 'render');
+  assert.doesNotMatch(big.cause, /waiting and painting/);
 
   // A build that times its renders keeps the long task floor: two measured numbers are a fair fight.
   const timed = report(open, [commit(30, 0, { total: 4, rendered: 59 })], [frame(0, 64, [script('#document.onclick', 2, 55, 47)])], [input(0, 'click')]);
