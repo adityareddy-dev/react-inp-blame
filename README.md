@@ -156,8 +156,8 @@ its entry under [Troubleshooting](#troubleshooting).
 Checked on 2026-09-26 against aidenybai/react-scan at 0fb3186 (0.5.7 on npm), getsentry/sentry-javascript at
 bd3ce5f (11.0.0), reactjs/react.dev at 44b0b5f and web-vitals 6.2.2's types. In development, React's Components track is the
 better source of per-component durations, and react-scan's notifications already tie a slow interaction to the components
-that rendered for it. What this library adds is that join in a production build, with Long Animation Frames' forced
-layout inside it, and the sentence.
+that rendered for it. Its `all-environments` entry starts the same tracking in a production build. What this library adds
+is Long Animation Frames' forced layout inside that join, in either build, and the sentence.
 
 ## Browser support
 
