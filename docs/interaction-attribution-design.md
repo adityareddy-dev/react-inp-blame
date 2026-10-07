@@ -54,13 +54,16 @@ builds. Since the prototype of 2026-09-12, the changes are these:
 The browser can tell you an interaction was slow (Event Timing, which is what INP is built
 on) and which scripts ran, with how much forced layout (Long Animation Frames). React can
 tell you which components rendered and, in dev and profiling builds, how long each took.
-In development react-scan's notifications already join the two, from the event's target to
-its fiber and the render times under it. In a production build neither side knows about the
-other, and every React team that has chased an INP regression there has done the join by
-hand: record a profile, find the long task, squint at the flame chart for a component name.
+react-scan's notifications already join Event Timing to React's side: the event's target
+gives a component name and a path through its fiber, and every component that rendered from
+the pointerup or keydown on is kept with its render time. Its `all-environments` entry starts
+the same tracking in a production build. It reads no Long Animation Frames, so the forced
+layout stays outside that join, and every React team that has chased an INP regression has
+done that part by hand: record a profile, find the long task, squint at the flame chart for a
+component name.
 
-This library does the join in both builds, with the forced layout Long Animation Frames
-report inside it, and answers in plain words:
+This library does the join with the forced layout Long Animation Frames report inside it, and
+answers in plain words:
 
     408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
