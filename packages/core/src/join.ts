@@ -2952,7 +2952,9 @@ function explain(r: InteractionReport): Explanation {
       f.at < r.end
         ? `A React render landed ${ms(f.at - paintBefore(r.entries, f.at))} after the press updated the screen, before the release`
         : `A second React render landed ${ms(f.at - r.end)} after the screen updated${uncounted ? '' : ', on the release'}`;
-    notes.push(`${landed}: ${what}${layout}.${uncounted ? " INP doesn't count it, but people still wait for it." : ''}`);
+    // Nothing ties a render INP didn't time to the interaction but its timing: on hyperdx a live tail's timer, a route
+    // change and React preparing hidden content all landed there, so the note doesn't say people wait for it.
+    notes.push(`${landed}: ${what}${layout}.${uncounted ? " INP doesn't count it, and what started it can't be told." : ''}`);
   }
   // A render the clause ties to the script is said there and nowhere else, so the note is kept for it at
   // any length and whichever phase was the longer: a render the script forced is the script's, as
