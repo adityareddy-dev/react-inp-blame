@@ -6,6 +6,8 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-07
+
 ### Changed
 
 - Behaviour change: the note on a later render INP didn't time no longer says "people still wait for it". It now
@@ -2164,7 +2166,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.22.0...v0.23.0
