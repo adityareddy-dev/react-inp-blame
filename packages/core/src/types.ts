@@ -695,7 +695,7 @@ export interface InteractionReport {
   /** React commits between the input and the next paint: what INP measures. */
   readonly commits: readonly CommitSummary[];
   /**
-   * Commits that landed after that paint but still belong to this input (effects, transitions, cascades), within
+   * Commits that landed after that paint (effects, transitions, cascades or anything else that committed), within
    * `inputWindow` of the paint, or of the end of a later input's own work in the same interaction, such as the
    * click that releases a press held past the paint, and before any newer input or any `input`, `change` or
    * `submit` a script dispatched after the paint. One made outside any dispatch and stamped with a keyup or a
@@ -705,7 +705,7 @@ export interface InteractionReport {
    * pointer's before its release is not, whether its press sent an entry or not: the hook stamps a drag's move
    * renders with its pointerdown.
    * INP does not count them, except one that ran inside another of the interaction's own entries
-   * (`CommitSummary.inDispatch`), such as that release's render; the user still waits for them.
+   * (`CommitSummary.inDispatch`), such as that release's render, and what started the rest can't be told.
    */
   readonly followUps: readonly CommitSummary[];
   /**
