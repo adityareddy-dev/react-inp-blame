@@ -88,7 +88,7 @@ export interface ReactAttribution {
   readonly components: readonly RenderedComponent[];
   /** React's commits between the input and the paint INP measured. */
   readonly commits: ReactRenderSummary;
-  /** Commits that landed after that paint but still belong to the interaction, and any a key set off after its press painted, before a slower release that INP measured instead: those land before that paint. INP does not count them, except the release's render of a press held past the paint; people still wait for them. */
+  /** Commits that landed after that paint, as `InteractionReport.followUps` says, and any a key set off after its press painted, before a slower release that INP measured instead: those land before that paint. INP does not count them, except the release's render of a press held past the paint, and what started the rest can't be told. */
   readonly followUps: ReactRenderSummary;
   /** The build of react-dom that measured it, as the report says (`InteractionReport.reactBuild`): a development build's numbers run high, so drop or label them before they are forwarded. */
   readonly reactBuild: InteractionReport['reactBuild'];
