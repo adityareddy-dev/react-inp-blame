@@ -70,10 +70,10 @@ says Good: INP counts anything up to 200 ms as good. The demo above sets `positi
 which is why its badge sits on the left: its own explanation column has the right-hand side. From the
 demo's sign-in page, in development:
 
-    408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
-    about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
-    after the screen updated: 84 ms mounting 256 components from SignInDemo down, 241 of them
-    inside ProfilePage, mostly PhotoTile (240 of the 256, 73 ms). INP doesn't count it, and
+    400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
+    about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms
+    after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them
+    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and
     what started it can't be told.
 
 `overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
