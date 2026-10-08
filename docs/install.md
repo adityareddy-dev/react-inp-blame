@@ -132,6 +132,12 @@ it beside your React plugin, not instead of it.
 `entry`, a module's path from the project root, is for a framework that writes its own HTML: that module gets
 the install as its first import instead, as the React Router, Remix and TanStack Start setups below show.
 
+**A config Vite 5 loads as CommonJS.** On Vite 5 a `vite.config.ts` or `vite.config.js` loads as CommonJS when
+`package.json` has no `"type": "module"`, and the build stops with `"react-inp-blame/vite" resolved to an ESM file`,
+since that entry is an ES module only. Name the config `vite.config.mts` (`.mjs` for JavaScript) or add
+`"type": "module"`. Seen on Vite 5.4.21 with @vitejs/plugin-react 4.7.0, which loads either way. Vite 6.4.4,
+7.3.7 and 8.1.6 load the same config as it is, on Node 24.19.
+
 **A vendor chunk rule.** A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put
 this library in that chunk with react-dom, so the install script's import of the chunk ran react-dom before
 `install()` (seen on Vite 5.4.21, 6.4.3 and 7.3.6 with React 17, and on 7.3.6 with React 18). When
