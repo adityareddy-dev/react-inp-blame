@@ -8,8 +8,9 @@ INP value in the backend you already use. The entry imports nothing from OpenTel
 it never throws inside your telemetry pipeline.
 
 It is experimental. Its export names and the attribute names can change in any minor release, 1.x included,
-until OpenTelemetry names fields for an interaction's target or a component, and the CHANGELOG says so when
-they do.
+until OpenTelemetry's browser conventions have fields for an interaction's target or a component, and the
+CHANGELOG says so when they do. The `browser.web_vital` event has nothing for either yet (`app.widget.click`
+names a widget, nothing on the browser side does).
 
 ## It needs the library in production
 

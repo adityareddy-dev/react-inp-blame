@@ -6,6 +6,15 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-13
+
+### Changed
+
+- 1.0.0 is 0.26.0's code under the API promise in the README. The bar I set for 1.0, at least 38 right and at most 6
+  wrong on 62 verdicts from apps it hadn't seen, isn't met and I've dropped it as the mark for 1.0, the
+  [accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md) has the
+  count.
+
 ## [0.26.0] - 2026-10-07
 
 ### Changed
@@ -2166,7 +2175,8 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.26.0...v1.0.0
 [0.26.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.23.0...v0.24.0
