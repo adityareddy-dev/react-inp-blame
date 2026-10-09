@@ -1,5 +1,7 @@
 # react-inp-blame 0.12.0 on five open-source apps
 
+Read this first (2026-10-09). Everything on this page is 0.12.0 on five apps, and the fixes listed under "Where the blame was wrong" were made for those same five apps, so they don't show how it does on one it hasn't seen. The latest check on apps it hadn't seen was 0.25.0 on hyperdx and kaneo, 62 verdicts, each graded twice with a third read where the two disagreed. It was right on 8. Of the other 54, 35 were wrong and 19 misleading. The bar I set for 1.0 on fresh apps is at least 60% right with at most 10% wrong, 38 and 6 on those 62, so it's a long way off. An earlier check on 0.23.0 was stopped partway through grading and pointed the same way. 0.26.0 rewrites some of the sentences behind those misses and hasn't been run on fresh apps yet. The next benchmark gets its protocol pushed to this repo before any app is picked, and its grades and traces go up with the results.
+
 Measured on 2026-09-25 with react-inp-blame 0.12.0 as published on npm (integrity
 `sha512-QIX+NKEjdPClmiMn3XkPPykApAonlByoYVpGzpzHIr4eU3iANAv1g9si9oAGYl+Cq2joCXWwimJnm4S9lc6X0w==`), installed in
 each app and checked file by file against the published tarball before the run. Two questions: what it costs
@@ -13,7 +15,7 @@ measured).
 
 **The blame was right in 11 of the 43 verdicts checked against the source, misleading in 18 and wrong in
 13**, and one couldn't be settled. Most of the misses get the kind of work and its milliseconds right, then
-name the wrong component or point you the wrong way. What was wrong, and the change that fixes each part, is
+name the wrong component or point you the wrong way. What was wrong, and the change made for each part, is
 under "Where the blame was wrong".
 
 ## How
