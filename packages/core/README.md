@@ -3,6 +3,11 @@
 When a click, tap or key press in your React app is slow, this names the component or the handler
 behind it and says where the time went.
 
+On two open-source apps it hadn't seen, hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other
+54, 35 were wrong and 19 misleading. Nothing after 0.25.0 has been run on fresh apps yet, and the
+[accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md) has how
+they were graded.
+
 ![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/main/docs/media/overlay.gif)
 
 **[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow
