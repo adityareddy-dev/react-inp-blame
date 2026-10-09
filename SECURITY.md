@@ -17,7 +17,8 @@ in that release's notes unless you ask for it not to be.
 
 From 1.0.0, security fixes go into the latest minor release, and into the minor before it for 90
 days after the latest came out. Once 2.0.0 is out, the last 1.x minor counts as the one before it.
-Other fixes go into the latest release only. Until 1.0.0 security fixes do too.
+Other fixes go into the latest release only. The last 0.x minor, 0.26, gets security fixes for 90
+days after 1.0.0 came out.
 
 ## What it touches
 
