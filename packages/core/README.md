@@ -1,12 +1,8 @@
 # react-inp-blame
 
-When a click, tap or key press in your React app is slow, this names the component or the handler
-behind it and says where the time went.
-
-On two open-source apps it hadn't seen, hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other
-54, 35 were wrong and 19 misleading. Nothing after 0.25.0 has been run on fresh apps yet, and the
-[accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md) has how
-they were graded.
+For a slow interaction in your React app, react-inp-blame shows a badge and a report of where the time went.
+The report includes a component or handler name when it has one.
+It can be wrong, check the name against the profiler.
 
 ![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/main/docs/media/overlay.gif)
 
@@ -113,6 +109,100 @@ through before you paste it.
 
 Each warning the library prints ends with a link to its entry under
 [Troubleshooting](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/troubleshooting.md) in the repository.
+
+## What 1.0 means
+
+1.0.0 keeps 0.26.0's runtime and starts the API promise in [What 1.x promises](https://github.com/adityareddy-dev/react-inp-blame#versions).
+The API and the meanings of its report fields are stable through 1.x, apart from the documented experimental and debugging exceptions.
+A minor release can improve how blame is selected and how a report reads. It cannot change what an existing field means.
+
+The blame can still be wrong, and the count below is why 1.0.0 is not a claim of accuracy.
+Read the [known limits](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/known-limits.md) before trusting a name.
+
+## How reliable is it
+
+On hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other 54, 35 were wrong and 19 misleading.
+Every verdict stayed in the count. Each was read twice, with a third read where the two disagreed on a scored axis. The [accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md) gives the context for this check. The bar I set for 1.0 was at least 38 right and at most 6 wrong on those 62, and it isn't met. No later version has been graded on fresh apps.
+
+These are separate checks of what each report says.
+
+| Check | Right | Wrong | Misleading | Cannot tell | Blank |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Whole verdict | 8 | 35 | 19 | 0 | 0 |
+| Name and its explanation | 9 | 32 | 19 | 2 | 0 |
+| Kind of work | 49 | 13 | 0 | 0 | 0 |
+| Milliseconds charged to the blamed work | 36 | 0 | 0 | 0 | 26 |
+
+Kind asks whether the named work is the biggest part of the time in the trace. The milliseconds pass
+if they are within the larger of 10 ms and 20% of the trace's figure for that work. Blank means the report
+gave no blame figure, so there was nothing to check on that axis. The headline duration was not a separate axis.
+
+The name check includes the explanation and notes. A wrong name grade can also mean the verdict states
+something false. Misleading means its wording is true but sends you to the wrong place. Cannot tell means
+the evidence could not settle it. A wrong kind makes the whole verdict wrong, even with a right or unresolved
+name grade. A right name with wrong milliseconds, or a name that points at an ancestor after the component
+walk stopped at its budget, cannot make the whole verdict right.
+
+Here is the same count split by app and run settings.
+
+Overall cells read right / wrong / misleading. Name cells add cannot tell as the last count. Kind cells read right / wrong / misleading. Milliseconds cells add blank as the last count. The kind and milliseconds axes do not permit misleading, their zeros reflect the rubric. Each row includes every verdict in that group. The marginal rows overlap, the eight app/build/throttle rows partition all 62. `dev` means development and `prod` means production. `1x` means no CPU throttling and `4x` means 4x CPU throttling.
+
+| Group | Verdicts | Overall | Name | Kind | Milliseconds |
+| --- | ---: | --- | --- | --- | --- |
+| All | 62 | 8 / 35 / 19 | 9 / 32 / 19 / 2 | 49 / 13 / 0 | 36 / 0 / 0 / 26 |
+| hyperdx | 39 | 6 / 19 / 14 | 6 / 19 / 14 / 0 | 37 / 2 / 0 | 16 / 0 / 0 / 23 |
+| kaneo | 23 | 2 / 16 / 5 | 3 / 13 / 5 / 2 | 12 / 11 / 0 | 20 / 0 / 0 / 3 |
+| dev | 30 | 6 / 12 / 12 | 6 / 12 / 12 / 0 | 25 / 5 / 0 | 27 / 0 / 0 / 3 |
+| prod | 32 | 2 / 23 / 7 | 3 / 20 / 7 / 2 | 24 / 8 / 0 | 9 / 0 / 0 / 23 |
+| 1x | 28 | 7 / 13 / 8 | 8 / 12 / 8 / 0 | 22 / 6 / 0 | 13 / 0 / 0 / 15 |
+| 4x | 34 | 1 / 22 / 11 | 1 / 20 / 11 / 2 | 27 / 7 / 0 | 23 / 0 / 0 / 11 |
+| hyperdx dev 1x | 11 | 4 / 3 / 4 | 4 / 3 / 4 / 0 | 11 / 0 / 0 | 8 / 0 / 0 / 3 |
+| hyperdx dev 4x | 6 | 0 / 3 / 3 | 0 / 3 / 3 / 0 | 6 / 0 / 0 | 6 / 0 / 0 / 0 |
+| hyperdx prod 1x | 10 | 1 / 6 / 3 | 1 / 6 / 3 / 0 | 8 / 2 / 0 | 0 / 0 / 0 / 10 |
+| hyperdx prod 4x | 12 | 1 / 7 / 4 | 1 / 7 / 4 / 0 | 12 / 0 / 0 | 2 / 0 / 0 / 10 |
+| kaneo dev 1x | 5 | 2 / 2 / 1 | 2 / 2 / 1 / 0 | 3 / 2 / 0 | 5 / 0 / 0 / 0 |
+| kaneo dev 4x | 8 | 0 / 4 / 4 | 0 / 4 / 4 / 0 | 5 / 3 / 0 | 8 / 0 / 0 / 0 |
+| kaneo prod 1x | 2 | 0 / 2 / 0 | 1 / 1 / 0 / 0 | 0 / 2 / 0 | 0 / 0 / 0 / 2 |
+| kaneo prod 4x | 8 | 0 / 8 / 0 | 0 / 6 / 0 / 2 | 4 / 4 / 0 | 7 / 0 / 0 / 1 |
+
+The kind of work was right more often than the name. Names were wrong on 32 verdicts and misleading on
+19. Two were unresolved. All 36 supplied blame figures passed the timing tolerance, but 26 verdicts supplied
+none. In production, 23 of 32 supplied none. Passing that timing check does not show that the named component
+caused the time.
+
+The graders also recorded their confidence and where evidence was missing. The grade files behind these tables are not in this repo.
+
+Capped ancestor means a production verdict whose component walk stopped at its budget and named an ancestor of the work. It is a flag, not a correctness grade. Reader confidence belongs to the selected grade, not the report's measured/inferred confidence. An evidence gap is a recorded limitation, not an automatic failure. These fields have no right/wrong/misleading grades.
+
+| Group | Verdicts | Capped ancestor: yes / no | Reader confidence: high / medium / low | Evidence gap: recorded / none |
+| --- | ---: | --- | --- | --- |
+| All | 62 | 1 / 61 | 25 / 36 / 1 | 50 / 12 |
+| hyperdx | 39 | 1 / 38 | 17 / 21 / 1 | 37 / 2 |
+| kaneo | 23 | 0 / 23 | 8 / 15 / 0 | 13 / 10 |
+| dev | 30 | 0 / 30 | 12 / 18 / 0 | 19 / 11 |
+| prod | 32 | 1 / 31 | 13 / 18 / 1 | 31 / 1 |
+| 1x | 28 | 1 / 27 | 11 / 16 / 1 | 25 / 3 |
+| 4x | 34 | 0 / 34 | 14 / 20 / 0 | 25 / 9 |
+| hyperdx dev 1x | 11 | 0 / 11 | 6 / 5 / 0 | 10 / 1 |
+| hyperdx dev 4x | 6 | 0 / 6 | 2 / 4 / 0 | 5 / 1 |
+| hyperdx prod 1x | 10 | 1 / 9 | 4 / 5 / 1 | 10 / 0 |
+| hyperdx prod 4x | 12 | 0 / 12 | 5 / 7 / 0 | 12 / 0 |
+| kaneo dev 1x | 5 | 0 / 5 | 1 / 4 / 0 | 3 / 2 |
+| kaneo dev 4x | 8 | 0 / 8 | 3 / 5 / 0 | 1 / 7 |
+| kaneo prod 1x | 2 | 0 / 2 | 0 / 2 / 0 | 2 / 0 |
+| kaneo prod 4x | 8 | 0 / 8 | 4 / 4 / 0 | 7 / 1 |
+
+The reasons and trace measurements are supporting evidence, they have no separate accuracy grade. There
+is no separate score for every component count or later-render note, those claims affect the name grade.
+
+All eight right verdicts were clicks. Six were in development and two in production.
+Seven were unthrottled.
+Five named a render subtree. The two Denoise Results clicks named DBSqlRowTable, and the two workspace-menu
+openings named MenuPositioner. One navigation expansion named AppNav. The grade reasons place the work inside those subtrees.
+The other three correctly named no culprit for the interaction. They are not three slow components found.
+
+Seven of the eight right verdicts still have a recorded evidence gap. Some exact component counts and the
+precise hot function inside DBSqlRowTable remain unverified in the grade reasons.
 
 # Reference
 
