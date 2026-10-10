@@ -6,7 +6,7 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
-## [1.0.0]
+## [1.0.0] - 2026-10-10
 
 ### Changed
 
