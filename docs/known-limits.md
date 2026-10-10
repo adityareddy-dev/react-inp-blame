@@ -47,15 +47,15 @@
 - Production React records no durations, so blame there rests on render counts and is `'inferred'`
   (`react-dom/profiling` gives durations), and minified handlers are named by their prop. An inferred blame
   says "most likely" in its sentence and in the overlay; take it as the likeliest reading, not a measurement.
-  A count says nothing about time, so the render rung blames a render known by its count alone only from
-  50 ms of working time, the length of a long task, and its sentence gives the working time the count is
-  read against, or says the render ran after the handlers where it did. Under that the count is not a
-  slow render, however large: the cause leads with the working time and says the count sat in it, or
-  came after it, short of a long task, before what else the report knows. The exception is a commit held
-  by the handler's own script where a long animation frame measured that script at 20 ms or more, not mostly
-  forced layout: there the count names the render, and its sentence gives the script's measured time
-  instead of the working time. A hydration the interaction waited for is still named by its count at any
-  working time, as before.
+  A count does not measure how long a render took. A count-based render normally needs at least 50 ms of
+  working time, the length of a long task, and its sentence gives the working time the count is read against.
+  It can also qualify when a long animation frame measured the handler's script holding the commit for at
+  least 20 ms and less than half of that script's time was forced layout.
+  Since 0.26.0, a commit with at least 1000 rendered components can also qualify below 50 ms when working
+  time is at least as long as the screen update. Other blame rules still apply. This can select a render
+  without a recorded long animation frame, so an unmeasured style recalculation can be mistaken for render work.
+  These exceptions do not turn the count into a duration. A hydration the interaction waited for can still be
+  named from its count at any working time.
   The exceptions are what the browser times itself and the build cannot change: waiting, the screen update,
   a Long Animation Frames script, and forced layout inside the handlers, which stay `'measured'` in a
   production build. So does a handler where React rendered nothing in the working time, on a page where it
@@ -92,14 +92,12 @@
   1.7 ms capped. A branch more than 1,000 fibers deep is cut as well, and the walk sees nothing below it, so
   a component that rendered down there is missed, and `'only-root'` can be one start of two.
 - **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only. The
-  browser counts style recalculation in the same figure, so a `'layout'` blame covers either. Its share of
-  a script that ran on past the handlers is apportioned by time rather than measured, so such a blame is
-  `'inferred'`. Where the browser reports no long animation frames the report says nothing about
-  layout at all, rather than implying none happened. Where it does report them and none covered the
-  interaction, the frame was under 50 ms, and a production build's report whose count would otherwise have
-  named the render says how much of the working time went to any styles and layout the interaction forced
-  is unmeasured, rather than blaming the render on its count: a style recalculation inside 17 ms of working
-  time is invisible to the browser's own record. Nothing records *which* read forced the layout, so a
+  figure includes style recalculation. Where part of a script's layout is assigned by time overlap, the blame
+  is `'inferred'`. Without long animation frames the report cannot measure forced layout. Even where the
+  browser supports them, a frame under 50 ms can leave no record of that layout, and some reports say so.
+  A count-based render selected by the 1000-component exception does not carry that sentence, so its absence
+  does not show that no layout happened. A measured duration does not prove that the component named beside
+  it caused the work. Nothing records *which* read forced the layout, so a
   `'layout'` blame's `name` and `detail` say where it happened instead: the subtree of the joined commit that
   ran in the script that forced it, and what it was mostly made of. Where several commits ran in the scripts
   that forced it, that is the one whose time could hold most of the layout: React's own time for it where the
