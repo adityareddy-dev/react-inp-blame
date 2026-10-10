@@ -1486,7 +1486,8 @@ the render durations plus the forced layout), and only when that is a quarter of
 (in a production build committing the demo's 1441-row list takes a fifth of it outside React's
 durations); a render from 5 ms with durations, or from 10 components by counts
 and 50 beside a named handler, and by counts never under 50 ms of working time but where a long animation
-frame measured the handler's script holding the commit (since 0.23.0); forced layout from 50 ms, or 25 ms without render durations, and half the
+frame measured the handler's script holding the commit (since 0.23.0), or where a commit of 1000 or more
+components has working time at least as long as the screen update (since 0.26.0); forced layout from 50 ms, or 25 ms without render durations, and half the
 window it was counted across, and never over a long wait before the handlers, as above,
 with one script having to hold nine tenths of a window's forced layout before its name is used for
 all of it; a Long Animation
@@ -2069,7 +2070,8 @@ past the paint the duration's rounding put at 40, read as after the working time
 handler's script the verdict. Where LoAF is supported and no frame covered the interaction, the frame
 was under 50 ms and whatever style recalculation and layout it forced went unmeasured (the Sheet
 opening on a phone forces four whole-document recalculations inside 31 ms of working time), and the
-sentence says so. Hydration is the exception: a boundary the interaction waited for is named by its
+sentence says so, except where the 1000-component exception selected the count-based render, which
+does not carry that sentence yet. Hydration is the exception: a boundary the interaction waited for is named by its
 count at any working time, as it was.
 
 ### Whose listener it is

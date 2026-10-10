@@ -6,14 +6,20 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-13
+## [1.0.0]
 
 ### Changed
 
-- 1.0.0 is 0.26.0's code under the API promise in the README. The bar I set for 1.0, at least 38 right and at most 6
-  wrong on 62 verdicts from apps it hadn't seen, isn't met and I've dropped it as the mark for 1.0, the
-  [accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md) has the
-  count.
+- 1.0.0 keeps 0.26.0's runtime and starts the API promise in the README. Existing report fields keep their meanings
+  through 1.x, and the documented experimental and debugging exceptions still apply.
+- The bar I set for 1.0, at least 38 right and at most 6 wrong on 62 verdicts from apps it hadn't seen, isn't met.
+  0.25.0 was right on 8 of 62, with 35 wrong and 19 misleading, and no later version has been graded on fresh
+  apps. The [accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md)
+  has the count.
+
+### Blame changes
+
+None from 0.26.0.
 
 ## [0.26.0] - 2026-10-07
 
