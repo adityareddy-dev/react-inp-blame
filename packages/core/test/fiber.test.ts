@@ -187,6 +187,12 @@ test('a production walk cut at its budget does not blame the subtree it happened
   const timedCut = walkCommit(timed as any, 5000, 100, click, development);
   assert.deepEqual([timedCut.hotPath, timedCut.pathStart, timedCut.truncated, timedCut.total], [['Dashboard', 'Metrics'], 'only-root', true, 90]);
 
+  // A branch doing more work is not enough: neither carries 60% of this render, so the path stays at its root.
+  time(timed.child.child, 40);
+  time(timed.child.child.sibling, 50);
+  const sharedCut = walkCommit(timed as any, 5000, 100, click, development);
+  assert.deepEqual([sharedCut.hotPath, sharedCut.pathStart, sharedCut.truncated, sharedCut.total, leafName(sharedCut as CommitSummary)], [['Dashboard'], 'only-root', true, 90, 'Dashboard']);
+
   // Several roots, the walk cut in the first: named by the component they all sit under, not by the first.
   const passedThrough = (component: () => void, ...children: Record<string, unknown>[]) => fiber(0, component, children, 0);
 
