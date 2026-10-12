@@ -1,7 +1,8 @@
 # react-inp-blame
 
-When a click, tap or key press in your React app is slow, this names the component or the handler
-behind it and says where the time went.
+For a slow interaction in your React app, react-inp-blame shows a badge and a report of where the time went.
+The report includes a component or handler name when it has one.
+It can be wrong, check the name against the profiler.
 
 ![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/main/docs/media/overlay.gif)
 
@@ -70,20 +71,29 @@ says Good: INP counts anything up to 200 ms as good. The demo above sets `positi
 which is why its badge sits on the left: its own explanation column has the right-hand side. From the
 demo's sign-in page, in development:
 
-    408 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
-    about 402 ms; React's own render took under 1 ms. A second React render landed 285 ms
-    after the screen updated: 84 ms mounting 256 components from SignInDemo down, 241 of them
-    inside ProfilePage, mostly PhotoTile (240 of the 256, 73 ms). INP doesn't count it, but
-    people still wait for it.
+    400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
+    about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms
+    after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them
+    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and
+    what started it can't be told.
 
 `overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
-production page) or `{ position, open, max }`. Both snippets above are development-only: `enabled`
-defaults to `'development'`, so a production build carries nothing from either plugin until you say
-`enabled: true` or `enabled: 'production'`. So `vite preview` and `next start`, which serve a
-production build, show no badge by default, and the build prints a line saying it left the library
-out. The line on Next.js 15.3 to 16.2 stays in every build, but compiles to nothing in the ones
-`enabled` leaves out.
+production page) or `{ position, open, max }`. In a shared repo each developer can press Hide for me in
+the panel, which keeps the badge off in that browser until the page is opened with `?inp-blame`, or the
+repo can use `'query'` and each developer opts in with the `localStorage` line. Both snippets above are
+development-only: `enabled` defaults to `'development'`, so a production build carries nothing from
+either plugin until you say `enabled: true` or `enabled: 'production'`. So `vite preview` and
+`next start`, which serve a production build, show no badge by default, and the build prints a line
+saying it left the library out. The line on Next.js 15.3 to 16.2 stays in every build, but compiles to
+nothing in the ones `enabled` leaves out.
+
+**Numbers in development.** Most numbers you see come from React's development build, which is slower
+than production, and under `<StrictMode>` React renders every component twice there. The badge rates
+what it measured on the same scale, marks the build `dev`, and the panel says to check anything amber
+or red in a production build: add `enabled: true` and `runtime: { overlay: 'query' }`, run `next build`
+and `next start` or `vite build` and `vite preview`, and open the page with `?inp-blame`
+([Numbers in development](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#numbers-in-development)).
 
 It is a development tool first, and production is optional. Turned on there, 0.12.0 cost about
 209 ms of page load on the shadcn/ui docs site, and about 5 ms inside each interaction on the twenty
@@ -102,6 +112,100 @@ through before you paste it.
 
 Each warning the library prints ends with a link to its entry under
 [Troubleshooting](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/troubleshooting.md) in the repository.
+
+## What 1.0 means
+
+1.0.0 keeps 0.26.0's runtime and starts the API promise in [What 1.x promises](https://github.com/adityareddy-dev/react-inp-blame#versions).
+The API and the meanings of its report fields are stable through 1.x, apart from the documented experimental and debugging exceptions.
+A minor release can improve how blame is selected and how a report reads. It cannot change what an existing field means.
+
+The blame can still be wrong, and the count below is why 1.0.0 is not a claim of accuracy.
+Read the [known limits](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/known-limits.md) before trusting a name.
+
+## How reliable is it
+
+On hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other 54, 35 were wrong and 19 misleading.
+Every verdict stayed in the count. Each was read twice, with a third read where the two disagreed on a scored axis. The [accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md) gives the context for this check. The bar I set for 1.0 was at least 38 right and at most 6 wrong on those 62, and it isn't met. No later version has been graded on fresh apps.
+
+These are separate checks of what each report says.
+
+| Check | Right | Wrong | Misleading | Cannot tell | Blank |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Whole verdict | 8 | 35 | 19 | 0 | 0 |
+| Name and its explanation | 9 | 32 | 19 | 2 | 0 |
+| Kind of work | 49 | 13 | 0 | 0 | 0 |
+| Milliseconds charged to the blamed work | 36 | 0 | 0 | 0 | 26 |
+
+Kind asks whether the named work is the biggest part of the time in the trace. The milliseconds pass
+if they are within the larger of 10 ms and 20% of the trace's figure for that work. Blank means the report
+gave no blame figure, so there was nothing to check on that axis. The headline duration was not a separate axis.
+
+The name check includes the explanation and notes. A wrong name grade can also mean the verdict states
+something false. Misleading means its wording is true but sends you to the wrong place. Cannot tell means
+the evidence could not settle it. A wrong kind makes the whole verdict wrong, even with a right or unresolved
+name grade. A right name with wrong milliseconds, or a name that points at an ancestor after the component
+walk stopped at its budget, cannot make the whole verdict right.
+
+Here is the same count split by app and run settings.
+
+Overall cells read right / wrong / misleading. Name cells add cannot tell as the last count. Kind cells read right / wrong / misleading. Milliseconds cells add blank as the last count. The kind and milliseconds axes do not permit misleading, their zeros reflect the rubric. Each row includes every verdict in that group. The marginal rows overlap, the eight app/build/throttle rows partition all 62. `dev` means development and `prod` means production. `1x` means no CPU throttling and `4x` means 4x CPU throttling.
+
+| Group | Verdicts | Overall | Name | Kind | Milliseconds |
+| --- | ---: | --- | --- | --- | --- |
+| All | 62 | 8 / 35 / 19 | 9 / 32 / 19 / 2 | 49 / 13 / 0 | 36 / 0 / 0 / 26 |
+| hyperdx | 39 | 6 / 19 / 14 | 6 / 19 / 14 / 0 | 37 / 2 / 0 | 16 / 0 / 0 / 23 |
+| kaneo | 23 | 2 / 16 / 5 | 3 / 13 / 5 / 2 | 12 / 11 / 0 | 20 / 0 / 0 / 3 |
+| dev | 30 | 6 / 12 / 12 | 6 / 12 / 12 / 0 | 25 / 5 / 0 | 27 / 0 / 0 / 3 |
+| prod | 32 | 2 / 23 / 7 | 3 / 20 / 7 / 2 | 24 / 8 / 0 | 9 / 0 / 0 / 23 |
+| 1x | 28 | 7 / 13 / 8 | 8 / 12 / 8 / 0 | 22 / 6 / 0 | 13 / 0 / 0 / 15 |
+| 4x | 34 | 1 / 22 / 11 | 1 / 20 / 11 / 2 | 27 / 7 / 0 | 23 / 0 / 0 / 11 |
+| hyperdx dev 1x | 11 | 4 / 3 / 4 | 4 / 3 / 4 / 0 | 11 / 0 / 0 | 8 / 0 / 0 / 3 |
+| hyperdx dev 4x | 6 | 0 / 3 / 3 | 0 / 3 / 3 / 0 | 6 / 0 / 0 | 6 / 0 / 0 / 0 |
+| hyperdx prod 1x | 10 | 1 / 6 / 3 | 1 / 6 / 3 / 0 | 8 / 2 / 0 | 0 / 0 / 0 / 10 |
+| hyperdx prod 4x | 12 | 1 / 7 / 4 | 1 / 7 / 4 / 0 | 12 / 0 / 0 | 2 / 0 / 0 / 10 |
+| kaneo dev 1x | 5 | 2 / 2 / 1 | 2 / 2 / 1 / 0 | 3 / 2 / 0 | 5 / 0 / 0 / 0 |
+| kaneo dev 4x | 8 | 0 / 4 / 4 | 0 / 4 / 4 / 0 | 5 / 3 / 0 | 8 / 0 / 0 / 0 |
+| kaneo prod 1x | 2 | 0 / 2 / 0 | 1 / 1 / 0 / 0 | 0 / 2 / 0 | 0 / 0 / 0 / 2 |
+| kaneo prod 4x | 8 | 0 / 8 / 0 | 0 / 6 / 0 / 2 | 4 / 4 / 0 | 7 / 0 / 0 / 1 |
+
+The kind of work was right more often than the name. Names were wrong on 32 verdicts and misleading on
+19. Two were unresolved. All 36 supplied blame figures passed the timing tolerance, but 26 verdicts supplied
+none. In production, 23 of 32 supplied none. Passing that timing check does not show that the named component
+caused the time.
+
+The graders also recorded their confidence and where evidence was missing. The grade files behind these tables are not in this repo.
+
+Capped ancestor means a production verdict whose component walk stopped at its budget and named an ancestor of the work. It is a flag, not a correctness grade. Reader confidence belongs to the selected grade, not the report's measured/inferred confidence. An evidence gap is a recorded limitation, not an automatic failure. These fields have no right/wrong/misleading grades.
+
+| Group | Verdicts | Capped ancestor: yes / no | Reader confidence: high / medium / low | Evidence gap: recorded / none |
+| --- | ---: | --- | --- | --- |
+| All | 62 | 1 / 61 | 25 / 36 / 1 | 50 / 12 |
+| hyperdx | 39 | 1 / 38 | 17 / 21 / 1 | 37 / 2 |
+| kaneo | 23 | 0 / 23 | 8 / 15 / 0 | 13 / 10 |
+| dev | 30 | 0 / 30 | 12 / 18 / 0 | 19 / 11 |
+| prod | 32 | 1 / 31 | 13 / 18 / 1 | 31 / 1 |
+| 1x | 28 | 1 / 27 | 11 / 16 / 1 | 25 / 3 |
+| 4x | 34 | 0 / 34 | 14 / 20 / 0 | 25 / 9 |
+| hyperdx dev 1x | 11 | 0 / 11 | 6 / 5 / 0 | 10 / 1 |
+| hyperdx dev 4x | 6 | 0 / 6 | 2 / 4 / 0 | 5 / 1 |
+| hyperdx prod 1x | 10 | 1 / 9 | 4 / 5 / 1 | 10 / 0 |
+| hyperdx prod 4x | 12 | 0 / 12 | 5 / 7 / 0 | 12 / 0 |
+| kaneo dev 1x | 5 | 0 / 5 | 1 / 4 / 0 | 3 / 2 |
+| kaneo dev 4x | 8 | 0 / 8 | 3 / 5 / 0 | 1 / 7 |
+| kaneo prod 1x | 2 | 0 / 2 | 0 / 2 / 0 | 2 / 0 |
+| kaneo prod 4x | 8 | 0 / 8 | 4 / 4 / 0 | 7 / 1 |
+
+The reasons and trace measurements are supporting evidence, they have no separate accuracy grade. There
+is no separate score for every component count or later-render note, those claims affect the name grade.
+
+All eight right verdicts were clicks. Six were in development and two in production.
+Seven were unthrottled.
+Five named a render subtree. The two Denoise Results clicks named DBSqlRowTable, and the two workspace-menu
+openings named MenuPositioner. One navigation expansion named AppNav. The grade reasons place the work inside those subtrees.
+The other three correctly named no culprit for the interaction. They are not three slow components found.
+
+Seven of the eight right verdicts still have a recorded evidence gap. Some exact component counts and the
+precise hot function inside DBSqlRowTable remain unverified in the grade reasons.
 
 # Reference
 
@@ -170,7 +274,8 @@ instead, and below 14.2 it warns and hands the config back as it was.
 On the App Router the client module also hears each navigation, meaning each route change the
 framework makes in the page with no new document: every report carries
 `navigationURL` and `navigationType`, a click that started a navigation names it in
-`startedNavigation`, and `inp()` starts over at each soft navigation. The Pages Router gets attribution
+`startedNavigation`, and `inp()` starts over at each soft navigation. Other routers announce theirs
+through `announceNavigation(url)`, below. The Pages Router gets attribution
 without the navigation join. On `next dev` from 15.3 its entry loads react-dom before
 `instrumentation-client` and the injected module, so there the wrapper also puts the install first in
 that entry, in webpack's `main` and, under Turbopack, through a loader on `next-dev-turbopack.js`.
@@ -211,7 +316,8 @@ in the URL.
 CI runs this on React Router 8.4, on React Router 7.18 with React 18.3, on Remix 2.17 and on
 TanStack Start 1.168, each under its dev server and a production build. The repository's
 [install page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router)
-has each app's whole config.
+has each app's whole config. React Router and TanStack Router apps add a few lines there too, so that
+reports follow route changes.
 
 A `manualChunks` rule sending all of `node_modules` to one vendor chunk used to put this library
 in that chunk with react-dom, so the install script ran after react-dom. When `manualChunks` is a
@@ -309,8 +415,9 @@ tree loses the page and the layout rather than the component that renders what w
 node has no React fiber or no named component above it, which is web-vitals' signal to fall back to
 its own selector, and it never throws. `attributeINP(metric)` returns the
 metric's attribution (`{}` where there is none) with a frozen `react` field added, from this
-library's report for that interaction: the blame with its confidence, the handler, the hot path, the
-heaviest commit's components, and what React rendered before and after the paint. It is `null` when
+library's report for that interaction: the blame with its confidence, the handler, the hot path and
+components of the heaviest commit, or of the commit a layout or render blame names, and what React rendered
+before and after the paint. It is `null` when
 nothing is installed and when there is no report for that interaction, one that stayed under
 `threshold`, one already pushed out of the 50 a page keeps (never one of the ten slowest or one INP
 can still point at), or one the library dropped after an error of its own. It is `null` too for a
@@ -340,17 +447,19 @@ later, and `@sentry/react` and `@sentry/nextjs` export the same `metrics`:
         unit: 'millisecond',
         attributes: {
           rating: metric.rating,
-          target: interactionTarget,                    // 'ProfilePage > PhotoTile (button.tile)'
-          'blame.kind': react?.blame.kind,              // 'render', 'handler', 'layout', 'waiting', ...
-          'blame.name': react?.blame.name ?? undefined, // Sentry sends a null as the string "null"
-          'blame.confidence': react?.blame.confidence,  // 'measured' or 'inferred'
+          target: interactionTarget,                     // 'ProfilePage > PhotoTile (button.tile)'
+          'blame.kind': react?.blame.kind,               // 'render', 'handler', 'layout', 'waiting', ...
+          'blame.name': react?.blame.name ?? undefined,  // Sentry sends a null as the string "null"
+          'blame.confidence': react?.blame.confidence,   // 'measured' or 'inferred'
+          'react.build': react?.reactBuild ?? undefined, // 'development' reads high, filter it out
         },
       });
     }, { generateTarget });
 
-For Google Analytics 4 it is web-vitals' own example, `debug_target` and all, with the blame in two
-more parameters. GA4 reports show a parameter once it is registered as an event-scoped custom
-dimension, and take at most 100 characters of its value, where `generateTarget` allows 120.
+For Google Analytics 4 it is web-vitals' own example, `debug_target` and all, with the blame in three
+more parameters and the build of react-dom in one. GA4 reports show a parameter once it is registered
+as an event-scoped custom dimension, and take at most 100 characters of its value, where
+`generateTarget` allows 120.
 `navigationURL` came in web-vitals 6, so on 5.x leave out `page_location`:
 
     import { onINP } from 'web-vitals/attribution';
@@ -368,6 +477,8 @@ dimension, and take at most 100 characters of its value, where `generateTarget` 
         debug_target: interactionTarget, // 'ProfilePage > PhotoTile (button.tile)'
         debug_blame_kind: react?.blame.kind,
         debug_blame_name: react?.blame.name ?? undefined,
+        debug_blame_confidence: react?.blame.confidence, // 'measured' or 'inferred'
+        debug_react_build: react?.reactBuild ?? undefined, // 'development' reads high, filter it out
       });
     }, { generateTarget });
 
@@ -378,8 +489,29 @@ Neither recipe sends a label or a sentence: a report's `target.label`, `verdict`
 can hold text the page shows, under `labels: 'text'` and by default in a development build, so forward
 those only from an app installed with `labels: 'attributes'`. The label that setting gives, and the id
 and test id in `generateTarget`'s string, go out as your code wrote them, so check none is built from
-user data. `page_location` keeps its query string. `blame.name` can be a script's URL, or the page's
-for an inline script, and never has a password, query or fragment.
+user data. `page_location`, web-vitals' URL, keeps its query string, where a report's `navigationURL`
+keeps only the origin and path. `blame.name` can be a script's URL, or the page's for an inline script,
+and never has a password, query or fragment.
+
+## With OpenTelemetry
+
+Experimental. `react-inp-blame/otel` puts the blame on the INP event OpenTelemetry's web vitals
+instrumentation, Honeycomb, Elastic, Embrace or Grafana Faro already sends, as `react_inp_blame.*`
+attributes. Its export names and the attribute names can change in any minor release, 1.x included, until
+OpenTelemetry names these fields. With OpenTelemetry's web SDK the processor goes first, since one that
+exports as the record is emitted would send it without them:
+
+    import { BatchLogRecordProcessor, LoggerProvider } from '@opentelemetry/sdk-logs';
+    import { InpBlameLogRecordProcessor } from 'react-inp-blame/otel';
+
+    const loggerProvider = new LoggerProvider({
+      processors: [new InpBlameLogRecordProcessor(), new BatchLogRecordProcessor({ exporter })],
+    });
+
+It sends what the library measured, so it needs the library in production: with `enabled` left at its
+default every record says `react_inp_blame.status: not-installed`. The setup for each SDK, what each
+attribute holds and what it costs are in
+[docs/opentelemetry.md](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/opentelemetry.md).
 
 ## API
 
@@ -418,6 +550,12 @@ for an inline script, and never has a password, query or fragment.
   unsupported, what the library has cost), `dispose()`, and `debug.commits()` and `debug.hook()`,
   which are for debugging and may change in any version.
 - `mountOverlay(options?)` shows the on-page badge and panel; their code loads when shown.
+- `announceNavigation(url)` tells the library that your router changed the route in the page. Reports
+  of the interactions after it carry the URL, with `navigationType: 'soft-navigation'`, `inp()` starts
+  over, and a click it was called inside names it in `startedNavigation` as a `'push'`. It does
+  nothing before `install()` and never throws. The Next.js App Router needs no call. The
+  [install page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router)
+  shows where to call it under React Router and TanStack Router.
 
 `target.handler` is the name of the function on the element's event prop, or the prop's own name when
 that function has no name worth printing. An inline `onClick={() => ...}` therefore reads as
@@ -426,12 +564,14 @@ only: a production build's minifier renames `handleLogin` too, so there it reads
 unless the build keeps function names (terser's `keep_fnames`, esbuild's `keepNames`).
 `target.component` and the prop still say where to look.
 
-Reports are frozen and carry `schemaVersion: 3`. When a late Event Timing entry, a long animation
+Reports are frozen and carry `schemaVersion: 4`. When a late Event Timing entry, a long animation
 frame or a later render joins one, the next revision arrives as a new object with `revision`
-bumped. `explanation.blame`, `rating`, the phases' milliseconds and the report's own numbers are
-data; `verdict` and the other sentences are display text. `navigationURL` and `navigationType` say
-which page the interaction happened on, with web-vitals' names and values, and `startedNavigation`
-names the soft navigation it started, if it started one.
+bumped. The blame's `kind`, `name`, `ms` and `confidence`, `rating`, the phases' milliseconds and
+the report's own numbers are data, and `blame.detail`, `verdict` and the other sentences are display
+text. `navigationURL` and `navigationType` say which page the interaction happened on, under
+web-vitals' names, and `startedNavigation` names the soft navigation it started, if it started one.
+`navigationURL` keeps only the origin and path though, where web-vitals' URL keeps the query too, so
+match the two on the path.
 
 A report's `target.label` names the clicked element, or the control it sits in, by its tag and a name of
 at most 40 characters. A control is a button, link, summary, label or form field, or an element with a
@@ -440,8 +580,9 @@ the `path` of an icon button is labelled by the button; `target.selector` stays 
 landed on. Under a production build of React the name comes only from what the page's code wrote on the
 element it names: its aria-label, a form field's placeholder, aria-placeholder or name, an input's type,
 or its data-testid or data-test. The text an element shows can be someone's name or email, and reports
-are made to be forwarded, so reading it is opt-in there: `install({ labels: 'text' })`. Development
-builds read it by default. What the page's code wrote goes out as written, though: an aria-label,
+are made to be forwarded, so reading it is opt-in there: `install({ labels: 'text' })`, which names a
+form field by its `<label>` and anything else by its first run of text. Development builds read it by
+default. What the page's code wrote goes out as written, though: an aria-label,
 data-testid or id built from user data, such as `` aria-label={`Message ${user.name}`} ``, lands in
 `target.label` or `target.selector`, and the label in the verdict. An element inside a contenteditable
 editor, or inside one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`, is named like a
@@ -528,10 +669,10 @@ or its preset already sets a `transform`, give the presets to its babel-jest ent
 one with `'\\.jsx?$'` as its key, so the `.ts` files stay with ts-jest. With Jest 30.4 or later on Node 24.9 or
 later, running Jest with `NODE_OPTIONS=--experimental-vm-modules` also works, with neither key.
 
-While on 0.x a minor release can break things (an export, an option, what a report field holds, an oldest
-version), and the CHANGELOG says which; `schemaVersion` on a report moves when a field is removed or changes
-meaning. A patch only fixes. The component a report blames, and its sentence, can change in any release as the
-verdict gets better. Fixes go into the latest release only.
+From 1.0.0 the package follows semantic versioning on its exports, their options and the shape of a report. A
+minor can change which component a report blames and any display text, and each release lists its blame
+changes. The rest, with the support window, is under
+[Versions](https://github.com/adityareddy-dev/react-inp-blame#versions).
 
 ## Size
 
@@ -541,17 +682,19 @@ current:
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
 | --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 91.5 KB | 32.4 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 15.3 KB | 6.0 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 30.4 KB | 11.1 KB |
-| `react-inp-blame/web-vitals`, on top of `/auto` | 1.5 KB | 0.8 KB |
+| `react-inp-blame/auto`: everything that loads with the page | 101.3 KB | 35.8 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown | 18.1 KB | 7.1 KB |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.3 KB | 11.7 KB |
+| `react-inp-blame/web-vitals`, on top of `/auto` | 1.6 KB | 0.9 KB |
+| `react-inp-blame/otel`, on top of `/auto` | 3.5 KB | 1.6 KB |
 <!-- size:end -->
 
 `react-inp-blame/web-vitals` pulls in none of the hook, the observers or the badge: an app that only wants
 component names in its web-vitals attribution pays for the fiber reading and nothing else.
 
 Under the `react-server` condition, `react-inp-blame`, `react-inp-blame/auto`,
-`react-inp-blame/next-client` and `react-inp-blame/web-vitals` resolve to a module whose exports do
-nothing, so a Server Component that imports them adds no browser code to the server bundle.
+`react-inp-blame/next-client`, `react-inp-blame/web-vitals` and `react-inp-blame/otel` resolve to a
+module whose exports do nothing, so a Server Component that imports them adds no browser code to the
+server bundle.
 
 MIT

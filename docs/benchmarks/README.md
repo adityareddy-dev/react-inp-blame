@@ -188,5 +188,6 @@ separates it from the rest. A page this heavy in components is the plugin's wors
 - **15 paired runs per cell.** Enough for the intervals above; a delta of a few milliseconds on a
   figure of thousands is at the edge of what that resolves.
 
-The harness (Playwright, the patches to each app, the report with its bootstrap) is not in this
-repository yet.
+The harness is in [bench/](../../bench/README.md): Playwright, the patch to each app, and the
+report with its bootstrap. The app clones aren't, its README says how to make each one at the commit
+measured here.

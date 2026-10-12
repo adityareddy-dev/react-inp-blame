@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import type { Api } from "react-inp-blame";
+import type { Api, InteractionReport } from "react-inp-blame";
 
 declare global {
   interface Window {
@@ -91,5 +91,48 @@ export function lastVerdict(page: Page): Promise<string | null> {
     type Session = { slots: { install?: { installed: { api: Api } | null } } };
     const session = (globalThis as unknown as Record<symbol, Session | undefined>)[Symbol.for("react-inp-blame")];
     return session?.slots.install?.installed?.api.last()?.verdict ?? null;
+  });
+}
+
+/** Where a report says its interaction happened, and the navigation it started. */
+export type Place = Pick<InteractionReport, "navigationURL" | "navigationType" | "startedNavigation">;
+
+/**
+ * Waits until `count` reports of interactions after `seen` are published, and returns their ids and places
+ * in the order the interactions happened, each at its latest revision, read from the library's page state
+ * as `lastVerdict` reads it.
+ */
+export async function reportsAfter(
+  page: Page,
+  seen: number | null,
+  count: number,
+): Promise<{ interactionId: number; place: Place }[]> {
+  const handle = await page.waitForFunction(
+    ({ seen, count }) => {
+      type Session = { slots: { install?: { installed: { api: Api } | null } } };
+      const session = (globalThis as unknown as Record<symbol, Session | undefined>)[Symbol.for("react-inp-blame")];
+      const reports = (session?.slots.install?.installed?.api.reports() ?? [])
+        .filter((report) => seen === null || report.interactionId > seen)
+        .sort((a, b) => a.interactionId - b.interactionId);
+      if (reports.length < count) return null;
+      return reports.map(({ interactionId, navigationURL, navigationType, startedNavigation }) => ({
+        interactionId,
+        place: { navigationURL, navigationType, startedNavigation },
+      }));
+    },
+    { seen, count },
+    { timeout: 8_000 },
+  );
+  const reports = await handle.jsonValue();
+  // waitForFunction only resolves on a truthy value, which its type does not say.
+  if (!reports) throw new Error(`waited for ${count} reports and got fewer`);
+  return reports;
+}
+
+/** The URL and type of the document's own navigation, named the way the library and web-vitals name it. */
+export function documentNavigation(page: Page): Promise<{ url: string; type: Place["navigationType"] }> {
+  return page.evaluate(() => {
+    const [entry] = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[];
+    return { url: entry.name, type: entry.type.replace(/_/g, "-") as Place["navigationType"] };
   });
 }

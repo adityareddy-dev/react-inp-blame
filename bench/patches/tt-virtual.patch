@@ -1,0 +1,88 @@
+diff --git a/index.html b/index.html
+index 1551290..ba530a2 100644
+--- a/index.html
++++ b/index.html
+@@ -4,7 +4,6 @@
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     <title>Vite App</title>
+-    <script src="https://unpkg.com/react-scan/dist/auto.global.js"></script>
+   </head>
+   <body>
+     <div id="root"></div>
+diff --git a/package.json b/package.json
+index 2e4ddaf..b807235 100644
+--- a/package.json
++++ b/package.json
+@@ -26,6 +26,7 @@
+     "@types/react-dom": "^19.3.0",
+     "@vitejs/plugin-react": "^6.1.1",
+     "babel-plugin-react-compiler": "^1.0.0",
++    "react-inp-blame": "0.12.0",
+     "typescript": "6.0.3",
+     "vite": "^8.3.0"
+   }
+diff --git a/src/makeData.ts b/src/makeData.ts
+index 5fd0293..cf91131 100644
+--- a/src/makeData.ts
++++ b/src/makeData.ts
+@@ -37,6 +37,11 @@ const newPerson = (index: number): Person => {
+ }
+ 
+ export function makeData(...lens: Array<number>) {
++  // BENCH: fixed seed so every page load, every run and every configuration gets identical data.
++  // Unseeded, each load sorts a different 200,000 rows and that variance swamps the effect
++  // being measured. Applied equally to configurations A, B and C.
++  faker.seed(20260919)
++
+   const makeDataLevel = (depth = 0): Array<Person> => {
+     const len = lens[depth]
+     return range(len).map((d): Person => {
+diff --git a/vite.config.js b/vite.config.js
+index d081fa2..61eb5fb 100644
+--- a/vite.config.js
++++ b/vite.config.js
+@@ -2,6 +2,26 @@ import { defineConfig } from 'vite'
+ import react, { reactCompilerPreset } from '@vitejs/plugin-react'
+ import babel from '@rolldown/plugin-babel'
+ import rollupReplace from '@rollup/plugin-replace'
++import { inpBlame } from 'react-inp-blame/vite'
++
++// BENCH: which of the three configurations this build is.
++// '' / unset -> A, library absent from the bundle entirely (no plugin is constructed)
++// 'b'        -> B, library with defaults
++// 'c'        -> C, library with overlay: true
++const CONFIG = process.env.BENCH_CONFIG || ''
++
++// BENCH: debugGlobal is added in B and C only so the harness can read stats() and reports()
++// from the page. It is not a measurement option; it assigns one global on install.
++const blamePlugins =
++  CONFIG === ''
++    ? []
++    : inpBlame({
++        enabled: true,
++        runtime:
++          CONFIG === 'c'
++            ? { debugGlobal: true, overlay: true }
++            : { debugGlobal: true },
++      })
+ 
+ // https://vitejs.dev/config/
+ export default defineConfig({
+@@ -9,6 +29,9 @@ export default defineConfig({
+     port: 7777,
+     allowedHosts: true,
+   },
++  build: {
++    outDir: process.env.BENCH_OUTDIR || 'dist',
++  },
+   plugins: [
+     rollupReplace({
+       preventAssignment: true,
+@@ -23,5 +46,6 @@ export default defineConfig({
+       presets: [reactCompilerPreset()],
+       include: [/\/src\/.*\.[jt]sx?$/],
+     }),
++    ...blamePlugins,
+   ],
+ })

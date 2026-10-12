@@ -1,5 +1,7 @@
 # react-inp-blame 0.12.0 on five open-source apps
 
+Read this first (2026-10-09). Everything on this page is 0.12.0 on five apps, and the fixes listed under "Where the blame was wrong" were made for those same five apps, so they don't show how it does on one it hasn't seen. The latest check on apps it hadn't seen was 0.25.0 on hyperdx and kaneo, 62 verdicts, each graded twice with a third read where the two disagreed. It was right on 8. Of the other 54, 35 were wrong and 19 misleading. The bar I set for 1.0 on fresh apps was at least 60% right with at most 10% wrong, 38 and 6 on those 62, and it isn't met, so I've dropped it as the mark for 1.0, and 1.0.0 is 0.26.0's code under the API promise in the [README](../../README.md). An earlier check on 0.23.0 was stopped partway through grading and pointed the same way. 0.26.0 rewrites some of the sentences behind those misses and hasn't been run on fresh apps yet. The next benchmark gets its protocol pushed to this repo before any app is picked, and its grades and traces go up with the results.
+
 Measured on 2026-09-25 with react-inp-blame 0.12.0 as published on npm (integrity
 `sha512-QIX+NKEjdPClmiMn3XkPPykApAonlByoYVpGzpzHIr4eU3iANAv1g9si9oAGYl+Cq2joCXWwimJnm4S9lc6X0w==`), installed in
 each app and checked file by file against the published tarball before the run. Two questions: what it costs
@@ -8,21 +10,22 @@ on apps nobody wrote for it, and whether what it blames is right.
 **INP did not move on any of them, at either speed.** Every INP interval holds zero, the phone Sheet's at 4x
 only just. The cost shows at page load on the shadcn site, as it did last time, and inside interactions only
 where the library's own read of a commit gets big: about 5 ms an interaction on twenty unthrottled and 10 ms
-at 4x, where a commit is close to 5,000 components.
+at 4x, where a commit runs past the 5,000 components the walk reads before it stops (how far past wasn't
+measured).
 
 **The blame was right in 11 of the 43 verdicts checked against the source, misleading in 18 and wrong in
 13**, and one couldn't be settled. Most of the misses get the kind of work and its milliseconds right, then
-name the wrong component or point you the wrong way. What was wrong, and the change that fixes each part, is
+name the wrong component or point you the wrong way. What was wrong, and the change made for each part, is
 under "Where the blame was wrong".
 
 ## How
 
 The harness is the one [the first benchmark](README.md) describes: production builds only, Playwright driving
 headless Chromium through a scripted sequence of real interactions per app, every step asserting that the page
-changed, a fresh browser context per run, one warm-up per app, 15 runs of each build interleaved A, B, A, B,
-unthrottled and then at 4x CPU throttling through the DevTools protocol. The measuring is a separate observer
-injected before any app script, the same bytes in both builds, and the deltas are paired by run index and
-bootstrapped (10,000 resamples, 95% percentile interval).
+changed, a fresh browser context per run, a thrown-away warm-up of each build at the start of each pass, 15
+runs of each build interleaved A, B, A, B, unthrottled and then at 4x CPU throttling through the DevTools
+protocol. The measuring is a separate observer injected before any app script, the same bytes in both builds,
+and the deltas are paired by run index and bootstrapped (10,000 resamples, 95% percentile interval).
 
 Two builds of each app this time. C, the overlay, was measured last time and is left out.
 
@@ -39,7 +42,7 @@ The apps:
 | `tt-virtual` | TanStack Table `examples/react/virtualized-rows`, 200,000 rows | 19.3.0, development build | sort up, sort down, scroll the list, tick a row |
 | `excalidraw` | excalidraw at `97c68dd` | 19.0.0 | draw 60 rectangles, select all, drag them, undo |
 | `shadcn-v4` | the shadcn/ui docs site, `apps/v4` at `a87a63b`, Next.js 16.3.3 App Router | 19.2.3 | sort a table, switch install tabs, search the command menu, follow a result, page a calendar, toggle the theme, open the mobile nav |
-| `shadcn-sheet` | the same site's Radix Sheet page, 1350x940 | 19.2.3 | open the Sheet, close it |
+| `shadcn-sheet` | the same site's Radix Sheet page, 1280x900 | 19.2.3 | open the Sheet, close it |
 | `shadcn-sheet-phone` | the same, at 390x844, DPR 3, touch | 19.2.3 | tap it open, tap it closed |
 | `twenty` | twenty CRM, `packages/twenty-front` at `2feb94c3128e`, Vite, signed in to a seeded workspace | 19.2.7 | select every row and unselect them, open a record from its chip and close it, open the command menu, type in it and close it, drag a column and drag it back, then go to Companies, Opportunities and People |
 | `cal-diy` | cal.diy `apps/web` at `54343aa`, Next.js 16.2.3, signed in with the seed's user | 19.3.0 canary, the one Next.js bundles for the App Router | hide and show an event type, search event types, open one, type in its title, the advanced tab, a switch on it, back |
@@ -50,9 +53,9 @@ that do this, and the rest of the build plumbing, never reach the measured page.
 
 The blame was checked against each app's source at the commits above, with the libraries read in each app's
 `node_modules`: every verdict a one-run pass printed for an interaction of 100 ms or more, and the slowest of
-each pass. Each finding then went to a second reader whose job was to knock it down. Six changed grade that
-way, five of them for the worse. The 15-run pass printed the same blame for a step in nearly every run; where
-it split, that's said below.
+each pass. Each finding was then gone over again, more than once, to try to knock it down. Six changed grade
+that way, five of them for the worse. The 15-run pass printed the same blame for a step in nearly every run;
+where it split, that's said below.
 
 ## What it costs
 
@@ -355,9 +358,10 @@ to take: TanStack's row compare still reads each value twice per comparison unle
   says "most likely".
 - **twenty and cal.diy have backends.** Their times include waiting on their own servers on the same machine.
   A step that fetches is as fast as that server was.
-- **One warm-up per app.** The first measured run of each build can still pay for a cold cache the others
-  don't.
-- **The blame check read source, not traces, except where a trace is named.** A second reader tried to refute
-  every finding, and six grades moved. It is still a reading of the code, and one verdict stays unsettled.
+- **One warm-up per build and pass.** The first measured run of each build can still pay for a cold cache
+  the others don't.
+- **The blame check read source, not traces, except where a trace is named.** Every finding was gone over
+  again to try to refute it, and six grades moved. It is still a reading of the code, and one verdict stays unsettled.
 
-The harness is not in this repository yet.
+The harness is in [bench/](../../bench/README.md), with the commands for this run. twenty and cal.diy need a
+local account on your own seeded copy of each, as its README says.

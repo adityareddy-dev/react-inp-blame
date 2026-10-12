@@ -1,4 +1,5 @@
 import { heaviest, readableName } from './commits.js';
+import { blamedCommit } from './join.js';
 import { selector } from './element.js';
 import { namingFiber, ownersOf } from './fiber.js';
 import { page, unexplainedReports } from './install-state.js';
@@ -39,15 +40,20 @@ const SEPARATOR = ' > ';
 /**
  * A web-vitals INP metric, in the fields this entry reads. `INPMetric` and
  * `INPMetricWithAttribution` both satisfy it, and so does the metric Next.js's `useReportWebVitals`
- * hands over, which comes from the build without attribution.
+ * hands over, which comes from the build without attribution. So does web-vitals' plain `Metric`,
+ * whose entries are typed as `PerformanceEntry`, which is what Honeycomb's INP hook hands over: each
+ * entry's `interactionId` is read where it is a number above 0.
  */
 export interface InpMetric<Attribution extends object = Record<string, never>> {
-  readonly entries: readonly InpMetricEntry[];
+  readonly entries: readonly object[];
   /** What web-vitals' attribution build adds; absent everywhere else. */
   readonly attribution?: Attribution;
 }
 
-/** One Event Timing entry of the metric: `PerformanceEventTiming` satisfies it. */
+/**
+ * One Event Timing entry of the metric: `PerformanceEventTiming` satisfies it.
+ * @deprecated `InpMetric.entries` takes any object now, so nothing reads this type. It goes in 2.0.0.
+ */
 export interface InpMetricEntry {
   /** Optional only because TypeScript's DOM library does not declare it yet; web-vitals keeps no entry without one. */
   readonly interactionId?: number;
@@ -76,14 +82,18 @@ export interface ReactAttribution {
   readonly blame: Blame;
   /** The React handler prop that ran, or the function behind it when its name survived minification. */
   readonly handler: string | null;
-  /** The chain carrying most of the rendering, outermost first; shorter or empty for a walk cut short, as `CommitSummary.hotPath` says. */
+  /** The chain carrying most of the rendering, outermost first, of the commit a 'layout' or 'render' blame names where it is one; shorter or empty for a walk cut short, as `CommitSummary.hotPath` says. */
   readonly hotPath: readonly string[];
-  /** The heaviest commit's components, at most 5. */
+  /** The heaviest commit's components, or those of the commit a 'layout' or 'render' blame names, at most 5. */
   readonly components: readonly RenderedComponent[];
   /** React's commits between the input and the paint INP measured. */
   readonly commits: ReactRenderSummary;
-  /** Commits that landed after that paint but still belong to the interaction, and any a key set off after its press painted, before a slower release that INP measured instead: those land before that paint. INP does not count them, except the release's render of a press held past the paint; people still wait for them. */
+  /** Commits that landed after that paint, as `InteractionReport.followUps` says, and any a key set off after its press painted, before a slower release that INP measured instead: those land before that paint. INP does not count them, except the release's render of a press held past the paint, and what started the rest can't be told. */
   readonly followUps: ReactRenderSummary;
+  /** The build of react-dom that measured it, as the report says (`InteractionReport.reactBuild`): a development build's numbers run high, so drop or label them before they are forwarded. */
+  readonly reactBuild: InteractionReport['reactBuild'];
+  /** Whether StrictMode rendered it twice, as the report says (`InteractionReport.strictMode`), or null outside a development build. */
+  readonly strictMode: boolean | null;
 }
 
 export type { Blame, RenderedComponent } from './types.js';
@@ -194,11 +204,14 @@ export function attributeINP<Attribution extends object>(metric: InpMetric<Attri
  * sides read the same Event Timing entries, so the numbers are identical rather than close. Newest
  * first, because an id is reused only after a reload.
  */
-function reportFor(entries: readonly InpMetricEntry[]): InteractionReport | null {
+function reportFor(entries: readonly object[]): InteractionReport | null {
   const api = page.installed?.api;
   if (!api) return null;
   const ids = new Set<number>();
-  for (const e of entries) if (e?.interactionId) ids.add(e.interactionId);
+  for (const e of entries) {
+    const id = (e as { interactionId?: unknown } | null)?.interactionId;
+    if (typeof id === 'number' && id > 0) ids.add(id);
+  }
   if (!ids.size) return null;
   const reports = api.reports();
   for (let i = reports.length - 1; i >= 0; i--) {
@@ -216,7 +229,8 @@ function describe(r: InteractionReport): ReactAttribution | null {
   // A report explains itself on first read, in this callback rather than in the one that built it.
   const { blame } = r.explanation;
   if (unexplainedReports.has(r)) return null;
-  const main = r.commits.length ? heaviest(r.commits) : null;
+  // A layout or render blame's commit is the one it names, which need not be the heaviest.
+  const main = blame.kind === 'layout' || blame.kind === 'render' ? blamedCommit(r) : r.commits.length ? heaviest(r.commits) : null;
   return Object.freeze({
     schemaVersion: SCHEMA_VERSION,
     interactionId: r.interactionId,
@@ -226,6 +240,8 @@ function describe(r: InteractionReport): ReactAttribution | null {
     components: Object.freeze(main ? main.components.slice(0, MAX_COMPONENTS) : []),
     commits: summarize(r.commits),
     followUps: summarize(r.followUps),
+    reactBuild: r.reactBuild,
+    strictMode: r.strictMode,
   });
 }
 

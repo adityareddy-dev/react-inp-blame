@@ -1,14 +1,14 @@
 import { MINIFIED_NAMES_CONSOLE, namesLookMinified } from './commits.js';
 import { createTimeline } from './devtools.js';
-import { checkHookReplaced, clearCommits, CLOSER_TYPES, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteCloser, noteInput, noteKeypress, noteResize, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
+import { checkHookReplaced, clearCommits, CLOSER_TYPES, DEFAULT_INPUT_WINDOW, dispatchedInput, hearingReports, hookInfo, hookStats, INPUT_TYPES, installHook, knownRenderers, noteCloser, noteInput, noteKeypress, noteResize, reactBuild, reactPage, readingReactDom, recentInputs, recordedCommits, uninstallHook } from './hook.js';
 import { inertApi } from './inert.js';
 import { page, type Listener } from './install-state.js';
-import { labelOf, type LabelSource } from './join.js';
+import { labelOf, scriptsUnlisted, type LabelSource } from './join.js';
 import { createLifecycle, MAX_REPORTS } from './lifecycle.js';
-import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, type PageNavigation } from './navigation.js';
+import { documentNavigation, MAX_NAVIGATIONS, onRouterNavigation, pageURL, type PageNavigation } from './navigation.js';
 import { NOT_OBSERVING, observeEventTiming, observeFrames, supportsInteractions, supportsLongAnimationFrames } from './observe.js';
 import type { OverlayHandle } from './overlay.js';
-import { overlayRequested } from './overlay-host.js';
+import { overlayHidden, overlayRequested } from './overlay-host.js';
 import { incompatibleCopy, shared } from './session.js';
 import type { Api, FrameSummary, InstallOptions, InteractionReport, OverlayOptions, ReactStatus, RendererInfo } from './types.js';
 import { dropped, errorText, guarded, warnOnce } from './warn.js';
@@ -16,6 +16,7 @@ import { dropped, errorText, guarded, warnOnce } from './warn.js';
 export type * from './types.js';
 export type { InpEstimate } from './inp.js';
 export type { OverlayHandle } from './overlay.js';
+export { announceNavigation } from './navigation.js';
 
 /** Where `debugGlobal: true` puts the API on window. */
 const DEBUG_GLOBAL = '__REACT_INP_BLAME__';
@@ -132,7 +133,7 @@ function installNow(opts: InstallOptions): Api {
     // Exposed anyway, so stats() on the page says why nothing is reported. A badge that was asked for says
     // it too, rather than leaving someone looking for one that never comes.
     const api = inertApi('unsupported', { unsupportedReason: { kind: 'browser', message }, installMs: installTime, dispose: hideOverlay });
-    if (overlayWanted(opts.overlay) && !page.overlay) showOverlay(api, typeof opts.overlay === 'object' ? opts.overlay : {});
+    if (overlayWanted(opts.overlay) && !page.overlay) showOverlay(api, typeof opts.overlay === 'object' ? opts.overlay : {}, opts.overlay !== 'query');
     return expose(api, opts.debugGlobal);
   }
   if (!(Math.random() < (opts.sampleRate ?? 1))) {
@@ -211,6 +212,8 @@ function installNow(opts: InstallOptions): Api {
   // exception is the page being hidden, below.
   const undelivered: InteractionReport[] = [];
   let delivery: ReturnType<typeof setTimeout> | null = null;
+  // Interactions whose long frames listed no scripts, up to the second, which is when the page is warned.
+  const unlisted = new Set<number>();
   const deliver = guarded(() => {
     delivery = null;
     const reports = undelivered.splice(0);
@@ -237,8 +240,10 @@ function installNow(opts: InstallOptions): Api {
   });
 
   // Where reports happened: the document's own navigation, then each soft navigation a router
-  // announces and each restore from the back/forward cache, oldest first.
-  const navigations: PageNavigation[] = [documentNavigation()];
+  // announces and each restore from the back/forward cache, oldest first. Each keeps only its URL's
+  // origin and path (`pageURL`), whichever router or copy of the library announced it.
+  const load = documentNavigation();
+  const navigations: PageNavigation[] = [{ ...load, url: pageURL(load.url) }];
   // Whether React has rendered on the page: sticky once seen, and looked for at most once a second and at
   // most REACT_LOOKS times while no react-dom has registered, since each look reads the page's elements.
   // Input the page has seen since the last look makes the next one due, so while looks remain a report never
@@ -274,6 +279,8 @@ function installNow(opts: InstallOptions): Api {
     interactionCount: 'interactionCount' in performance ? () => (performance as Performance & InteractionCounting).interactionCount : null,
     labels,
     reactStatus,
+    reactPage,
+    reactBuild,
     now: () => performance.now(),
     dropped,
     publish: (r) => {
@@ -281,12 +288,15 @@ function installNow(opts: InstallOptions): Api {
       undelivered.push(r);
       delivery ??= setTimeout(deliver, 0);
       if (namesLookMinified([...r.commits, ...r.followUps])) warnOnce('minified-names', MINIFIED_NAMES_CONSOLE);
+      if (unlisted.size < 2 && scriptsUnlisted(r) && unlisted.add(r.interactionId).size === 2) {
+        warnOnce('frames-without-scripts', "Long Animation Frames on this page list no scripts, so forced layout cannot be measured here. A handler a verdict names may have spent its time in a layout instead.", 'frames-without-scripts', developmentBuild);
+      }
       drawWhenIdle(r);
     },
   });
 
   const navigated = (navigation: PageNavigation) => {
-    navigations.push(navigation);
+    navigations.push({ ...navigation, url: pageURL(navigation.url) });
     if (navigations.length > MAX_NAVIGATIONS) navigations.shift();
     lifecycle.onNavigation(navigation.start);
     // The badge shows the INP of the navigation the page is on, which has just started over.
@@ -316,8 +326,8 @@ function installNow(opts: InstallOptions): Api {
       }
     }
   });
-  // The App Router announces a navigation from inside the handler that starts it, so the input
-  // being dispatched, if any, is the one that started it.
+  // A router announces a navigation from inside the handler that starts it where it can (the App Router
+  // and TanStack Router do), so the input being dispatched, if any, is the one that started it.
   const stopRouterNavigations = onRouterNavigation(
     guarded(({ url, type, at }) => {
       const input = dispatchedInput();
@@ -419,7 +429,7 @@ function installNow(opts: InstallOptions): Api {
   const applyOverlay = (option: InstallOptions['overlay']) => {
     if (option === undefined) return;
     hideOverlay();
-    if (overlayWanted(option)) showOverlay(api, typeof option === 'object' ? option : {});
+    if (overlayWanted(option)) showOverlay(api, typeof option === 'object' ? option : {}, option !== 'query');
   };
   page.installed = {
     api,
@@ -502,11 +512,16 @@ export function onInteraction(fn: Listener): () => void {
  * page that never shows them never downloads that code, and install() returns before any of it
  * is requested, evaluated or mounted.
  */
-function showOverlay(api: Api, opts: OverlayOptions): Promise<OverlayHandle | null> {
+function showOverlay(api: Api, opts: OverlayOptions, hideable = false): Promise<OverlayHandle | null> {
+  // Hide for me is offered only on a badge the overlay option shows, the one a stored 'hidden' keeps off. Not under
+  // 'query', where it would take the place of the 'overlay' this person stored to see it.
+  const hidden = () => {
+    if (page.overlay === shown) page.overlay = null;
+  };
   const shown: Promise<OverlayHandle | null> = new Promise<void>((resolve) => setTimeout(resolve, 0))
     .then(() => (page.overlay === shown ? import('./overlay.js') : null))
     // Asked again on arrival: hidden or replaced while the code was on its way.
-    .then((code) => (code && page.overlay === shown ? code.createOverlay(api, opts) : null))
+    .then((code) => (code && page.overlay === shown ? code.createOverlay(api, opts, hideable ? hidden : undefined) : null))
     .catch((error: unknown) => {
       warnOnce('overlay-failed', `the badge and panel could not be shown (${errorText(error)}).`);
       // The next mountOverlay() tries again, rather than getting this null for as long as the page is open.
@@ -517,9 +532,9 @@ function showOverlay(api: Api, opts: OverlayOptions): Promise<OverlayHandle | nu
   return shown;
 }
 
-/** Whether the `overlay` option asks for the badge on this page. */
+/** Whether the `overlay` option asks for the badge on this page, and this person has not hidden it. */
 function overlayWanted(option: InstallOptions['overlay']): boolean {
-  return option === true || (option === 'query' && overlayRequested()) || (!!option && typeof option === 'object');
+  return !!option && !overlayHidden() && (option !== 'query' || overlayRequested());
 }
 
 function hideOverlay(): void {

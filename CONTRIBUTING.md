@@ -31,7 +31,11 @@ we can agree on the approach before you spend time on it.
   `fixtures/component-libraries` is `fixtures/vite-react-ts` with styled-components, @emotion/styled,
   lucide-react and Radix's DropdownMenu, each in the case where its own components used to be what a
   report named.
+- `api/`: the types every entry point publishes, as `scripts/api-snapshot.mjs` prints them. A unit test
+  fails when they change.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
+- `bench/`: the benchmark harness behind docs/benchmarks. Not a workspace, not in the package, and CI
+  doesn't run it. It needs the app clones its README describes.
 
 ## Setup
 
@@ -65,6 +69,7 @@ From the repository root:
     npm run build                                 # packages/core, with tsc
     npm run typecheck                             # the library, the Vite demo, its specs and the walkthrough
     npm run test:unit                             # node --test on packages/core/test
+    node scripts/api-snapshot.mjs --write         # after a change to the published types, into api/
     npm test                                      # Vite demo on the dev server
     npm run test:prod                             # Vite demo, production build
     npm test -w apps/next-demo                    # Next.js, next dev
@@ -194,8 +199,15 @@ Two things the demo's suite leaves out of a normal run:
   hydration on every page it is installed on, so it stays that way. Elsewhere, add a development
   dependency only when the change needs one and say why; otherwise `package-lock.json` does not
   change.
-- The report is a contract. Adding a field to `InteractionReport` is fine; removing one, or changing
-  what one means, needs a new `schemaVersion` and a line in the pull request saying so.
+- The report is a contract. Adding a field to `InteractionReport` is fine. Removing one, or changing
+  what one means, waits for the next major and a new `schemaVersion`. A change to which kind, name or
+  detail a blame gets adds a line to the release's Blame changes.
+- Something deprecated keeps working through at least one minor, with `@deprecated` on its type, a
+  Deprecated line in the CHANGELOG and, where it runs, one warning in development builds with its own
+  README anchor. Only a major removes it.
+- Never remove or rename a troubleshooting anchor, even for a warning that is gone.
+- An export added to a browser entry gets its inert twin in `src/react-server.ts`.
+- A pull request that changes the API updates `api/` and says why.
 
 ## Security
 

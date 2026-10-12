@@ -48,6 +48,22 @@ export interface CommitSummary {
    */
   readonly mounted?: number;
   /**
+   * Of `mounted`, the components with a useEffect to run after this commit, as a chart or a map that sets
+   * itself up in one has (a `useSyncExternalStore` subscription is run the same way, and counts too). Always
+   * 0 on React 17. Absent on a report stored by an earlier release.
+   */
+  readonly effectMounts?: number;
+  /**
+   * Of `rendered`, the components with a useEffect to run after this commit, mounted or rendered again. Always 0 on
+   * React 17. Absent on a report stored by an earlier release.
+   */
+  readonly effectRuns?: number;
+  /**
+   * The name of the one component `effectMounts` counts, where it counts one and no other component that rendered
+   * has a useEffect to run; null otherwise. Absent on a report stored by an earlier release.
+   */
+  readonly effectMountName?: string | null;
+  /**
    * The commit hydrated server-rendered HTML, a root's or a Suspense boundary's. Hydrating is the page
    * starting up rather than an input's work, so such a commit is kept only when React ran it inside an
    * input's dispatch, hydrating so that it could handle that input.
@@ -68,12 +84,39 @@ export interface CommitSummary {
    * The chain that carries most of the work, outermost first, every name on it as it stands. It spends at
    * most twelve steps below the component it starts from, on the components a reader could search for: a
    * library's layers between them (`Primitive.div`, a Slot, a Provider, a wrapper named after the component
-   * it renders) are on the chain but spend no step. For a production walk cut at `walkBudget`, whose counts
+   * it renders) are on the chain but spend no step. So does a component that is all its parent rendered and
+   * hands the very children it was given to the one component it renders, as a dialog root round a component's
+   * whole return does, where the one it renders carries most of its work and a component above it can be
+   * named. Where nothing below it is named, the chain ends at that one. For a production walk cut at `walkBudget`, whose counts
    * cannot choose among subtrees it reached in part or not at all, it stops at its one subtree where
    * nothing it did not reach rendered beside it, and is otherwise the component its subtrees all sit
-   * under, or empty where they sit under none.
+   * under, or empty where they sit under none. A timed walk cut there, which never reached the roots past
+   * the cut, does the same where React's total for the render says those took longer than the heaviest
+   * root it reached. `pathStart` says which. On a layout blame in a commit with several roots, which is named
+   * after the component they all sit under, the chain starts at the heaviest root below that one and can run
+   * well past it.
    */
   readonly hotPath: readonly string[];
+  /**
+   * Where `hotPath` starts, as the walk found it. Every walk sets one of the four, and these four are all
+   * there are in 1.x.
+   *
+   * 'only-root': the walk found one component where this render started, and the path starts at it.
+   *
+   * 'heaviest-root': the walk found several components where renders started, and the path starts at the
+   * heaviest one it reached. `roots` has up to five of their names.
+   *
+   * 'unknown-root': the walk reached components that rendered but stopped before it could tell which one
+   * held the render (in production at walkBudget, in a development or profiling build when React's own total
+   * shows more of the render went unreached than the heaviest start it reached), so the path starts at the
+   * nearest component they all sit under, or is empty when they share none.
+   *
+   * 'no-root': the walk reached no component that rendered, either because the commit rendered none or
+   * because it stopped first (then `truncated` is true). hotPath is empty and `rendered` is 0.
+   *
+   * Absent: a report from before 0.21.0 (0.20.0 and 0.21.0 share schemaVersion 4).
+   */
+  readonly pathStart?: 'only-root' | 'heaviest-root' | 'unknown-root' | 'no-root';
   /**
    * Of `rendered`, those inside the component `hotPath` starts from, that component included. Equal to
    * `rendered` where that is the commit's one root or the component every root sits under, and below it
@@ -90,6 +133,12 @@ export interface CommitSummary {
    * Absent on a report stored by an earlier release.
    */
   readonly pathRendered?: number;
+  /**
+   * Whether a component that rendered in this commit is under `<StrictMode>`, as the mode React gave its fiber
+   * says. Only a development build renders such a component twice, which `InteractionReport.strictMode` is
+   * for. Absent on a report stored by an earlier release.
+   */
+  readonly strictMode?: boolean;
   /** Per-component aggregates, heaviest first, at most 12. */
   readonly components: readonly RenderedComponent[];
   /** Whether React measured render durations for this tree: its root is in ProfileMode, or part of it was measured anyway (under a `<Profiler>`). Only development and profiling builds measure. */
@@ -101,7 +150,10 @@ export interface CommitSummary {
    * close but not exact, and a blame built on it is `'inferred'`.
    */
   readonly coarseClock: boolean;
-  /** Total render time of the commit in ms when durations exist, else 0. */
+  /**
+   * Total render time of the commit in ms when durations exist, else 0. A walk cut at `walkBudget` on a root
+   * React timed takes the root's own figure, since the roots past the cut are in it and not in the walk.
+   */
   readonly total: number;
   /**
    * performance.now() when React began the render this commit came from, read from the root fiber.
@@ -198,8 +250,9 @@ export type ReactStatus = 'reading' | 'waiting' | 'installed-late' | 'unreadable
 export interface UnsupportedReason {
   /**
    * 'browser': no Event Timing `interactionId` (Chrome 96, Firefox 144, Safari 26.2), so nothing was
-   * installed. 'another-copy': a copy of this library from an incompatible version is already on the
-   * page, so this one installed nothing. 'hook-disabled': the page's DevTools hook has `isDisabled` set
+   * installed. 'another-copy': another copy or entry of this library already owns the page and this one
+   * cannot share it, so this one installed nothing, as when a copy from an incompatible version got there
+   * first. 'hook-disabled': the page's DevTools hook has `isDisabled` set
    * or no `supportsFiber`, or the global is empty and read-only, so React registers with no hook;
    * or the page turned the hook in use off that way after install(), before react-dom registered or with
    * its methods made no-ops, or emptied the global over the shim before react-dom registered, which the
@@ -217,7 +270,10 @@ export interface UnsupportedReason {
   message: string;
 }
 
-/** The DevTools hook as this library found and uses it. */
+/**
+ * The DevTools hook as this library found and uses it. For debugging, like `Api.debug`: not part of the
+ * report contract, and its shape may change in any version.
+ */
 export interface HookInfo {
   /**
    * Who owns the hook: this library, or the keys of the hook it chained onto. Where the page turned that hook off
@@ -273,6 +329,10 @@ export interface Api {
   dispose(): void;
 }
 
+/**
+ * What `Api.debug` holds. For debugging: not part of the report contract, and its shape may change in
+ * any version.
+ */
 export interface DebugApi {
   /**
    * The last 300 commits walked, in or out of an interaction window, oldest first. They carry no
@@ -383,53 +443,76 @@ export interface Hydration extends HydrationBoundary {
 /** Who is to blame, as data: the same call the cause sentence makes, for UIs to render short. */
 export interface Blame {
   /**
-   * Where the time mostly went. 'hydration' is React hydrating, inside the interaction, the
-   * server-rendered HTML the input landed on: the report's `hydration` names the boundary. An input
-   * that was never dispatched because its HTML was *still* waiting spent its time elsewhere, so it
-   * keeps the blame that says where, and `hydration.kind` is `'not-hydrated'`. 'layout' is the
-   * browser recalculating styles and layout inside the handlers, one figure in a Long Animation Frames
-   * entry, which measures it in every build, React's durations or not. 'waiting' is the input waiting
-   * for the main thread: before its first handler, or inside the working time, between one of its
-   * events' handlers and the next's (Enter on a button whose click restyled 30,000 cells, where the
-   * keyup waits for the browser to finish).
+   * Where the time mostly went, one of eight kinds. 'render': React rendering and committing for this
+   * input, charged to a subtree. 'handler': the input's own event handlers, named after the handler.
+   * 'hydration': React hydrating the server-rendered HTML the input landed on. 'layout': style and layout
+   * the browser recalculated inside the handlers. 'waiting': the input waiting for the main thread, before
+   * its first handler or between handlers. 'painting': the screen update after the handlers. 'script': a
+   * script Long Animation Frames recorded while the interaction ran, named after what ran it. 'none':
+   * nothing stood out, or nothing could be seen. A slow event listener is both a handler and a script, and
+   * which of the two a report says can change in a minor.
+   *
+   * 'hydration' is React hydrating, inside the interaction, the server-rendered HTML the input landed on: the
+   * report's `hydration` names the boundary. An input that was never dispatched because its HTML was *still*
+   * waiting spent its time elsewhere, so it keeps the blame that says where, and `hydration.kind` is
+   * `'not-hydrated'`. 'layout' is the browser recalculating styles and layout inside the handlers, one figure
+   * in a Long Animation Frames entry, which measures it in every build, React's durations or not. 'waiting'
+   * is the input waiting for the main thread: before its first handler, or inside the working time, between
+   * one of its events' handlers and the next's (Enter on a button whose click restyled 30,000 cells, where
+   * the keyup waits for the browser to finish).
    */
   readonly kind: 'render' | 'handler' | 'hydration' | 'layout' | 'waiting' | 'painting' | 'script' | 'none';
   /**
-   * The subtree that re-rendered, the handler that ran, the script, or the boundary that was
-   * hydrated; null when unknown. A 'render' always has one: the subtree, or 'the app' where the commit
-   * named none. For a 'layout' it is where the layout was forced, never what forced
-   * it, because no source says that. That is the subtree of a commit the interaction can claim: one
-   * joined by its own input stamp, walked to the end, with no commit of the interaction left
-   * unjoined. Failing that it is the invoker the browser charged the script to ("DIV#root.onclick"),
-   * and only while one script holds nearly all of `ms`; where several scripts share the total, no
-   * one of them is where the layout happened and this is null. The cause sentence names the largest
-   * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script
-   * the input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that
-   * filled at least half of the wait, before the first handler or between them; null otherwise. A
-   * 'painting' takes the invoker of the script after the handlers that ran for at least half of the
-   * screen update ("DIV.onscroll"), or where that script is React's own task (`MessagePort.onmessage`)
-   * and React rendered inside it, the component that render is named after; null otherwise. A 'handler'
-   * React has no name for (a listener bound on the document, say) takes the invoker of the longest script
-   * in the working time on the same terms as a 'waiting': "#document.onkeydown".
+   * What the time is charged to: a subtree that re-rendered, a handler that ran, what ran a script as the
+   * browser names it, or the boundary that was hydrated, and null when unknown. Which of them a report names
+   * can change in a minor as the reading gets better, and the rest of this says how each kind picks one
+   * today. A 'render' always has one: the subtree, or 'the app', the fixed value (the same through 1.x) a
+   * 'render' or a 'layout' takes where its commit's walk gave no component to name it after: where it could
+   * not tell where the render started, which the commit's `pathStart` says, or where the component the render
+   * is named after has no name it could read. For a 'layout' it is where the layout was forced, never what
+   * forced it, because no source says that. That is the subtree of a commit the interaction can claim: one
+   * joined by its own input stamp, walked to the end, with no commit of the interaction left unjoined. Of
+   * several commits in the scripts that forced it, it is the one whose time could hold most of the layout,
+   * and null where none could hold half. Failing that it is the invoker the browser charged the script to
+   * ("DIV#root.onclick"), and only while one script holds nearly all of `ms`; where several scripts share the
+   * total, no one of them is where the layout happened and this is null. The cause sentence names the largest
+   * either way, with how much of the total it holds. For a 'waiting' it is the invoker of the script the
+   * input waited behind ("TimerHandler:setTimeout"), when Long Animation Frames recorded one that filled at
+   * least half of the wait, before the first handler or between them; null otherwise. A 'painting' takes the
+   * invoker of the script after the handlers that ran for at least half of the screen update
+   * ("DIV.onscroll"), or where that script is React's own task (`MessagePort.onmessage`) and React rendered
+   * inside it, the component that render is named after; null otherwise. A 'handler' React has no name for (a
+   * listener bound on the document, say) takes the invoker of the longest script in the working time on the
+   * same terms as a 'waiting': "#document.onkeydown".
    */
   readonly name: string | null;
   /**
-   * For a render or a hydration, what it was mostly made of: many of one component ("LineItem ×800"), one
-   * component's own render where React timed it at half the render or more ("TableBody's own render"), else
-   * how many components rendered ("637 components"). For a render, of which how many inside the component
-   * `name` gives, where that is fewer ("812 of 1216 components"); a hydration is named after a boundary or
-   * the page, which holds them all, so it carries the whole count. Null where it rendered one. For a
+   * Display text. For a render or a hydration, what it was mostly made of: many of one component
+   * ("LineItem ×800"), one component's own render where React timed it at half the render or more
+   * ("TableBody's own render"), else how many components rendered ("637 components"). For a render, of which
+   * how many inside the component `name` gives, where that is fewer ("812 of 1216 components"); a hydration
+   * is named after a boundary or the page, which holds them all, so it carries the whole count. Null where it
+   * rendered one. Where the walk was cut short it is always the count, and says so: "at least 1999 components,
+   * the rest not walked". A render whose commit spent over half of `ms` in its useEffect callbacks has
+   * "useEffect callbacks" instead, "useEffect callbacks after mounting RevenueChart" where one component
+   * mounted in it with one (`effectMountName`), or "useEffect callbacks in 3 mounted components" where
+   * several did and no component that rendered again had one to run (`effectRuns`), and on a walk cut short,
+   * which counted only the mounts it reached, "useEffect callbacks in at least 2 mounted components". For a
    * handler, its component, or null where the name is a listener the browser recorded rather than a React
-   * handler. For a 'layout', what that same commit was mostly made of, as a render's, or with the whole
-   * count ("56 components") where `name` is the component the render started from and that holds the whole
-   * commit, wherever `name` came from that commit, and null wherever `name` did not, since a script has no
-   * component counts. For a 'waiting' inside the working time, where it came: "between click and keyup", or
-   * "between handlers" where it was split across more than one; null for a wait before the first handler.
+   * handler. For a 'layout', what that same commit was mostly made of, as a render's, where a count is the
+   * whole commit's ("56 components", not "15 of 56") when `name` is the component the render started from and
+   * that holds the whole commit, wherever `name` came from that commit, and null wherever `name` did not,
+   * since a script has no component counts. For a 'waiting' inside the working time, where it came: "between
+   * click and keyup", or "between handlers" where it was split across more than one; null for a wait before
+   * the first handler.
    */
   readonly detail: string | null;
   /**
    * How much of the interaction it accounts for, in ms; null for 'none', and for a render, a hydration
-   * or a handler where the build records no durations and React committed in the working time.
+   * or a handler where the build records no durations and React committed in the working time. For a
+   * render it is the named commit's render, plus committing it, plus its useEffect callbacks in the same
+   * task, and React's other commits in the interaction are not in it, except a render React committed inside
+   * those callbacks with no recorded start, which can't be taken out and which the sentence says is included.
    */
   readonly ms: number | null;
   /**
@@ -462,9 +545,10 @@ export interface Blame {
 export type Rating = 'good' | 'needs-improvement' | 'poor';
 
 /**
- * The report in plain words, for people and for UIs. `blame`, `rating` and the phases' `ms` are
- * data. `headline`, `where`, `cause`, `notes` and the phases' `label` and `hint` are display text:
- * their wording may change in any version, so show them, never parse or compare them.
+ * The report in plain words, for people and for UIs. `blame.kind`, `blame.name`, `blame.ms`,
+ * `blame.confidence`, `rating` and the phases' `ms` are data. `blame.detail`, `headline`, `where`,
+ * `cause`, `notes` and the phases' `label` and `hint` are display text: their wording may change in
+ * any version, so show them, never parse or compare them.
  */
 export interface Explanation {
   /** e.g. "216 ms click". Display text. */
@@ -484,17 +568,25 @@ export interface Explanation {
 }
 
 /**
- * How the page came to be at a URL: web-vitals' `Metric['navigationType']`, with the same values.
- * 'soft-navigation' is a client-side navigation a router announced (the Next.js App Router, through
- * `react-inp-blame/next`); 'back-forward-cache' is a page restored from the back/forward cache.
+ * How the page came to be at a URL, with the values of web-vitals' `Metric['navigationType']`. The
+ * document's own load takes it from the browser's navigation entry, or 'prerender' and 'restore' for a
+ * page that was prerendered or discarded and loaded again. 'soft-navigation' is a client-side navigation
+ * a router announced (the Next.js App Router through `react-inp-blame/next`, any other router through
+ * `announceNavigation`), and 'back-forward-cache' is a page restored from the back/forward cache. The set
+ * is this library's own and stays as it is through 1.x: a navigation type a browser adds later reads as
+ * 'navigate' until 2.0.0.
  */
 export type NavigationType = 'navigate' | 'reload' | 'back-forward' | 'back-forward-cache' | 'prerender' | 'restore' | 'soft-navigation';
 
 /** A soft navigation an interaction started, as the router announced it. */
 export interface StartedNavigation {
-  /** Where it went, as an absolute URL. */
+  /** Where it went: an absolute URL without its query, fragment or password. */
   readonly url: string;
-  /** The router's word for it: 'push' or 'replace' for a link or `router.push()` / `router.replace()`, 'traverse' for back and forward. */
+  /**
+   * The router's word for it: 'push' or 'replace' for a link or `router.push()` / `router.replace()`, 'traverse'
+   * for back and forward. `announceNavigation` always records 'push', and so does a type Next.js passes that is
+   * none of these three, so the set stays as it is through 1.x.
+   */
   readonly type: 'push' | 'replace' | 'traverse';
 }
 
@@ -514,7 +606,7 @@ export interface EventEntrySummary {
  */
 export interface InteractionReport {
   /** The version of this shape. It changes when a field is removed or changes meaning; a field added beside the others leaves it as it is. */
-  readonly schemaVersion: 3;
+  readonly schemaVersion: 4;
   readonly interactionId: number;
   /** The event the headline is named after: the best-known one in the headline entry's paint group. */
   readonly type: string;
@@ -526,8 +618,28 @@ export interface InteractionReport {
    */
   readonly reactStatus: ReactStatus;
   /**
-   * The pointer `type`'s event came from, 'mouse', 'pen' or 'touch', as the library saw it dispatched;
-   * null for a key, for a click a key made, and when the library did not see the event.
+   * The build of react-dom the page renders with. A development build is slower than the others, and StrictMode
+   * renders twice there, so its numbers run higher than production's: this is what to drop or label reports by
+   * before they are forwarded. 'development' where any react-dom on the page says so to the DevTools hook, as
+   * the badge's mark does, in whatever order they registered. A production and a profiling build say the same
+   * there, and only a profiling build puts its roots in React's ProfileMode, so those two are told apart by the
+   * page's first commit. Null where react-dom did not say, where no react-dom registered, and for a production
+   * or profiling build before the page's first commit or that this library cannot read.
+   */
+  readonly reactBuild: 'development' | 'production' | 'profiling' | null;
+  /**
+   * Whether a component React rendered for this interaction was under `<StrictMode>`, which renders each
+   * component twice in a development build, so its render times run higher than the same code's outside
+   * StrictMode. Null unless `reactBuild` is 'development' and the report holds a commit, since no other
+   * build renders twice.
+   */
+  readonly strictMode: boolean | null;
+  /**
+   * The pointer `type`'s event came from, as the browser named it on the event the library saw dispatched.
+   * Browsers give 'mouse', 'pen' or 'touch', and any other value is passed on as it is, since this is the
+   * browser's string rather than a set of the library's own. A click takes a finger's or a pen's from its
+   * press's pointerdown, since WebKit gives a tap's click 'mouse'. Null for a key, for a click a key made,
+   * when the library did not see the event, and where the browser gave an empty string.
    */
   readonly pointerType: string | null;
   /** `startTime` of the headline entry. */
@@ -570,9 +682,10 @@ export interface InteractionReport {
    */
   readonly hydration: Hydration | null;
   /**
-   * The URL of the page the interaction happened on: the document's, or that of the latest soft
-   * navigation that had begun when the interaction did. web-vitals' `Metric.navigationURL`, so a
-   * report lines up with the INP web-vitals reports for that URL.
+   * The origin and path of the page the interaction happened on: the document's, or that of the latest
+   * soft navigation that had begun when the interaction did. A query, a fragment and a password are left
+   * out, since a report is made to be forwarded. web-vitals' `Metric.navigationURL` keeps them, so match
+   * the two on the path.
    */
   readonly navigationURL: string;
   /** How the page came to be at `navigationURL`: web-vitals' `Metric.navigationType`. */
@@ -582,7 +695,7 @@ export interface InteractionReport {
   /** React commits between the input and the next paint: what INP measures. */
   readonly commits: readonly CommitSummary[];
   /**
-   * Commits that landed after that paint but still belong to this input (effects, transitions, cascades), within
+   * Commits that landed after that paint (effects, transitions, cascades or anything else that committed), within
    * `inputWindow` of the paint, or of the end of a later input's own work in the same interaction, such as the
    * click that releases a press held past the paint, and before any newer input or any `input`, `change` or
    * `submit` a script dispatched after the paint. One made outside any dispatch and stamped with a keyup or a
@@ -592,7 +705,7 @@ export interface InteractionReport {
    * pointer's before its release is not, whether its press sent an entry or not: the hook stamps a drag's move
    * renders with its pointerdown.
    * INP does not count them, except one that ran inside another of the interaction's own entries
-   * (`CommitSummary.inDispatch`), such as that release's render; the user still waits for them.
+   * (`CommitSummary.inDispatch`), such as that release's render, and what started the rest can't be told.
    */
   readonly followUps: readonly CommitSummary[];
   /**
@@ -622,20 +735,24 @@ export interface InteractionReport {
 }
 
 export interface OverlayOptions {
-  /** Which corner the badge sits in. Default 'bottom-right'. */
+  /**
+   * Which corner the badge sits in. Without it the badge starts bottom right and moves to the next free corner
+   * when the page's own fixed or sticky element holds that one.
+   */
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
   /** Start with the panel open. Default false. */
   open?: boolean;
-  /** How many interactions the panel keeps, newest first. Default 20. */
+  /** How many interactions the panel keeps, newest first, and as many again in its fold of quick ones. Default 20. */
   max?: number;
 }
 
 export interface InstallOptions {
   /**
-   * Show the on-page badge and panel. `true` always; `'query'` only when the URL carries
-   * `?inp-blame` / `#inp-blame` or localStorage has `react-inp-blame=overlay`, which is how you
-   * open it on a production page without shipping UI to users. Their code is loaded with a
-   * dynamic import after install() returns. Default false.
+   * Show the on-page badge and panel. `true` or an options object shows them, unless someone pressed
+   * Hide for me in this browser, which `?inp-blame` or `#inp-blame` in the URL clears. `'query'` shows
+   * them only when the URL carries `?inp-blame` / `#inp-blame` or localStorage has
+   * `react-inp-blame=overlay`, which is how you open it on a production page without shipping UI to
+   * users. Their code is loaded with a dynamic import after install() returns. Default false.
    */
   overlay?: boolean | 'query' | OverlayOptions;
   /** Report interactions at or above this duration (ms), plus shorter ones that trigger a later render INP does not count. Default 40. */
@@ -673,10 +790,10 @@ export interface InstallOptions {
    *
    * `'attributes'`: only what the page's code wrote on the element: its `aria-label`, a form field's
    * `placeholder`, `aria-placeholder` or `name`, an input's `type`, or its `data-testid` or `data-test`.
-   * `'text'`: the same, except that an element with no `aria-label` that is not a form field is
-   * named by its first run of text, the way a person would name it. That text can be what the page
-   * shows about a person (a name in a table cell), and it travels with every report you forward to
-   * an error tracker or analytics.
+   * `'text'`: the same, except that a form field with no `aria-label` is named by its `<label>` first,
+   * and any other element with no `aria-label` by its first run of text, the way a person would name
+   * it. That text can be what the page shows about a person (a name in a table cell), and it travels
+   * with every report you forward to an error tracker or analytics.
    * `'auto'`: text under a development build of React, attributes under any other.
    *
    * Default 'auto'.

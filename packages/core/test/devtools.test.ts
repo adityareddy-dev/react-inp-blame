@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { aboveRoots } from '../src/commits.ts';
 import { createTimeline } from '../src/devtools.ts';
 import type { InputRecord } from '../src/hook.ts';
 import { attachLaterRender, buildReport, sealReport } from '../src/join.ts';
@@ -254,15 +255,105 @@ test('the interaction entry is named after the heaviest render before the paint,
   assert.equal(r.explanation.blame.name, 'OrderSummary');
 });
 
+test('a render whose walk could not tell where it started is named after no component, though its path still shows the one the roots sit under', () => {
+  // A production walk cut at its budget under an App that did not render, and beside a Toaster it never reached.
+  const cut = { rendered: 5000, truncated: true, pathStart: 'unknown-root' as const };
+  const row = (count: number) => ({ name: 'Row', count, self: null, total: null });
+  const one = (name: string) => ({ name, count: 1, self: null, total: null });
+  for (const [opts, path] of [
+    [{ roots: ['Orders', 'Metrics'], hotPath: ['App'], components: [row(4998), one('Orders'), one('Metrics')] }, ['Heaviest path', 'App']],
+    [{ roots: ['App'], hotPath: [], components: [row(4999), one('App')] }, undefined],
+  ] as const) {
+    const r = report([commit(150, { ...cut, ...opts })]);
+    const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+    assert.deepEqual(
+      drawn.map((d) => d.label),
+      ['200 ms click', 'React render · the app (at least 5000 components, time not measured)'],
+    );
+    assert.deepEqual(drawn[0]?.properties?.find(([name]) => name === 'Heaviest path'), path);
+    assert.equal(r.explanation.blame.name, 'the app');
+  }
+});
+
+test("the interaction entry takes the start a layout blame is named after, where that start is the heaviest render's", () => {
+  // Closing a Sheet on the shadcn/ui docs, production build: 56 components from Dialog down, 15 of them inside
+  // DismissableLayer, and 87 ms of layout forced in BODY.onclick. The tooltip blamed Dialog and the entry read DismissableLayer.
+  const close = { ...click, duration: 160, processingStart: 3.2, processingEnd: 105 };
+  const hotPath = ['Dialog', 'DialogProvider', 'SheetContent', 'Presence', 'Portal', 'DialogContent', 'FocusScope', 'DismissableLayer'];
+  const sheet = commit(60, { rendered: 56, mounted: 0, roots: ['Dialog'], hotPath, startRendered: 56, pathRendered: 15, components: [{ name: 'Presence', count: 4, self: null, total: null }] });
+  const frames = [{ start: 0, duration: 160, blocking: 110, forcedLayout: 87, scripts: [{ invoker: 'BODY.onclick', name: '', source: 'app.js', start: 3.2, duration: 101.8, forcedLayout: 87 }], styleAndLayoutStart: null }];
+  const label = (r: ReturnType<typeof report>) => recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn[0]?.label;
+  const layout = sealReport(buildReport([close], [sheet], frames));
+  assert.deepEqual([layout.explanation.blame.kind, layout.explanation.blame.name], ['layout', 'Dialog']);
+  assert.equal(label(layout), '160 ms click · Dialog');
+  // A render blame on the same commit is named after where the render went, and so is the entry.
+  const render = sealReport(buildReport([close], [sheet], null));
+  assert.deepEqual([render.explanation.blame.kind, render.explanation.blame.name], ['render', 'DismissableLayer']);
+  assert.equal(label(render), '160 ms click · DismissableLayer');
+  // Where React's times show DismissableLayer took under half of it, the render blame takes the start, and so does the entry.
+  const timed = { ...sheet, hasDurations: true, total: 60, components: [{ name: 'Presence', count: 4, self: 5, total: 20 }, { name: 'Dialog', count: 1, self: 3, total: 60 }] };
+  const started = sealReport(buildReport([close], [timed], null));
+  assert.deepEqual([started.explanation.blame.kind, started.explanation.blame.name], ['render', 'Dialog']);
+  assert.equal(label(started), '160 ms click · Dialog');
+});
+
+test('the interaction entry takes the component a layout blame names above several roots, as the tooltip does', () => {
+  // plate's search dialog opening: a Presence and a Portal mount under Radix's DialogPortal. The path ends at cmdk's
+  // CommandGroup, and the tooltip names DialogPortal.
+  const open = { ...click, duration: 160, processingStart: 3.2, processingEnd: 105 };
+  const dialog = commit(60, { rendered: 89, mounted: 87, roots: ['Presence', 'Portal'], hotPath: ['Portal', 'DialogContent', 'FocusScope', 'Command', 'CommandList', 'CommandGroup'], pathStart: 'heaviest-root', startRendered: 72, pathRendered: 27, components: [{ name: 'Primitive.div', count: 13, self: null, total: null }] });
+  aboveRoots.set(dialog.hotPath, 'DialogPortal');
+  const frames = [{ start: 0, duration: 160, blocking: 110, forcedLayout: 87, scripts: [{ invoker: 'BODY.onclick', name: '', source: 'app.js', start: 3.2, duration: 101.8, forcedLayout: 87 }], styleAndLayoutStart: null }];
+  const r = sealReport(buildReport([open], [dialog], frames));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'DialogPortal']);
+  // 87 of the 89 mounted, so it is rendering 89, not mounting 89.
+  assert.match(r.verdict, /rendering 89 components inside DialogPortal\./);
+  assert.equal(recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn[0]?.label, '160 ms click · DialogPortal');
+});
+
+test('the interaction entry takes the commit a layout blame names where that is not the heaviest, and the heaviest path stays the heaviest', () => {
+  // Opening a menu, production build: 44 ms of layout forced in one script across four commits. The menu's
+  // commit could hold it; the sidebar's rendered the most.
+  const press = { ...click, name: 'pointerdown', duration: 72, processingStart: 1.1, processingEnd: 59.9 };
+  const one = (name: string, count: number) => [{ name, count, self: null, total: null }];
+  const sidebar = commit(3.8, { rendered: 295, mounted: 0, roots: ['Sidebar'], hotPath: ['Sidebar'], startRendered: 295, pathRendered: 295, components: one('NavItem', 24), effectsStartedAt: 4.6, effectsEndedAt: 4.7 });
+  const portal = commit(9.3, { rendered: 96, mounted: 95, roots: ['Portal'], hotPath: ['Portal'], components: one('Slot', 9), effectsStartedAt: 9.4, effectsEndedAt: 11.4 });
+  const menu = commit(36.5, { rendered: 185, mounted: 0, roots: ['Header'], hotPath: ['Header', 'Menu', 'MenuContent'], startRendered: 185, pathRendered: 80, components: one('MenuItem', 13), effectsStartedAt: 36.8, effectsEndedAt: 57.4 });
+  const layer = commit(57.9, { rendered: 15, mounted: 0, roots: ['Layer'], hotPath: ['Layer'], components: one('Slot', 3), effectsStartedAt: 57.9, effectsEndedAt: 58 });
+  const forced = [{ start: 0, duration: 64, blocking: 14, forcedLayout: 44.4, scripts: [{ invoker: '#document.onpointerdown', name: '', source: 'app.js', start: 1.9, duration: 58, forcedLayout: 44.4 }], styleAndLayoutStart: null }];
+  const ring: InputRecord[] = [{ ts: 0, type: 'pointerdown', gestureTs: 0, press: undefined, target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const r = sealReport(buildReport([press], [sidebar, portal, menu, layer], forced, ring));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'Header']);
+  const [interaction] = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn;
+  assert.equal(interaction?.label, '72 ms click · Header');
+  assert.equal(row(interaction, 'Heaviest path'), 'Sidebar');
+});
+
+test('the interaction entry takes the commit a render blame names where that is not the heaviest', () => {
+  // Enter on a menu item, production build: the press rendered 300 components and painted on its own; the
+  // release's 55 ms of working time rendered 60 of its own, which the tooltip blames.
+  const key = (ts: number, type: string): InputRecord => ({ ts, type, gestureTs: 0, press: 'Enter', target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const down = { ...click, name: 'keydown', startTime: 0, duration: 32, processingStart: 0.1, processingEnd: 4.8 };
+  const up = { ...click, name: 'keyup', startTime: 5, duration: 64, processingStart: 5.2, processingEnd: 60 };
+  const press = commit(4.2, { inputType: 'keydown', rendered: 300, roots: ['Menu'], hotPath: ['Menu'], components: [{ name: 'Item', count: 200, self: null, total: null }] });
+  const own = commit(58, { inputTs: 5, sinceInput: 53, inputType: 'keyup', rendered: 60, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 55, self: null, total: null }] });
+  const r = sealReport(buildReport([down, up], [press, own], [], [key(0, 'keydown'), key(5, 'keyup')]));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['render', 'List']);
+  const [interaction] = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r)).drawn;
+  assert.match(interaction?.label ?? '', / · List$/);
+  assert.equal(row(interaction, 'Heaviest path'), 'Menu');
+});
+
 test("the interaction's count of renders before the paint is the tooltip's, and says how many were too small to count", () => {
-  // Shaped like opening the shadcn/ui Sheet: six commits before the paint, three with work in them, and an empty
-  // one and two small ones beside them. The tooltip said React rendered 3 times and the Summary said 6.
+  // Shaped like opening the shadcn/ui Sheet: six commits before the paint, three with work in them, two small ones
+  // and an empty one beside them. The tooltip said React rendered 3 times and the Summary said 6. Five rendered
+  // something, and the empty one is the one left out.
   const small = (at: number, rendered: number) => commit(at, { rendered, roots: rendered ? ['Presence'] : [], hotPath: rendered ? ['Presence'] : [], components: rendered ? [{ name: 'Presence', count: rendered, self: null, total: null }] : [] });
   const r = report([commit(20), small(30, 0), commit(60), small(70, 2), commit(100), small(110, 3)]);
-  assert.match(r.verdict, / React rendered 3 times before the screen updated,/);
+  assert.match(r.verdict, / React rendered 5 times before the screen updated,/);
   const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
   const count = (d: Drawn | undefined) => d?.properties?.find(([name]) => name === 'React renders before the paint')?.[1];
-  assert.equal(count(drawn[0]), '3, and 3 too small to count');
+  assert.equal(count(drawn[0]), '5, and 1 too small to count');
   // Every one of them is still drawn.
   assert.equal(drawn.filter((d) => d.track === 'React renders').length, 6);
   // Where every render counts, the count is the number alone.
@@ -302,6 +393,17 @@ test('a small render whose useEffect took the time is the render the tooltip bla
   assert.match(spread.verdict, / React spent 6 ms rendering across 2 commits, 3 ms of it re-rendering Chart\. /);
   const { drawn: spreadDrawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('18.3.1', 1)]).draw(spread));
   assert.equal(row(spreadDrawn[0], 'React renders before the paint'), '2');
+});
+
+test('the small render a layout blame names is counted, as the tooltip blames it', () => {
+  // A production commit of 4 components from Popover, inside the root's click listener that forced 100 ms of layout
+  // over 178 ms of handlers. The tooltip blamed Popover, and the Summary said "0, and 1 too small to count".
+  const popover = commit(60, { rendered: 4, roots: ['Popover'], hotPath: ['Popover'], components: [{ name: 'PopoverContent', count: 4, self: null, total: null }] });
+  const frames = [{ start: 0, duration: 200, blocking: 150, forcedLayout: 100, scripts: [{ invoker: 'DIV#root.onclick', name: '', source: 'app.js', start: 2, duration: 178, forcedLayout: 100 }], styleAndLayoutStart: null }];
+  const r = sealReport(buildReport([click], [popover], frames));
+  assert.deepEqual([r.explanation.blame.kind, r.explanation.blame.name], ['layout', 'Popover']);
+  const { drawn } = recording(CHROME_147, () => createTimeline(() => [reactDom('19.3.0', 0)]).draw(r));
+  assert.equal(row(drawn[0], 'React renders before the paint'), '1');
 });
 
 test("the count of renders before the paint leaves out what the tooltip's count leaves out, and says what", () => {

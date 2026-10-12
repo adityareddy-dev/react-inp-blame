@@ -1,4 +1,4 @@
-import { passedLayer } from './commits.js';
+import { aboveRoots, passedLayer } from './commits.js';
 import { CONTROL_TAGS, iconAround, isControl } from './element.js';
 import type { InputStamp } from './hook.js';
 import type { CommitSummary, HydrationBoundary, RenderedComponent } from './types.js';
@@ -146,6 +146,14 @@ export function nextDevToolsRoot(root: FiberRoot): boolean {
  */
 export function profileModeBit(reactMajor: number): number {
   return reactMajor === 17 ? 0b1000 : 0b10;
+}
+
+/**
+ * The bit of `fiber.mode` that `<StrictMode>` sets on the fibers under it: StrictMode, 1, on React 17, and
+ * StrictLegacyMode, 8, on 18 and 19.
+ */
+export function strictModeBit(reactMajor: number): number {
+  return reactMajor === 17 ? 0b1 : 0b1000;
 }
 
 // The flags that make React run a commit's passive phase, and so call `onPostCommitFiberRoot` after
@@ -498,18 +506,24 @@ const INPUT_HANDLERS = ['onClick', 'onDoubleClick', 'onPointerDown', 'onPointerU
  */
 export function namingFiber(node: Node | null): Fiber | null {
   const icon = node && iconAround(node);
-  const start = icon && fiberFromNode(icon);
-  if (!start) return fiberFromNode(node);
+  const cached = icon && fiberFromNode(icon);
+  if (!cached) return fiberFromNode(node);
+  // React 19 caches on an element the fiber it made it with, which on every other render holds the render before,
+  // and the handler from then: the climb reads the one on the screen.
+  const start = onScreen(cached);
   let f = start;
   // An icon with no fiber is read from the element around it. Where React set that element's markup through
   // dangerouslySetInnerHTML and its tag is not a control's, the element is the icon, as the `<svg>` an icon
   // library renders is, and its handler is the icon's whatever role it has. So is the handler of an element
   // that is not a control. A control holds what is drawn in it, so its handler is its own and IconButton's
   // `<button onClick>` names IconButton, save where React rendered nothing in it and it is an `<i>`, the icon
-  // itself that Font Awesome nests its svg in, or its role was handed down with its handler, as `<ReactSVG
-  // role="button" onClick>` hands both to the empty `<div>` react-svg draws its svg in. What React rendered
-  // there is read from the element's fiber on the screen, not the one cached on it.
-  const handled = handlesInput(start) && (fiberOn(icon) === start || isMarkupIcon(start) || !isControlHost(start) || (rendersNothing(onScreen(start)) && (start.type === 'i' || roleHandedDown(start))));
+  // itself that Font Awesome nests its svg in, or the empty `<span>` an accessible icon is written as, or its
+  // role was handed down with its handler, as `<ReactSVG role="button" onClick>` hands both to the empty
+  // `<div>` react-svg draws its svg in. What React rendered there is read from the element's fiber on the
+  // screen, not the one cached on it.
+  const handled =
+    handlesInput(start) &&
+    (fiberOn(icon) === cached || isMarkupIcon(start) || !isControlHost(start) || (rendersNothing(start) && (start.type === 'i' || start.type === 'span' || roleHandedDown(start))));
   // An icon with a handler is climbed through the components that handed it down even where it is a control
   // itself: `<Trash2 role="button" onClick>` is the writer's too.
   for (let i = 0; i < ICON_CLIMB && (handled || (!isControlHost(f) && !handlesInput(f))); i++) {
@@ -642,15 +656,15 @@ export function ownersOf(fiber: Fiber | null, limit = 8): string[] {
  *
  * Only the event's own prop is unconditional. Everything else React dispatches from this event rather
  * than for it is added by `propsFor`, and only where React really would: `onChange` on a form control,
- * `onSubmit` on Enter. The rule for the whole table is that a fallback which is sometimes right is
- * worse than nothing, because a named handler reads as a fact.
+ * `onSubmit` on Enter and on a click on a submit button. The rule for the whole table is that a fallback
+ * which is sometimes right is worse than nothing, because a named handler reads as a fact.
  *
  * `mousedown` and `mouseup` are not here. The ring records pointer events (`INPUT_TYPES` in hook.ts)
  * and Event Timing names the pointer ones, so a mouse event never reaches this table; an app that
  * wrote `onMouseDown` is still named, from the `pointerdown` row's fallback.
  */
 const handlerProp: Record<string, readonly string[]> = {
-  click: ['onClick', 'onSubmit'],
+  click: ['onClick'],
   pointerdown: ['onPointerDown', 'onMouseDown'],
   pointerup: ['onPointerUp', 'onMouseUp'],
   keydown: ['onKeyDown'],
@@ -664,7 +678,7 @@ const handlerProp: Record<string, readonly string[]> = {
 // What a key event can reach besides its own prop, and the click on a toggle that React turns into an
 // onChange. Both are added by `propsFor` only where React would fire them.
 const TYPING = ['onChange', 'onInput'];
-const CLICK_ON_TOGGLE = ['onClick', 'onChange', 'onSubmit'];
+const CLICK_ON_TOGGLE = ['onClick', 'onChange'];
 // `KeyboardEvent.code` for the two Enter keys, and `key` for both, since the ring stores the code and
 // a caller with the event in hand may pass either.
 export const ENTER_KEYS = ['Enter', 'NumpadEnter'];
@@ -751,10 +765,29 @@ function propsFor(fiber: Fiber | null, eventType: string, key: string | null | u
     if (enter && eventType !== 'keyup') props.push('onSubmit');
     return props;
   }
-  if (base.includes('onChange') || !firesChange(fiber, eventType)) return base;
-  // Only `click` gets here, from a checkbox or a radio. onChange goes after the click's own prop and
-  // ahead of the form fallback, so a control with an onClick is still named by it.
-  return CLICK_ON_TOGGLE;
+  if (eventType !== 'click') return base;
+  // A checkbox or a radio fires onChange from its click, after the click's own prop, so a control with an
+  // onClick is still named by it. A submit button's click submits its form, after the button's own onClick.
+  if (firesChange(fiber, eventType)) return CLICK_ON_TOGGLE;
+  return submitsOnClick(fiber) ? [...base, 'onSubmit'] : base;
+}
+
+/**
+ * Whether a click here submits a form: it landed on a submit button or inside one. A button submits unless
+ * its type is button or reset, and an input only as a submit or an image. A click anywhere else in a form, a
+ * field or a checkbox, submits nothing, so it reaches no onSubmit.
+ */
+function submitsOnClick(fiber: Fiber | null): boolean {
+  let f = fiber;
+  let hops = 0;
+  while (f && hops++ < MAX_HOPS) {
+    if (typeof f.type === 'string' && INTERACTIVE.includes(f.type)) {
+      const type = typeof f.memoizedProps?.type === 'string' ? f.memoizedProps.type.toLowerCase() : '';
+      return f.type === 'button' ? type !== 'button' && type !== 'reset' : f.type === 'input' && (type === 'submit' || type === 'image');
+    }
+    f = f.return;
+  }
+  return false;
 }
 
 // Fibers looked at inside a label to find the control its click is forwarded to. A label holds a
@@ -868,6 +901,8 @@ export function handlerOf(fiber: Fiber | null, eventType: string, key?: string |
 export interface CommitContext {
   /** `profileModeBit` for the renderer's React major. */
   profileMode: number;
+  /** `strictModeBit` for the renderer's React major. */
+  strictMode: number;
   priority: number | undefined;
   didError: boolean;
   /**
@@ -949,16 +984,27 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   let rendered = 0;
   // Of them, the components rendering for the first time: a fiber React made in this commit has no alternate.
   let mounted = 0;
+  // Of those, the ones with a useEffect to run after the commit, and the name of the last. React 17 numbers its
+  // flags otherwise, and says nothing of when its effects ran anyway (`reportsPassiveEffects`). `effectRuns`
+  // counts every component that rendered with one to run, mounted or not, so a name is given only where it
+  // is the one: a chart running its effect again beside a tooltip that mounted with one named the tooltip.
+  // The join counts the mounts only where they are all of them, for the same reason.
+  const effectFlag = context.profileMode === profileModeBit(17) ? 0 : PassiveFlags;
+  let effectMounts = 0;
+  let effectRuns = 0;
+  let effectMountName: string | null = null;
   // Rendered components with a time, and whether any time had a fraction of a millisecond.
   let timed = 0;
   let fractional = false;
+  // Whether a component that rendered is under <StrictMode>. The bit is inherited down the tree.
+  let strict = false;
   // A root hydrating is known from the root; a Suspense boundary hydrating, only by finding it.
   let hydrated = hydratesRoot(rootFiber);
   const { hydratedTarget } = context;
 
   function visit(f: Fiber, depth: number): Agg[] {
     const comp = countsAsComponent(f);
-    const bailedOut = f.alternate !== null && f.alternate.child === f.child;
+    const bailedOut = f.alternate?.child === f.child;
     const performed = comp && (f.flags & PerformedWork) !== 0;
     // Host and text fibers are most of any tree, and counting them cut every root-level update
     // short on a page of 5000 DOM nodes. They cost the walk no more than they cost React: a
@@ -996,8 +1042,16 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
       return kids;
     }
     rendered++;
-    if (f.alternate === null) mounted++;
+    strict ||= (f.mode & context.strictMode) !== 0;
     const name = nameOf(f) || '(anonymous)';
+    if (f.flags & effectFlag) effectRuns++;
+    if (f.alternate === null) {
+      mounted++;
+      if (f.flags & effectFlag) {
+        effectMounts++;
+        effectMountName = name;
+      }
+    }
     const total = f.actualDuration || 0;
     if (total > 0) {
       timed++;
@@ -1005,11 +1059,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     }
     let childSum = 0;
     if (!bailedOut) {
-      let c = f.child;
-      while (c !== null) {
-        childSum += c.actualDuration || 0;
-        c = c.sibling;
-      }
+      for (let c = f.child; c !== null; c = c.sibling) childSum += c.actualDuration || 0;
     }
     const self = Math.max(0, total - childSum);
     measured += self;
@@ -1042,6 +1092,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   const hasDurations = (rootFiber.mode & context.profileMode) !== 0 || measured > 0;
   const coarseClock = hasDurations && timed >= COARSE_CLOCK_SAMPLES && !fractional && renderTime / rendered < COARSE_CLOCK_MEAN_MS;
   const metric = (a: Agg) => (hasDurations ? a.total : a.rendered);
+  const carries = (a: Agg, b: Agg) => metric(a) >= HOT_PATH_SHARE * metric(b);
 
   // Hot path: from the heaviest root, keep descending while one child carries most of
   // the work. Pass-through components inside a rendered subtree are named on the way.
@@ -1052,7 +1103,7 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // in. Where it reached several roots, or one with rendered work beside it that the walk never reached,
   // the counts cannot choose a root: the one counted first can be the smaller. The path then names the
   // component they all sit under, or nothing. React's durations are totals for each subtree, walked or not,
-  // so they still choose.
+  // so they still choose among the roots the walk reached, though not for the ones it never did (below).
   const comparable = (a: Agg) => hasDurations || !a.cut;
   const hotPath: string[] = [];
   // Of `rendered`, those inside the component the path starts from: all of them under the component several
@@ -1062,29 +1113,54 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
   // path that is not a layer, else the end of the path.
   let pathRendered = rendered;
   const onlyRoot = performedRoots.length === 1 ? performedRoots[0]! : null;
-  if (!hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber))) {
+  // A timed walk cut at its budget never reaches the roots after the cut, and only React's total for the whole
+  // render has their time, in ProfileMode (under <Profiler> alone the root is not timed). Where they took longer
+  // than the heaviest root it reached, the durations cannot choose a root either.
+  const rootTotal = outOfBudget && performedRoots.length && rootFiber.mode & context.profileMode && rootFiber.actualDuration! >= renderTime ? rootFiber.actualDuration! : 0;
+  const fellBack =
+    rootTotal - renderTime > performedRoots.reduce((a, t) => Math.max(a, t.total), 0) ||
+    (!hasDurations && outOfBudget && !(onlyRoot && !unreachedBeside(onlyRoot.fiber, rootFiber)));
+  if (fellBack) {
     const shared = sharedAncestor(top);
     if (shared) hotPath.push(shared);
   } else if (performedRoots.length) {
+    // What several roots sit under, for a layout named after it.
+    if (!onlyRoot) aboveRoots.set(hotPath, sharedAncestor(top));
     let cur = performedRoots.reduce((a, b) => (metric(b) > metric(a) ? b : a));
     hotPath.push(cur.name);
     startRendered = cur.rendered;
     let named: Agg | null = passedLayer(cur.name) ? null : cur;
+    // How long the path is up to the component it names, and whether it passed a wrapper below that one.
+    let upTo = 1;
+    let wrapped = false;
     for (let steps = 0; cur.kids.length && comparable(cur) && steps < HOT_PATH_STEPS; ) {
       const next = cur.kids.reduce((a, b) => (metric(b) > metric(a) ? b : a));
-      if (metric(next) < HOT_PATH_SHARE * metric(cur)) break;
+      if (!carries(next, cur)) break;
       if (next.name !== cur.name) hotPath.push(next.name);
+      // A component that is all its parent rendered and hands the very children it was given to the one component
+      // it renders, which carries most of its work, is passed, below a component the path can name: what is inside
+      // it is that one's. On Cap, Radix's Dialog root round AdminNavItems' whole return was named. One whose own
+      // render took the time is named, as before.
       // A library's layer, and a wrapper named after the component it renders (shadcn's Label over
       // Radix's), is named on the path but spends no step: the steps go on the components a reader could
       // search for, and the render is named after the deepest of them.
-      if (!passedLayer(next.name) && next.name !== named?.name) {
+      const given = next.fiber.memoizedProps?.children;
+      if (named && given && cur.kids.length < 2 && next.kids.length === 1 && next.kids[0]!.fiber.memoizedProps?.children === given && carries(next.kids[0]!, next)) wrapped = true;
+      else if (!passedLayer(next.name) && next.name !== named?.name) {
         named = next;
         steps++;
+        wrapped = false;
+        upTo = hotPath.length;
       }
       cur = next;
     }
+    // Where nothing below such a wrapper was named, the path ends at the component it names.
+    if (wrapped) hotPath.length = upTo;
     pathRendered = (named ?? cur).rendered;
   }
+  // Where the path starts, from what the walk found rather than from names: `roots` is deduped and cut at five, and
+  // a component that did not render can share a name with the ones under it.
+  const pathStart: NonNullable<CommitWalk['pathStart']> = !performedRoots.length ? 'no-root' : fellBack ? 'unknown-root' : onlyRoot ? 'only-root' : 'heaviest-root';
 
   // Summed over a whole commit, readings of a coarse clock come out close; one component's do not.
   const perComponentTimes = hasDurations && !coarseClock;
@@ -1101,17 +1177,22 @@ export function walkCommit(rootFiber: Fiber, budget: number, at: number, input: 
     inputType: input.type,
     rendered,
     mounted,
+    effectMounts,
+    effectRuns,
+    effectMountName: effectMounts === 1 && effectRuns === 1 ? effectMountName : null,
     hydrated: hydrated || hydratedTarget != null,
     hydratedTarget: hydratedTarget && Object.freeze(hydratedTarget),
     truncated,
-    roots: Object.freeze(dedupe(performedRoots.map((a) => a.name)).slice(0, MAX_ROOTS)),
+    roots: Object.freeze([...new Set(performedRoots.map((a) => a.name))].slice(0, MAX_ROOTS)),
     hotPath: Object.freeze(hotPath),
+    pathStart,
     startRendered,
     pathRendered,
+    strictMode: strict,
     components: Object.freeze(components),
     hasDurations,
     coarseClock,
-    total: hasDurations ? renderTime : 0,
+    total: rootTotal || (hasDurations ? renderTime : 0),
     startedAt: renderStartOf(rootFiber, at),
     effectsStartedAt: null,
     effectsEndedAt: null,
@@ -1160,8 +1241,4 @@ function sharedAncestor(top: Agg[]): string | null {
 function renderStartOf(rootFiber: Fiber, at: number): number | null {
   const t = rootFiber.actualStartTime;
   return typeof t === 'number' && t >= 0 && t <= at ? t : null;
-}
-
-function dedupe(xs: string[]): string[] {
-  return xs.filter((x, i) => xs.indexOf(x) === i);
 }

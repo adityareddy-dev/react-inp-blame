@@ -5,12 +5,12 @@ import type { CommitSummary, NavigationType, StartedNavigation } from './types.j
  * The navigations of a page, which reports are placed in: the document's own load, then each soft
  * navigation a router announces and each restore from the back/forward cache. Their names and values
  * are web-vitals' (`navigationURL`, `navigationType`), so a report lines up with the INP web-vitals
- * reports for the same navigation.
+ * reports for the same navigation. A report's URL keeps only the origin and path, so match on those.
  */
 
 /** One navigation of the page. */
 export interface PageNavigation {
-  /** Its URL, absolute. */
+  /** Its URL, absolute, as `pageURL` leaves it. */
   readonly url: string;
   readonly type: NavigationType;
   /** `performance.now()` when it began: 0 for the document's own load. */
@@ -40,9 +40,50 @@ export interface RouterNavigation {
  */
 const router = shared<{ listener: ((navigation: RouterNavigation) => void) | null }>('router', () => ({ listener: null }));
 
-/** Tells the installation that a router started a soft navigation. Does nothing while nothing is installed. */
-export function announceNavigation(navigation: RouterNavigation): void {
-  router.listener?.(navigation);
+/**
+ * A URL as a report keeps it: its origin and path, without a query, a fragment or a password, since a
+ * report is made to be forwarded. One that does not parse is cut at its first `?` or `#`.
+ */
+export function pageURL(href: string): string {
+  try {
+    const url = new URL(href);
+    url.username = url.password = url.search = url.hash = '';
+    return url.href;
+  } catch {
+    return href.split(/[?#]/, 1)[0]!;
+  }
+}
+
+/**
+ * Tells the installation that a router started a soft navigation. Does nothing while nothing is installed.
+ * A type other than 'push', 'replace' or 'traverse' (Next.js passes its router's own) reads as 'push'.
+ */
+export function routerNavigated(navigation: RouterNavigation): void {
+  const { type } = navigation;
+  router.listener?.(type === 'push' || type === 'replace' || type === 'traverse' ? navigation : { ...navigation, type: 'push' });
+}
+
+/**
+ * Tells react-inp-blame that the app's router changed the route in the page, to `url`, resolved against
+ * the page's URL, so include any base path. Reports of the interactions that begin after it carry the
+ * URL, with `navigationType: 'soft-navigation'`, and the INP estimate starts over. Called while a click
+ * or key press is being dispatched, that interaction's report names it in `startedNavigation`, as a
+ * 'push'. Reports keep its origin and path only, so a call for a change of query or hash alone still
+ * counts as a navigation: the INP estimate starts over, and `startedNavigation.url` is the same as the
+ * report's own `navigationURL`. Does nothing before install(), on a page the sample left out and on
+ * the server, and never throws. The Next.js App Router needs no call: `withInpBlame` announces its
+ * navigations.
+ */
+export function announceNavigation(url: string | URL): void {
+  if (typeof window === 'undefined' || !router.listener) return;
+  let href: string;
+  try {
+    href = new URL(url, location.href).href;
+  } catch {
+    // A URL that does not parse names no navigation.
+    return;
+  }
+  routerNavigated({ url: href, type: 'push', at: performance.now() });
 }
 
 /** Makes `fn` hear router announcements, until the returned undo is called. */
@@ -67,7 +108,9 @@ export function documentNavigation(): PageNavigation {
   if (entry) {
     if (doc.prerendering || (entry.activationStart ?? 0) > 0) type = 'prerender';
     else if (doc.wasDiscarded) type = 'restore';
-    else type = entry.type.replace(/_/g, '-') as NavigationType;
+    // A type a browser adds later reads as 'navigate', so a report keeps to the frozen set.
+    else if (entry.type === 'reload' || entry.type === 'prerender') type = entry.type;
+    else if (entry.type === 'back_forward') type = 'back-forward';
   }
   return { url: entry?.name || location.href, type, start: 0, router: null };
 }

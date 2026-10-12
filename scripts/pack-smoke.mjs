@@ -32,12 +32,13 @@ const functions = (...names) => Object.fromEntries(names.map((name) => [name, 'f
 // rather than a set of names. `import` hands that value over as `default` and `require()` as what it
 // returns, and the names are looked for on it.
 const EXPECTED = {
-  '.': { names: functions('install', 'mountOverlay', 'onInteraction') },
+  '.': { names: functions('install', 'mountOverlay', 'onInteraction', 'announceNavigation') },
   // Exports nothing: importing it installs, which in these apps means loading with no `window` and not throwing.
   './auto': { names: {} },
   './next': { names: functions('withInpBlame') },
   './next-client': { names: functions('onRouterTransitionStart') },
   './web-vitals': { names: functions('generateTarget', 'attributeINP') },
+  './otel': { names: functions('inpBlameAttributes', 'InpBlameLogRecordProcessor') },
   './vite': { names: functions('inpBlame') },
   './astro': { names: functions('inpBlame') },
   './display-names-loader': { whole: 'function', names: functions('stamp') },
@@ -258,6 +259,24 @@ function assertPackage(app) {
   const names = Object.assign({}, ...onServer.map((subpath) => EXPECTED[subpath].names));
   const noOp = Object.fromEntries(onServer.map((subpath) => [subpath, { names }]));
   assertLoads(app, 'plan.react-server.json', noOp, ['--conditions=react-server']);
+  assertOtelApart(dir, manifest);
+}
+
+// The files that may name react-inp-blame/otel: the entry itself and the no-op standing in for it.
+const OTEL_FILES = ['dist/otel.js', 'dist/otel.d.ts', 'dist/react-server.js', 'dist/react-server.d.ts'];
+
+/**
+ * An app that does not import react-inp-blame/otel pays nothing for it. That holds while no other module
+ * imports it and sideEffects does not list it, so a bundler can leave it out of every other entry.
+ */
+function assertOtelApart(dir, manifest) {
+  const naming = fs
+    .readdirSync(path.join(dir, 'dist'))
+    .map((file) => `dist/${file}`)
+    .filter((file) => !OTEL_FILES.includes(file) && /otel\.js|InpBlameLogRecordProcessor/.test(fs.readFileSync(path.join(dir, file), 'utf8')));
+  assert.ok(naming.length === 0, `${naming.join(', ')} ${naming.length === 1 ? 'names' : 'name'} react-inp-blame/otel, so an app that never imports it can load it`);
+  const listed = (manifest.sideEffects || []).filter((file) => file.includes('otel'));
+  assert.ok(listed.length === 0, `sideEffects lists ${listed.join(', ')}, so a bundler has to keep it wherever it is reachable`);
 }
 
 /** `bare`: the package has no dependencies and npm leaves optional peers out, so it arrives alone. */
@@ -389,7 +408,8 @@ function typedConsumer(manifest) {
     const names = allowed.length ? allowed.map((name) => `'${name}'`).join(' | ') : 'never';
     return `export const only${index}: Only<typeof entry${index}, ${names}> = true;\n`;
   });
-  const types = 'type Callable = (...args: never[]) => unknown;\ntype Only<T, Names> = [Exclude<keyof T, Names>] extends [never] ? true : false;';
+  // A class, such as the otel entry's processor, is a function to typeof and is called with new.
+  const types = 'type Callable = ((...args: never[]) => unknown) | (abstract new (...args: never[]) => unknown);\ntype Only<T, Names> = [Exclude<keyof T, Names>] extends [never] ? true : false;';
   return `${imports.join('\n')}\n\n${types}\n\nexport const documented: Callable[] = [\n${uses.join('')}];\n${only.join('')}`;
 }
 
