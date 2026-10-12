@@ -2,9 +2,500 @@
 
 The format is [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions are
 [semantic](https://semver.org/spec/v2.0.0.html). `schemaVersion` on a report is versioned separately:
-it changes when a field is removed or changes meaning, which a minor release may do while it is 0.x.
+it changes when a field is removed or changes meaning, which from 1.0.0 only a major release does.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-10-10
+
+### Changed
+
+- 1.0.0 keeps 0.26.0's runtime and starts the API promise in the README. Existing report fields keep their meanings
+  through 1.x, and the documented experimental and debugging exceptions still apply.
+- The bar I set for 1.0, at least 38 right and at most 6 wrong on 62 verdicts from apps it hadn't seen, isn't met.
+  0.25.0 was right on 8 of 62, with 35 wrong and 19 misleading, and no later version has been graded on fresh
+  apps. The [accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md)
+  has the count.
+
+### Blame changes
+
+None from 0.26.0.
+
+## [0.26.0] - 2026-10-07
+
+### Changed
+
+- Behaviour change: the note on a later render INP didn't time no longer says "people still wait for it". It now
+  reads "INP doesn't count it, and what started it can't be told." Nothing ties that render to the interaction but
+  when it landed, and on hyperdx it was more than once a live tail's timer or a route change, not the click. The
+  render itself is still reported with its count and its time, and a render INP did time is said as before.
+- Every render inside the script the screen update waited on is counted there, not only the ones with work in them.
+  On kaneo a menu's FrameRequestCallback held 8 renders and the sentence said 4, then set the other 4 apart as
+  renders after the handlers, "13 ms of rendering in all across 5 commits".
+- A later render is said to force layout only where its script held no other commit. A long animation frame gives
+  one forced layout figure per script, and on hyperdx the later render was given its whole task's 12 ms where a
+  trace put 1.5 ms of it on that render. Where the script held another commit too, the layout clause is left out.
+- A later render whose walk ran out of budget is said by its count alone, "rendering at least 4983 components",
+  not "inside DBSearchPageContent". The name was where the walk stopped, not where the render went.
+
+
+## [0.25.0] - 2026-10-05
+
+### Changed
+
+- A layout forced in a commit with several roots is named after the component they all sit under, with the whole
+  commit's count. A Radix dialog mounts its overlay and its content as two portals under DialogPortal, so on plate
+  the search dialog's opening was blamed on CommandGroup, the end of the path through the content, where the read
+  that forced the layout can be in either. It now reads "rendering 89 components inside DialogPortal", and the
+  devtools entry names DialogPortal too. Where the roots sit under no component it names the app. `hotPath` is
+  unchanged, and a report stored by an earlier release is named as before.
+- "React rendered N times before the screen updated" counts every commit that rendered a component on a production
+  build too, as it has on a development build since 0.19.0. Before, a production build counted only commits of 10
+  components or more, so plate's search dialog read "React rendered 8 times" where 13 commits rendered. The note is
+  still said only where two of those renders had work in them, and the Performance panel's Summary count moves with it.
+- A render is said to be mounting only where every component it rendered mounted. 0.24.0 drew the line at nine in
+  ten, so on plate the render after the search dialog opened read "75 ms mounting 1959 components" where 1838 mounted
+  and 121 re-rendered, and that reads as 1959 mounts. The count was right and the verb wasn't. It now reads
+  "rendering 1959 components", the dialog's own mount of 89 with 87 new reads "rendering 89 components" too, and the
+  badge panel's rows say "rendered". A render where every component mounted still reads "mounting".
+- A forced layout is said to overlap React's render only where the render inside the time it was counted across is
+  more than what the layout left of it. Before, the render set against that time took in commits between one event's
+  handlers and the next's, which the time leaves out, so on plate's search dialog 62 ms of rendering, 45 of it between
+  the pointerdown's handlers and the pointerup's, was set against the 28 ms left and the cause said the layout
+  overlapped React's render. The click's own renders were 17 ms. It now says what was left, and where React's total
+  is more than that, how much of it came between the handlers: "Of the 62 ms, 45 ms came between the pointerdown's
+  handlers and the pointerup's, outside the 168 ms."
+- A later render is said to have made the browser recalculate styles and layout only for what the scripts it
+  committed or ran its effects in forced. Before, it took every script in its frames, so on plate's search dialog in
+  development a dev overlay's animation frame callback, which forced 7 ms (45 ms at 4x CPU throttling) after React's
+  task had forced none, was put on the render. That clause is gone there.
+
+## [0.24.0] - 2026-10-04
+
+### Changed
+
+- **A component that is all its parent rendered and hands the very children it was given to the one component it
+  renders, which carries most of its work, is no longer the one a render or layout blame names.** Before, the walk
+  went into it like any other, so on Cap a sidebar component that keeps its popover's open state and wraps its
+  whole return in Radix's Dialog root was blamed as 'Dialog', '211 of 212 components', where the code to change is
+  the sidebar component. Radix's root hands its `children` to DialogProvider as it got them. Now such a component
+  spends no step on the hot path and is never the one named, where a component above it can be. Where something
+  below it carries most of the work the path goes on to that as before, and where nothing does it ends at the
+  nearest component above it a reader could search for, which the blame then names. `hotPath` in a report,
+  web-vitals' `react.hotPath` and OpenTelemetry's `react_inp_blame.hot_path` end there too. Having children isn't
+  enough: a feed given its empty state, a form given its submit row, a highlighter given its code and a table given
+  a toolbar build what they render themselves, and are named as before.
+- Where React timed the render (a development or profiling build), a component of that shape whose own render took
+  the time, a permission check round a fade or a highlighter handing on the string it was given, is named as in
+  0.23.0. What the rule still can't tell: a production build has only counts, and there such a component is passed
+  over all the same. That moves the name only where nothing below it is named, a dialog root whose own render was
+  slow say, which is then blamed on the component above it. A permission check round a fade or a highlighter
+  handing on its string gets the name 0.23.0 gave. A wrapper that wraps its children in an element of its own before handing
+  them on is named as in 0.23.0, and where one of those (a Card, a layout) sits between the component that owns the
+  state and a dialog root, the render is named after that one rather than the owner. On Cap, over six runs each of
+  a development and a production build at full speed and at a quarter of it, every report that blamed a render on
+  the sidebar's collapse, its popover's opening or the popover's close by Escape named AdminNavItems. The rule
+  changed no name on the demo apps.
+- **A render is said to be mounting only where nine in ten of its components rendered for the first time, and
+  re-rendering only where one in ten or fewer did.** Before, it went by half, so on formbricks a render that
+  mounted 134 of 217 components read "mounting 217 components", and on Cap 160 components a Tooltip remounted among
+  332 read "re-rendering 332 components". Between the two it now reads "rendering", and the badge panel's rows say
+  "rendered".
+- `/auto` grew 0.05 KB and the part before react-dom 0.04 KB, both still within their budgets. The rest stay as
+  they were.
+
+### Blame changes
+
+- A render or layout blame whose path went into a component that was all its parent rendered and handed the very
+  children it was given to the one component it rendered, which carried most of its work, with nothing named below
+  it and a component above it that can be: `name` goes from that component to the nearest one above it
+  ('AdminNavItems' where 0.23.0 gave 'Dialog'), and a count in `detail` is that one's.
+- A render where more than one in ten and fewer than nine in ten of the components mounted: the cause's verb goes
+  from "mounting" or "re-rendering" to "rendering". `name`, `detail` and `ms` don't change.
+
+## [0.23.0] - 2026-10-03
+
+### Changed
+
+- **A render or layout blame whose commit's path ends in a component the walk found no name for is named 'the
+  app'.** Before, a root written as an anonymous function, with no child holding most of what it rendered, gave a
+  blame named '(anonymous)', and a render where such a component was half the commit was "mostly (anonymous)",
+  with '(anonymous) ×300' as its detail, or "(anonymous)'s own render" where most of its time was its own. Now the
+  blame reads 'the app', the fixed value for a walk that gives no component to name, and the detail is the
+  commit's count, with no part of it said to be inside the app. The sentence no longer says where the render started
+  isn't known where only the name was missing, and a production walk cut at `walkBudget` whose first root has no
+  name still says it.
+- **A layout forced in a script several React commits ran in is named after the commit whose time could hold
+  it.** Before, the blame took the subtree of the commit that rendered most, so a menu opening in a production
+  build, with four commits in one listener and 44 ms of forced layout, was named after a 295-component list whose
+  effects took 0.1 ms rather than the 185-component menu whose layout effects measured its items. Now each commit
+  there is weighed by React's own time for it (render, committing and effects) where the build times renders, and
+  otherwise by its effects plus the time since the commit before it in the same script, which for the first one
+  runs from the script's start or the handlers', whichever is later, and so holds the handler too. The largest
+  names the layout where it could hold at least half of it. Where none could, `name` and `detail` are null and the
+  cause says React committed that many times there and none took long enough to hold most of it. One commit in the
+  forcing script is named as before. The cause describes the commit the blame names, so a Sheet closing inside the
+  forcing script beside a 500-row Table rendered later reads Dialog with '56 components' again, and the sentence
+  says the Sheet's render rather than the Table's.
+- **The Performance panel's entry, the badge panel's component list and web-vitals' `hotPath` and `components`
+  follow the commit a layout or render blame names.** Before, all three took the heaviest commit, which could be a
+  render the blame doesn't name, such as a key press's larger render beside a blame on its release's own. Now a
+  layout or render blame's commit is the one it names, where its name and detail tell which commit that is, and the
+  Performance panel's Heaviest path row still shows the heaviest. For `attributeINP`, `react.hotPath` and
+  `react.components` on a layout or render blame now come from that commit, and so does OpenTelemetry's
+  `react_inp_blame.hot_path`, which is read from them. The `react` object stays at `schemaVersion: 1`.
+- **A render blame names the commit whose committing and effects are worth saying beside its render, and says
+  them.** Before, in a build that times renders, a commit's committing and effects counted towards naming it only
+  where they were worth a mention across all the commits, so a Toolbar that rendered for 7.5 ms and then spent 8
+  more committing and running useEffect callbacks lost to a Nav that rendered for 14.2 ms with 2 more. The sentence
+  gave the render alone, so most of `blame.ms` could go unsaid. Now committing and effects that reach 5 ms and a
+  fifth of a commit's time count for it, and once one commit's do, any other commit's from 5 ms count for that one
+  too, so a larger render never loses the name for being larger. The sentence says each of them from 1 ms. Where
+  some of the commit's time would still go unsaid, it adds "That commit took 91 ms with committing and effects",
+  and beside the named commit's figures it gives what the other commits spent rather than the totals across all
+  of them.
+- **A render blame whose hot path ends in a component React's times show took under half of the render is named
+  where the render started.** Before, a render of 386 components from Shell down was named after PopupContent, at
+  the end of a path through a dropdown's layers, though the times on that path showed PopupContent held at most 73
+  of its 165 ms. Now each name above the end holds it, so the smallest of their totals bounds it, and where that is
+  under half the render and the render started from one component that holds the whole commit, the blame is named
+  after Shell with the whole commit's count. The sentence still says how many were inside PopupContent. A build
+  with no durations keeps the deepest name, and the Performance panel's entry takes the start name too.
+- **A production render held by the handler's script that a long animation frame measured is blamed under 50 ms
+  of working time.** Before, a count under a long task of working time was never a slow render, so an Enter press
+  with 49 ms of working time, whose `onKeyDown` script a long animation frame measured at 32 ms and which
+  re-rendered 386 components, read as nothing that stood out. Now, where a frame
+  measured the handler's own script holding the commit at 20 ms or more, and not mostly forced layout, the count
+  names that commit's render, and the sentence gives the script's measured time in place of the working time. A
+  screen update that outran such a render says it the same way in its note. Without a frame, or under a script that
+  doesn't hold the commit, it reads as before.
+- **A key release that waited for its press's screen update is blamed on that wait, under 50 ms too.** Before, a
+  40 ms release that waited 22 ms for the menu its press had just opened to paint read as nothing that stood out.
+  Now, where the press's handlers had ended when the key came up and its paint came only after the release's
+  handlers began, and the wait is the largest phase and at least half the interaction, the blame is `waiting`, with
+  the input delay as its `ms` and no name. The sentence names the press's render where it carried work.
+- **A render a key's press committed just before its release is the press's, where the press painted on its own.**
+  Before, a commit stamped with the press, landing a moment before a slower release, counted in the release's
+  working time, its render count and its "React rendered N times" note, and could be the render the release was
+  blamed on. Now it is left out of all three, and of the Performance panel's counts, though it stays in `commits`
+  and on the panel's renders track. A press painted together with its release still counts.
+- **A screen update that outran a production render short of a long task says that render where the working time
+  was at least half of the update.** Before, the count was said only where the working time reached 50 ms, so the
+  same 400-row render showed under a 76 ms screen update at 50 ms of working time and not at 49. Now it shows at
+  both, wherever the working time is half the screen update or more.
+- **The browser's own work after the handlers reads "recalculating styles and layout".** It read "recalculating
+  styles and layout for what changed", which pointed at the interaction's own changes where a restyle a write to
+  `body` or `html` set off is as likely. Known limits says that restyle can't be named.
+- **The docs define a render blame's `ms`.** The API page, the `Blame.ms` JSDoc and the OpenTelemetry page now
+  say it is the named commit's render, plus committing it, plus its useEffect callbacks in the same task, with no
+  other commit in it except a render committed inside those callbacks that can't be taken out, which the sentence
+  says. So it can be more or less than `commits.ms`.
+- **`/auto` is 35.5 KB gzipped, up from 34.4 KB, `react-inp-blame/otel` is 1.6 KB, up from 1.5 KB, and
+  `react-inp-blame/web-vitals` is 0.9 KB, up from 0.8 KB.** Of
+  `/auto`'s 1.1 KB, naming a layout across several commits took 0.36 KB, a release's wait for its press 0.18 KB,
+  committing and effects choosing a render 0.14 KB, the measured handler script 0.13 KB and naming a render where
+  it started 0.10 KB. Naming the app for a component with no name took 0.07 KB, the measured script's note 0.06
+  KB, leaving the press's render out of the release 0.05 KB, and the screen update's note short of a long task
+  0.03 KB. `otel` grew 0.03 KB and `react-inp-blame/web-vitals` 0.02 KB, from web-vitals' attribution taking the
+  commit a layout or render blame names, which `otel` carries. The part before react-dom stays at 11.6 KB and the
+  badge and panel at 7.1 KB.
+
+### Blame changes
+
+- A render or layout blame whose commit's path ends in a component the walk found no name for, with no other name
+  on it to take: `name` goes from '(anonymous)' to 'the app'.
+- A render blame where a component the walk found no name for was half the commit, or half its time in its own
+  render: `detail` goes from '(anonymous) ×N' or "(anonymous)'s own render" to the commit's count.
+- A render or layout blame named 'the app' for a path ending in a component with no name, where the walk counted
+  fewer components inside that one than in the commit: `detail` goes from 'M of N components' to 'N components'.
+- A layout forced in a script several commits ran in: `name` and `detail` go from the commit that rendered most to
+  the one whose time could hold most of the layout, or to null where none could hold half of it.
+- A layout forced in a script one commit ran in, beside a larger render in a later script: `name` and `detail` go
+  back to where that commit's render started, with the whole commit's count ('Dialog', '56 components' where 0.20.0
+  to 0.22.0 gave 'DismissableLayer', '15 of 56 components').
+- A render blame in a build that times renders, where a commit's committing and effects reach 5 ms and a fifth of
+  its time: that commit can now be the one named over one that rendered longer but took less time in all, with
+  each commit's committing and effects counted where they reach 5 ms, and `ms` is its own.
+- A render blame whose hot path ends in a component React's times show took under half of the render: `name` goes
+  to the component the render started at, and `detail` to the whole commit's count.
+- A release that waited at least half its time, and longer than any other phase, for its press's screen update,
+  after the press's handlers ended: `kind` goes from `none` to `waiting`, at any duration.
+- A production render known by its counts, under 50 ms of working time, held by the handler's own script that a
+  long animation frame measured at 20 ms or more and not mostly forced layout: `kind` goes from `none` to `render`,
+  named after the commit the script held.
+- A render a key's press committed just before its release, where the press painted in a frame of its own: it is
+  no longer the release's render, so a release blamed on it gets another blame, `none` where nothing else stood out.
+
+## [0.22.0] - 2026-10-02
+
+### Changed
+
+- **A render the walk could not tell where it started is named 'the app' in Chrome's Performance panel, as the blame
+  sentence names it.** Before, a production render cut at `walkBudget` with no component to name read 'React render
+  · root (at least 5000 components, time not measured)' on its track while the blame said 'the app'. Now the track
+  reads 'React render · the app (at least 5000 components, time not measured)', and a hydration or a later render
+  reads the same way.
+
+## [0.21.0] - 2026-10-01
+
+### Added
+
+- **Each commit says where its hot path starts, in `pathStart`.** Before, a reader could not tell a path that
+  starts where the render began from one that starts at a component the roots only sit under. Now every commit in
+  `commits` and `followUps` carries `'only-root'`, `'heaviest-root'`, `'unknown-root'` or `'no-root'`, the last
+  exactly where nothing rendered. It is absent only on a report from before 0.21.0, and `schemaVersion` stays 4.
+
+### Changed
+
+- **In a production build a walk cut at `walkBudget` names the app where it can't tell where the render started,
+  and says so.** Before, a render past the budget could be named after a component the subtrees only sit under, as
+  if the render came from it, with only a note that the count was partial. Now the blame names the component the
+  render started at only where one rendered at the top and holds everything the walk reached with nothing it didn't
+  reach rendered beside it, and otherwise 'the app'. The sentence says the walk stopped partway through, so which
+  components took the time isn't known, or where it started and which components took the time aren't known. A
+  development or profiling build that could tell where the render started keeps the note that the component count
+  is partial.
+- **In a development build a walk cut at `walkBudget` before it reaches a second root names the app where React's
+  total shows the part it missed took longer.** Before, it named the one subtree it reached, with that subtree's
+  time only. Now it reads 'the app' with React's figure for the whole render, and the sentence says where it
+  started and which components took the time aren't known. A commit's `total` is React's own figure for the render
+  on any walk cut at the budget on a root React timed. Where the root it reached took longer than the part it
+  missed, the blame keeps that root's name, and the figure is React's total for the whole render, which can include
+  the root it missed. Before, it gave the root's own time and called the rest committing. A root timed only under
+  `<Profiler>` keeps the sum of what was walked.
+- **A render or hydration blame on a walk cut short says the rest was not walked.** Its detail read 'at least 1998
+  of at least 5000 components' and now reads 'at least 1998 of at least 5000 components, the rest not walked'.
+  Where the useEffect callbacks lead, a cut walk no longer names the one mounted component it happened to reach,
+  and the detail reads 'useEffect callbacks in at least 1 mounted component'.
+- **A navigation type the browser adds later reads as `navigationType: 'navigate'`.** The document's own load took
+  its type straight from the browser's navigation entry, so a type a browser added later would have reached a
+  report outside the documented set (a `some_new_type` showed as 'some-new-type'). Now navigate, reload,
+  back_forward and prerender map as before, and anything else reads as 'navigate', so code switching on
+  `navigationType` never meets a value missing from the list. Since 0.1.0.
+- **What 1.x promises now says when the security backport and the Node floor apply.** SECURITY.md and the README
+  said security fixes go into the latest minor and the one before it for 90 days, which read as already in force.
+  Now both say it starts at 1.0.0, and until then every fix goes into the latest release only. The README also said
+  the build plugins run on Node 20.19 and later through all of 1.x. Now 20.19 is the floor at 1.0.0, a minor can
+  drop a Node line once it is past its end of life upstream, and the CHANGELOG says so under Changed, never in a
+  patch.
+- **The API page lists every fixed set of strings a report and `stats()` hold, each frozen for 1.x.** Before, the
+  README gave two examples (`blame.kind`, `stats().mode`) and no list. Now docs/api.md names each set with its
+  values, including `hydratedTarget.scope` and the `react` object `attributeINP` adds, and says a new value comes
+  only in 2.0.0. It also says `pointerType` is the browser's own string (an empty one reads as null), that `'the
+  app'` is the one fixed value of `blame.name`, taken by a render or layout blame whose commit's walk named no
+  component, and that `announceNavigation` for a change of query or hash alone still starts `inp()` over. The
+  README's Versions sentence links to the list.
+- **`/auto` is 34.4 KB gzipped, up from 34.1 KB, and the part of it that runs before react-dom is 11.6 KB, up from
+  11.5 KB.** Nearly all of `/auto`'s 0.28 KB went on the walk cut at `walkBudget`: 0.22 KB on recording where its
+  path starts and naming the app where it can't tell, and 0.04 KB on the development build's check against React's
+  total for the render. The navigation type mapping added 0.02 KB, and the other fixes came to about nothing
+  between them. The part before react-dom grew 0.09 KB, all of it the same walk: 0.04 KB for where the path starts
+  and 0.05 KB for the development build's check. The badge and panel stay at 7.1 KB, `react-inp-blame/otel` at 1.5
+  KB and `react-inp-blame/web-vitals` at 0.8 KB.
+
+### Fixed
+
+- **The panel row no longer says a root updated where the walk couldn't tell the render started there.** A
+  production render past the budget read 'App updated · at least 5000 components mounted inside the app' and now
+  reads 'at least 5000 components mounted inside the app'.
+- **A press whose pointer was not seen reads as a click in its headline, cause and verdict, as its panel row
+  already did.** Before, the verdict said '120 ms tap' while the row said click, for a press that could just as
+  well have been a mouse's. Now only a finger's or a pen's press is a tap.
+- **`inpBlameAttributes` gives an INP metric whose entries getter throws the `library-error` status.** Before, such
+  a metric got an empty object, so the INP event went out with no `react_inp_blame.status` at all. Now a metric
+  named INP counts as INP before its entries are read, and the throw is reported as `library-error`, or
+  `not-installed` where the library isn't on the page. Since 0.20.0.
+- **The production either-or cause gives the component count once.** Before, it read "The onClick handler or
+  React's render of StatsPanel (2 components) most likely took the 135 ms, the handler the likelier: React
+  re-rendered only 2 components." The count is now only in the reason the handler is the likelier. Since 0.20.0.
+- **A panel row whose useEffect detail names the component it blames leaves out 're-rendered'.** 'SalesChart
+  re-rendered · useEffect callbacks after mounting SalesChart' read as a contradiction, and now reads 'SalesChart ·
+  useEffect callbacks after mounting SalesChart'.
+- **A click that changed only the query or the hash says it started a navigation within the page.** A report keeps
+  only a URL's origin and path, so a query-routed step from ?step=1 to ?step=2 read "It started a navigation to
+  /checkout." about the page the click was already on. Now it reads "It started a navigation within /checkout."
+  Since 0.20.0.
+- **`startedNavigation.type` keeps to its fixed set.** The Next.js App Router integration passed the router's own
+  navigation type straight through, so a type other than push, replace or traverse (a refresh, say) landed in the
+  report as it was. It now reads as 'push', as `announceNavigation`'s always has. In 0.20.0 and before.
+
+### Security
+
+- **SECURITY.md says exactly what `clear()` and `dispose()` drop.** It said retained data lasts until dispose(),
+  clear() or unload. clear() drops only the commits, reports, quick interactions and Event Timing entries, and
+  dispose() drops the commits and the inputs with their elements, while the reports, frames and navigations stay
+  reachable through the object install() returned until the page lets go of it. It now says so.
+
+## [0.20.0] - 2026-09-29
+
+### Added
+
+- **Any router can tell the library a route changed, with `announceNavigation(url)` from the package root.**
+  Before, only the Next.js App Router's navigations started `inp()` and the badge over and moved `navigationURL`,
+  so in a React Router or TanStack Router app every report stayed on the first URL. Now the reports after a call
+  carry the new URL with `navigationType: 'soft-navigation'`, and a call made inside a click names that click in
+  `startedNavigation`. The install docs show where React Router and TanStack Start apps call it. React Router gets
+  a small `AnnounceNavigations` component, rendered before the `Outlet`, that announces only when the URL changed,
+  so a link to the page it's already on doesn't start `inp()` over. TanStack Start announces from inside the click,
+  so the click is named on its report, and compares with the URL it last announced, so going back before a slow
+  loader finished, or a redirect to the page it was on, is announced too. It waits for the first load, so a route
+  whose `validateSearch` fills in a default the URL lacks isn't announced on landing, and it is for browser
+  history. CI builds both apps from these lines and checks where each report is placed. Under React Router, a quick
+  link click whose route renders in a later task gets no report, which Known limits says.
+- **A report says which build of react-dom measured it, and the badge marks a development build `dev`.** Reports
+  had no way to tell a development number from a production one, and the badge looked the same, though React's
+  development build is slower and StrictMode renders twice there (one Vite app read 324 ms of React render with
+  StrictMode and 165 ms without). Each report now carries `reactBuild`, 'development', 'production' or 'profiling',
+  and `strictMode`, true where a component that rendered was under `<StrictMode>` and null outside a development
+  build or where the report holds no render. The web-vitals `react` field carries both. On a page with more than
+  one react-dom, a development one makes the report 'development' in whatever order they registered, including one
+  this library cannot read. Under a development react-dom the badge carries a small 'dev' mark from before the
+  first interaction, and the panel head says to check anything amber or red in production, with a link to the
+  install guide. The Next.js and Vite installs each have a short section on it, both READMEs say development
+  numbers run high, and the recipes label reports by `reactBuild` before forwarding them. No number changes, and
+  the rating and its colour stay as measured.
+- **`react-inp-blame/otel`, experimental, puts the blame on the INP event an OpenTelemetry setup already sends.**
+  It adds which component or handler made an interaction slow to the INP event OpenTelemetry's web vitals
+  instrumentation, Honeycomb, Elastic, Embrace or Grafana Faro already sends, as `react_inp_blame.*` attributes:
+  `InpBlameLogRecordProcessor` for a log record, `inpBlameAttributes()` for a hook. Every INP record gets
+  `react_inp_blame.status` (`matched`, `not-installed`, `sampled-out`, `no-report` or `library-error`), so a
+  production build with nothing installed says `not-installed` instead of sending nothing. The setups, what lands
+  on the record and the limits are in docs/opentelemetry.md. The entry, its exports and every attribute name are
+  outside the version promise until OpenTelemetry names these fields.
+
+### Changed
+
+- **A report's `navigationURL` and `startedNavigation.url` keep only the URL's origin and path, and `schemaVersion`
+  is 4.** They held the whole URL as web-vitals does, query string, fragment and any `user:password@` included, so
+  a token or an email in a query went out with every forwarded report. Now
+  `https://ann:s3cret@shop.example/products?token=abc#x` reads `https://shop.example/products`, whichever router,
+  `announceNavigation()` or copy of the library announced it. A URL that does not parse is cut at its first `?` or
+  `#`. web-vitals' `navigationURL` still keeps the query, so match a report with web-vitals' INP on origin and
+  path. A HashRouter or query-routed app loses the route detail it had there. The `react` object `attributeINP`
+  adds stays at `schemaVersion: 3`, since it carries no URL. Since 0.1.0.
+- **`blame.detail` is display text, like the headline.** It was listed with the data, so a dashboard could group on
+  strings like '15 of 56 components'. Now the JSDoc and the API page list it with `verdict`, `cause` and `notes`:
+  its wording, and what it picks to say, can change in any version, so show it and never parse it. The blame's
+  `kind`, `name`, `ms` and `confidence` stay data, so group on those. Blame.kind's JSDoc and the API page also
+  define each of the eight kinds, which are all there are in 1.x, and say that a slow event listener is both a
+  handler and a script, and that which of the two a report says, and which name it gives, can change in a minor.
+- **`attributeINP` takes web-vitals' plain `Metric`, as Honeycomb's INP hook hands it over.** Passing a `Metric`,
+  whose entries are typed as `PerformanceEntry`, failed to compile and needed a cast. Now it compiles, and each
+  entry's `interactionId` is read where it is a number above 0, as before. `InpMetric`'s `entries` are now typed as
+  `readonly object[]`, so code that types its own values with `InpMetric` and reads `entries[0]?.interactionId` no
+  longer compiles and has to narrow or cast. Callers of `attributeINP` are unaffected. Since 0.2.0.
+- **The Versions section says what 1.x will promise, and SECURITY.md says what the library touches on a page.**
+  Versions said only that a 0.x minor may break things. Now it says that from 1.0.0 a field keeps its meaning, an
+  option keeps what it does and a default stays for all of 1.x. A minor may change which kind, name and detail a
+  blame gets, which components a report names, and any display text, and each release lists its blame changes. The
+  0.x rules hold until then, and CONTRIBUTING has the report, deprecation, warning anchor and inert twin rules to
+  match. SECURITY.md now says which releases get security fixes, and under "What it touches" what the library
+  reads, changes, keeps and lets out on a page, including the DevTools hook it wraps, the React marks it reads,
+  what it stores and what a report can carry. The README's labels and personal data section points at it.
+- **`overlay: true` no longer shows the badge in a browser where someone pressed Hide for me, a new button in the
+  panel.** With `overlay: true` in a shared config, the only way to lose the badge was to take it out for everyone.
+  Now Hide for me, beside Clear, sets `localStorage` `react-inp-blame` to `hidden`, and the badge stays off in that
+  browser while reports, the DevTools track and the API go on. `?inp-blame` in the URL brings it back. A badge that
+  `overlay: 'query'` or `mountOverlay()` shows has no Hide for me. Under 'query' the key already holds the
+  'overlay' that opted in, and removing it is the way out.
+- **The panel folds quick rows, says a component re-rendered only when it did, and the badge moves off a corner the
+  app's own widget holds.** Typing at the 40 ms threshold made a row per key that read 'nothing stood out' and
+  pushed the slow rows down. Now rows under 200 ms that blame nothing fold into 'N quick interactions, nothing to
+  fix', which opens on a click, and `max` counts the rows and the fold separately, so a slow row stays in sight.
+  Rows where the library can't tell stay rows. A context update read 'ProductList re-rendered · ProductRow ×375 ·
+  151 ms' for a list that bailed out, and now reads 'PrefsProvider updated · ProductRow ×375 re-rendered inside
+  ProductList · 151 ms', or '120 of 351 components re-rendered inside ProductList' where no one component was most
+  of what rendered inside. The report's blame is unchanged. With no `position`, the badge sat on top of a chat
+  button in the bottom right, and a click meant for the button opened the panel. Now it checks when it mounts and
+  again at the first report, including widgets inside another shadow root such as Next.js's dev indicator, and
+  takes the first free corner of bottom right, bottom left, top right and top left. It stays where it is when all
+  four are taken, as under a dialog's backdrop. An explicit `position` is used as given.
+- **A finger's or a pen's click reads as a tap.** A touch click's verdict read '120 ms click' and its row 'Click on
+  "Save"'. Now they read '120 ms tap' and 'Tap on "Save"'. A click that WebKit reports with pointerType 'mouse'
+  takes the pointer from its own press's pointerdown. So `pointerType` in the report and in `nextInput` is now
+  'touch' for a tap in WebKit, and a frame that waited on it says it waited on the next tap. A press whose pointer
+  the library did not see keeps 'Click' in its row.
+- **A layout blame is named after the render's start only where the forcing script's commit is the one the cause
+  describes.** With a Sheet closing inside the forcing script and a 500-row Table rendering later, the blame was `{
+  name: 'Dialog', detail: '56 components' }` beside a cause that never names Dialog. Now it is 'DismissableLayer'
+  with '15 of 56 components', as 0.18.0 had it. Since 0.19.0. The Performance panel's interaction entry takes the
+  start a layout blame names, where that is the heaviest render's start: a Sheet close blamed on Dialog drew '160
+  ms click · DismissableLayer', and now draws '160 ms click · Dialog'.
+- **The render a layout blame names counts in the note and the Summary, however small.** A 4-component Popover
+  commit a layout blame named was 'too small to count', so the Summary read 'React renders before the paint 0, and
+  1 too small to count'. Now it reads '1', and 'React rendered N times before the screen updated' counts that
+  commit too. A render said inside a timer after the handlers is still counted by neither.
+- **React's own listener that renders a key's input between its handlers hands that time to the render, where the
+  render's count would earn the blame.** On Gboard, the keydown's oninput runs in React's root listener after its
+  handlers, and a production build said a 357 ms wait named after `DIV#root.oninput`. It now gives a render blame
+  on the component React rendered there (BigList). A small render leaves the wait as 0.19.0 said it, since the
+  listener runs the page's onChange too: 12 components in a 120 ms oninput keep '124 ms went by between the
+  keydown's handlers and the keyup's'. The listener is known by its react-dom file, by its dispatchDiscreteEvent or
+  dispatchContinuousEvent function, or, in a minified build, by being the container of a root the hook saw. A
+  listener on the document is never taken for React's that way.
+- **The explanation no longer repeats the library's own cost, or says a layout 'was charged to' the listener React
+  dispatched the event from.** Every report whose walk took half a millisecond had 'The N ms includes X ms that
+  react-inp-blame itself spent reading what React rendered', and every open row had 'Measuring this cost ...'. Both
+  are gone. `walkMs` and `overheadMs` still carry the figure, and the footer keeps the page's average. The layout
+  sentence drops 'It was charged to X.' when X is React's own listener, known the same way as for the time between
+  handlers, or the document's listener where a root is the document, as under the Next.js App Router. On a page
+  whose roots are elsewhere, a tag manager's document listener is still named, as in 0.19.0, and where the blame is
+  named after the listener the sentence still says it. 'No React commit ran in the script it was charged to' now
+  reads '... in the script that forced it'.
+- **A render whose commit spent most of its time in useEffect callbacks leads with them.** A chart that draws in
+  its useEffect after mounting read as its parent's own render, 60 ms against 361 ms of effects, with advice about
+  memoising. The cause now leads with the effects, and the own-render note is left out there. `blame.detail` is
+  'useEffect callbacks after mounting RevenueChart' where one component mounted with one, 'useEffect callbacks in 3
+  mounted components' where several did and no component that rendered again had one to run, and 'useEffect
+  callbacks' otherwise. CommitSummary gains `effectMounts`, `effectRuns` and `effectMountName` to match: the
+  components that mounted in a commit with a useEffect to run, every component that rendered with one to run, and
+  the name of the one that mounted where it's the only one with a useEffect to run. They are absent on a report
+  stored by an earlier release.
+- **Where the build or the browser can't tell a handler's time from React's, the cause says so.** Under `next dev
+  --webpack`, where the long frames over a click listed no scripts, a modal that forced layout in a layout effect
+  read 'On top of that, the onClick handler ran for about 151 ms' beside a 214 ms render, for a handler that is one
+  setState. It now reads '151 ms outside React's render is not accounted for', with why, and the note on the
+  component's own render is left out where more time went unaccounted for than that render's own. Where the outside
+  time outruns the render, the handler keeps the verdict, measured, as before. A development build now warns once
+  when a page's long frames list no scripts (`frames-without-scripts`), at the second interaction whose handlers
+  ran for 50 ms or more under long frames that named none. In a production build, where only the component count
+  chose between the handler and the render, the cause names both: StatsPanel's own render took 134 ms of a 135 ms
+  click in development, and in production its count, 2 components, said the handler. The sentence now says the
+  handler or React's render of that component took the time, the handler the likelier, and that a profiling build
+  can tell them apart. The blame keeps the count's pick.
+- **Under `labels: 'text'`, a form field with no aria-label is named by its `<label>` before its placeholder, name
+  or type.** A checkbox inside `<label>Compact rows</label>` read `input "checkbox"` and now reads `input "Compact
+  rows"`. What was typed into the field is still never read, and neither are the options of a select inside its
+  label.
+- **An empty span an accessible icon is written as is named by the component that wrote it, as the same empty `<i>`
+  already was.** An icon a handler was handed down to is also climbed from its fiber on the screen, so React 19
+  names its writer on every render and not only the first. Both change the components `target.owners` and
+  `generateTarget` name for a click on such an icon.
+- **`/auto` is 34.1 KB gzipped, up from 32.4 KB, and the part of it that runs before react-dom is 11.5 KB, up from
+  11.1 KB.** About 1.0 KB of `/auto`'s growth went on this release's verdict fixes: React's own listener, the time
+  the browser could not account for, a render led by its useEffect callbacks, and the handler and icon naming
+  fixes. 0.2 KB went on `reactBuild`, `strictMode` and the `dev` mark, 0.2 KB on the tap, label, layout blame and
+  Hide for me changes, and the rest on the URL trim and smaller fixes. The part before react-dom grew with the same
+  naming fixes, the useEffect counts the walk now takes and the build reading. The badge and panel's chunk, loaded
+  only when shown, is 7.1 KB, up from 6.0 KB: 0.8 KB for the fold, the corner check and Hide for me, and 0.3 KB for
+  the development build's mark and note. The new `react-inp-blame/otel` adds 1.5 KB on top of `/auto`, and
+  `react-inp-blame/web-vitals` stays at 0.8 KB.
+
+### Deprecated
+
+- **`InpMetricEntry` from `react-inp-blame/web-vitals`, unused since `attributeINP` takes any entries.** It is
+  still exported and marked `@deprecated`. Where you typed an entry with it, `PerformanceEventTiming` satisfies the
+  same shape. It goes in 2.0.0.
+
+### Fixed
+
+- **A click or key press no longer names a handler it never ran, or mixes its scripts up with the next input's.** A
+  click on a form field named the form's onSubmit as its handler, though only its submit button reaches onSubmit,
+  and it now names what the field itself had. A key's onbeforeinput after a pointer press is the next key's
+  listener, as its onkeypress already was: taken for the click's own, the next key's listener was named as the
+  click's script. A script holding the report's own render is not the next click's work, where the ring holds only
+  that click, and a render inside the timer after a key's handlers is said to be inside it when the next key went
+  down without holding the frame.
 
 ## [0.19.0] - 2026-09-28
 
@@ -1504,7 +1995,15 @@ First release.
   Vite does the same two things, and `react-inp-blame/auto` covers any other bundler.
 - React 17, 18 and 19, and a fail-closed check on every React internal the library reads.
 
-[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/adityareddy-dev/react-inp-blame/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.26.0...v1.0.0
+[0.26.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.25.0...v0.26.0
+[0.25.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.24.0...v0.25.0
+[0.24.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.23.0...v0.24.0
+[0.23.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.22.0...v0.23.0
+[0.22.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.21.0...v0.22.0
+[0.21.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.20.0...v0.21.0
+[0.20.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/adityareddy-dev/react-inp-blame/compare/v0.16.0...v0.17.0

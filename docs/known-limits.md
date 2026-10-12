@@ -17,6 +17,15 @@
 - **An interaction after the page's first input that paints in under 16 ms gets no report**, however heavy the
   render after it: the browser sends no Event Timing entry for it. The first input still arrives as a
   `first-input` entry. See "Quiet interactions" in the [design notes](interaction-attribution-design.md).
+- **A quick React Router link click whose new route renders in a later task gets no report**, however slow
+  that render, where `announceNavigation` is called from a layout effect as
+  [Install](install.md#install-with-react-router) shows: the announcement lets go of quiet interactions before
+  React hands over the commit that holds the route. Keeping them past it would make the route Back or Forward
+  goes back to a quiet click's later render.
+- **Back or Forward within `inputWindow` of a reported click can add the route it opens to that click's
+  report** (1.5 s from the paint unless you set it). The browser's own navigation is no input, so the route's
+  commit is taken for the click's, and the report gains "A second React render landed 780 ms after the screen
+  updated" while its `navigationURL` stays the page the person left.
 - React 18 and 19 development builds print "Download the React DevTools" on pages where the library created the
   hook: it has no `checkDCE`, which react-dom takes to mean React DevTools is there.
 - **Hydration is joined to an input only when React hydrated inside that input's dispatch**, which is what
@@ -38,12 +47,15 @@
 - Production React records no durations, so blame there rests on render counts and is `'inferred'`
   (`react-dom/profiling` gives durations), and minified handlers are named by their prop. An inferred blame
   says "most likely" in its sentence and in the overlay; take it as the likeliest reading, not a measurement.
-  A count says nothing about time, so the render rung blames a render known by its count alone only from
-  50 ms of working time, the length of a long task, and its sentence gives the working time the count is
-  read against, or says the render ran after the handlers where it did. Under that the count is not a
-  slow render, however large: the cause leads with the working time and says the count sat in it, or
-  came after it, short of a long task, before what else the report knows. A hydration the interaction
-  waited for is still named by its count at any working time, as before.
+  A count does not measure how long a render took. A count-based render normally needs at least 50 ms of
+  working time, the length of a long task, and its sentence gives the working time the count is read against.
+  It can also qualify when a long animation frame measured the handler's script holding the commit for at
+  least 20 ms and less than half of that script's time was forced layout.
+  Since 0.26.0, a commit with at least 1000 rendered components can also qualify below 50 ms when working
+  time is at least as long as the screen update. Other blame rules still apply. This can select a render
+  without a recorded long animation frame, so an unmeasured style recalculation can be mistaken for render work.
+  These exceptions do not turn the count into a duration. A hydration the interaction waited for can still be
+  named from its count at any working time.
   The exceptions are what the browser times itself and the build cannot change: waiting, the screen update,
   a Long Animation Frames script, and forced layout inside the handlers, which stay `'measured'` in a
   production build. So does a handler where React rendered nothing in the working time, on a page where it
@@ -51,25 +63,92 @@
   only thing that can lower a confidence, though: a script blame is `'inferred'` whenever a commit could
   not be tied to the interaction, since a script is what is left once React is ruled out and an unjoined
   commit is exactly what stops React from being ruled out.
+  Where the count alone chose between the handler and the render beside it, the cause names both ("the
+  onClick handler or React's render of StatsPanel") and says a profiling build can tell them apart, and
+  the blame keeps the count's pick: in three production runs of apps written to test this, it picked wrong
+  both ways. A list whose rows took 2 ms or less each decides it and names nothing else. Two ways to a
+  profiling build: in Vite, a `resolve.alias` from `react-dom/client` to `react-dom/profiling`, and in
+  Next.js, `next build --profile`. The Vite alias added 5.4 KB gzipped to one app. The runtime cost of
+  either is not measured yet.
+- **A commit past `walkBudget` (5000 components by default) is walked only in part**, and what took the time
+  past the cut is not known. Its counts say "at least", and its blame's detail says the rest was not walked,
+  unless the commit's useEffect callbacks lead it. Its sentence says so too in a production build and
+  wherever the walk could not tell where the render started, and where a development build could tell, a note
+  says only that the component count is partial. In a production build, which has only counts to go on, the
+  blame names the component the render started at only where one rendered at the top and holds everything the
+  walk reached, and that is where the render started, not what inside it took the time: a theme change over
+  6,000 labels reads ThemeProvider, at least 1,999 components, where a walk of the whole tree finds NodeLabel
+  ×6,000. Where the walk reached several such components, or one with work beside it that it never got to, it
+  names the app and says it could not tell where the render started (`pathStart` is `'unknown-root'`). A
+  development build has React's durations, which are totals for each subtree walked or not, so it still
+  chooses among the subtrees the walk reached, but a subtree past the cut is in none of them, so it can name
+  a component above the one past the cut that took the time. On a root React timed, React's total for the
+  whole render is the render's time for any walk cut at the budget. Where it shows the part not reached took
+  longer than the heaviest part reached, a development build names the app the same way. Where it does not,
+  the time the sentence gives inside the component it names is still React's total for the whole render, so
+  it can include a root beside it that the walk never reached. A root timed only under `<Profiler>` has no
+  total of its own, and there the subtree the walk reached first can still be named. A larger budget walks
+  further, inside the interaction it measures: a sort of 18,456 cells took 12.6 ms to walk in full, against
+  1.7 ms capped. A branch more than 1,000 fibers deep is cut as well, and the walk sees nothing below it, so
+  a component that rendered down there is missed, and `'only-root'` can be one start of two.
 - **Forced layout is blamed only when a long animation frame measured it**, which is Chromium only. The
-  browser counts style recalculation in the same figure, so a `'layout'` blame covers either. Its share of
-  a script that ran on past the handlers is apportioned by time rather than measured, so such a blame is
-  `'inferred'`. Where the browser reports no long animation frames the report says nothing about
-  layout at all, rather than implying none happened. Where it does report them and none covered the
-  interaction, the frame was under 50 ms, and a production build's report whose count would otherwise have
-  named the render says how much of the working time went to any styles and layout the interaction forced
-  is unmeasured, rather than blaming the render on its count: a style recalculation inside 17 ms of working
-  time is invisible to the browser's own record. Nothing records *which* read forced the
-  layout, so a `'layout'` blame's `name` and `detail` say where it happened instead: the joined commit's subtree and
-  what it was mostly made of. Where the render started from a component that holds the whole commit (the
-  cause's "56 components from Dialog down"), that is the subtree named, with the whole count, since the
+  figure includes style recalculation. Where part of a script's layout is assigned by time overlap, the blame
+  is `'inferred'`. Without long animation frames the report cannot measure forced layout. Even where the
+  browser supports them, a frame under 50 ms can leave no record of that layout, and some reports say so.
+  A count-based render selected by the 1000-component exception does not carry that sentence, so its absence
+  does not show that no layout happened. A measured duration does not prove that the component named beside
+  it caused the work. Nothing records *which* read forced the layout, so a
+  `'layout'` blame's `name` and `detail` say where it happened instead: the subtree of the joined commit that
+  ran in the script that forced it, and what it was mostly made of. Where several commits ran in the scripts
+  that forced it, that is the one whose time could hold most of the layout: React's own time for it where the
+  build times renders, else its effects and the time since the commit before it in the same script, which for
+  the first commit there runs from the script's start and so holds the handler too. Where none could hold half
+  of it, `name` and `detail` are `null` and the cause says so. A long effect that read no size can still take
+  the name from the commit whose layout effect did. Where the render started from a component that holds the
+  whole commit (the cause's "56 components from Dialog down"), that is the subtree named, since the
   component a render is named after holds only part of it and the read can be anywhere in what React
-  rendered. That name is dropped for the browser's own invoker where no commit joined,
-  or where the one that did only overlapped the interaction in time, was walked short of the end, or sat
-  beside commits that could not be tied to the interaction. The invoker itself is named only while one script
+  rendered. Its `detail` is then what a render's would be, many of one
+  component or one component's own render, and where it is a count, the whole commit's ("56 components"),
+  not "15 of 56". That name is dropped for the browser's own invoker where no commit joined, or where the
+  one that did only overlapped the interaction in time, was walked short of the end, or sat beside
+  commits that could not be tied to the interaction. The invoker itself is named only while one script
   holds nine tenths of the layout, since `ms` is every script's total summed; where several scripts share
-  it, `name` is `null` and the cause names the largest with the share it holds. The milliseconds are the
-  browser's either way, so `confidence` is about them alone and is never lowered to cover a doubtful name.
+  it, `name` is `null` and the cause names the largest with the share it holds, unless that is React's own
+  listener (its react-dom file or function, a root container the hook saw, or the document where a root is
+  the document or the hook saw none it could name), which the cause does not name. So under the Next.js
+  App Router, where the root is the document, a tag manager's or a heatmap's document listener reads the
+  same as React's (`#document.onclick`), and a layout it forced is not named there either, though the
+  frames in the report still hold it. The milliseconds are the browser's either way, so `confidence` is
+  about them alone and is never lowered to cover a doubtful name.
+- **A long animation frame that lists no scripts says nothing about what the time outside React went on.**
+  Under `next dev --webpack` a modal whose layout effect forced layout came back as a 365 ms frame with no
+  scripts in it, and the verdict read "On top of that, the onClick handler ran for about 151 ms" for a
+  handler that is one setState. The same click under Turbopack measured the layout. Why webpack's dev frames
+  list no scripts is not verified (its eval'd modules are the guess). Where every frame over the handlers lists
+  none and one of them is 50 ms or longer, the time outside a render that has the verdict is said to be not
+  accounted for. Where that time outruns React's render, the handler still has the verdict, measured, though
+  it may have been a layout. A development build warns once, at the second such interaction whose handlers
+  ran for 50 ms or more ([`frames-without-scripts`](troubleshooting.md#frames-without-scripts)).
+- **A tap that waits behind React's own task is not named after what React was rendering.** A tap that lands while
+  React hydrates a Suspense boundary waits for React's scheduler task, and a `waiting` blame takes its name from the
+  script Long Animation Frames recorded over the wait. Under Turbopack that is `MessagePort.onmessage`, which says
+  React was working but not on what. Under webpack's development build (`next dev` on Next.js 15, `next dev --webpack`
+  on 16) the frame over the wait lists no scripts, as above, so `name` is null and the cause says the main thread was
+  busy with something else. React's commits don't say it either: a render the tap's own update interrupts is thrown
+  away and started again, so none of it commits, and only commits are read. On a Next.js 15.5 page whose next/dynamic
+  grid rendered for 320 ms as its boundary hydrated, all 28 taps that landed in it under webpack's development build
+  had a null name and all 12 under Turbopack were named `MessagePort.onmessage`. In a production build (`next build`,
+  webpack as well) of the same page, with the grid's chunk held back 1.5 s so taps land in its render, all 10 that did
+  were named `MessagePort.onmessage`. Where the time is the grid's chunk itself running as it loads, the wait is named
+  after the chunk's file.
+- **A `painting` blame after a menu or a dialog closes cannot name a restyle of the whole page that a write
+  to `body` or `html` set off.** Closing one often writes a style or a class there (a scroll lock, the
+  `pointer-events` a modal put on the page, a theme class), and the browser can then recalculate styles for
+  every element under it. That is a common cause of a slow screen update after a close, and the report cannot
+  see it: it keeps no record of writes to `body` or `html`, and the restyle runs as the browser's own work,
+  with no script for Long Animation Frames to list. So the cause puts that time on the browser "most likely
+  recalculating styles and layout", `blame.name` stays null, and a note about a render in the handlers can
+  sit beside it though that render may not be what made the frame slow.
 - **The next press's work is told from the interaction's own by a listener of that press the browser
   recorded.** Typing or clicking fast, the frame an interaction paints in can hold the next press's handlers
   too, and Long Animation Frames lists only scripts over 5 ms, which in a React app often leaves out the next
@@ -78,7 +157,8 @@
   its script, and over that, one of its own that started a millisecond or more after its handlers ended is
   taken for the next press's work. A next click whose button went down before the interaction, or whose
   pointerdown was not recorded, has no listener to go by, since nothing tells its `onclick` or `onpointerup`
-  from the interaction's own, so it is weighed as in 0.18.0: every script from that click on is its work.
+  from the interaction's own, so it is weighed as in 0.18.0: every script from that click on is its work,
+  except one that holds a render of the interaction's own.
   Rollover typing, where the next key goes down before this one comes up, can still put the next key's work on
   this one.
 - **Reports name the nearest component with a readable name, not always the innermost one.** A component
@@ -91,9 +171,26 @@
   commit's `components` and its `hotPath`; the path spends its twelve steps only on names a reader could
   search for, passing a library's layers between them (a Slot, `Primitive.div`, a Provider, a wrapper named
   after the component it renders) without spending one, and a render is named after the deepest searchable
-  name on it, so it reaches the component below those layers where there is
-  one. A name with the `$1` that Vite's development server and Rolldown add to one that clashes
-  (`Dt$1`) is judged without it. The component emotion renders beside every element @emotion/styled or the
+  name on it, so it reaches the component below those layers where there is one. A component that is all its
+  parent rendered and hands the very children it was given to the one component it renders, as Radix's Dialog
+  root does, is passed too where that one carries most of its work, and where nothing below it is named the
+  render is named after the nearest component above it a reader could search for, through any layers between.
+  That is read from props, the tree's shape and React's times, not from who wrote what. Where React timed the
+  render, a component of that shape whose own render is the heavy part is named. A production build has only
+  counts, and there it is passed over all the same. That moves the name only where nothing below it is named, a
+  dialog root whose own render was slow say, which is then blamed on the component above it. A highlighter handing
+  its code string to one inner component, or a permission check round a fade, gets the name 0.23.0 gave. A wrapper that wraps its children in an element of its
+  own before handing them on isn't caught and is named as 0.23.0 named it, and so is one where the path starts
+  at a layer with nothing above it to name. Where such a wrapper (a Card, an AppLayout putting its children in
+  `<main>`) sits between the component that owns the state and a dialog root, the dialog root is passed and the
+  render is named after the Card or the layout, not the owner above it. Where React's times on the
+  path show that name took under half of the render (every name above it holds it, so the smallest of their
+  totals bounds it), the render is named after the component it started from where that holds the whole commit
+  and has a name worth searching for (the cause's "from ... down"), and the cause still says the deeper one.
+  Otherwise, and in a build with no durations, it takes the deepest name. A component the walk found no name
+  for is never the name: a render or layout whose path ends there with nothing above it to take is named
+  `'the app'`, and nothing is said to be mostly made of it. A name with the `$1` that Vite's development
+  server and Rolldown add to one that clashes (`Dt$1`) is judged without it. The component emotion renders beside every element @emotion/styled or the
   `css` prop styles, to insert its styles, is not counted.
 - **A styling library's wrapper is named the way the library names one it was given no label for**, whatever
   label it has: MUI's `MuiButtonBaseRoot` reads `Styled(button)`, a styled-components wrapper its Babel or SWC

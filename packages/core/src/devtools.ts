@@ -1,5 +1,5 @@
 import { heaviest, leafName } from './commits.js';
-import { ms, verdictCounts } from './join.js';
+import { blamedCommit, fromAbove, ms, verdictCounts } from './join.js';
 import { MAX_QUIET, MAX_REPORTS } from './lifecycle.js';
 import type { CommitSummary, InteractionReport, RendererInfo } from './types.js';
 import { parseReactVersion } from './version.js';
@@ -83,9 +83,12 @@ export function createTimeline(renderers: () => RendererInfo[]): Timeline {
  */
 function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void {
   const x = r.explanation;
-  // The commit the verdict's blame names, so the entry's name never contradicts its tooltip.
-  const main = r.commits.length ? heaviest(r.commits) : null;
-  const leaf = main ? (leafName(main) ?? '') : '';
+  // The commit the verdict's blame names, so the entry's name never contradicts its tooltip: where a layout
+  // or render blame is named after the component that commit's render started at, or its roots sit under, that one.
+  const heaviestCommit = r.commits.length ? heaviest(r.commits) : null;
+  const main = x.blame.kind === 'layout' || x.blame.kind === 'render' ? blamedCommit(r) : heaviestCommit;
+  const started = (x.blame.kind === 'layout' || x.blame.kind === 'render') && x.blame.name && main && (main.hotPath[0] === x.blame.name || fromAbove(main) === x.blame.name) ? x.blame.name : null;
+  const leaf = started ?? (main ? (leafName(main) ?? '') : '');
   const properties: [string, string][] = [
     ['Total', ms(r.duration)],
     ['Waiting before the handler', ms(r.inputDelay)],
@@ -97,8 +100,8 @@ function drawInteraction(r: InteractionReport, reactDrawsRenders: boolean): void
     // Not "after the paint": a press's render before a slower release is one, and it came before this paint.
     ['Later React renders', String(r.followUps.length)],
   ];
-  if (main && main.hotPath.length) properties.push(['Heaviest path', main.hotPath.join(' > ')]);
-  // From half a millisecond, where the verdict starts naming it: under that the row read "0 ms".
+  if (heaviestCommit && heaviestCommit.hotPath.length) properties.push(['Heaviest path', heaviestCommit.hotPath.join(' > ')]);
+  // From half a millisecond, where it rounds to 1 ms: under that the row read "0 ms".
   if (r.walkMs >= 0.5) properties.push(['react-inp-blame itself', ms(r.walkMs)]);
   measure(`${x.headline}${leaf ? ' · ' + leaf : ''}`, r.start, Math.max(r.end, r.start + 0.1), {
     track: INTERACTION_TRACK,
@@ -134,7 +137,7 @@ function drawRender(r: InteractionReport, c: CommitSummary, timeStampTracks: boo
   // By where the report put it, not by the headline's paint: a press's render before a slower release is a
   // later render of the press's paint, and it would be drawn from the release's input back to itself.
   const later = r.followUps.includes(c);
-  const name = leafName(c) ?? 'root';
+  const name = leafName(c) ?? 'the app';
   const counted = `${c.truncated ? 'at least ' : ''}${c.rendered} components`;
   const label = `${later ? 'Later render' : c.hydrated ? 'Hydration' : 'React render'} · ${name} (${counted}${c.hasDurations ? '' : ', time not measured'})`;
   // A render the build did not time has no length: DevTools puts an entry's length before its name on hover, and

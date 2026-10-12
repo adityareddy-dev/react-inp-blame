@@ -1,0 +1,13 @@
+{
+  "name": "inp-blame-bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "node bench.mjs",
+    "report": "node report.mjs",
+    "test": "node --test configs.test.mjs report.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.59.1"
+  }
+}

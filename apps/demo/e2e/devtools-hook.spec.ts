@@ -148,3 +148,65 @@ test('the badge says nothing is wrong where React is read', async ({ page }) => 
   await page.locator('#react-inp-blame .badge').click();
   await expect(page.locator('#react-inp-blame .panel .status.warn')).toHaveCount(0);
 });
+
+
+// The spike uses an isolated developer-test profile in installed Chrome, never a personal profile.
+if (process.env.INP66_CHROME === '1') test.use({ channel: 'chrome' });
+
+test.describe('INP-66 real unmount spike', () => {
+  for (const kind of ['layout', 'passive', 'control', 'survivor', 'passive-first', 'passive-second']) {
+    test(`captures real ${kind} cleanup and hook evidence without equating counts to time`, async ({ page, browser }, testInfo) => {
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      await page.goto(`/devtools-hook.html?order=library&inp66&cleanup=${kind}`);
+      await expect.poll(() => page.evaluate(() => Boolean((window as any).__inp66Probe)), { timeout: 5_000 }).toBe(true);
+      await page.locator('[data-test=probe-delete]').click();
+      await page.waitForFunction(() => (window as any).__inp66Probe.events.some((event: any) => event.kind === 'fixture_cleanup_end' && event.phase === 'passive' && event.component === 'SecondCleanup'));
+      await expect(page.locator('[data-test=surviving-sibling]')).toHaveText('1');
+      const data = await page.evaluate(() => (window as any).__inp66Probe.snapshot());
+      const events = data.events as Array<{ sequence: number; kind: string; at: number; [key: string]: any }>;
+      const cleanupDurations = ['layout', 'passive'].map((phase) => {
+        const start = events.find((event) => event.kind === 'fixture_cleanup_start' && event.phase === phase)!;
+        const end = events.find((event) => event.kind === 'fixture_cleanup_end' && event.phase === phase)!;
+        expect(start.component).toBe('NamedCleanup');
+        expect(end.component).toBe('NamedCleanup');
+        expect(end.at).toBeGreaterThanOrEqual(start.at);
+        if (kind === phase) expect(end.at - start.at).toBeGreaterThanOrEqual(39);
+        return { phase, measuredMs: end.at - start.at, requestedMs: start.requestedMs };
+      });
+      const secondStart = events.find((event) => event.kind === 'fixture_cleanup_start' && event.component === 'SecondCleanup')!;
+      const secondEnd = events.find((event) => event.kind === 'fixture_cleanup_end' && event.component === 'SecondCleanup')!;
+      cleanupDurations.push({ phase: 'passive-second', measuredMs: secondEnd.at - secondStart.at, requestedMs: secondStart.requestedMs });
+      if (kind === 'passive-first') {
+        expect(cleanupDurations.find((entry) => entry.phase === 'passive')!.measuredMs).toBeGreaterThanOrEqual(39);
+        expect(secondStart.requestedMs).toBe(0);
+      }
+      if (kind === 'passive-second') {
+        expect(secondEnd.at - secondStart.at).toBeGreaterThanOrEqual(39);
+        expect(cleanupDurations.find((entry) => entry.phase === 'passive')!.requestedMs).toBe(0);
+      }
+      if (kind === 'survivor') {
+        const start = events.find((event) => event.kind === 'fixture_render_start' && event.requestedMs === 40)!;
+        const end = events.find((event) => event.kind === 'fixture_render_end' && event.sequence > start.sequence)!;
+        expect(end.at - start.at).toBeGreaterThanOrEqual(39);
+        expect(cleanupDurations.every((entry) => entry.requestedMs === 0)).toBe(true);
+      }
+      // Availability, names and ordering are recorded observations, never a forced positive feasibility result.
+      const unmounts = data.hookOnly.filter((event: any) => event.kind === 'unmount_hook');
+      const commits = data.hookOnly.filter((event: any) => event.kind === 'commit_hook');
+      expect(commits.length).toBeGreaterThanOrEqual(2);
+      expect(unmounts.find((event: any) => event.name === 'NamedCleanup')?.owners).toContain('DeletionOwner');
+      expect(unmounts.find((event: any) => event.name === 'SecondCleanup')?.owners).toContain('DeletionOwner');
+      expect(data.hookOnly.every((event: any) => !event.kind.startsWith('fixture_'))).toBe(true);
+      expect(data.overflow).toBe(false);
+      expect(events.map((event) => event.sequence)).toEqual(events.map((_, index) => index + 1));
+      expect(errors).toEqual([]);
+      await testInfo.attach(`inp66-${kind}-${prod ? 'prod' : 'dev'}`, {
+        body: Buffer.from(JSON.stringify({ ...data, mode: prod ? 'prod' : 'dev', browserVersion: browser.version(),
+          cleanupDurations, unmountCount: unmounts.length, commitCount: commits.length,
+          measurementBoundary: 'Cleanup markers are fixture ground truth, not generic hook timing evidence.' }, null, 2)),
+        contentType: 'application/json',
+      });
+    });
+  }
+});

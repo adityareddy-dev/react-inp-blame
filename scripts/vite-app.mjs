@@ -48,7 +48,7 @@ const FIXTURES = {
   },
   'react-router': {
     readme: '## Install with React Router',
-    files: ['vite.config.ts'],
+    files: ['vite.config.ts', 'app/announce-navigations.tsx'],
     reported: ['react-router', '@react-router/dev', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     // The template's own check, route types first. Its tsconfig takes in every file, the specs included.
     typecheck: (app) => npm('run typecheck', app),
@@ -57,13 +57,13 @@ const FIXTURES = {
   // and a route module can load it before the client entry does. docs/install.md's config holds there too.
   'react-router-7': {
     readme: '## Install with React Router',
-    files: ['vite.config.ts'],
+    files: ['vite.config.ts', 'app/announce-navigations.tsx'],
     reported: ['react-router', '@react-router/dev', 'vite', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     typecheck: (app) => npm('run typecheck', app),
   },
   'tanstack-start': {
     readme: '## Install with TanStack Start',
-    files: ['vite.config.ts', 'src/client.tsx'],
+    files: ['vite.config.ts', 'src/client.tsx', 'src/router.tsx'],
     reported: ['@tanstack/react-start', '@tanstack/react-router', 'vite', '@vitejs/plugin-react', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     // The template has no check of its own. Its tsconfig takes in every file, the specs and the route tree
     // the build generates included.

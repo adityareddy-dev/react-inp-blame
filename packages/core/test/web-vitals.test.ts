@@ -280,6 +280,47 @@ test('an icon a script drew is placed by what React renders in the element now, 
   }
 });
 
+test("an icon a handler was handed down to is climbed from its fiber on the screen, not the one cached on it", () => {
+  // `<Trash2 onClick={() => remove(id)} />` beside a label in RemoveRow, where lucide's Trash2 and Icon hand the
+  // onClick to the svg. React 19 caches on the svg the fiber it was made with, and on every other render that one
+  // holds the render before, with the handler from then: the climb stopped at Trash2, since the Icon above it,
+  // on the screen, was handed the new one.
+  const hostFiber = (tag: string, props: Record<string, unknown> = {}): Record<string, unknown> => ({ tag: 5, elementType: tag, type: tag, memoizedProps: props, child: null, sibling: null, alternate: null });
+  const link = (parent: Record<string, unknown>, ...kids: Record<string, unknown>[]) => {
+    parent.child = kids[0] ?? null;
+    kids.forEach((kid, i) => Object.assign(kid, { return: parent, sibling: kids[i + 1] ?? null }));
+    return parent;
+  };
+  const tree = () => {
+    const onClick = () => {};
+    const path = hostFiber('path');
+    const svg = link(hostFiber('svg', { className: 'lucide', onClick }), path);
+    const icon = link(Object.assign(component('Icon'), { memoizedProps: { onClick } }), svg);
+    const trash = link(Object.assign(component('Trash2'), { memoizedProps: { onClick } }), icon);
+    const span = link(hostFiber('span'), trash, hostFiber('span'));
+    const removeRow = link(Object.assign(component('RemoveRow'), { memoizedProps: {} }), span);
+    const rows = link(component('Rows'), removeRow);
+    const root = link({ tag: 3, memoizedProps: null, child: null, sibling: null }, rows);
+    return { root, rows, removeRow, span, trash, icon, svg, path };
+  };
+  const now = tree();
+  const before = tree();
+  for (const key of Object.keys(now) as (keyof typeof now)[]) {
+    now[key].alternate = before[key];
+    before[key].alternate = now[key];
+  }
+  now.root.stateNode = before.root.stateNode = { current: now.root };
+  // The svg from the render before points at the Icon on the screen, as React left it.
+  before.svg.return = now.icon;
+  const svg = element('svg', { classes: ['lucide'], fiber: before.svg });
+  const path = element('path', { fiber: before.path, parentNode: svg });
+  assert.equal(generateTarget(asNode(path)), 'Rows > RemoveRow (path)');
+  // With the fiber on the screen cached, as on the first render, the same.
+  svg[FIBER_KEY] = now.svg;
+  path[FIBER_KEY] = now.path;
+  assert.equal(generateTarget(asNode(path)), 'Rows > RemoveRow (path)');
+});
+
 test("an svg an app's Icon sets through dangerouslySetInnerHTML is placed as one it renders, whoever gave the element its role", () => {
   // `<Icon svg={trash} onClick={remove} />` beside a label in RemoveRow, where Icon renders
   // `<span role={onClick ? 'button' : 'img'} onClick={onClick} dangerouslySetInnerHTML={{ __html: svg }} />`. The
@@ -302,8 +343,8 @@ test("an svg an app's Icon sets through dangerouslySetInnerHTML is placed as one
   assert.equal(generateTarget(asNode(icon({}, { ...markup, role: 'button' }))), 'Rows > RemoveRow (svg)');
   assert.equal(generateTarget(asNode(icon({ role: 'button' }, markup))), 'Rows > RemoveRow (svg)');
   // Where a script draws the svg in an empty `<span role="button" aria-label="Delete">` that Icon renders, the
-  // span is a control of Icon's own, as IconButton's button is, and holds what is drawn in it.
-  assert.equal(generateTarget(asNode(icon({}, { role: 'button', 'aria-label': 'Delete' }))), 'Rows > RemoveRow > Icon (svg)');
+  // span is the icon, as Font Awesome's empty `<i>` is, and RemoveRow wrote it.
+  assert.equal(generateTarget(asNode(icon({}, { role: 'button', 'aria-label': 'Delete' }))), 'Rows > RemoveRow (svg)');
 });
 
 test('text a component returned adds that component to the path of the element holding it', () => {
@@ -478,6 +519,22 @@ test('the attribution keeps every field web-vitals measured and adds one of its 
   assert.deepEqual(attribution.react?.followUps, { count: 0, rendered: 0, ms: null });
 });
 
+test('the attribution says which build of react-dom measured it, so development numbers can be told apart before they are sent', (t) => {
+  const reports = [
+    reportOf(CLICK, [commit({ strictMode: true })], [], [], 'attributes', [], undefined, 'reading', undefined, 'development'),
+    reportOf(CLICK, [commit({ strictMode: true })], [], [], 'attributes', [], undefined, 'reading', undefined, 'production'),
+  ];
+  const restore = installed(reports.slice(0, 1));
+  const development = attributeINP(metricWithAttribution).react;
+  restore();
+  t.after(installed(reports.slice(1)));
+  const production = attributeINP(metricWithAttribution).react;
+  assert.deepEqual({ reactBuild: development?.reactBuild, strictMode: development?.strictMode }, { reactBuild: 'development', strictMode: true });
+  assert.deepEqual({ reactBuild: production?.reactBuild, strictMode: production?.strictMode }, { reactBuild: 'production', strictMode: null });
+  // Two fields added beside the others leave the version as it was.
+  assert.equal(development?.schemaVersion, 3);
+});
+
 test('a metric from the build without attribution, as Next.js reports it, still gets the React side', (t) => {
   t.after(installed([reportOf(CLICK, [commit()], [])]));
   // useReportWebVitals imports the non-attribution build, so `attribution` is undefined there.
@@ -503,6 +560,43 @@ test('a production build measures no render, so the summary says so rather than 
   assert.equal(react?.blame.confidence, 'inferred');
 });
 
+test("a layout blame's hot path and components are the commit it names, not the heaviest", (t) => {
+  // A click that opens a menu, production build: one script forced 44 ms of layout across four commits. The
+  // first rendered the most, 295 components; the menu's commit, 185, is the one whose effects could hold it.
+  const press = [{ name: 'pointerdown', interactionId: 7, startTime: 0, duration: 72, processingStart: 1.1, processingEnd: 59.9, target: null }];
+  const at = (at: number, opts: Partial<CommitSummary>) => commit({ at, sinceInput: at, inputTs: 0, gestureTs: 0, hasDurations: false, total: 0, mounted: 0, ...opts });
+  const one = (name: string, count: number) => [{ name, count, self: null, total: null }];
+  const sidebar = at(3.8, { rendered: 295, roots: ['Sidebar'], hotPath: ['Sidebar'], startRendered: 295, pathRendered: 295, components: one('NavItem', 24), effectsStartedAt: 4.6, effectsEndedAt: 4.7 });
+  const portal = at(9.3, { rendered: 96, mounted: 95, roots: ['Portal'], hotPath: ['Portal'], components: one('Slot', 9), effectsStartedAt: 9.4, effectsEndedAt: 11.4 });
+  const menu = at(36.5, { rendered: 185, roots: ['Header'], hotPath: ['Header', 'Menu', 'MenuContent'], startRendered: 185, pathRendered: 80, components: one('MenuItem', 13), effectsStartedAt: 36.8, effectsEndedAt: 57.4 });
+  const layer = at(57.9, { rendered: 15, roots: ['Layer'], hotPath: ['Layer'], components: one('Slot', 3), effectsStartedAt: 57.9, effectsEndedAt: 58 });
+  const forced = [{ start: 0, duration: 64, blocking: 14, forcedLayout: 44.4, scripts: [{ invoker: '#document.onpointerdown', name: '', source: 'app.js', start: 1.9, duration: 58, forcedLayout: 44.4 }], styleAndLayoutStart: null }];
+  const ring = [{ ts: 0, type: 'pointerdown', gestureTs: 0, press: undefined, target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: 0, unjoined: [] } }];
+  const report = reportOf(press, [sidebar, portal, menu, layer], forced, ring);
+  t.after(installed([report]));
+  assert.deepEqual([report.explanation.blame.kind, report.explanation.blame.name], ['layout', 'Header']);
+  const { react } = attributeINP({ entries: press });
+  assert.deepEqual(react?.hotPath, ['Header', 'Menu', 'MenuContent']);
+  assert.deepEqual(react?.components.map((c) => c.name), ['MenuItem']);
+});
+
+test("a render blame's hot path and components are the commit it names, not the heaviest", (t) => {
+  // Enter on a menu item, production build: the press rendered 300 components and painted on its own; the
+  // release's 55 ms of working time rendered 60 of its own, which the blame names.
+  const key = (ts: number, type: string) => ({ ts, type, gestureTs: 0, press: 'Enter', target: null, owners: [], handler: null, key: null, dehydrated: null, work: { endedAt: ts, unjoined: [] } });
+  const down = { name: 'keydown', interactionId: 7, startTime: 0, duration: 32, processingStart: 0.1, processingEnd: 4.8, target: null };
+  const up = { name: 'keyup', interactionId: 7, startTime: 5, duration: 64, processingStart: 5.2, processingEnd: 60, target: null };
+  const none = { hasDurations: false, total: 0 };
+  const press = commit({ ...none, at: 4.2, sinceInput: 4.2, inputTs: 0, gestureTs: 0, inputType: 'keydown', rendered: 300, roots: ['Menu'], hotPath: ['Menu'], components: [{ name: 'Item', count: 200, self: null, total: null }] });
+  const own = commit({ ...none, at: 58, sinceInput: 53, inputTs: 5, gestureTs: 0, inputType: 'keyup', rendered: 60, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 55, self: null, total: null }] });
+  const report = reportOf([down, up], [press, own], [], [key(0, 'keydown'), key(5, 'keyup')]);
+  t.after(installed([report]));
+  assert.deepEqual([report.explanation.blame.kind, report.explanation.blame.name], ['render', 'List']);
+  const { react } = attributeINP({ entries: [up] });
+  assert.deepEqual(react?.hotPath, ['List']);
+  assert.deepEqual(react?.components.map((c) => c.name), ['Row']);
+});
+
 test('the join is on the interactionId, which names one report among several', (t) => {
   const other = [{ name: 'keydown', interactionId: 21, startTime: 900, duration: 56, processingStart: 902, processingEnd: 940, target: null }];
   t.after(installed([reportOf(other, [commit({ at: 930, inputTs: 900, hotPath: ['SearchBox'] })], []), reportOf(CLICK, [commit()], [])]));
@@ -511,6 +605,17 @@ test('the join is on the interactionId, which names one report among several', (
   assert.equal(attributeINP({ entries: CLICK }).react?.interactionId, 7);
   // web-vitals keeps no entry without an id, so an entry without one matches nothing rather than guessing.
   assert.equal(attributeINP({ entries: [{}] }).react, null);
+});
+
+test("web-vitals' plain Metric, whose entries are any PerformanceEntry, joins on an id only where it is a number above 0", (t) => {
+  t.after(installed([reportOf(CLICK, [commit()], [])]));
+  // Typed as web-vitals' Metric types it, which is what Honeycomb's INP hook hands over.
+  const metric = (entries: object[]): { name: string; value: number; entries: PerformanceEntry[] } => ({ name: 'INP', value: 240, entries: entries as PerformanceEntry[] });
+
+  assert.equal(attributeINP(metric(CLICK)).react?.interactionId, 7);
+  assert.equal(attributeINP(metric([{ ...CLICK[0], interactionId: '7' }])).react, null);
+  assert.equal(attributeINP(metric([{ ...CLICK[0], interactionId: 0 }])).react, null);
+  assert.equal(attributeINP(metric([{ ...CLICK[0], interactionId: -7 }])).react, null);
 });
 
 test('react is null rather than a guess: nothing installed, and no report for that interaction', (t) => {

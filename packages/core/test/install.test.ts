@@ -4,10 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, type TestContext } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { install, mountOverlay, onInteraction } from '../src/index.ts';
+import { announceNavigation, install, mountOverlay, onInteraction } from '../src/index.ts';
 import { page as installState } from '../src/install-state.ts';
 import { MAX_REPORTS } from '../src/lifecycle.ts';
-import { announceNavigation } from '../src/navigation.ts';
+import { pageURL, routerNavigated } from '../src/navigation.ts';
 import type { InstallOptions, InteractionReport } from '../src/types.ts';
 import { attributeINP } from '../src/web-vitals.ts';
 
@@ -329,8 +329,8 @@ test('a page whose process is a stand-in with no NODE_ENV in it counts as a deve
 /**
  * Gives the stand-in browser a document with what the badge and panel are drawn with: elements that keep
  * their children and their parent, and a body. `hosts()` counts the elements in the body that the badge
- * and panel live in, `panelHidden()` says whether the panel of the first of them is hidden, and `badge()`
- * is its badge.
+ * and panel live in, `panelHidden()` says whether the panel of the first of them is hidden, `badge()`
+ * is its badge, and `press(button)` clicks the panel's button of that class.
  */
 function badgeDocument() {
   const element = (tagName: string): Record<string, any> => {
@@ -345,8 +345,14 @@ function badgeDocument() {
       get isConnected() {
         return el.parentNode !== null;
       },
-      setAttribute() {},
-      addEventListener() {},
+      listeners: {},
+      attributes: {},
+      setAttribute(name: string, value: string) {
+        el.attributes[name] = value;
+      },
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        el.listeners[type] = listener;
+      },
       attachShadow: () => (el.shadowRoot = element('#shadow-root')),
       append: (...nodes: unknown[]) => el.childNodes.push(...nodes),
       prepend: (...nodes: unknown[]) => el.childNodes.unshift(...nodes),
@@ -367,10 +373,15 @@ function badgeDocument() {
   Object.defineProperty(globalThis, 'document', { value: document, configurable: true, writable: true });
   const hosts = () => body.childNodes.filter((node: { id: string }) => node.id === 'react-inp-blame');
   const wrap = () => hosts()[0].shadowRoot.childNodes.find((node: { className?: string }) => node.className?.startsWith('wrap'));
+  const panel = () => wrap().childNodes.find((node: { className?: string }) => node.className === 'panel');
+  const holds = (node: Record<string, any>, cls: string): boolean => node.attributes?.class === cls || !!node.childNodes?.some((child: Record<string, any>) => holds(child, cls));
   return {
     hosts: () => hosts().length,
-    panelHidden: (): boolean => wrap().childNodes.find((node: { className?: string }) => node.className === 'panel').hidden,
+    panelHidden: (): boolean => panel().hidden,
     badge: () => wrap().childNodes.find((node: { tagName: string }) => node.tagName === 'button'),
+    press: (button: string) => panel().listeners.click({ target: { closest: (selector: string) => (selector === `.${button}` ? {} : null) } }),
+    /** Whether the panel draws a button of this class. */
+    drawn: (button: string) => holds(panel(), button),
   };
 }
 
@@ -525,6 +536,131 @@ test("the badge shows only where overlay: 'query' and the URL or localStorage as
       assert.equal(hosts(), shown ? 1 : 0, `overlay: ${overlay} on ${url}${stored ? ` with ${stored} in localStorage` : ''}`);
       api.dispose();
     });
+  }
+});
+
+test("a stored 'hidden' keeps the badge off for that person whatever overlay says, until ?inp-blame clears it", async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
+    else delete (globalThis as Record<string, unknown>).localStorage;
+  });
+  const THROWS = 'throws';
+  const cases: [overlay: InstallOptions['overlay'], url: string, stored: string | null, shown: boolean, after: string | null][] = [
+    [true, PAGE_URL, null, true, null],
+    [true, PAGE_URL, 'overlay', true, 'overlay'],
+    [true, PAGE_URL, 'hidden', false, 'hidden'],
+    [true, `${PAGE_URL}?inp-blame`, 'hidden', true, null],
+    [true, PAGE_URL, THROWS, true, THROWS],
+    [{ position: 'top-left' }, PAGE_URL, 'hidden', false, 'hidden'],
+    [{ position: 'top-left' }, `${PAGE_URL}#inp-blame`, 'hidden', true, null],
+    ['query', PAGE_URL, null, false, null],
+    ['query', PAGE_URL, 'overlay', true, 'overlay'],
+    ['query', PAGE_URL, 'hidden', false, 'hidden'],
+    ['query', `${PAGE_URL}?inp-blame`, 'hidden', true, null],
+    ['query', PAGE_URL, THROWS, false, THROWS],
+    [false, PAGE_URL, null, false, null],
+    [false, PAGE_URL, 'overlay', false, 'overlay'],
+    [false, `${PAGE_URL}?inp-blame`, 'hidden', false, 'hidden'],
+    [false, PAGE_URL, THROWS, false, THROWS],
+  ];
+  for (const [overlay, url, stored, shown, after] of cases) {
+    await inBrowser(async () => {
+      const { search, hash } = new URL(url);
+      Object.defineProperty(globalThis, 'location', { value: { href: url, search, hash }, configurable: true, writable: true });
+      let value = stored;
+      const fail = () => {
+        throw new Error('SecurityError');
+      };
+      const storage =
+        stored === THROWS
+          ? { getItem: fail, setItem: fail, removeItem: fail }
+          : {
+              getItem: (key: string) => (key === 'react-inp-blame' ? value : null),
+              setItem() {},
+              removeItem: (key: string) => {
+                if (key === 'react-inp-blame') value = null;
+              },
+            };
+      Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true, writable: true });
+      const { hosts } = badgeDocument();
+      const api = install({ overlay });
+      await installState.overlay;
+      const what = `overlay: ${JSON.stringify(overlay)} on ${url} with ${stored} in localStorage`;
+      assert.equal(hosts(), shown ? 1 : 0, what);
+      assert.equal(stored === THROWS ? THROWS : value, after, what);
+      api.dispose();
+    });
+  }
+});
+
+test('after Hide for me, mountOverlay() still shows the badge, with no Hide for me of its own, and the overlay option asked again does not', async (t) => {
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
+    else delete (globalThis as Record<string, unknown>).localStorage;
+  });
+  const stored = new Map<string, string>();
+  const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value), removeItem: (key: string) => stored.delete(key) };
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true, writable: true });
+  await inBrowser(async () => {
+    const { search, hash } = new URL(PAGE_URL);
+    Object.defineProperty(globalThis, 'location', { value: { href: PAGE_URL, search, hash }, configurable: true, writable: true });
+    const { hosts, press, drawn, badge, panelHidden } = badgeDocument();
+    const api = install({ overlay: true });
+    await installState.overlay;
+    assert.equal(hosts(), 1);
+    badge().listeners.click();
+    assert.ok(drawn('hide'), 'the overlay option drew no Hide for me');
+    press('hide');
+    assert.equal(hosts(), 0);
+    assert.equal(stored.get('react-inp-blame'), 'hidden');
+    // The badge the page's own code asks for is shown regardless, and not the one Hide for me took down.
+    const shown = await mountOverlay();
+    assert.equal(hosts(), 1, 'mountOverlay() handed back the badge Hide for me took down');
+    // The panel opens as it was left, so it is drawn.
+    assert.equal(panelHidden(), false);
+    assert.ok(!drawn('hide'), "mountOverlay()'s badge offered Hide for me, which only the overlay option's can");
+    shown?.dispose();
+    await nextTask();
+    assert.equal(hosts(), 0);
+    // install() again with overlay: true asks the option again, and 'hidden' keeps it off.
+    install({ overlay: true });
+    await installState.overlay;
+    assert.equal(hosts(), 0);
+    api.dispose();
+  });
+});
+
+test("overlay: 'query' offers no Hide for me, so a stored 'overlay' is never swapped for 'hidden' and lost", async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  t.after(() => {
+    if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
+    else delete (globalThis as Record<string, unknown>).localStorage;
+  });
+  const stored = new Map<string, string>([['react-inp-blame', 'overlay']]);
+  const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value), removeItem: (key: string) => stored.delete(key) };
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true, writable: true });
+  // A browser with Event Timing, then one without it, whose badge only says so.
+  for (const entryTypes of [['event', 'first-input'], ['first-input']]) {
+    await inBrowser(
+      async () => {
+        const { search, hash } = new URL(PAGE_URL);
+        Object.defineProperty(globalThis, 'location', { value: { href: PAGE_URL, search, hash }, configurable: true, writable: true });
+        const { hosts, drawn, badge } = badgeDocument();
+        const api = install({ overlay: 'query' });
+        await installState.overlay;
+        assert.equal(hosts(), 1, `entry types ${entryTypes}`);
+        badge().listeners.click();
+        assert.ok(!drawn('hide'), `overlay: 'query' drew Hide for me, entry types ${entryTypes}`);
+        assert.equal(stored.get('react-inp-blame'), 'overlay');
+        api.dispose();
+        await nextTask();
+      },
+      { entryTypes },
+    );
   }
 });
 
@@ -707,6 +843,146 @@ test('durations come from the ProfileMode bit of the React version that register
       assert.equal(commits.length, walked + 1, `React ${version} was not walked`);
       assert.equal(commits[commits.length - 1]?.hasDurations, hasDurations, `React ${version}, mode ${mode}`);
     }
+    api.dispose();
+  });
+});
+
+test('a report says which build of react-dom measured it, and under a development build whether StrictMode rendered it', async (t) => {
+  // A production and a profiling build both say bundleType 0, and only a profiling build puts its roots in
+  // ProfileMode. StrictMode's bit is 8 on React 18 and 19, and 1 on React 17, where ProfileMode is 8.
+  const cases: Array<[version: string, bundleType: number, mode: number, reactBuild: InteractionReport['reactBuild'], strictMode: boolean | null]> = [
+    ['19.3.0', 1, 0b1011, 'development', true],
+    ['19.3.0', 1, 0b0011, 'development', false],
+    ['18.3.1', 1, 0b1011, 'development', true],
+    ['18.3.1', 1, 0b0011, 'development', false],
+    ['17.0.2', 1, 0b1001, 'development', true],
+    ['17.0.2', 1, 0b1000, 'development', false],
+    ['19.3.0', 0, 0b0011, 'profiling', null],
+    ['19.3.0', 0, 0b1001, 'production', null],
+  ];
+  const clock = useClock(t);
+  for (const [version, bundleType, mode, reactBuild, strictMode] of cases) {
+    await inBrowser((page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', devtoolsTrack: false });
+      const id = existing.inject(reactDom(version, bundleType));
+      clock.now = 500;
+      const root = mountedRoot(mode, 4);
+      existing.onCommitFiberRoot(id, root);
+      clock.now = 1000;
+      commitAgain(root, 4);
+      page.duringClick(() => existing.onCommitFiberRoot(id, root));
+      page.paint([slowClick(120)]);
+      const r = api.last();
+      assert.deepEqual({ commits: r?.commits.length, reactBuild: r?.reactBuild, strictMode: r?.strictMode }, { commits: 1, reactBuild, strictMode }, `React ${version}, bundleType ${bundleType}, mode ${mode}`);
+      api.dispose();
+    });
+  }
+});
+
+test("a report's build is the page's even where it joined no commit, and null until react-dom has said which it is", async (t) => {
+  const clock = useClock(t);
+  // The build a slow click with no render of its own reads, after a mount in `mode` where one is given.
+  const buildOf = async (renderer: Record<string, unknown> | null, mode: number | null) => {
+    let seen: Pick<InteractionReport, 'reactBuild' | 'strictMode'> | undefined;
+    await inBrowser((page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', devtoolsTrack: false });
+      const id = renderer && existing.inject(renderer);
+      clock.now = 500;
+      if (id !== null && mode !== null) existing.onCommitFiberRoot(id, mountedRoot(mode, 4));
+      clock.now = 1000;
+      page.paint([slowClick(120)]);
+      const r = api.last();
+      assert.equal(r?.commits.length, 0);
+      seen = r && { reactBuild: r.reactBuild, strictMode: r.strictMode };
+      api.dispose();
+    });
+    return seen;
+  };
+  assert.deepEqual(await buildOf(reactDom('19.3.0', 1), null), { reactBuild: 'development', strictMode: null });
+  assert.deepEqual(await buildOf(reactDom('19.3.0', 0), 0b0011), { reactBuild: 'profiling', strictMode: null });
+  assert.deepEqual(await buildOf(reactDom('19.3.0', 0), 0b0001), { reactBuild: 'production', strictMode: null });
+  // Before the page's first commit a production build and a profiling one look the same.
+  assert.deepEqual(await buildOf(reactDom('19.3.0', 0), null), { reactBuild: null, strictMode: null });
+  assert.deepEqual(await buildOf({ version: '19.3.0', rendererPackageName: 'react-dom' }, 0b0011), { reactBuild: null, strictMode: null });
+  assert.deepEqual(await buildOf(null, null), { reactBuild: null, strictMode: null });
+});
+
+test("a development react-dom beside a production one is the page's build whichever registered first, as the badge says", async (t) => {
+  const clock = useClock(t);
+  for (const widgetFirst of [true, false]) {
+    await inBrowser((page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', devtoolsTrack: false });
+      // A production widget's react-dom, and the app's development one under <StrictMode>.
+      const widget = widgetFirst ? existing.inject(reactDom('19.3.0', 0)) : 0;
+      const app = existing.inject(reactDom('19.3.0', 1));
+      const other = widgetFirst ? widget : existing.inject(reactDom('19.3.0', 0));
+      clock.now = 400;
+      existing.onCommitFiberRoot(other, mountedRoot(0b0001, undefined));
+      clock.now = 500;
+      const root = mountedRoot(0b1011, 4);
+      existing.onCommitFiberRoot(app, root);
+      clock.now = 1000;
+      commitAgain(root, 4);
+      page.duringClick(() => existing.onCommitFiberRoot(app, root));
+      page.paint([slowClick(120)]);
+      const r = api.last();
+      assert.deepEqual({ commits: r?.commits.length, reactBuild: r?.reactBuild, strictMode: r?.strictMode }, { commits: 1, reactBuild: 'development', strictMode: true }, `widget first: ${widgetFirst}`);
+      api.dispose();
+    });
+  }
+  // A production root created with unstable_strictMode carries the bit too, but renders once.
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const widget = existing.inject(reactDom('19.3.0', 0));
+    existing.inject(reactDom('19.3.0', 1));
+    clock.now = 500;
+    const root = mountedRoot(0b1001, undefined);
+    existing.onCommitFiberRoot(widget, root);
+    clock.now = 1000;
+    commitAgain(root, undefined);
+    page.duringClick(() => existing.onCommitFiberRoot(widget, root));
+    page.paint([slowClick(120)]);
+    const r = api.last();
+    assert.deepEqual({ commits: r?.commits.length, reactBuild: r?.reactBuild, strictMode: r?.strictMode }, { commits: 1, reactBuild: 'development', strictMode: false });
+    api.dispose();
+  });
+  // A development react-dom this library cannot read still renders the page with a development build, so its
+  // numbers are development ones, as the badge says: React 16 beside a production React 19, and a React 19
+  // whose tree is not the shape read.
+  t.mock.method(console, 'warn', () => {});
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    existing.inject(reactDom('16.14.0', 1));
+    const id = existing.inject(reactDom('19.3.0', 0));
+    clock.now = 500;
+    existing.onCommitFiberRoot(id, mountedRoot(0b0001, undefined));
+    clock.now = 1000;
+    page.paint([slowClick(120)]);
+    assert.equal(api.last()?.reactBuild, 'development');
+    api.dispose();
+  });
+  await inBrowser((page) => {
+    const existing = existingHook();
+    page.window[HOOK] = existing;
+    const api = install({ hook: 'chain', devtoolsTrack: false });
+    const id = existing.inject(reactDom('19.3.0', 1));
+    const changed = mountedRoot(0b0001, undefined);
+    delete changed.current.flags;
+    clock.now = 500;
+    existing.onCommitFiberRoot(id, changed);
+    clock.now = 1000;
+    page.paint([slowClick(120)]);
+    assert.deepEqual({ reactStatus: api.last()?.reactStatus, reactBuild: api.last()?.reactBuild }, { reactStatus: 'unreadable', reactBuild: 'development' });
     api.dispose();
   });
 });
@@ -1691,6 +1967,17 @@ test('a click that starts an App Router navigation is named with it, and the rep
   });
 });
 
+test("a navigation type Next.js passes that is not 'push', 'replace' or 'traverse' reads as 'push', so startedNavigation.type keeps to its fixed set", async (t) => {
+  const { onRouterTransitionStart } = await nextClient(t, 'refresh', { install: {}, basePath: '' });
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    const clickedAt = page.duringClick(() => onRouterTransitionStart('/cart', 'refresh' as never, null));
+    page.paint([click(7, clickedAt, 64)]);
+    assert.deepEqual(api.last()?.startedNavigation, { url: 'https://shop.example/cart', type: 'push' });
+    api.dispose();
+  });
+});
+
 test('next-client installs nothing and names no navigation where no withInpBlame set its value, as an older one did in a build it left out', async (t) => {
   await inBrowser(async (page) => {
     const { onRouterTransitionStart } = await nextClient(t, 'unset');
@@ -1719,6 +2006,172 @@ test("next-client installs nothing and names no navigation in a build withInpBla
   });
 });
 
+test('announceNavigation inside a click names it on that click, starts INP over, and places the reports after it at the new URL', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    clock.now = 1000;
+    page.paint([slowClick(120)]);
+    assert.equal(api.inp()?.interactionId, 7);
+
+    // A router that pushes from inside the click handler, as TanStack Router does for a Link click.
+    clock.now = 2000;
+    const clickedAt = page.duringClick(() => {
+      clock.now = 2004;
+      announceNavigation('/cart');
+    });
+    assert.equal(api.inp(), null);
+    page.paint([click(14, clickedAt, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: { url: 'https://shop.example/cart', type: 'push' } });
+
+    clock.now = 3000;
+    page.paint([click(21, 3000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: 'https://shop.example/cart', navigationType: 'soft-navigation', startedNavigation: null });
+    assert.equal(api.inp()?.interactionId, 21);
+    api.dispose();
+  });
+});
+
+test('announceNavigation from an effect, with no input being dispatched, names no click and places the reports after it at the new URL', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    // React Router renders the new route in a transition, so the call comes after the click that started it.
+    clock.now = 1500;
+    announceNavigation('https://shop.example/cart');
+    page.paint([click(7, 1000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: null });
+    clock.now = 2000;
+    page.paint([click(14, 2000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: 'https://shop.example/cart', navigationType: 'soft-navigation', startedNavigation: null });
+    api.dispose();
+  });
+});
+
+test("the browser's Back button, announced from a layout effect, lets go of a quiet click at once, so the route it goes back to is not that click's later render", async (t) => {
+  const clock = useClock(t);
+  // In the popstate, as React 19 renders it, and in a task after it.
+  for (const inPopstate of [true, false]) {
+    await inBrowser(async (page) => {
+      const existing = existingHook();
+      page.window[HOOK] = existing;
+      const api = install({ hook: 'chain', threshold: 40, devtoolsTrack: false });
+      const id = existing.inject(reactDom('19.3.0'));
+      const root = mountedRoot(0b11, 4);
+      existing.onCommitFiberRoot(id, root);
+      // A quick click on a toggle, which renders in its own dispatch and stays quiet.
+      clock.now = 1000;
+      page.fire('click', { isTrusted: true, type: 'click', timeStamp: 1000, target: null });
+      page.duringClick(() => {
+        commitAgain(root, 3);
+        existing.onCommitFiberRoot(id, root, 1, false);
+      });
+      page.paint([click(7, 1000, 24)]);
+      // Back, 900 ms later: a popstate, which is no input. The page it goes back to renders for 600 ms, and
+      // React runs the announcing layout effect before it hands the hook that commit.
+      clock.now = 1900;
+      if (inPopstate) page.window.event = { isTrusted: true, type: 'popstate', timeStamp: 1850 };
+      commitAgain(root, 600);
+      announceNavigation('/');
+      existing.onCommitFiberRoot(id, root, 1, false);
+      delete page.window.event;
+      await nextTask();
+      assert.deepEqual(api.reports(), [], `in the popstate: ${inPopstate}`);
+      api.dispose();
+    });
+  }
+});
+
+test('announceNavigation resolves a relative URL against the page, takes a URL object, and records a push', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    clock.now = 1000;
+    announceNavigation('../cart');
+    clock.now = 2000;
+    page.paint([click(7, 2000, 64)]);
+    assert.equal(api.last()?.navigationURL, 'https://shop.example/cart');
+
+    clock.now = 3000;
+    const clickedAt = page.duringClick(() => announceNavigation(new URL('https://shop.example/cart')));
+    page.paint([click(14, clickedAt, 64)]);
+    assert.deepEqual(api.last()?.startedNavigation, { url: 'https://shop.example/cart', type: 'push' });
+    api.dispose();
+  });
+});
+
+test('a URL in a report keeps its origin and path, never its query, fragment or password', async (t) => {
+  const clock = useClock(t);
+  await inBrowser((page) => {
+    Object.defineProperty(globalThis, 'location', { value: { href: 'https://ann:s3cret@shop.example/products?token=s3cret-abc#access_token=xyz', search: '?token=s3cret-abc', hash: '#access_token=xyz' }, configurable: true, writable: true });
+    const api = install({ devtoolsTrack: false });
+    clock.now = 1000;
+    page.paint([click(7, 1000, 64)]);
+    assert.equal(api.last()?.navigationURL, PAGE_URL);
+
+    // Announced from a click, with a query and a fragment of its own.
+    clock.now = 2000;
+    const clickedAt = page.duringClick(() => {
+      clock.now = 2004;
+      announceNavigation('/cart?utm_source=mail#top');
+    });
+    page.paint([click(14, clickedAt, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: { url: 'https://shop.example/cart', type: 'push' } });
+    clock.now = 3000;
+    page.paint([click(21, 3000, 64)]);
+    assert.equal(api.last()?.navigationURL, 'https://shop.example/cart');
+
+    // A router integration, from this copy or an older one, hands the whole URL over.
+    routerNavigated({ url: 'https://shop.example/search?q=boots#results', type: 'replace', at: 4000 });
+    clock.now = 5000;
+    page.paint([click(28, 5000, 64)]);
+    assert.equal(api.last()?.navigationURL, 'https://shop.example/search');
+
+    page.fire('pageshow', { persisted: true, timeStamp: 6000 });
+    clock.now = 7000;
+    page.paint([click(35, 7000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: 'https://shop.example/search', navigationType: 'back-forward-cache', startedNavigation: null });
+    api.dispose();
+  });
+});
+
+test('pageURL keeps the origin and path of any URL, and cuts one that does not parse at its query or fragment', () => {
+  assert.equal(pageURL('https://ann:s3cret@shop.example:8443/a/b?c=1#d'), 'https://shop.example:8443/a/b');
+  assert.equal(pageURL('https://shop.example/products'), 'https://shop.example/products');
+  assert.equal(pageURL('https://shop.example#/cart?id=4'), 'https://shop.example/');
+  assert.equal(pageURL('about:blank'), 'about:blank');
+  assert.equal(pageURL('file:///C:/app/index.html?x=1'), 'file:///C:/app/index.html');
+  assert.equal(pageURL('/cart?token=1#top'), '/cart');
+  assert.equal(pageURL('cart#top?x'), 'cart');
+});
+
+test('announceNavigation does nothing and does not throw before install(), after dispose(), or for a URL that does not parse', async () => {
+  await inBrowser((page) => {
+    assert.doesNotThrow(() => announceNavigation('/cart'));
+    const api = install({ devtoolsTrack: false });
+    assert.doesNotThrow(() => announceNavigation('http://['));
+    page.paint([click(7, performance.now() + 10, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: PAGE_URL, navigationType: 'navigate', startedNavigation: null });
+    api.dispose();
+    assert.doesNotThrow(() => announceNavigation('/cart'));
+  });
+});
+
+test('announceNavigation from another copy of the module reaches the installation', async (t) => {
+  const clock = useClock(t);
+  const tag = 'copy';
+  const copy: typeof import('../src/navigation.ts') = await import(`../src/navigation.ts?${tag}`);
+  await inBrowser((page) => {
+    const api = install({ devtoolsTrack: false });
+    clock.now = 1000;
+    copy.announceNavigation('/cart');
+    clock.now = 2000;
+    page.paint([click(7, 2000, 64)]);
+    assert.deepEqual(placeOf(api.last()), { navigationURL: 'https://shop.example/cart', navigationType: 'soft-navigation', startedNavigation: null });
+    api.dispose();
+  });
+});
+
 test('a page restored from the back/forward cache starts its INP over, and its reports say how it came back', async () => {
   await inBrowser((page) => {
     const api = install({ devtoolsTrack: false });
@@ -1736,6 +2189,26 @@ test('a page restored from the back/forward cache starts its INP over, and its r
     assert.equal(api.inp()?.interactionId, 14);
     api.dispose();
   });
+});
+
+test("the document's own navigation type comes from the browser's navigation entry, and a type the browser adds later reads as 'navigate'", async (t) => {
+  const typeOf = async (type: string) => {
+    let navigationType: string | undefined;
+    t.mock.method(performance, 'getEntriesByType', (name: string) => (name === 'navigation' ? [{ name: PAGE_URL, entryType: 'navigation', type, activationStart: 0 }] : []));
+    await inBrowser((page) => {
+      const api = install({ devtoolsTrack: false });
+      page.paint([slowClick(120)]);
+      navigationType = api.last()?.navigationType;
+      api.dispose();
+    });
+    t.mock.restoreAll();
+    return navigationType;
+  };
+  assert.equal(await typeOf('navigate'), 'navigate');
+  assert.equal(await typeOf('reload'), 'reload');
+  assert.equal(await typeOf('back_forward'), 'back-forward');
+  assert.equal(await typeOf('prerender'), 'prerender');
+  assert.equal(await typeOf('some_new_type'), 'navigate');
 });
 
 test('a slow click whose entry is still queued when the page is hidden has its report by the time web-vitals reports INP', async () => {
@@ -2865,7 +3338,7 @@ test("an error in a window listener of the library's, or in what it does when a 
     router: (page) => {
       page.window.event = unreadableEvent();
       try {
-        announceNavigation({ url: 'https://shop.example/cart', type: 'push', at: 1000 });
+        routerNavigated({ url: 'https://shop.example/cart', type: 'push', at: 1000 });
       } finally {
         delete page.window.event;
       }
@@ -4983,6 +5456,45 @@ test('a build whose component names look minified says so in the report and once
     assert.match(String(said[0]!.arguments[0]), / See https:\/\/github\.com\/adityareddy-dev\/react-inp-blame#minified-names$/);
     api.dispose();
   });
+});
+
+test('a development build is warned once, at the second interaction whose long frames listed no scripts', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const unlisted = () => warn.mock.calls.filter((c) => /#frames-without-scripts$/.test(String(c.arguments[0])));
+  const script = { invoker: 'BUTTON.onclick', sourceFunctionName: 'save', sourceURL: 'https://shop.example/app.js', startTime: 1010, duration: 250, forcedStyleAndLayoutDuration: 0 };
+  await inBuild('development', () =>
+    inBrowser(
+      (page) => {
+        const api = install({ devtoolsTrack: false });
+        try {
+          // One frame that names its script, then the same click twice more with none named.
+          page.queue([click(7, 1000, 300), longFrame(1010, [script])]);
+          page.paint([]);
+          page.queue([click(8, 2000, 300), longFrame(2010, [])]);
+          page.paint([]);
+          // The same interaction revised is still one.
+          page.queue([longFrame(2100, [])]);
+          page.paint([]);
+          // Handlers of 3 ms in frames long for styles and layout list no script on any page, since the browser lists
+          // none under 5 ms, so they say nothing about this one.
+          page.queue([{ ...click(11, 2400, 256), processingEnd: 2405 }, longFrame(2400, [])]);
+          page.paint([]);
+          page.queue([{ ...click(12, 2700, 256), processingEnd: 2705 }, longFrame(2700, [])]);
+          page.paint([]);
+          assert.equal(unlisted().length, 0);
+          page.queue([click(9, 3000, 300), longFrame(3010, [])]);
+          page.paint([]);
+          page.queue([click(10, 4000, 300), longFrame(4010, [])]);
+          page.paint([]);
+          assert.equal(unlisted().length, 1);
+          assert.match(String(unlisted()[0]!.arguments[0]), /Long Animation Frames on this page list no scripts, so forced layout cannot be measured here/);
+        } finally {
+          api.dispose();
+        }
+      },
+      { entryTypes: ['event', 'first-input', 'long-animation-frame'] },
+    ),
+  );
 });
 
 test('stats().react says whether React can be seen, and a report built while it cannot says React\'s work is unknown', async (t) => {

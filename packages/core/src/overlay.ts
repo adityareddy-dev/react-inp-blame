@@ -1,7 +1,7 @@
-import { heaviest, leafName } from './commits.js';
+import { dominantComponent, heaviest, leafName } from './commits.js';
 import type { InpEstimate } from './inp.js';
 import { unexplainedReports } from './install-state.js';
-import { blamedCommit, carriesWork, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
+import { blamedCommit, carriesWork, countInside, insideCount, isPointerEvent, isTypingEvent, kindOf, laterRenderOf, mostlyOf, renderedCount, renderedVerb } from './join.js';
 import { OVERLAY_ID } from './overlay-host.js';
 import type { Blame, CommitSummary, HookInfo, InteractionReport, OverlayOptions, Phase, Stats } from './types.js';
 import { errorText, warnOnce } from './warn.js';
@@ -80,6 +80,10 @@ const STORE = 'react-inp-blame:overlay';
 /** The dash the badge and the panel's head show before the page has an interaction. */
 const NONE = '\u2014';
 const DOT = ' · ';
+/** Where the panel's line under a development build sends the reader: how to check a number in production. */
+const DEVELOPMENT_DOCS = 'https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#numbers-in-development';
+/** A row with nothing to fix folds away under this, in ms: typing at the reporting threshold makes one per key. */
+const QUICK_MS = 200;
 
 // The phone sizes come after the rules they override, which have the same specificity.
 const CSS = `
@@ -128,18 +132,20 @@ const CSS = `
 .comp b { color: #e7e9ee; font-weight: 500; }
 .comp .tr { grid-column: 1 / -1; height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; }
 .comp .fl { height: 100%; background: #818cf8; border-radius: 2px; }
-.cost { color: #6f7582; font-size: 11px; margin-top: 8px; }
 .empty { padding: 26px 16px; color: #9aa0ad; text-align: center; }
 .status { padding: 10px 16px; font-size: 11.5px; border-bottom: 1px solid rgba(255,255,255,.08); color: #c3c7d1; }
 .status.warn { background: rgba(251,191,36,.1); color: #fde68a; }
 .mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #fbbf24; color: #111318; font-size: 11px; font-weight: 800; margin-left: 2px; }
+.dev { padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.1); color: #c3c7d1; font-size: 10px; font-weight: 600; letter-spacing: .03em; }
+.devnote a { color: #c3c7d1; }
 .foot { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px 10px; color: #6f7582; font-size: 10.5px; }
+.foot .btns { display: flex; gap: 14px; }
 .foot button { background: none; border: 0; color: #9aa0ad; font: inherit; cursor: pointer; padding: 0; }
 .foot button:hover { color: #fff; }
 ${RATING_CSS}
 `;
 
-export function createOverlay(source: Source, opts: OverlayOptions = {}): OverlayHandle {
+export function createOverlay(source: Source, opts: OverlayOptions = {}, onHide?: () => void): OverlayHandle {
   const max = opts.max ?? 20;
   const host = document.createElement('div');
   host.id = OVERLAY_ID;
@@ -153,6 +159,9 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   adoptStyles(root);
 
   const expanded = new Set<number>();
+  let foldOpen = false;
+  // With no position given, the corner is asked at mount and again at the first report, as widgets often load late.
+  let asks = opts.position ? 0 : 2;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
@@ -176,37 +185,84 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const status = statusOf(source);
     badge.dataset.status = status?.key ?? 'ok';
     const mark = status?.level === 'warn' ? h('span', { class: 'mark', title: status.text }, '!') : null;
+    // React's development build is slower than production and renders twice under StrictMode, so its numbers
+    // run high. The badge says which build it measured and keeps its colours: it never guesses production's.
+    const development = source.debug.hook().renderers.some((r) => r.rendererPackageName === 'react-dom' && r.bundleType === 1);
+    const dev = development && h('span', { class: 'dev', title: 'Development build: React runs slower here than in production.' }, 'dev');
     if (status?.key === 'unsupported-browser') {
       badge.dataset.rating = 'none';
       fill(badge, h('i', 'dot'), 'INP ', h('span', 'n', 'not measured'));
     } else if (!inp) {
       badge.dataset.rating = 'none';
-      fill(badge, h('i', 'dot'), 'INP ', h('span', 'n', NONE), mark);
+      fill(badge, h('i', 'dot'), 'INP ', h('span', 'n', NONE), dev, mark);
     } else {
       badge.dataset.rating = inp.rating;
-      fill(badge, h('i', 'dot'), 'INP ', h('span', 'ms', `${Math.round(inp.value)} ms`), mark);
+      fill(badge, h('i', 'dot'), 'INP ', h('span', 'ms', `${Math.round(inp.value)} ms`), dev, mark);
+    }
+    if (asks && (asks === 2 || all.length)) {
+      asks--;
+      if (panel.hidden) place();
     }
     if (panel.hidden) return;
     // The panel is rebuilt below, so the control that has the focus is given it back afterwards.
     const focused = focusedControl();
-    const groups = groupRows(all).slice(-max).reverse();
+    const groups = groupRows(all).reverse();
     const cost = all.length ? all.reduce((a, r) => a + r.overheadMs, 0) / all.length : 0;
+    const developmentLine =
+      development &&
+      h(
+        'div',
+        'sub devnote',
+        'Development build. React runs slower here than in production, and StrictMode renders twice, so ',
+        h('a', { href: DEVELOPMENT_DOCS, target: '_blank', rel: 'noopener' }, 'check anything amber or red in a production build'),
+        '.',
+      );
     const head = inp
       ? h(
           'div',
           '',
           h('div', 'big', String(Math.round(inp.value)), h('small', '', 'ms'), tag(inp.rating)),
           h('div', 'sub', `Page INP so far${inp.report ? `, from ${inSentence(titleFor(inp.report))}` : ''}${DOT}${inp.interactionCount} interaction${inp.interactionCount === 1 ? '' : 's'}`),
+          developmentLine,
         )
-      : h('div', '', h('div', 'big', NONE, h('small', '', 'ms')), h('div', 'sub', 'Interaction to Next Paint. Nothing slow yet.'));
+      : h('div', '', h('div', 'big', NONE, h('small', '', 'ms')), h('div', 'sub', 'Interaction to Next Paint. Nothing slow yet.'), developmentLine);
     fill(
       panel,
       h('div', 'head', head, h('button', { class: 'x', type: 'button', 'aria-label': 'Close' }, '×')),
       status && h('div', { class: `status ${status.level}`, 'data-status': status.key }, status.text),
-      ...(groups.length ? groups.map(row) : [h('div', 'empty', 'Click or type. Anything slow shows up here, with the component to blame.')]),
-      h('div', 'foot', h('span', '', `react-inp-blame${DOT}measuring cost ${costText(cost)} per interaction`), h('button', { class: 'clear', type: 'button' }, 'Clear')),
+      ...(groups.length ? rows(groups) : [h('div', 'empty', 'Click or type. Anything slow shows up here, with the component to blame.')]),
+      h(
+        'div',
+        'foot',
+        h('span', '', `react-inp-blame${DOT}measuring cost ${costText(cost)} per interaction`),
+        h(
+          'span',
+          'btns',
+          onHide && h('button', { class: 'hide', type: 'button', title: 'Hides the badge in this browser. Open the page with ?inp-blame to bring it back.' }, 'Hide for me'),
+          h('button', { class: 'clear', type: 'button' }, 'Clear'),
+        ),
+      ),
     );
     if (focused) panel.querySelector<HTMLElement>(focused)?.focus({ preventScroll: true });
+  }
+
+  /**
+   * Moves the badge off a corner the page's own fixed or sticky element holds, a chat button say, to the first
+   * free one of bottom right, bottom left, top right and top left, or leaves it where it is where all four are
+   * taken, as under a dialog's backdrop. One drawn inside another shadow root counts too, as Next.js draws its dev
+   * indicator. Asked only while the panel is closed, which would move with it.
+   */
+  function place() {
+    if (!('elementsFromPoint' in document)) return;
+    const { width, height } = badge.getBoundingClientRect();
+    const widget = (el: Element) => el !== host && /^(fixed|sticky)$/.test(getComputedStyle(el).position);
+    const taken = (c: string) => {
+      const x = c[1] === 'r' ? innerWidth - 16 - width / 2 : 16 + width / 2;
+      const y = c[0] === 'b' ? innerHeight - 16 - height / 2 : 16 + height / 2;
+      return document.elementsFromPoint(x, y).some((el) => widget(el) || (el !== host && !!el.shadowRoot?.elementsFromPoint(x, y).some(widget)));
+    };
+    const free = ['br', 'bl', 'tr', 'tl'].find((c) => !taken(c));
+    if (free) wrap.className = `wrap ${free}`;
   }
 
   /**
@@ -219,9 +275,35 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     if (!el || !panel.contains(el)) return null;
     const id = el.closest<HTMLElement>('.row')?.dataset.id;
     if (id) return `.row[data-id="${id}"] .toggle`;
+    if (el.closest('.fold')) return '.fold .toggle';
     if (el.closest('.x')) return '.x';
     if (el.closest('.clear')) return '.clear';
+    if (el.closest('.hide')) return '.hide';
     return null;
+  }
+
+  /**
+   * The rows, newest first, with the quick ones that have nothing to fix folded into one line where the newest
+   * of them was, which opens on a click to show them under it. A row that blames nothing because the library
+   * cannot tell stays a row. `max` counts the rows and the fold's list apart, so quick ones never push a row out.
+   */
+  function rows(groups: Group[]): HTMLElement[] {
+    const folded = groups.filter((g) => nothingToFix(slowest(g.reports)));
+    const kept = groups.filter((g) => !folded.includes(g)).slice(0, max);
+    const quick = folded.slice(0, max);
+    if (!quick.length) return kept.map(row);
+    const n = quick.reduce((a, g) => a + g.reports.length, 0);
+    const fold = h(
+      'div',
+      'row fold',
+      h('div', { class: 'toggle', role: 'button', tabindex: '0', 'aria-expanded': String(foldOpen) }, h('div', 'meta', `${n} quick interaction${n === 1 ? '' : 's'}, nothing to fix`)),
+    );
+    const out: HTMLElement[] = [];
+    for (const g of groups) {
+      if (g === quick[0]) out.push(fold, ...(foldOpen ? quick.map(row) : []));
+      else if (kept.includes(g)) out.push(row(g));
+    }
+    return out;
   }
 
   function row(g: Group): HTMLElement {
@@ -248,8 +330,9 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
 
   function more(r: InteractionReport): HTMLElement {
     const x = r.explanation;
-    // Only a render with real work gets a component list; a status pill updating does not.
-    const main = r.commits.length ? heaviest(r.commits) : null;
+    // Only a render with real work gets a component list; a status pill updating does not. A layout or render
+    // blame's is the commit it names.
+    const main = x.blame.kind === 'layout' || x.blame.kind === 'render' ? blamedCommit(r) : r.commits.length ? heaviest(r.commits) : null;
     const before = main && carriesWork(main) ? main : null;
     const later = laterRenderOf(r);
     const legend = x.phases.flatMap((p, i) => [swatch(`p${i}`, p), ...(p.parts ?? []).map((part) => swatch('ph', part))]);
@@ -261,7 +344,6 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       ...x.notes.map((note) => h('p', 'note', note)),
       ...(before ? comps('Rendered before the paint', before) : []),
       ...(later ? comps(`Rendered ${laterWhen(r, later)}`, later) : []),
-      h('p', 'cost', `Measuring this cost ${costText(r.overheadMs)}.`),
     );
   }
 
@@ -287,6 +369,10 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     const id = Number(r.dataset.id);
     if (expanded.has(id)) expanded.delete(id);
     else expanded.add(id);
+    render();
+  }
+  function toggleFold() {
+    foldOpen = !foldOpen;
     render();
   }
   function schedule() {
@@ -319,12 +405,22 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   panel.addEventListener('click', (e) => {
     const el = e.target as HTMLElement;
     if (el.closest('.x')) return hide();
+    if (el.closest('.hide')) {
+      try {
+        localStorage.setItem('react-inp-blame', 'hidden');
+      } catch {
+        // ignore
+      }
+      handle.dispose();
+      return onHide?.();
+    }
     if (el.closest('.clear')) {
       source.clear();
       expanded.clear();
       return render();
     }
     if (el.closest('.more')) return;
+    if (el.closest('.fold')) return toggleFold();
     const r = el.closest<HTMLElement>('.row');
     if (r) toggleRow(r);
   });
@@ -336,7 +432,9 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
     // Space would also scroll the panel, on a repeat as much as on the first press.
     e.preventDefault();
     // A held key repeats, and the row opens or closes once per press rather than once per repeat.
-    if (!e.repeat) toggleRow(r);
+    if (e.repeat) return;
+    if (r.closest('.fold')) toggleFold();
+    else toggleRow(r);
   });
   const onKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || panel.hidden) return;
@@ -361,7 +459,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
   if (document.body) attach();
   else document.addEventListener('DOMContentLoaded', attach, { once: true });
 
-  return {
+  const handle: OverlayHandle = {
     open: () => setOpen(true),
     close: () => setOpen(false),
     toggle: () => setOpen(panel.hidden),
@@ -373,6 +471,7 @@ export function createOverlay(source: Source, opts: OverlayOptions = {}): Overla
       host.remove();
     },
   };
+  return handle;
 }
 
 interface Group {
@@ -511,21 +610,59 @@ export const laterWhen = (r: Pick<InteractionReport, 'end'>, c: CommitSummary): 
 /** How the panel's line for a later render opens: "earlier" for one before the release, "then" for one after the paint. */
 export const laterLead = (r: Pick<InteractionReport, 'end'>, c: CommitSummary): string => (c.at < r.end ? 'earlier, ' : 'then ');
 
+/** A quick row that blames nothing because nothing stood out, rather than because the library cannot tell. */
+function nothingToFix(r: InteractionReport): boolean {
+  return r.explanation.blame.kind === 'none' && r.duration < QUICK_MS && !cannotTell(r);
+}
+
+/** Why a report blames nothing where the library cannot tell what took the time, or null where it can. */
+function cannotTell(r: InteractionReport): string | null {
+  // A report the library could not explain blames nothing for an error of its own, not because nothing
+  // stood out or React is not being read. Asked after the read of its blame, which is where that error is met.
+  if (unexplainedReports.has(r)) return 'nothing is blamed: the library hit an error of its own';
+  // Nothing is blamed where React is not being read; the cause line under the row says why.
+  if (r.explanation.blame.kind === 'none' && (r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable')) return 'nothing is blamed: React is not being read';
+  return null;
+}
+
 /** The row's line under its title: what took the time, or why nothing is blamed. */
 export function blameLine(r: InteractionReport): Child[] {
   const blame = r.explanation.blame;
-  // A report the library could not explain blames nothing for an error of its own, not because nothing
-  // stood out or React is not being read. Asked after the read above, which is where that error is met.
-  if (unexplainedReports.has(r)) return ['nothing is blamed: the library hit an error of its own'];
-  // Nothing is blamed where React is not being read; the cause line under this says why.
-  if (blame.kind === 'none' && (r.reactStatus === 'installed-late' || r.reactStatus === 'unreadable')) return ['nothing is blamed: React is not being read'];
+  const unknown = cannotTell(r);
+  if (unknown) return [unknown];
   // An inferred blame is the likeliest reading of component counts and phase times, not a measurement.
   // The row says so in two words; the cause sentence under it says what would make it exact.
   // "mounted" where the commit the blame names was mostly components rendering for the first time, as the
   // cause says of it: not always the heaviest commit, where one's committing and effects outweighed it.
   const named = blame.kind === 'render' ? blamedCommit(r) : null;
-  const line = blameText(blame, named ? renderedVerb(named) : 're-rendered');
+  const line = named && blame.name && !mayHaveRendered(named, blame.name) ? startedLine(blame, named) : blameText(blame, named ? renderedVerb(named) : 're-rendered');
   return blame.confidence === 'inferred' && blame.kind !== 'none' ? ['most likely ', ...line] : line;
+}
+
+/**
+ * Whether `name` can have rendered in `c`: it is among the components the commit lists, or the list is not all
+ * of them. The component a render is named after is where the render went, and can be one that bailed out
+ * above the ones that rendered, as a context's consumers render under a list that does not.
+ */
+function mayHaveRendered(c: CommitSummary, name: string): boolean {
+  return c.components.some((x) => x.name === name) || c.components.reduce((a, x) => a + x.count, 0) < c.rendered;
+}
+
+/**
+ * The row's line for a render blame named after a component that did not render: where it started, when one
+ * root did, and what rendered inside the named one, "PrefsProvider updated · ProductRow ×375 re-rendered inside
+ * ProductList". What rendered is the commit's, never the blame's detail, and counts only what was inside. A root
+ * that is the component said to have re-rendered, each row updating from its own store, is not said twice, and
+ * one the walk could not tell the render started at (`leafName` gives none) is not said at all.
+ */
+function startedLine(blame: Blame, c: CommitSummary): Child[] {
+  const top = dominantComponent(c);
+  // Never more of one component than rendered inside: then some of it was outside, and the count inside is said.
+  const within = insideCount(c);
+  const many = top && top.count > 1 && (within == null || top.count <= within) ? top : null;
+  const what = many ? `${many.name} ×${many.count}` : countInside(c);
+  const root = c.roots.length === 1 && c.roots[0] !== many?.name && leafName(c) !== null ? [b(c.roots[0]!), ` updated${DOT}`] : [];
+  return [...root, `${what} ${renderedVerb(c)} inside `, b(blame.name!), blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : ''];
 }
 
 /** The row's line for a blame: text with the name it turns on in bold. */
@@ -534,8 +671,11 @@ function blameText(blame: Blame, rendered: string): Child[] {
   const ms = blame.ms != null ? `${DOT}${Math.round(blame.ms)} ms` : '';
   const named = name ? [DOT, b(name)] : [];
   switch (blame.kind) {
-    case 'render':
-      return [b(name ?? 'the tree'), ` ${rendered}${detail ? `${DOT}${detail}` : ''}${ms}`];
+    case 'render': {
+      // "SalesChart re-rendered" beside "after mounting SalesChart" reads as a contradiction, so the detail says it alone.
+      const verb = detail === `useEffect callbacks after mounting ${name}` ? '' : ` ${rendered}`;
+      return [b(name ?? 'the tree'), `${verb}${detail ? `${DOT}${detail}` : ''}${ms}`];
+    }
     case 'handler': {
       const where = detail ? ` in ${detail}` : '';
       // A production build of React records no render times, so there is no figure to put beside the
@@ -566,15 +706,19 @@ function blameText(blame: Blame, rendered: string): Child[] {
 }
 
 /**
- * "Typing in Password" / "Key press on Close" / "Click on Log in", from the report's target. A report
- * with no target is just "Typing", "Key press" or "Click".
+ * "Typing in Password" / "Key press on Close" / "Click on Log in", or "Tap on Log in" for a finger's,
+ * from the report's target. A report with no target is just "Typing", "Key press", "Click" or "Tap".
  */
 export function titleFor(r: InteractionReport): string {
   const t = r.target;
   const label = t?.label ? t.label.replace(/^\w+ /, '') : (t?.selector ?? '');
   if (isTyping(r)) return label ? `Typing in ${label}` : 'Typing';
   if (isTypingEvent(r.type)) return label ? `Key press on ${label}` : 'Key press';
-  if (isPointerEvent(r.type)) return label ? `Click on ${label}` : 'Click';
+  if (isPointerEvent(r.type)) {
+    // Only where the pointer is known: a press the library did not see may have been a mouse's.
+    const kind = r.pointerType === 'touch' || r.pointerType === 'pen' ? 'Tap' : 'Click';
+    return label ? `${kind} on ${label}` : kind;
+  }
   return `${kindOf(r.type)} ${label}`.trim();
 }
 

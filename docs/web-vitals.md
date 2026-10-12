@@ -38,7 +38,12 @@ above it, which is web-vitals' signal to fall back to its own selector, and it n
 
 `attributeINP(metric)` returns the metric's attribution (`{}` where there is none, as under
 `useReportWebVitals`) with a `react` field added: `{ schemaVersion, interactionId, blame, handler,
-hotPath, components, commits, followUps }`, frozen, from this library's own report for that interaction.
+hotPath, components, commits, followUps, reactBuild, strictMode }`, frozen, from this library's own
+report for that interaction. `hotPath` and `components` come from one commit: on a render or layout blame the
+one the blame names, otherwise the heaviest. On a layout blame in a commit with several roots, named after the
+component they all sit under, `hotPath` starts at the heaviest root below it and can run well past it. `reactBuild` is the build of react-dom that measured it, and a development
+build's numbers run high ([why](install.md#numbers-in-development)). `strictMode` says whether StrictMode
+rendered it twice there, and is `null` under any other build.
 It is `null` when nothing is installed on the page, and when there is no report for the interaction:
 one that stayed under `threshold` and set off no later render INP leaves out, one already pushed out
 of the 50 reports a page keeps, which the ten slowest and those INP can still point at never are, a click or
@@ -54,6 +59,13 @@ Component names in production need the `displayName` transform (the
 [Next.js wrapper](install.md#install-with-nextjs-142-or-later), the [Vite plugin](install.md#install-with-vite)
 or the [loader](install.md#webpack-or-rspack)). Without it the minifier has renamed them and the path reads
 `a > b (button.tile)`.
+
+A production build of React times no renders, so between a handler and the render beside it the blame there
+rests on the component count, and `blame.confidence` is `'inferred'`. That pick has gone both ways: a dark
+mode toggle whose 163 ms were 40 card renders read as the handler, and a sort whose time was the handler read
+as the 401 components it re-rendered. The cause names both where only the count chose. So send `blame.name`
+with its confidence and chart the two apart, or send the name only where the confidence is `'measured'`.
+A [profiling build](known-limits.md) turns those into measured blames.
 
 ## Sending it to Sentry
 
@@ -79,10 +91,11 @@ onINP((metric) => {
     unit: 'millisecond',
     attributes: {
       rating: metric.rating,
-      target: interactionTarget,                    // 'ProfilePage > PhotoTile (button.tile)'
-      'blame.kind': react?.blame.kind,              // 'render', 'handler', 'layout', 'waiting', ...
-      'blame.name': react?.blame.name ?? undefined, // Sentry sends a null as the string "null"
-      'blame.confidence': react?.blame.confidence,  // 'measured' or 'inferred'
+      target: interactionTarget,                     // 'ProfilePage > PhotoTile (button.tile)'
+      'blame.kind': react?.blame.kind,               // 'render', 'handler', 'layout', 'waiting', ...
+      'blame.name': react?.blame.name ?? undefined,  // Sentry sends a null as the string "null"
+      'blame.confidence': react?.blame.confidence,   // 'measured' or 'inferred'
+      'react.build': react?.reactBuild ?? undefined, // 'development' reads high, filter it out
     },
   });
 }, { generateTarget });
@@ -91,8 +104,8 @@ onINP((metric) => {
 ## Sending it to Google Analytics 4
 
 This is web-vitals' own [example for Google Analytics](https://github.com/GoogleChrome/web-vitals#send-attribution-data),
-`debug_target` and all, with the blame in two more parameters. `navigationURL` came in web-vitals 6, so on
-5.x leave out `page_location`:
+`debug_target` and all, with the blame in three more parameters and the build of react-dom in one.
+`navigationURL` came in web-vitals 6, so on 5.x leave out `page_location`:
 
 ```ts
 import { onINP } from 'web-vitals/attribution';
@@ -110,6 +123,8 @@ onINP((metric) => {
     debug_target: interactionTarget, // 'ProfilePage > PhotoTile (button.tile)'
     debug_blame_kind: react?.blame.kind,
     debug_blame_name: react?.blame.name ?? undefined,
+    debug_blame_confidence: react?.blame.confidence, // 'measured' or 'inferred'
+    debug_react_build: react?.reactBuild ?? undefined, // 'development' reads high, filter it out
   });
 }, { generateTarget });
 ```
@@ -127,6 +142,6 @@ other sentences can hold text the page shows: under `labels: 'text'`, and by def
 (see [Labels and personal data](api.md#labels-and-personal-data)). If you forward those as well, install with
 `labels: 'attributes'`, so a label comes only from what your code wrote on the element. That label, and the id
 and test id in `generateTarget`'s string, go out as your code wrote them, so check none is built from user
-data. `navigationURL`, sent above as `page_location`, keeps its query string. `blame.name` does not: when a
-script takes the blame it can be the script's URL, or the page's for an inline script, without any password,
-query or fragment.
+data. web-vitals' `navigationURL`, sent above as `page_location`, keeps its query string, where a report's
+keeps only the origin and path. `blame.name` does not keep it either: when a script takes the blame it can be
+the script's URL, or the page's for an inline script, without any password, query or fragment.

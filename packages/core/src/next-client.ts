@@ -7,7 +7,7 @@
  */
 import { frameworkLayers, frameworkWrappers } from './commits.js';
 import { install } from './index.js';
-import { announceNavigation } from './navigation.js';
+import { routerNavigated } from './navigation.js';
 import type { InstallOptions, StartedNavigation } from './types.js';
 
 /** What `withInpBlame` hands this module. */
@@ -73,11 +73,11 @@ interface RouterTransitionStartEvent {
 /**
  * Called by the App Router as each navigation starts. A navigation started while an input was being
  * dispatched (a Link click, `router.push()` in a click handler) is named on that input's report, and
- * every report after it carries its URL.
+ * every report after it carries its URL's origin and path.
  */
 export function onRouterTransitionStart(url: string, navigationType: StartedNavigation['type'], event?: RouterTransitionStartEvent | null): void {
   if (process.env.REACT_INP_BLAME_NEXT && settings) {
-    announceNavigation({
+    routerNavigated({
       // A push or replace announces the path it was given, without the basePath; a traverse, the full URL.
       url: new URL(url.startsWith('/') ? settings.basePath + url : url, location.href).href,
       type: navigationType,

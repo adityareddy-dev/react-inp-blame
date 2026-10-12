@@ -63,10 +63,21 @@ and only the component a report names is short, the note says that one is most l
 React DevTools shows the same short name, but selecting it there shows its props and what rendered it, which
 usually says whose it is.
 
+<a id="frames-without-scripts"></a>
+### Long Animation Frames on this page list no scripts
+
+The browser timed long frames on this page but named no script inside them, so the library cannot tell a
+slow handler from a forced layout in an effect, and cannot measure the layout at all. Beside a render that
+has the verdict, reports say the time outside it is not accounted for. Where that time is larger than the
+render, the handler is blamed for it, though it may have been a layout. It has been seen under
+`next dev --webpack`, where the same page under Turbopack (`next dev`) lists its scripts, though the cause is
+not confirmed. A production build, or another dev server, is where to measure layout on such a page.
+
 <a id="another-copy"></a>
 ### A copy from an incompatible version is already on this page
 
-Two versions of react-inp-blame were loaded, and the second one installed nothing. Run
+Another copy or entry of react-inp-blame already owns this page and this one cannot share it, so this one
+installed nothing. Where the warning says a copy from an incompatible version, two versions were loaded. Run
 `npm ls react-inp-blame` to find them, and dedupe to one version.
 
 <a id="unsupported-browser"></a>
@@ -169,7 +180,9 @@ issue with the warning text and your browser. Reports still come through `onInte
 <a id="left-out-of-a-production-build"></a>
 ### Left out of this production build
 
-`enabled` defaults to `'development'`, so a production build carries nothing from this library. The page it
+`enabled` defaults to `'development'`, so a production build carries nothing from this library but what your
+own code imports from it, such as `announceNavigation` from the lines that
+[announce route changes](install.md#install-with-react-router), which does nothing there. The page it
 serves (`vite preview`, `next start`, `astro preview` or your own server) shows no badge and makes no reports.
 That is on purpose, so real visitors get none of it until you choose. To include it, pass `enabled: true` or
 `enabled: 'production'`, and think about `runtime: { overlay: 'query' }`, which shows the badge only when the

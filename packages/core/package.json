@@ -1,7 +1,7 @@
 {
   "name": "react-inp-blame",
-  "version": "0.19.0",
-  "description": "INP (Interaction to Next Paint) attribution for React: which component made an interaction slow, from Event Timing and Long Animation Frames joined to the fiber tree, with tracks in Chrome's Performance panel.",
+  "version": "1.0.0",
+  "description": "Interaction attribution for INP: joins Event Timing and Long Animation Frames to the React fiber tree",
   "license": "MIT",
   "author": "Aditya Reddy <adityareddy.dev@gmail.com>",
   "repository": {
@@ -46,6 +46,12 @@
       "import": "./dist/web-vitals.js",
       "default": "./dist/web-vitals.js"
     },
+    "./otel": {
+      "types": "./dist/otel.d.ts",
+      "react-server": "./dist/react-server.js",
+      "import": "./dist/otel.js",
+      "default": "./dist/otel.js"
+    },
     "./vite": {
       "types": "./vite.d.mts",
       "import": "./vite.mjs",
@@ -69,6 +75,7 @@
       "next": ["./next.d.cts"],
       "next-client": ["./dist/next-client.d.ts"],
       "web-vitals": ["./dist/web-vitals.d.ts"],
+      "otel": ["./dist/otel.d.ts"],
       "vite": ["./vite.d.mts"],
       "astro": ["./astro.d.mts"],
       "display-names-loader": ["./display-names-loader.d.cts"]

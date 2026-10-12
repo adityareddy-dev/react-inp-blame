@@ -32,6 +32,17 @@ test('a click is blamed on SlowList', async ({ page }) => {
     const rendered = Number(/Row ×(\d+)/.exec(blame ?? '')?.[1]);
     expect(rendered, `the blame line reads "${blame}"`).toBeGreaterThanOrEqual(400);
 
+    // Which build measured it, read through the page, since the config has no debugGlobal.
+    const badge = page.locator('#react-inp-blame .badge');
+    const devnote = page.locator('#react-inp-blame .panel .devnote');
+    if (dev) {
+      await expect(badge.locator('.dev')).toHaveText('dev');
+      await expect(devnote).toBeVisible();
+    } else {
+      await expect(badge.locator('.dev')).toHaveCount(0);
+      await expect(devnote).toHaveCount(0);
+    }
+
     expect(problems).toEqual([]);
   } finally {
     // Read last, so a reload any time during the test is counted. More than one means Vite reloaded the page.

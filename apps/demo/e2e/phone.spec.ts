@@ -320,8 +320,8 @@ test('the panel fits the phone screen, with its close button and the first row i
     expect(color, `${part} is opaque`).toMatch(/^rgb\(/);
   }
   // A finger needs about 44 px. The close button was 24 px across before phones got a larger one, and so do
-  // the rows. Clear was 24 by 15 up to 0.18.0.
-  for (const [what, selector] of [['the close button', '.x'], ['Clear', '.clear']]) {
+  // the rows. Clear was 24 by 15 up to 0.18.0. Hide for me, beside it since 0.20.0, is the same size.
+  for (const [what, selector] of [['the close button', '.x'], ['Hide for me', '.hide'], ['Clear', '.clear']]) {
     const box = await inside(what, `#react-inp-blame .panel ${selector}`);
     expect(box.width, `${what} is wide enough for a finger`).toBeGreaterThanOrEqual(44);
     expect(box.height, `${what} is tall enough for a finger`).toBeGreaterThanOrEqual(44);
