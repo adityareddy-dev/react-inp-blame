@@ -37,4 +37,6 @@ Dependencies are reused read-only through an ignored root junction to the existi
 
 Implementation passed independent review; T1 remains open because pinned browser checks are pending. Next: commit this work unit, push only the new branch, and open a draft PR for actual CI browser verification. No merge is authorized for this worker.
 
+Work-unit commit: `722035aeb2f344715a28d4a57884cc4e91aefaa8` (`test: align budget assertions with attribution contract`), 50 additions and 2 deletions including this recovery record. The test-only diff remains the independently reviewed 10 additions and 2 deletions. Pinned browser proof is still pending.
+
 Rollback boundary: remove this test-contract work unit without changing runtime code or unrelated tests.
