@@ -14,11 +14,13 @@ const read = (file: string) => fs.readFileSync(path.join(core, file), 'utf8');
 const HELP = 'https://github.com/adityareddy-dev/react-inp-blame#';
 
 /** The anchors a markdown file has: each `<a id>` and each heading, slugged the way GitHub does it. */
-function anchorsOf(file: string): Set<string> {
+const anchorsOf = (file: string) => anchorsIn(read(file));
+
+function anchorsIn(markdown: string): Set<string> {
   const anchors = new Set<string>();
   const seen = new Map<string, number>();
   let fenced = false;
-  for (const line of read(file).split('\n')) {
+  for (const line of markdown.split(/\r?\n/)) {
     if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
     if (fenced) continue;
     for (const match of line.matchAll(/<a\s+id="([^"]+)"/g)) anchors.add(match[1]!);
@@ -35,6 +37,27 @@ function anchorsOf(file: string): Set<string> {
   }
   return anchors;
 }
+
+test('Markdown anchors are the same with LF and CRLF line endings', () => {
+  const lines = [
+    '# Heading [Options]',
+    '## Heading [Options]',
+    '<a id="explicit-anchor"></a>',
+    '```md',
+    '# Hidden heading',
+    '<a id="hidden-anchor"></a>',
+    '```',
+    '~~~md',
+    '## Another hidden heading',
+    '~~~',
+    '### After fence',
+    '',
+  ];
+  const expected = new Set(['heading-options', 'heading-options-1', 'explicit-anchor', 'after-fence']);
+  for (const newline of ['\n', '\r\n']) {
+    assert.deepEqual(anchorsIn(lines.join(newline)), expected, JSON.stringify(newline));
+  }
+});
 
 /** Each run of `<a id>`s in a markdown file, by each id in it: anchors stacked with nothing between land on one spot. */
 function stackedIds(file: string): Map<string, string[]> {
