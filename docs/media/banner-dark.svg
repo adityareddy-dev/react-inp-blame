@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+  <title id="title">react-inp-blame</title>
+  <desc id="desc">Interaction attribution for INP. A 400 ms click with about 399 ms in its handler, drawn as a bar beside a React component tree.</desc>
+  <defs>
+    <radialGradient id="glow" cx="0.8" cy="0.35" r="0.55">
+      <stop offset="0" stop-color="#1f6feb" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#1f6feb" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="300" rx="20" fill="#0d1117"/>
+  <rect width="1200" height="300" rx="20" fill="url(#glow)"/>
+  <rect x="0.5" y="0.5" width="1199" height="299" rx="19.5" fill="none" stroke="#30363d"/>
+  <g fill="none" stroke="#30363d" stroke-width="2">
+    <path d="M1010 60 L930 130 M1010 60 L1090 130 M930 130 L880 198 M930 130 L980 198 M1090 130 L1090 198"/>
+  </g>
+  <circle cx="1010" cy="60" r="12" fill="#58a6ff"/>
+  <circle cx="930" cy="130" r="10" fill="#8b949e"/>
+  <circle cx="1090" cy="130" r="10" fill="#8b949e"/>
+  <circle cx="880" cy="198" r="7" fill="#484f58"/>
+  <circle cx="980" cy="198" r="7" fill="#484f58"/>
+  <circle cx="1090" cy="198" r="7" fill="#484f58"/>
+  <g font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="60" y="122" font-size="68" font-weight="700" fill="#e6edf3">react-inp-blame</text>
+    <text x="62" y="166" font-size="27" fill="#e6edf3">Interaction attribution for INP</text>
+    <text x="62" y="202" font-size="20" fill="#8b949e">Joins Event Timing and Long Animation Frames to the React fiber tree</text>
+  </g>
+  <text x="60" y="246" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#8b949e">400 ms click, about 399 ms in the handler</text>
+  <rect x="60" y="258" width="1080" height="14" rx="7" fill="#21262d"/>
+  <rect x="60" y="258" width="1077" height="14" rx="7" fill="#d29922"/>
+</svg>
