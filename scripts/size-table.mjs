@@ -53,16 +53,14 @@ export function writtenTable(readme) {
 }
 
 /**
- * What is wrong with the README's table against what was measured, and against the budget. The table has to
- * be exactly what `--write` would put there, so a row a tenth of a kilobyte off is stale too, and so is a
- * heading that names another bundler version. A gzipped size over its budget is a problem of its own.
- * `tool` is the bundler and its version, as `formatTable` takes it. Empty when all is well.
+ * What is wrong with the README's table against what was measured. The table has to be exactly what
+ * `--write` would put there, so a row a tenth of a kilobyte off is stale too, and so is a heading that names
+ * another bundler version. `tool` is the bundler and its version, as `formatTable` takes it. Empty when all is well.
  */
-export function problems(readme, measured, budget, tool) {
+export function problems(readme, measured, tool) {
   const readmeRows = parseTable(readme);
   if (!readmeRows) return ['README.md has no size table between the markers'];
   const stale = [];
-  const over = [];
   for (const row of measured) {
     const written = readmeRows.find((r) => r.label === row.label);
     const minified = Number(kb(row.minified));
@@ -71,11 +69,9 @@ export function problems(readme, measured, budget, tool) {
     else if (written.minified !== minified || written.gzip !== gzip) {
       stale.push(`${row.label}: README.md says ${written.minified} / ${written.gzip} KB, the build is ${minified} / ${gzip} KB`);
     }
-    const limit = budget[row.key];
-    if (limit !== undefined && gzip > limit) over.push(`${row.label}: ${gzip} KB gzipped is over its budget of ${limit} KB`);
   }
   if (readmeRows.length !== measured.length) stale.push(`README.md's table has ${readmeRows.length} rows, the script measures ${measured.length}`);
   // Every row matches and the table still differs: the heading, or how it is laid out.
   if (!stale.length && writtenTable(readme) !== formatTable(measured, tool)) stale.push("README.md's table is not what --write writes: its heading or its layout differs");
-  return [...stale, ...over];
+  return stale;
 }

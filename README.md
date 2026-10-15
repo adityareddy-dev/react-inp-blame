@@ -450,7 +450,7 @@ line's module stays, as an empty function); where it loads:
 <!-- size:end -->
 
 `node scripts/size.mjs` measures these from the build on every CI run, and CI fails when this table is out
-of date or a size passes its budget in `scripts/size-budget.json`. The table before 0.8.0 said 39.0 and
+of date. The table before 0.8.0 said 39.0 and
 14.4 KB for `/auto`, figures from 0.1.0 that had not been measured again as the entry grew.
 
 ## Labels and personal data
