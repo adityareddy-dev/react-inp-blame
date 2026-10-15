@@ -1,0 +1,140 @@
+[
+  {
+    "id": "C01",
+    "action": "On the Manual account #1 reports page, open Search and type \"Supermarket\".",
+    "reset": "Restore the seed, then open #/view/account/1/reports.",
+    "expectedStateChange": "The transaction list shows only the Supermarket row; the other three account #1 rows are hidden."
+  },
+  {
+    "id": "C02",
+    "action": "On Manual account #1 reports, open Search and type a label that matches nothing, \"zzz-no-match\".",
+    "reset": "Restore the seed, then open #/view/account/1/reports.",
+    "expectedStateChange": "The transaction list has no rows and shows the empty-result message."
+  },
+  {
+    "id": "C03",
+    "action": "On Manual account #1 reports, click \"Add a transaction\", enter label \"Bench pharmacy\" and amount -12.40, then submit.",
+    "reset": "Restore the seed, then open #/view/account/1/reports.",
+    "expectedStateChange": "The list gains a \"Bench pharmacy\" row (five rows in total), and the account #1 balance falls from 1 172,20 € to 1 159,80 €."
+  },
+  {
+    "id": "C04",
+    "action": "Open the transaction details for \"Rent September\" on account #1 and change its Category from Housing to Groceries.",
+    "reset": "Restore the seed, then open #/view/account/1/transactions/3.",
+    "expectedStateChange": "The Category select reads Groceries, and the \"Rent September\" row in the account #1 list shows Groceries."
+  },
+  {
+    "id": "C05",
+    "action": "Open the transaction details for \"Employer payroll\" on account #1 and change its Type from Transfer to Deposit.",
+    "reset": "Restore the seed, then open #/view/account/1/transactions/2.",
+    "expectedStateChange": "The Type select reads Deposit, and the stored transaction type is type.deposit."
+  },
+  {
+    "id": "C06",
+    "action": "Open the transaction details for \"Supermarket\" on account #1, replace the Custom label with \"Weekly shop\", and save it.",
+    "reset": "Restore the seed, then open #/view/account/1/transactions/1.",
+    "expectedStateChange": "The account #1 list shows \"Weekly shop\" where \"Supermarket\" was, and the Supermarket label is no longer shown."
+  },
+  {
+    "id": "C07",
+    "action": "Open the transaction details for \"Metro pass\" on account #1 and click \"Delete this transaction\".",
+    "reset": "Restore the seed, then open #/view/account/1/transactions/4.",
+    "expectedStateChange": "The account #1 list drops from four rows to three and no longer contains \"Metro pass\"."
+  },
+  {
+    "id": "C08",
+    "action": "Open the transaction details for \"Rent September\" on account #1 and click \"Create auto-categorization rule\".",
+    "reset": "Restore the seed, then open #/view/account/1/transactions/3.",
+    "expectedStateChange": "The rules list gains one rule for the Rent September label, where it previously had none."
+  },
+  {
+    "id": "C09",
+    "action": "On the Categories page, click \"Add a category\", enter the name \"Pets\" and save.",
+    "reset": "Restore the seed, then open #/categories.",
+    "expectedStateChange": "The categories table gains a Pets row, so it lists five categories instead of four."
+  },
+  {
+    "id": "C10",
+    "action": "On the Categories page, rename the Groceries category to \"Food\".",
+    "reset": "Restore the seed, then open #/categories.",
+    "expectedStateChange": "The categories table shows Food in place of Groceries, and the text Groceries is no longer in the table."
+  },
+  {
+    "id": "C11",
+    "action": "On the Categories page, click \"Add default categories\".",
+    "reset": "Restore the seed, then open #/categories.",
+    "expectedStateChange": "The categories table lists more than the four seeded categories (Groceries, Housing, Salary, Transport)."
+  },
+  {
+    "id": "C12",
+    "action": "On the Budget page for Manual account #1, click the Plus button of the Groceries row, enter a planned budget of 300, and confirm.",
+    "reset": "Restore the seed, then open #/view/account/1/budget.",
+    "expectedStateChange": "The Groceries row's sign button reads Minus with 300 in its planned budget field, and the Total planned budget changes from 0.00 to -300.00."
+  },
+  {
+    "id": "C13",
+    "action": "On the Charts page for Manual account #1, click the \"Last year\" period button.",
+    "reset": "Restore the seed, then open #/view/account/1/charts/all.",
+    "expectedStateChange": "The period field changes from the current month's range to the previous calendar year's range (01/01 to 12/31 of that year)."
+  },
+  {
+    "id": "C14",
+    "action": "On the Charts page for Manual account #1, select the \"balance\" chart tab.",
+    "reset": "Restore the seed, then open #/view/account/1/charts/all.",
+    "expectedStateChange": "The URL changes to #/view/account/1/charts/balance and the balance tab is the selected one."
+  },
+  {
+    "id": "C15",
+    "action": "On the Views settings page, click \"Create a view\", enter the name \"Household\", select Manual account #1 and Manual account #2, and save.",
+    "reset": "Restore the seed, then open #/settings/views.",
+    "expectedStateChange": "The Custom views list in the menu and on the page shows Household, where it previously showed \"You have no custom views yet.\""
+  },
+  {
+    "id": "C16",
+    "action": "On the Recurring transactions page for Manual account #1, create a recurring transaction labelled \"Gym\" with amount -30.00 and a monthly frequency.",
+    "reset": "Restore the seed, then open #/recurring-transactions/account/1.",
+    "expectedStateChange": "The recurring transactions list for account #1 gains a Gym row."
+  },
+  {
+    "id": "C17",
+    "action": "On the Auto categorization page, click \"New rule\", set the condition label contains \"Metro\" and the action category Transport, then save.",
+    "reset": "Restore the seed, then open #/rules.",
+    "expectedStateChange": "The rules list changes from \"You haven't set any rules yet!\" to a list with one rule."
+  },
+  {
+    "id": "C18",
+    "action": "On the Bank accesses page, edit the Manual Bank access and rename it to \"Bench bank\".",
+    "reset": "Restore the seed, then open #/accesses.",
+    "expectedStateChange": "The menu access entry and the page header show Bench bank in place of Manual Bank."
+  },
+  {
+    "id": "C19",
+    "action": "On the Bank accesses page, edit Manual account #3 and set its custom label to \"Savings wallet\".",
+    "reset": "Restore the seed, then open #/accesses.",
+    "expectedStateChange": "The menu entry for the third account reads Savings wallet in place of Manual account #3."
+  },
+  {
+    "id": "C20",
+    "action": "From the menu on the dashboard, open Manual account #2.",
+    "reset": "Restore the seed, then open #/dashboard.",
+    "expectedStateChange": "The URL changes to #/view/account/2/... and the side menu marks the Manual account #2 entry as the active one."
+  },
+  {
+    "id": "C21",
+    "action": "From the menu, open the EUR global view.",
+    "reset": "Restore the seed, then open #/dashboard.",
+    "expectedStateChange": "The URL changes to #/view/currency/EUR/... and the page lists the transactions of all accounts in EUR, with the Total of 1 072,20 € shown."
+  },
+  {
+    "id": "C22",
+    "action": "On the Customization settings page, switch the language selector to Français.",
+    "reset": "Restore the seed, then open #/settings/customization.",
+    "expectedStateChange": "The menu section names are shown in French, so Reports is shown as Relevé."
+  },
+  {
+    "id": "C23",
+    "action": "On the transaction details for \"Rent September\" on account #1, set the Budget month to Previous.",
+    "reset": "Restore the seed, then open #/view/account/1/transactions/3.",
+    "expectedStateChange": "The Budget month button group marks Previous as selected, where no month was selected before."
+  }
+]
