@@ -313,13 +313,12 @@ its entry under [Troubleshooting](#troubleshooting).
 | Zero dependencies                                       | yes                                                                               | no                                | no (11 in 0.5.7)                   | yes                    | part of React                        |
 | Needs a build step for names                            | in production builds: the plugins add it                                          | yes                               | not in development⁷                | no names               | not in development                   |
 
-
-2. Its main entry does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended". Two other entries in 0.5.7 run there anyway: `react-scan/all-environments` skips that check, and `react-scan/lite`, a headless one, attaches to every renderer whatever its build.
-3. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK, with span streaming (its default), names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
-4. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
-5. It keeps every fiber render from the pointerup or keydown as one set, until the interaction's Event Timing entry arrives or a second after the frame that follows the input.
-6. `totalStyleAndLayoutDuration`, and `longestScript.entry`, which carries `forcedStyleAndLayoutDuration`.
-7. It ships bundler plugins under `react-scan/react-component-name/*`; what they match was not checked.
+1. Its main entry does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended". Two other entries in 0.5.7 run there anyway: `react-scan/all-environments` skips that check, and `react-scan/lite`, a headless one, attaches to every renderer whatever its build.
+2. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK, with span streaming (its default), names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
+3. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
+4. It keeps every fiber render from the pointerup or keydown as one set, until the interaction's Event Timing entry arrives or a second after the frame that follows the input.
+5. `totalStyleAndLayoutDuration`, and `longestScript.entry`, which carries `forcedStyleAndLayoutDuration`.
+6. It ships bundler plugins under `react-scan/react-component-name/*`; what they match was not checked.
 
 Checked on 2026-09-26 against aidenybai/react-scan at 0fb3186 (0.5.7 on npm), getsentry/sentry-javascript at
 bd3ce5f (11.0.0), reactjs/react.dev at 44b0b5f and web-vitals 6.2.2's types. In development, React's Components track is the
@@ -455,8 +454,6 @@ line's module stays, as an empty function); where it loads:
 `node scripts/size.mjs` measures these from the build on every CI run, and CI fails when this table is out
 of date or a size passes its budget in `scripts/size-budget.json`. The table before 0.8.0 said 39.0 and
 14.4 KB for `/auto`, figures from 0.1.0 that had not been measured again as the entry grew.
-
-
 
 ## Labels and personal data
 
