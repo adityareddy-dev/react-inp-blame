@@ -21,18 +21,26 @@ builds unless `enabled` says otherwise. So with the defaults every record from p
 sample it:
 
 ```ts
-import { withInpBlame } from 'react-inp-blame/next';
+import { withInpBlame } from "react-inp-blame/next";
 
-export default withInpBlame({ /* your config */ }, {
-  enabled: true,                   // production builds too
-  runtime: { sampleRate: 0.1 },    // on one page load in ten
-});
+export default withInpBlame(
+  {
+    /* your config */
+  },
+  {
+    enabled: true, // production builds too
+    runtime: { sampleRate: 0.1 }, // on one page load in ten
+  },
+);
 ```
 
 With Vite, the same two options go to `inpBlame()` in `vite.config.ts`. A page the sample leaves out says
 `sampled-out`.
 
-
+Running it in production costs something. The [current benchmark cohort](benchmarks/real-apps.md)
+has no accuracy or overhead results yet. What loads with the page
+is `react-inp-blame/auto`, 34.1 KB gzip by `scripts/size.mjs` in 0.20.0, and this entry adds 1.5 KB on
+top. So a telemetry path held to about 10 KB is not met at 1.0.
 
 There is a cheaper step short of that. `runtime: false` keeps only the `displayName` transform, so
 `generateTarget` from [react-inp-blame/web-vitals](web-vitals.md) can name components in production with no
@@ -46,21 +54,31 @@ emitted, so behind one the attributes would miss the export. Checked with
 
 ```ts
 // src/telemetry.ts
-import { logs } from '@opentelemetry/api-logs';
-import { WebVitalsInstrumentation } from '@opentelemetry/browser-instrumentation/experimental/web-vitals';
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
-import { registerInstrumentations } from '@opentelemetry/instrumentation';
-import { BatchLogRecordProcessor, LoggerProvider } from '@opentelemetry/sdk-logs';
-import { InpBlameLogRecordProcessor } from 'react-inp-blame/otel';
+import { logs } from "@opentelemetry/api-logs";
+import { WebVitalsInstrumentation } from "@opentelemetry/browser-instrumentation/experimental/web-vitals";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import { registerInstrumentations } from "@opentelemetry/instrumentation";
+import {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+} from "@opentelemetry/sdk-logs";
+import { InpBlameLogRecordProcessor } from "react-inp-blame/otel";
 
 const loggerProvider = new LoggerProvider({
   processors: [
     new InpBlameLogRecordProcessor(), // first, so every processor after it sends the attributes
-    new BatchLogRecordProcessor({ exporter: new OTLPLogExporter({ url: 'https://collector.example.com/v1/logs' }) }),
+    new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
+        url: "https://collector.example.com/v1/logs",
+      }),
+    }),
   ],
 });
 logs.setGlobalLoggerProvider(loggerProvider);
-registerInstrumentations({ instrumentations: [new WebVitalsInstrumentation()], loggerProvider });
+registerInstrumentations({
+  instrumentations: [new WebVitalsInstrumentation()],
+  loggerProvider,
+});
 ```
 
 The processor adds nothing to any other record, other web vitals included. Where you would rather not touch
@@ -74,12 +92,12 @@ interaction's time.
 
 ```ts
 // src/embrace.ts
-import { initSDK } from '@embrace-io/web-sdk';
-import { InpBlameLogRecordProcessor } from 'react-inp-blame/otel';
+import { initSDK } from "@embrace-io/web-sdk";
+import { InpBlameLogRecordProcessor } from "react-inp-blame/otel";
 
 initSDK({
-  appID: 'your-app-id',
-  appVersion: '1.0.0',
+  appID: "your-app-id",
+  appVersion: "1.0.0",
   logProcessors: [new InpBlameLogRecordProcessor()],
 });
 ```
@@ -94,16 +112,19 @@ processor slot would be the better route. Checked with `@elastic/opentelemetry-b
 
 ```ts
 // src/elastic.ts
-import { startBrowserSdk } from '@elastic/opentelemetry-browser';
-import { inpBlameAttributes } from 'react-inp-blame/otel';
+import { startBrowserSdk } from "@elastic/opentelemetry-browser";
+import { inpBlameAttributes } from "react-inp-blame/otel";
 
 startBrowserSdk({
-  serviceName: 'shop',
-  otlpEndpoint: 'https://collector.example.com',
+  serviceName: "shop",
+  otlpEndpoint: "https://collector.example.com",
   instrumentations: {
-    '@opentelemetry/instrumentation-web-vitals': {
+    "@opentelemetry/instrumentation-web-vitals": {
       applyCustomLogRecordData: (record) => {
-        record.attributes = { ...record.attributes, ...inpBlameAttributes(record) };
+        record.attributes = {
+          ...record.attributes,
+          ...inpBlameAttributes(record),
+        };
       },
     },
   },
@@ -117,14 +138,17 @@ entry matches on the interaction's id. Checked with `@honeycombio/opentelemetry-
 
 ```ts
 // src/honeycomb.ts
-import { HoneycombWebSDK } from '@honeycombio/opentelemetry-web';
-import { inpBlameAttributes } from 'react-inp-blame/otel';
+import { HoneycombWebSDK } from "@honeycombio/opentelemetry-web";
+import { inpBlameAttributes } from "react-inp-blame/otel";
 
 const sdk = new HoneycombWebSDK({
-  apiKey: 'your-ingest-key',
-  serviceName: 'shop',
+  apiKey: "your-ingest-key",
+  serviceName: "shop",
   webVitalsInstrumentationConfig: {
-    inp: { applyCustomAttributes: (vital, span) => span.setAttributes(inpBlameAttributes(vital)) },
+    inp: {
+      applyCustomAttributes: (vital, span) =>
+        span.setAttributes(inpBlameAttributes(vital)),
+    },
   },
 });
 sdk.start();
@@ -140,18 +164,31 @@ web-vitals stands in after a back/forward restore or a soft navigation with no s
 
 ```ts
 // src/faro.ts
-import { getWebInstrumentations, initializeFaro, type MeasurementEvent } from '@grafana/faro-web-sdk';
-import { inpBlameAttributes } from 'react-inp-blame/otel';
+import {
+  getWebInstrumentations,
+  initializeFaro,
+  type MeasurementEvent,
+} from "@grafana/faro-web-sdk";
+import { inpBlameAttributes } from "react-inp-blame/otel";
 
 initializeFaro({
-  url: 'https://faro-collector.example.com/collect/your-app-key',
-  app: { name: 'shop', version: '1.0.0' },
+  url: "https://faro-collector.example.com/collect/your-app-key",
+  app: { name: "shop", version: "1.0.0" },
   instrumentations: getWebInstrumentations(),
   beforeSend: (item) => {
     const m = item.payload as MeasurementEvent;
-    if (item.type === 'measurement' && m.type === 'web-vitals' && m.values['inp'] !== undefined) {
-      const blame = inpBlameAttributes(m.values['interaction_time'] ?? NaN);
-      m.context = { ...m.context, ...Object.fromEntries(Object.entries(blame).map(([name, value]) => [name, String(value)])) };
+    if (
+      item.type === "measurement" &&
+      m.type === "web-vitals" &&
+      m.values["inp"] !== undefined
+    ) {
+      const blame = inpBlameAttributes(m.values["interaction_time"] ?? NaN);
+      m.context = {
+        ...m.context,
+        ...Object.fromEntries(
+          Object.entries(blame).map(([name, value]) => [name, String(value)]),
+        ),
+      };
     }
     return item;
   },
@@ -183,24 +220,24 @@ span, and Faro in the measurement's `context`, as strings. A value that is null 
 than sent. The examples are from the demo's check, a click that re-rendered 801 components on a development
 build.
 
-| Attribute | What it holds | Example | Group by it |
-| --- | --- | --- | --- |
-| `react_inp_blame.status` | Whether a report was found, below | `matched` | yes |
-| `react_inp_blame.blame.kind` | Where the time mostly went: `render`, `handler`, `hydration`, `layout`, `waiting`, `painting`, `script` or `none` | `render` | yes |
-| `react_inp_blame.blame.name` | The component, handler or script it went to | `OrderSummary` | yes |
-| `react_inp_blame.blame.detail` | What that was mostly made of | `LineItem ×800` | no, it is display text, whose wording can change in any minor |
-| `react_inp_blame.blame.ms` | How much of the interaction it accounts for, in ms. Left out for `none`, and for a `render`, `hydration` or `handler` blame where the build records no durations and React committed inside the interaction | `167.5999999998603` | no |
-| `react_inp_blame.blame.confidence` | `measured` or `inferred` | `measured` | yes |
-| `react_inp_blame.handler` | The React handler that ran | `add` | yes |
-| `react_inp_blame.target.components` | Up to four components around the element, outermost first | `App > Lab > ContextStorm` | yes |
-| `react_inp_blame.hot_path` | The path down to where the render spent its time. On a render or layout blame it follows the commit the blame names, otherwise the heaviest. On a layout blame in a commit with several roots, named after the component they all sit under, it starts at the heaviest root below that one and can run well past it. Without the `displayName` transform in production, the minifier's names, which change with each build (below) | `ContextStorm > OrderSummary` | yes |
-| `react_inp_blame.react_status` | Whether the library could see React: `reading`, `waiting`, `installed-late` or `unreadable` | `reading` | yes |
-| `react_inp_blame.react_build` | The build of react-dom that measured it. A `development` one reads high | `development` | yes, and filter it out |
-| `react_inp_blame.commits.count` | React commits inside the interaction | `1` | no |
-| `react_inp_blame.commits.rendered` | Components they rendered | `801` | no |
-| `react_inp_blame.commits.ms` | What React spent rendering them, in ms, where the build records it | `163.0999999998603` | no |
-| `react_inp_blame.follow_ups.count` | Commits after the paint that belong to it | `0` | no |
-| `react_inp_blame.follow_ups.ms` | What React spent rendering those, in ms. Left out with none | | no |
+| Attribute                           | What it holds                                                                                                                                                                                                                                                                                                                                                                                                                      | Example                       | Group by it                                                   |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------- |
+| `react_inp_blame.status`            | Whether a report was found, below                                                                                                                                                                                                                                                                                                                                                                                                  | `matched`                     | yes                                                           |
+| `react_inp_blame.blame.kind`        | Where the time mostly went: `render`, `handler`, `hydration`, `layout`, `waiting`, `painting`, `script` or `none`                                                                                                                                                                                                                                                                                                                  | `render`                      | yes                                                           |
+| `react_inp_blame.blame.name`        | The component, handler or script it went to                                                                                                                                                                                                                                                                                                                                                                                        | `OrderSummary`                | yes                                                           |
+| `react_inp_blame.blame.detail`      | What that was mostly made of                                                                                                                                                                                                                                                                                                                                                                                                       | `LineItem ×800`               | no, it is display text, whose wording can change in any minor |
+| `react_inp_blame.blame.ms`          | How much of the interaction it accounts for, in ms. Left out for `none`, and for a `render`, `hydration` or `handler` blame where the build records no durations and React committed inside the interaction                                                                                                                                                                                                                        | `167.5999999998603`           | no                                                            |
+| `react_inp_blame.blame.confidence`  | `measured` or `inferred`                                                                                                                                                                                                                                                                                                                                                                                                           | `measured`                    | yes                                                           |
+| `react_inp_blame.handler`           | The React handler that ran                                                                                                                                                                                                                                                                                                                                                                                                         | `add`                         | yes                                                           |
+| `react_inp_blame.target.components` | Up to four components around the element, outermost first                                                                                                                                                                                                                                                                                                                                                                          | `App > Lab > ContextStorm`    | yes                                                           |
+| `react_inp_blame.hot_path`          | The path down to where the render spent its time. On a render or layout blame it follows the commit the blame names, otherwise the heaviest. On a layout blame in a commit with several roots, named after the component they all sit under, it starts at the heaviest root below that one and can run well past it. Without the `displayName` transform in production, the minifier's names, which change with each build (below) | `ContextStorm > OrderSummary` | yes                                                           |
+| `react_inp_blame.react_status`      | Whether the library could see React: `reading`, `waiting`, `installed-late` or `unreadable`                                                                                                                                                                                                                                                                                                                                        | `reading`                     | yes                                                           |
+| `react_inp_blame.react_build`       | The build of react-dom that measured it. A `development` one reads high                                                                                                                                                                                                                                                                                                                                                            | `development`                 | yes, and filter it out                                        |
+| `react_inp_blame.commits.count`     | React commits inside the interaction                                                                                                                                                                                                                                                                                                                                                                                               | `1`                           | no                                                            |
+| `react_inp_blame.commits.rendered`  | Components they rendered                                                                                                                                                                                                                                                                                                                                                                                                           | `801`                         | no                                                            |
+| `react_inp_blame.commits.ms`        | What React spent rendering them, in ms, where the build records it                                                                                                                                                                                                                                                                                                                                                                 | `163.0999999998603`           | no                                                            |
+| `react_inp_blame.follow_ups.count`  | Commits after the paint that belong to it                                                                                                                                                                                                                                                                                                                                                                                          | `0`                           | no                                                            |
+| `react_inp_blame.follow_ups.ms`     | What React spent rendering those, in ms. Left out with none                                                                                                                                                                                                                                                                                                                                                                        |                               | no                                                            |
 
 On a production build of React the same click gave `inferred` and `production`, and no `blame.ms` or
 `commits.ms`, since that build times no renders.
