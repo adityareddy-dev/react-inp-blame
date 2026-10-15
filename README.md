@@ -33,8 +33,8 @@ badge. Both setups are development-only by default. Production needs an
 
 ```ts
 // next.config.ts
-import type { NextConfig } from 'next';
-import { withInpBlame } from 'react-inp-blame/next';
+import type { NextConfig } from "next";
+import { withInpBlame } from "react-inp-blame/next";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -49,7 +49,7 @@ until the file has it (14.2 to 15.2 need nothing more):
 
 ```ts
 // instrumentation-client.ts
-export { onRouterTransitionStart } from 'react-inp-blame/next-client';
+export { onRouterTransitionStart } from "react-inp-blame/next-client";
 ```
 
 Next.js 14.2 reads no `next.config.ts`, since that came in 15, so there the same setup goes in
@@ -57,7 +57,7 @@ Next.js 14.2 reads no `next.config.ts`, since that came in 15, so there the same
 
 ```js
 // next.config.mjs
-import { withInpBlame } from 'react-inp-blame/next';
+import { withInpBlame } from "react-inp-blame/next";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -72,11 +72,13 @@ export default withInpBlame(nextConfig, { runtime: { overlay: true } });
 
 ```ts
 // vite.config.ts
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import { inpBlame } from 'react-inp-blame/vite';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { inpBlame } from "react-inp-blame/vite";
 
-export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: true } })] });
+export default defineConfig({
+  plugins: [react(), inpBlame({ runtime: { overlay: true } })],
+});
 ```
 
 React Router in framework mode, Remix, TanStack Start and Astro write their own HTML, which this plugin
@@ -121,10 +123,12 @@ If you would rather read reports than look at a badge, drop `overlay` and subscr
 
 ```ts
 // Next.js: instrumentation-client.ts or any client module. Vite: the entry module.
-import { onInteraction } from 'react-inp-blame';
+import { onInteraction } from "react-inp-blame";
 
 // A report can come again as a later revision when more data joins it: keep the latest per interactionId.
-onInteraction((report) => console.log(report.verdict, report.explanation.blame));
+onInteraction((report) =>
+  console.log(report.verdict, report.explanation.blame),
+);
 ```
 
 To read the whole report of the last interaction in the console, add `debugGlobal: true` to `runtime` and
@@ -137,8 +141,8 @@ measurement. This library adds React context to it. For component names on the i
 `generateTarget` needs no runtime installation:
 
 ```ts
-import { onINP } from 'web-vitals/attribution';
-import { generateTarget } from 'react-inp-blame/web-vitals';
+import { onINP } from "web-vitals/attribution";
+import { generateTarget } from "react-inp-blame/web-vitals";
 
 onINP((metric) => console.log(metric), { generateTarget });
 ```
@@ -154,7 +158,7 @@ coinciding work alone does not prove what caused it. Without that API, reports l
 For an existing OpenTelemetry web-vitals pipeline, add the processor before the processor that exports:
 
 ```ts
-import { InpBlameLogRecordProcessor } from 'react-inp-blame/otel';
+import { InpBlameLogRecordProcessor } from "react-inp-blame/otel";
 
 const loggerProvider = new LoggerProvider({
   processors: [
@@ -198,12 +202,12 @@ Every verdict stayed in the count. Each was read twice, with a third read where 
 
 These are separate checks of what each report says.
 
-| Check | Right | Wrong | Misleading | Cannot tell | Blank |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Whole verdict | 8 | 35 | 19 | 0 | 0 |
-| Name and its explanation | 9 | 32 | 19 | 2 | 0 |
-| Kind of work | 49 | 13 | 0 | 0 | 0 |
-| Milliseconds charged to the blamed work | 36 | 0 | 0 | 0 | 26 |
+| Check                                   | Right | Wrong | Misleading | Cannot tell | Blank |
+| --------------------------------------- | ----: | ----: | ---------: | ----------: | ----: |
+| Whole verdict                           |     8 |    35 |         19 |           0 |     0 |
+| Name and its explanation                |     9 |    32 |         19 |           2 |     0 |
+| Kind of work                            |    49 |    13 |          0 |           0 |     0 |
+| Milliseconds charged to the blamed work |    36 |     0 |          0 |           0 |    26 |
 
 Kind asks whether the named work is the biggest part of the time in the trace. The milliseconds pass
 if they are within the larger of 10 ms and 20% of the trace's figure for that work. Blank means the report
@@ -219,26 +223,25 @@ Here is the same count split by app and run settings.
 
 Overall cells read right / wrong / misleading. Name cells add cannot tell as the last count. Kind cells read right / wrong / misleading. Milliseconds cells add blank as the last count. The kind and milliseconds axes do not permit misleading, their zeros reflect the rubric. Each row includes every verdict in that group. The marginal rows overlap, the eight app/build/throttle rows partition all 62. `dev` means development and `prod` means production. `1x` means no CPU throttling and `4x` means 4x CPU throttling.
 
-| Group | Verdicts | Overall | Name | Kind | Milliseconds |
-| --- | ---: | --- | --- | --- | --- |
-| All | 62 | 8 / 35 / 19 | 9 / 32 / 19 / 2 | 49 / 13 / 0 | 36 / 0 / 0 / 26 |
-| hyperdx | 39 | 6 / 19 / 14 | 6 / 19 / 14 / 0 | 37 / 2 / 0 | 16 / 0 / 0 / 23 |
-| kaneo | 23 | 2 / 16 / 5 | 3 / 13 / 5 / 2 | 12 / 11 / 0 | 20 / 0 / 0 / 3 |
-| dev | 30 | 6 / 12 / 12 | 6 / 12 / 12 / 0 | 25 / 5 / 0 | 27 / 0 / 0 / 3 |
-| prod | 32 | 2 / 23 / 7 | 3 / 20 / 7 / 2 | 24 / 8 / 0 | 9 / 0 / 0 / 23 |
-| 1x | 28 | 7 / 13 / 8 | 8 / 12 / 8 / 0 | 22 / 6 / 0 | 13 / 0 / 0 / 15 |
-| 4x | 34 | 1 / 22 / 11 | 1 / 20 / 11 / 2 | 27 / 7 / 0 | 23 / 0 / 0 / 11 |
-| hyperdx dev 1x | 11 | 4 / 3 / 4 | 4 / 3 / 4 / 0 | 11 / 0 / 0 | 8 / 0 / 0 / 3 |
-| hyperdx dev 4x | 6 | 0 / 3 / 3 | 0 / 3 / 3 / 0 | 6 / 0 / 0 | 6 / 0 / 0 / 0 |
-| hyperdx prod 1x | 10 | 1 / 6 / 3 | 1 / 6 / 3 / 0 | 8 / 2 / 0 | 0 / 0 / 0 / 10 |
-| hyperdx prod 4x | 12 | 1 / 7 / 4 | 1 / 7 / 4 / 0 | 12 / 0 / 0 | 2 / 0 / 0 / 10 |
-| kaneo dev 1x | 5 | 2 / 2 / 1 | 2 / 2 / 1 / 0 | 3 / 2 / 0 | 5 / 0 / 0 / 0 |
-| kaneo dev 4x | 8 | 0 / 4 / 4 | 0 / 4 / 4 / 0 | 5 / 3 / 0 | 8 / 0 / 0 / 0 |
-| kaneo prod 1x | 2 | 0 / 2 / 0 | 1 / 1 / 0 / 0 | 0 / 2 / 0 | 0 / 0 / 0 / 2 |
-| kaneo prod 4x | 8 | 0 / 8 / 0 | 0 / 6 / 0 / 2 | 4 / 4 / 0 | 7 / 0 / 0 / 1 |
+| Group           | Verdicts | Overall     | Name            | Kind        | Milliseconds    |
+| --------------- | -------: | ----------- | --------------- | ----------- | --------------- |
+| All             |       62 | 8 / 35 / 19 | 9 / 32 / 19 / 2 | 49 / 13 / 0 | 36 / 0 / 0 / 26 |
+| hyperdx         |       39 | 6 / 19 / 14 | 6 / 19 / 14 / 0 | 37 / 2 / 0  | 16 / 0 / 0 / 23 |
+| kaneo           |       23 | 2 / 16 / 5  | 3 / 13 / 5 / 2  | 12 / 11 / 0 | 20 / 0 / 0 / 3  |
+| dev             |       30 | 6 / 12 / 12 | 6 / 12 / 12 / 0 | 25 / 5 / 0  | 27 / 0 / 0 / 3  |
+| prod            |       32 | 2 / 23 / 7  | 3 / 20 / 7 / 2  | 24 / 8 / 0  | 9 / 0 / 0 / 23  |
+| 1x              |       28 | 7 / 13 / 8  | 8 / 12 / 8 / 0  | 22 / 6 / 0  | 13 / 0 / 0 / 15 |
+| 4x              |       34 | 1 / 22 / 11 | 1 / 20 / 11 / 2 | 27 / 7 / 0  | 23 / 0 / 0 / 11 |
+| hyperdx dev 1x  |       11 | 4 / 3 / 4   | 4 / 3 / 4 / 0   | 11 / 0 / 0  | 8 / 0 / 0 / 3   |
+| hyperdx dev 4x  |        6 | 0 / 3 / 3   | 0 / 3 / 3 / 0   | 6 / 0 / 0   | 6 / 0 / 0 / 0   |
+| hyperdx prod 1x |       10 | 1 / 6 / 3   | 1 / 6 / 3 / 0   | 8 / 2 / 0   | 0 / 0 / 0 / 10  |
+| hyperdx prod 4x |       12 | 1 / 7 / 4   | 1 / 7 / 4 / 0   | 12 / 0 / 0  | 2 / 0 / 0 / 10  |
+| kaneo dev 1x    |        5 | 2 / 2 / 1   | 2 / 2 / 1 / 0   | 3 / 2 / 0   | 5 / 0 / 0 / 0   |
+| kaneo dev 4x    |        8 | 0 / 4 / 4   | 0 / 4 / 4 / 0   | 5 / 3 / 0   | 8 / 0 / 0 / 0   |
+| kaneo prod 1x   |        2 | 0 / 2 / 0   | 1 / 1 / 0 / 0   | 0 / 2 / 0   | 0 / 0 / 0 / 2   |
+| kaneo prod 4x   |        8 | 0 / 8 / 0   | 0 / 6 / 0 / 2   | 4 / 4 / 0   | 7 / 0 / 0 / 1   |
 
-The kind of work was right more often than the name. Names were wrong on 32 verdicts and misleading on
-19. Two were unresolved. All 36 supplied blame figures passed the timing tolerance, but 26 verdicts supplied
+The kind of work was right more often than the name. Names were wrong on 32 verdicts and misleading on 19. Two were unresolved. All 36 supplied blame figures passed the timing tolerance, but 26 verdicts supplied
 none. In production, 23 of 32 supplied none. Passing that timing check does not show that the named component
 caused the time.
 
@@ -246,23 +249,23 @@ The graders also recorded their confidence and where evidence was missing. The g
 
 Capped ancestor means a production verdict whose component walk stopped at its budget and named an ancestor of the work. It is a flag, not a correctness grade. Reader confidence belongs to the selected grade, not the report's measured/inferred confidence. An evidence gap is a recorded limitation, not an automatic failure. These fields have no right/wrong/misleading grades.
 
-| Group | Verdicts | Capped ancestor: yes / no | Reader confidence: high / medium / low | Evidence gap: recorded / none |
-| --- | ---: | --- | --- | --- |
-| All | 62 | 1 / 61 | 25 / 36 / 1 | 50 / 12 |
-| hyperdx | 39 | 1 / 38 | 17 / 21 / 1 | 37 / 2 |
-| kaneo | 23 | 0 / 23 | 8 / 15 / 0 | 13 / 10 |
-| dev | 30 | 0 / 30 | 12 / 18 / 0 | 19 / 11 |
-| prod | 32 | 1 / 31 | 13 / 18 / 1 | 31 / 1 |
-| 1x | 28 | 1 / 27 | 11 / 16 / 1 | 25 / 3 |
-| 4x | 34 | 0 / 34 | 14 / 20 / 0 | 25 / 9 |
-| hyperdx dev 1x | 11 | 0 / 11 | 6 / 5 / 0 | 10 / 1 |
-| hyperdx dev 4x | 6 | 0 / 6 | 2 / 4 / 0 | 5 / 1 |
-| hyperdx prod 1x | 10 | 1 / 9 | 4 / 5 / 1 | 10 / 0 |
-| hyperdx prod 4x | 12 | 0 / 12 | 5 / 7 / 0 | 12 / 0 |
-| kaneo dev 1x | 5 | 0 / 5 | 1 / 4 / 0 | 3 / 2 |
-| kaneo dev 4x | 8 | 0 / 8 | 3 / 5 / 0 | 1 / 7 |
-| kaneo prod 1x | 2 | 0 / 2 | 0 / 2 / 0 | 2 / 0 |
-| kaneo prod 4x | 8 | 0 / 8 | 4 / 4 / 0 | 7 / 1 |
+| Group           | Verdicts | Capped ancestor: yes / no | Reader confidence: high / medium / low | Evidence gap: recorded / none |
+| --------------- | -------: | ------------------------- | -------------------------------------- | ----------------------------- |
+| All             |       62 | 1 / 61                    | 25 / 36 / 1                            | 50 / 12                       |
+| hyperdx         |       39 | 1 / 38                    | 17 / 21 / 1                            | 37 / 2                        |
+| kaneo           |       23 | 0 / 23                    | 8 / 15 / 0                             | 13 / 10                       |
+| dev             |       30 | 0 / 30                    | 12 / 18 / 0                            | 19 / 11                       |
+| prod            |       32 | 1 / 31                    | 13 / 18 / 1                            | 31 / 1                        |
+| 1x              |       28 | 1 / 27                    | 11 / 16 / 1                            | 25 / 3                        |
+| 4x              |       34 | 0 / 34                    | 14 / 20 / 0                            | 25 / 9                        |
+| hyperdx dev 1x  |       11 | 0 / 11                    | 6 / 5 / 0                              | 10 / 1                        |
+| hyperdx dev 4x  |        6 | 0 / 6                     | 2 / 4 / 0                              | 5 / 1                         |
+| hyperdx prod 1x |       10 | 1 / 9                     | 4 / 5 / 1                              | 10 / 0                        |
+| hyperdx prod 4x |       12 | 0 / 12                    | 5 / 7 / 0                              | 12 / 0                        |
+| kaneo dev 1x    |        5 | 0 / 5                     | 1 / 4 / 0                              | 3 / 2                         |
+| kaneo dev 4x    |        8 | 0 / 8                     | 3 / 5 / 0                              | 1 / 7                         |
+| kaneo prod 1x   |        2 | 0 / 2                     | 0 / 2 / 0                              | 2 / 0                         |
+| kaneo prod 4x   |        8 | 0 / 8                     | 4 / 4 / 0                              | 7 / 1                         |
 
 The reasons and trace measurements are supporting evidence, they have no separate accuracy grade. There
 is no separate score for every component count or later-render note, those claims affect the name grade.
@@ -300,15 +303,15 @@ its entry under [Troubleshooting](#troubleshooting).
 
 ## Compared with other tools
 
-| | react-inp-blame | Sentry `reactComponentAnnotation` | react-scan | web-vitals attribution | React 19.2 Performance tracks |
-| --- | --- | --- | --- | --- | --- |
-| Runs in a production build | optional¹ | yes | not its main entry² | yes | no: development and profiling builds |
-| Names the rendered subtree, not just the target's owner | yes | no³ | yes | no: a CSS selector | yes, in development⁴ |
-| Follow-up renders after the paint | yes | no | not told apart⁵ | no | drawn, not joined to the interaction |
-| Forced-layout split | yes, from Long Animation Frames, and it can be the verdict rather than a footnote | no | no: reads no Long Animation Frames | partly⁶ | no |
-| Plain-language verdict | yes | no | no | no | no |
-| Zero dependencies | yes | no | no (11 in 0.5.7) | yes | part of React |
-| Needs a build step for names | in production builds: the plugins add it | yes | not in development⁷ | no names | not in development |
+|                                                         | react-inp-blame                                                                   | Sentry `reactComponentAnnotation` | react-scan                         | web-vitals attribution | React 19.2 Performance tracks        |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------- | ---------------------------------- | ---------------------- | ------------------------------------ |
+| Runs in a production build                              | optional¹                                                                         | yes                               | not its main entry²                | yes                    | no: development and profiling builds |
+| Names the rendered subtree, not just the target's owner | yes                                                                               | no³                               | yes                                | no: a CSS selector     | yes, in development⁴                 |
+| Follow-up renders after the paint                       | yes                                                                               | no                                | not told apart⁵                    | no                     | drawn, not joined to the interaction |
+| Forced-layout split                                     | yes, from Long Animation Frames, and it can be the verdict rather than a footnote | no                                | no: reads no Long Animation Frames | partly⁶                | no                                   |
+| Plain-language verdict                                  | yes                                                                               | no                                | no                                 | no                     | no                                   |
+| Zero dependencies                                       | yes                                                                               | no                                | no (11 in 0.5.7)                   | yes                    | part of React                        |
+| Needs a build step for names                            | in production builds: the plugins add it                                          | yes                               | not in development⁷                | no names               | not in development                   |
 
 
 2. Its main entry does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended". Two other entries in 0.5.7 run there anyway: `react-scan/all-environments` skips that check, and `react-scan/lite`, a headless one, attaches to every renderer whatever its build.
@@ -326,11 +329,11 @@ is Long Animation Frames' forced layout inside that join, in either build, and t
 
 ## Browser support
 
-| | Chromium | Firefox | Safari |
-| --- | --- | --- | --- |
-| Event Timing `interactionId` (required) | 96 | 144 | 26.2 |
-| Long Animation Frames: scripts and forced layout | 123 | no | no |
-| Performance panel tracks | 128 | no | no |
+|                                                  | Chromium | Firefox | Safari |
+| ------------------------------------------------ | -------- | ------- | ------ |
+| Event Timing `interactionId` (required)          | 96       | 144     | 26.2   |
+| Long Animation Frames: scripts and forced layout | 123      | no      | no     |
+| Performance panel tracks                         | 128      | no      | no     |
 
 Without `interactionId` nothing installs and `stats().mode` is `'unsupported'`. One warning says why: always in
 a development build, and in a production build on the pages `sampleRate` takes. A production page the sample
@@ -343,15 +346,15 @@ leaves their times out and blame built on render times is `'inferred'`.
 
 ## Versions
 
-| | CI runs | Outside that |
-| --- | --- | --- |
-| react-dom | 17.0.2, 18.2.0, 18.3.1, 19.0.0, 19.1.9, 19.2.8, 19.3.0, and the canary `next@canary` brings | Outside 17 to 19 that root is not read, and [one warning](docs/troubleshooting.md#react-version) says so |
-| Next.js | 14.2.35, 15.3.9, 15.5.26, 16.2.12, 16.3.5 and canary | Below 14.2 the wrapper leaves the config as it was and [says why](docs/troubleshooting.md#next-too-old) |
-| Vite | 6.4, 7.3 and 8.3; a build on Vite 5 | Not tried below 5 |
-| React Router, Remix, TanStack Start | React Router 7.18 and 8.4, Remix 2.17 on Vite, TanStack Start 1.168 | Not tried |
-| Astro | 7.3 | Not tried |
-| [webpack](docs/install.md#webpack-or-rspack) | 5.111 | Not tried |
-| Node, for the build plugins | Installs and loads on 20.19, tests on 22 and 24 | `engines` asks for 20.19 |
+|                                              | CI runs                                                                                     | Outside that                                                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| react-dom                                    | 17.0.2, 18.2.0, 18.3.1, 19.0.0, 19.1.9, 19.2.8, 19.3.0, and the canary `next@canary` brings | Outside 17 to 19 that root is not read, and [one warning](docs/troubleshooting.md#react-version) says so |
+| Next.js                                      | 14.2.35, 15.3.9, 15.5.26, 16.2.12, 16.3.5 and canary                                        | Below 14.2 the wrapper leaves the config as it was and [says why](docs/troubleshooting.md#next-too-old)  |
+| Vite                                         | 6.4, 7.3 and 8.3; a build on Vite 5                                                         | Not tried below 5                                                                                        |
+| React Router, Remix, TanStack Start          | React Router 7.18 and 8.4, Remix 2.17 on Vite, TanStack Start 1.168                         | Not tried                                                                                                |
+| Astro                                        | 7.3                                                                                         | Not tried                                                                                                |
+| [webpack](docs/install.md#webpack-or-rspack) | 5.111                                                                                       | Not tried                                                                                                |
+| Node, for the build plugins                  | Installs and loads on 20.19, tests on 22 and 24                                             | `engines` asks for 20.19                                                                                 |
 
 The peer dependencies are all `*` and optional, on purpose. npm refuses to install beside a prerelease that a
 range leaves out, even for an optional peer, and `next@canary` or a React canary is a prerelease of a version no
@@ -438,13 +441,15 @@ production and development builds ([how that was measured](docs/how-it-works.md#
 line's module stays, as an empty function); where it loads:
 
 <!-- size:start -->
-| Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
-| --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 101.3 KB | 35.8 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 18.1 KB | 7.1 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.3 KB | 11.7 KB |
-| `react-inp-blame/web-vitals`, on top of `/auto` | 1.6 KB | 0.9 KB |
-| `react-inp-blame/otel`, on top of `/auto` | 3.5 KB | 1.6 KB |
+
+| Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level)                      | Minified | Gzip    |
+| ---------------------------------------------------------------------------------------- | -------- | ------- |
+| `react-inp-blame/auto`: everything that loads with the page                              | 101.3 KB | 35.8 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown                        | 18.1 KB  | 7.1 KB  |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.3 KB  | 11.7 KB |
+| `react-inp-blame/web-vitals`, on top of `/auto`                                          | 1.6 KB   | 0.9 KB  |
+| `react-inp-blame/otel`, on top of `/auto`                                                | 3.5 KB   | 1.6 KB  |
+
 <!-- size:end -->
 
 `node scripts/size.mjs` measures these from the build on every CI run, and CI fails when this table is out
@@ -459,7 +464,7 @@ Reports are made to be forwarded to error trackers and analytics, so `target.lab
 value, and under a production build of React it uses only what your code wrote on the element (`aria-label`, a
 form field's `placeholder`, `aria-placeholder` or `name`, an input's `type`, `data-testid` or `data-test`). An
 element's text is opt-in there, with `labels: 'text'`. What your code wrote goes out as written, though: an
-`aria-label`, `data-testid` or `id` built from user data, such as `` aria-label={`Message ${user.name}`} ``,
+`aria-label`, `data-testid` or `id` built from user data, such as ``aria-label={`Message ${user.name}`}``,
 lands in `target.label` or `target.selector`, and the label in the verdict. A URL in a report keeps its origin
 and path, never its query, fragment or password, and a script's URL in a blame loses the same. The details are
 under [labels and personal data](docs/api.md#labels-and-personal-data) in the API page. Each report also goes out
