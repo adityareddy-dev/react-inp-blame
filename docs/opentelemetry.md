@@ -32,7 +32,10 @@ export default withInpBlame({ /* your config */ }, {
 With Vite, the same two options go to `inpBlame()` in `vite.config.ts`. A page the sample leaves out says
 `sampled-out`.
 
-
+Running it in production costs something. The [current benchmark cohort](benchmarks/real-apps.md)
+has no accuracy or overhead results yet. What loads with the page
+is `react-inp-blame/auto`, 34.1 KB gzip by `scripts/size.mjs` in 0.20.0, and this entry adds 1.5 KB on
+top. So a telemetry path held to about 10 KB is not met at 1.0.
 
 There is a cheaper step short of that. `runtime: false` keeps only the `displayName` transform, so
 `generateTarget` from [react-inp-blame/web-vitals](web-vitals.md) can name components in production with no
