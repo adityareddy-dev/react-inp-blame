@@ -1,0 +1,140 @@
+[
+  {
+    "id": "C01",
+    "action": "In the builder's Basics card, expand it and replace the Full name field with a new name.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Basics card header shows the new name and its initials avatar shows the new initials; the stored basics.name equals the typed value."
+  },
+  {
+    "id": "C02",
+    "action": "In the Basics card, replace the Headline field with a new headline.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Basics card header subtitle contains the new headline; the stored basics.headline equals the typed value."
+  },
+  {
+    "id": "C03",
+    "action": "In the Basics card, replace the Location field with a new location.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Basics card header subtitle contains the new location; the stored basics.location equals the typed value."
+  },
+  {
+    "id": "C04",
+    "action": "In the Basics card, replace the Phone field with a new phone number.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Phone input value equals the typed number; the stored basics.phone equals it."
+  },
+  {
+    "id": "C05",
+    "action": "In the Basics card, replace the Email field with a new valid address.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Email input value equals the typed address and no validation message is shown; the stored basics.email equals it."
+  },
+  {
+    "id": "C06",
+    "action": "Click the Basics card header button to collapse the card, then click it again to expand it.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The header button's aria-expanded flips from true to false (the contact fields are hidden), then back to true (the fields are visible again)."
+  },
+  {
+    "id": "C07",
+    "action": "In the Summary editor, select the existing summary text and type a new sentence.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Summary editor's text contains the typed sentence; the stored summary.content contains it."
+  },
+  {
+    "id": "C08",
+    "action": "Click the eye button of the Skills section row ('Hide Skills from the page').",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The eye button's aria-pressed becomes true and its label becomes 'Show Skills on the page'; the Skills outline row shows the hidden style; the stored sections.skills.hidden is true."
+  },
+  {
+    "id": "C09",
+    "action": "Click the eye button of the Skills section row again ('Show Skills on the page').",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The eye button's aria-pressed becomes false and its label becomes 'Hide Skills from the page'; the stored sections.skills.hidden is false."
+  },
+  {
+    "id": "C10",
+    "action": "Open the Experience section and add a new entry with the section's add-entry control.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Experience section's entry count increases by one and a new entry card appears; the stored sections.experience.items length increases by one."
+  },
+  {
+    "id": "C11",
+    "action": "In the new Experience entry card, type a value into the Position field.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The entry card's accessible label shows the typed position; the stored sections.experience.items entry's position equals the typed value."
+  },
+  {
+    "id": "C12",
+    "action": "In an Experience entry card, type a value into the Company field.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Company input value equals the typed company; the stored entry's company equals it."
+  },
+  {
+    "id": "C13",
+    "action": "Open an Experience entry's options menu and choose 'Hide from page'.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The entry is marked hidden (its card shows the hidden note), the menu item label changes to 'Show on page', and the stored entry hidden flag is true."
+  },
+  {
+    "id": "C14",
+    "action": "Click 'Delete entry' on the entry added in C10.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The entry card is removed, the Experience entry count decreases by one, and the stored sections.experience.items length decreases by one."
+  },
+  {
+    "id": "C15",
+    "action": "Add a new entry to the Education section and type a value into its School field.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "A new Education entry card appears and its School input value equals the typed school; the stored sections.education.items entry's school equals it."
+  },
+  {
+    "id": "C16",
+    "action": "Add a new entry to the Skills section and type a value into its Name field.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "A new Skills entry card appears and its Name input value equals the typed name; the stored sections.skills.items entry's name equals it."
+  },
+  {
+    "id": "C17",
+    "action": "Open the Experience section options menu and choose 'Rename…', then enter a new section title.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Experience section heading and its outline row show the new title; the stored sections.experience.title equals it."
+  },
+  {
+    "id": "C18",
+    "action": "Use 'Add section' to add a Custom section with a name.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "A new section row with the typed name appears in the outline; the stored customSections length increases by one."
+  },
+  {
+    "id": "C19",
+    "action": "In the Design panel, select the 'Compact' option of the Density control.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Compact item is the selected value of the Density group; the stored metadata matches the applyDensity('compact') preset from the design presets."
+  },
+  {
+    "id": "C20",
+    "action": "In the Design panel, choose a different Accent colour swatch.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The newly chosen swatch is the selected one in the Accent colour group; the stored metadata.design.colors.primary equals the swatch's rgba value."
+  },
+  {
+    "id": "C21",
+    "action": "In the Design panel, select the 'Wide' option of the Margins control.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The Wide item is the selected value of the Margins group; the stored metadata.page.marginX and marginY equal the applyMargins('wide') preset."
+  },
+  {
+    "id": "C22",
+    "action": "In the Design panel, toggle the 'Underline links' switch.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The switch's checked state flips, and the stored metadata.page.hideLinkUnderline flips to match."
+  },
+  {
+    "id": "C23",
+    "action": "In the Design panel, choose a template other than the current one from the template gallery; the 'Show templates' filter stays on All.",
+    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "expectedStateChange": "The chosen template is marked current, and the stored metadata.template equals the chosen template's id."
+  }
+]
