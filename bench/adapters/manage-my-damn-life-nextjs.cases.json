@@ -1,0 +1,146 @@
+[
+  {
+    "id": "C01",
+    "action": "On the Calendar View, choose 'Week View' in the view selector.",
+    "reset": "Seeded user signed in, /setup synced, Calendar View open. Before: if the view is already Week, choose Day View first.",
+    "expectedStateChange": "Seven day column headers are rendered and the toolbar title becomes a week range (dd/mm/yyyy – dd/mm/yyyy)."
+  },
+  {
+    "id": "C02",
+    "action": "On the Calendar View, choose 'Month View' in the view selector.",
+    "reset": "Calendar View open. Before: if the view is already Month, choose Week View first.",
+    "expectedStateChange": "The month day grid (.fc-daygrid-body) is rendered and the toolbar title is a full-month range."
+  },
+  {
+    "id": "C03",
+    "action": "On the Calendar View, choose 'List View' in the view selector.",
+    "reset": "Calendar View open. Before: if the view is already List, choose Day View first.",
+    "expectedStateChange": "The list layout (.fc-list) is rendered and the selector shows List View."
+  },
+  {
+    "id": "C04",
+    "action": "On the Calendar View, choose 'Day View' in the view selector.",
+    "reset": "Calendar View open. Before: if the view is already Day, choose Week View first.",
+    "expectedStateChange": "Exactly one day column header is rendered, with a time grid (.fc-timegrid), and the selector shows Day View."
+  },
+  {
+    "id": "C05",
+    "action": "On the Calendar View, click the 'Next' navigation button in the toolbar.",
+    "reset": "Calendar View open at the current date. The previous step's date is carried into the next case; C06 undoes this.",
+    "expectedStateChange": "The toolbar title text changes to the following period."
+  },
+  {
+    "id": "C06",
+    "action": "On the Calendar View, click the 'Previous' navigation button in the toolbar.",
+    "reset": "Calendar View open, usually one period after the current one from C05. C06 returns the date to the earlier period.",
+    "expectedStateChange": "The toolbar title text changes to the preceding period."
+  },
+  {
+    "id": "C07",
+    "action": "On the Calendar View, click the 'Show Tasks' switch label.",
+    "reset": "Calendar View open with Show Tasks on (default). C08 switches it back.",
+    "expectedStateChange": "The #show_tasks_switch checkbox changes its checked state."
+  },
+  {
+    "id": "C08",
+    "action": "On the Calendar View, click the 'Show Tasks' switch label again.",
+    "reset": "Show Tasks has been toggled once by C07; this case toggles it back.",
+    "expectedStateChange": "The #show_tasks_switch checkbox changes its checked state back."
+  },
+  {
+    "id": "C09",
+    "action": "On the Calendar View, click 'Add from Templates'.",
+    "reset": "Calendar View open, no dialog showing. Before: if a dialog is open, press Escape.",
+    "expectedStateChange": "A modal dialog titled 'Add from Templates' opens and lists the seeded 'Weekly review' template."
+  },
+  {
+    "id": "C10",
+    "action": "With the 'Add from Templates' dialog open, press Escape.",
+    "reset": "Before: if no dialog is open, click 'Add from Templates' first. The dialog is then closed.",
+    "expectedStateChange": "The modal dialog is removed from the page (no .modal.show element remains)."
+  },
+  {
+    "id": "C11",
+    "action": "On the Settings page, change 'Starting Day of the Week for Calendar View' to a different day and press the first Save.",
+    "reset": "Reached from the settings menu. Before: navigate to Settings. The target day is Sunday unless it is already Sunday, in which case Monday.",
+    "expectedStateChange": "The day selector shows the new value and a toast reads 'Updated successfully!'."
+  },
+  {
+    "id": "C12",
+    "action": "On the Settings page, change the Date Format to the other of 'YYYY-MM-DD' and 'DD/MM/YYYY' and press the date/time Save.",
+    "reset": "Settings page open. Before: navigate to Settings if needed.",
+    "expectedStateChange": "The 'Sample Output for Date and Time' text changes to the new date format and a 'Date Format: Updated successfully!' toast appears."
+  },
+  {
+    "id": "C13",
+    "action": "On the Settings page, change the Time Format to the other of 'HH:mm' and 'hh:mm A' and press the date/time Save.",
+    "reset": "Settings page open. Before: navigate to Settings if needed.",
+    "expectedStateChange": "The 'Sample Output for Date and Time' text changes its time part (AM/PM suffix added or removed) and a 'Time Format: Updated successfully!' toast appears."
+  },
+  {
+    "id": "C14",
+    "action": "On the Settings page, click the 'Nuke Local Data on Logout?' checkbox.",
+    "reset": "Settings page open. The checkbox is toggled once by this case; the next run starts from the seeded (unchecked) state.",
+    "expectedStateChange": "The #default-nukedexie_checkbox checked state changes."
+  },
+  {
+    "id": "C15",
+    "action": "On the WebCAL Manager page, click 'Add'.",
+    "reset": "Reached from the settings menu. Before: navigate to WebCAL Manager and close the add form if it is open.",
+    "expectedStateChange": "The add form appears with a name field (maxlength 50), a link field (maxlength 1000) and an interval field; the Add button is replaced by the form."
+  },
+  {
+    "id": "C16",
+    "action": "With the WebCAL add form open, enter the name 'Holiday calendar' and the second local calendar link, the bench fixture at /bench/holiday-calendar.ics, then press Add.",
+    "reset": "Before: open the add form if it is closed. The seeded local link is already subscribed, and the app rejects a second subscription to the same link, so the second fixture is used. The server fetches the link and stores its events; the seeded database is restored before every run.",
+    "expectedStateChange": "A 'Done!' toast appears and the 'Holiday calendar' card is listed on the page."
+  },
+  {
+    "id": "C17",
+    "action": "On the WebCAL Manager page, press the sync icon on the 'Team calendar' card.",
+    "reset": "Before: navigate to WebCAL Manager. The sync fetches the seeded local link again.",
+    "expectedStateChange": "A 'Sync done!' toast appears."
+  },
+  {
+    "id": "C18",
+    "action": "On the WebCAL Manager page, press the delete icon on the 'Team calendar' card.",
+    "reset": "Before: navigate to WebCAL Manager. The Team calendar subscription is removed for the rest of the run.",
+    "expectedStateChange": "A 'Deleted successfully.' toast appears and the server's webcal list (GET /api/webcal/get) no longer contains 'Team calendar'."
+  },
+  {
+    "id": "C19",
+    "action": "On the Template Manager page, press the delete icon on the 'Weekly review' template.",
+    "reset": "Before: navigate to Template Manager. The seeded template is removed for the rest of the run.",
+    "expectedStateChange": "A 'Deleted successfully.' toast appears and the 'Weekly review' card is removed from the page."
+  },
+  {
+    "id": "C20",
+    "action": "On the Manage Filters page, click 'Add New Filter'.",
+    "reset": "Reached from the settings menu. Before: navigate to Manage Filters and click Close if the form is already open.",
+    "expectedStateChange": "The filter form appears, with the 'Enter filter name.' field visible and the Save button present."
+  },
+  {
+    "id": "C21",
+    "action": "On the Task View, click 'Gantt View'.",
+    "reset": "Task View open with the list layout. Before: navigate to Task View and click 'Task View' if Gantt is already active.",
+    "expectedStateChange": "The 'Gantt View' button becomes the active button (btn-secondary) and 'Task View' becomes btn-outline-secondary."
+  },
+  {
+    "id": "C22",
+    "action": "On the Task View, click 'Task View' to return to the list layout.",
+    "reset": "Gantt layout active from C21. Before: click 'Gantt View' if the list layout is already active.",
+    "expectedStateChange": "The 'Task View' button becomes the active button (btn-secondary) and 'Gantt View' becomes btn-outline-secondary."
+  },
+  {
+    "id": "C23",
+    "action": "On the Task View, expand or collapse the 'Filters' accordion.",
+    "reset": "Task View list layout. The accordion is flipped once by this case.",
+    "expectedStateChange": "The 'Filters' accordion button's aria-expanded attribute changes value."
+  },
+  {
+    "id": "C24",
+    "action": "Click the dark/light mode icon in the top navigation bar.",
+    "reset": "Any page with the navigation bar; the theme is light at the start of the run.",
+    "expectedStateChange": "The document's data-bs-theme attribute changes between 'light' and 'dark'."
+  }
+]
