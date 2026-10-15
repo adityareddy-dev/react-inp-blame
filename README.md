@@ -1,4 +1,20 @@
-# react-inp-blame
+<h1 align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.svg">
+  <img alt="react-inp-blame: interaction attribution for INP, with a 400 ms click split into its handler" src="docs/media/banner-light.svg" width="880">
+</picture>
+</h1>
+
+<div align="center">
+
+<a href="https://www.npmjs.com/package/react-inp-blame"><img alt="npm version" src="https://img.shields.io/npm/v/react-inp-blame"></a>
+<a href="https://github.com/adityareddy-dev/react-inp-blame/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/adityareddy-dev/react-inp-blame/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+<a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/react-inp-blame"></a>
+<a href="#versions"><img alt="Node engines" src="https://img.shields.io/node/v/react-inp-blame"></a>
+
+![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](docs/media/overlay.gif)
+
+</div>
 
 Click **Log in** in the demo. The report shows a 400 ms interaction, about 399 ms in the handler, and
 a React render that landed after the screen updated. INP didn't count that later render. Without the
@@ -6,28 +22,33 @@ timeline, it is easy to investigate the render and miss the handler.
 
 react-inp-blame joins browser interaction timing to the React tree and shows where the time went,
 with a component or handler name when it has one. The name can be wrong, check it against the profiler.
-1.0.0 makes the API and report shape stable, with [documented exceptions](#versions). It does not
-make the attribution reliable: the latest [unseen-app accuracy check](#how-reliable-is-it) is below.
-
-![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](docs/media/overlay.gif)
+1.0.0 makes the API and report shape stable, with [documented exceptions](#versions).
+That is an API promise, not an accuracy claim. Read the [validation status and limits](#how-reliable-is-it).
 
 **[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow on
 purpose. Click something and read what the badge blames.
+
+<div align="center">
+
+[Next.js](#start-with-nextjs-142-or-later) · [Vite](#start-with-vite) ·
+[API reference](docs/api.md) · [Browser support](#browser-support) ·
+[React and framework versions](#versions) · [web-vitals and telemetry](#send-attribution-with-inp) ·
+[Benchmarks and reproduction](#benchmarks-and-reproduction) · [Validation status](#how-reliable-is-it) ·
+[Troubleshooting](#troubleshooting)
+
+</div>
 
 ## 30-second quickstart
 
 In an existing Next.js or Vite React app:
 
-    npm install react-inp-blame
+  ```sh
+  npm install react-inp-blame
+  ```
 
 Use the setup below for your framework, restart its dev server, then click a slow control and open the
 badge. Both setups are development-only by default. Production needs an
 [explicit opt-in](docs/install.md#numbers-in-development).
-
-[Next.js](#start-with-nextjs-142-or-later) · [Vite](#start-with-vite) ·
-[API reference](docs/api.md) · [Browser support](#browser-support) ·
-[React and framework versions](#versions) · [web-vitals and telemetry](#send-attribution-with-inp) ·
-[Benchmarks and reproduction](#benchmarks-and-reproduction)
 
 ## Start with Next.js 14.2 or later
 
@@ -184,7 +205,7 @@ repository, then open the address Vite prints. `npm test` runs the demo checks a
 The [benchmark harness](bench/README.md) now selects [five everyday apps](docs/benchmarks/real-apps.md).
 Their build and interaction integrations are pending, and no accuracy or overhead results exist
 for this cohort. The [measurement plan](docs/benchmarks/README.md) describes the protocol and
-selection amendment. The [accuracy check](#how-reliable-is-it) remains a separate historical result.
+selection amendment. See [validation status](#how-reliable-is-it) before treating attribution as evidence.
 
 ## What 1.0 means
 
@@ -192,92 +213,19 @@ selection amendment. The [accuracy check](#how-reliable-is-it) remains a separat
 The API and the meanings of its report fields are stable through 1.x, apart from the documented experimental and debugging exceptions.
 A minor release can improve how blame is selected and how a report reads. It cannot change what an existing field means.
 
-The blame can still be wrong, and the count below is why 1.0.0 is not a claim of accuracy.
+The blame can still be wrong. A stable report format does not establish attribution accuracy.
 Read the [known limits](docs/known-limits.md) before trusting a name.
 
 ## How reliable is it
 
-On hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other 54, 35 were wrong and 19 misleading.
-Every verdict stayed in the count. Each was read twice, with a third read where the two disagreed on a scored axis. The [accuracy page](docs/benchmarks/real-apps.md) gives the context for this check. The bar I set for 1.0 was at least 38 right and at most 6 wrong on those 62, and it isn't met. No later version has been graded on fresh apps.
+The current five-app cohort has no published accuracy or overhead results. Its build and interaction
+integrations are still pending, so selecting those apps is not evidence that attribution has been validated
+on them. See the [cohort status](docs/benchmarks/real-apps.md) and [measurement plan](docs/benchmarks/README.md).
 
-These are separate checks of what each report says.
-
-| Check                                   | Right | Wrong | Misleading | Cannot tell | Blank |
-| --------------------------------------- | ----: | ----: | ---------: | ----------: | ----: |
-| Whole verdict                           |     8 |    35 |         19 |           0 |     0 |
-| Name and its explanation                |     9 |    32 |         19 |           2 |     0 |
-| Kind of work                            |    49 |    13 |          0 |           0 |     0 |
-| Milliseconds charged to the blamed work |    36 |     0 |          0 |           0 |    26 |
-
-Kind asks whether the named work is the biggest part of the time in the trace. The milliseconds pass
-if they are within the larger of 10 ms and 20% of the trace's figure for that work. Blank means the report
-gave no blame figure, so there was nothing to check on that axis. The headline duration was not a separate axis.
-
-The name check includes the explanation and notes. A wrong name grade can also mean the verdict states
-something false. Misleading means its wording is true but sends you to the wrong place. Cannot tell means
-the evidence could not settle it. A wrong kind makes the whole verdict wrong, even with a right or unresolved
-name grade. A right name with wrong milliseconds, or a name that points at an ancestor after the component
-walk stopped at its budget, cannot make the whole verdict right.
-
-Here is the same count split by app and run settings.
-
-Overall cells read right / wrong / misleading. Name cells add cannot tell as the last count. Kind cells read right / wrong / misleading. Milliseconds cells add blank as the last count. The kind and milliseconds axes do not permit misleading, their zeros reflect the rubric. Each row includes every verdict in that group. The marginal rows overlap, the eight app/build/throttle rows partition all 62. `dev` means development and `prod` means production. `1x` means no CPU throttling and `4x` means 4x CPU throttling.
-
-| Group           | Verdicts | Overall     | Name            | Kind        | Milliseconds    |
-| --------------- | -------: | ----------- | --------------- | ----------- | --------------- |
-| All             |       62 | 8 / 35 / 19 | 9 / 32 / 19 / 2 | 49 / 13 / 0 | 36 / 0 / 0 / 26 |
-| hyperdx         |       39 | 6 / 19 / 14 | 6 / 19 / 14 / 0 | 37 / 2 / 0  | 16 / 0 / 0 / 23 |
-| kaneo           |       23 | 2 / 16 / 5  | 3 / 13 / 5 / 2  | 12 / 11 / 0 | 20 / 0 / 0 / 3  |
-| dev             |       30 | 6 / 12 / 12 | 6 / 12 / 12 / 0 | 25 / 5 / 0  | 27 / 0 / 0 / 3  |
-| prod            |       32 | 2 / 23 / 7  | 3 / 20 / 7 / 2  | 24 / 8 / 0  | 9 / 0 / 0 / 23  |
-| 1x              |       28 | 7 / 13 / 8  | 8 / 12 / 8 / 0  | 22 / 6 / 0  | 13 / 0 / 0 / 15 |
-| 4x              |       34 | 1 / 22 / 11 | 1 / 20 / 11 / 2 | 27 / 7 / 0  | 23 / 0 / 0 / 11 |
-| hyperdx dev 1x  |       11 | 4 / 3 / 4   | 4 / 3 / 4 / 0   | 11 / 0 / 0  | 8 / 0 / 0 / 3   |
-| hyperdx dev 4x  |        6 | 0 / 3 / 3   | 0 / 3 / 3 / 0   | 6 / 0 / 0   | 6 / 0 / 0 / 0   |
-| hyperdx prod 1x |       10 | 1 / 6 / 3   | 1 / 6 / 3 / 0   | 8 / 2 / 0   | 0 / 0 / 0 / 10  |
-| hyperdx prod 4x |       12 | 1 / 7 / 4   | 1 / 7 / 4 / 0   | 12 / 0 / 0  | 2 / 0 / 0 / 10  |
-| kaneo dev 1x    |        5 | 2 / 2 / 1   | 2 / 2 / 1 / 0   | 3 / 2 / 0   | 5 / 0 / 0 / 0   |
-| kaneo dev 4x    |        8 | 0 / 4 / 4   | 0 / 4 / 4 / 0   | 5 / 3 / 0   | 8 / 0 / 0 / 0   |
-| kaneo prod 1x   |        2 | 0 / 2 / 0   | 1 / 1 / 0 / 0   | 0 / 2 / 0   | 0 / 0 / 0 / 2   |
-| kaneo prod 4x   |        8 | 0 / 8 / 0   | 0 / 6 / 0 / 2   | 4 / 4 / 0   | 7 / 0 / 0 / 1   |
-
-The kind of work was right more often than the name. Names were wrong on 32 verdicts and misleading on 19. Two were unresolved. All 36 supplied blame figures passed the timing tolerance, but 26 verdicts supplied
-none. In production, 23 of 32 supplied none. Passing that timing check does not show that the named component
-caused the time.
-
-The graders also recorded their confidence and where evidence was missing. The grade files behind these tables are not in this repo.
-
-Capped ancestor means a production verdict whose component walk stopped at its budget and named an ancestor of the work. It is a flag, not a correctness grade. Reader confidence belongs to the selected grade, not the report's measured/inferred confidence. An evidence gap is a recorded limitation, not an automatic failure. These fields have no right/wrong/misleading grades.
-
-| Group           | Verdicts | Capped ancestor: yes / no | Reader confidence: high / medium / low | Evidence gap: recorded / none |
-| --------------- | -------: | ------------------------- | -------------------------------------- | ----------------------------- |
-| All             |       62 | 1 / 61                    | 25 / 36 / 1                            | 50 / 12                       |
-| hyperdx         |       39 | 1 / 38                    | 17 / 21 / 1                            | 37 / 2                        |
-| kaneo           |       23 | 0 / 23                    | 8 / 15 / 0                             | 13 / 10                       |
-| dev             |       30 | 0 / 30                    | 12 / 18 / 0                            | 19 / 11                       |
-| prod            |       32 | 1 / 31                    | 13 / 18 / 1                            | 31 / 1                        |
-| 1x              |       28 | 1 / 27                    | 11 / 16 / 1                            | 25 / 3                        |
-| 4x              |       34 | 0 / 34                    | 14 / 20 / 0                            | 25 / 9                        |
-| hyperdx dev 1x  |       11 | 0 / 11                    | 6 / 5 / 0                              | 10 / 1                        |
-| hyperdx dev 4x  |        6 | 0 / 6                     | 2 / 4 / 0                              | 5 / 1                         |
-| hyperdx prod 1x |       10 | 1 / 9                     | 4 / 5 / 1                              | 10 / 0                        |
-| hyperdx prod 4x |       12 | 0 / 12                    | 5 / 7 / 0                              | 12 / 0                        |
-| kaneo dev 1x    |        5 | 0 / 5                     | 1 / 4 / 0                              | 3 / 2                         |
-| kaneo dev 4x    |        8 | 0 / 8                     | 3 / 5 / 0                              | 1 / 7                         |
-| kaneo prod 1x   |        2 | 0 / 2                     | 0 / 2 / 0                              | 2 / 0                         |
-| kaneo prod 4x   |        8 | 0 / 8                     | 4 / 4 / 0                              | 7 / 1                         |
-
-The reasons and trace measurements are supporting evidence, they have no separate accuracy grade. There
-is no separate score for every component count or later-render note, those claims affect the name grade.
-
-All eight right verdicts were clicks. Six were in development and two in production.
-Seven were unthrottled.
-Five named a render subtree. The two Denoise Results clicks named DBSqlRowTable, and the two workspace-menu
-openings named MenuPositioner. One navigation expansion named AppNav. The grade reasons place the work inside those subtrees.
-The other three correctly named no culprit for the interaction. They are not three slow components found.
-
-Seven of the eight right verdicts still have a recorded evidence gap. Some exact component counts and the
-precise hot function inside DBSqlRowTable remain unverified in the grade reasons.
+A report joins timing evidence with React activity. A component name is a lead to investigate, not proof
+that the component caused the delay. Coinciding work may be unrelated, production builds lack React render
+times, and browser support limits the evidence available. Check a verdict against a browser performance
+trace and the [known limits](docs/known-limits.md) before acting on it.
 
 <a id="reporting-a-wrong-blame"></a>
 
@@ -313,12 +261,13 @@ its entry under [Troubleshooting](#troubleshooting).
 | Zero dependencies                                       | yes                                                                               | no                                | no (11 in 0.5.7)                   | yes                    | part of React                        |
 | Needs a build step for names                            | in production builds: the plugins add it                                          | yes                               | not in development⁷                | no names               | not in development                   |
 
-1. Its main entry does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended". Two other entries in 0.5.7 run there anyway: `react-scan/all-environments` skips that check, and `react-scan/lite`, a headless one, attaches to every renderer whatever its build.
-2. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK, with span streaming (its default), names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
-3. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
-4. It keeps every fiber render from the pointerup or keydown as one set, until the interaction's Event Timing entry arrives or a second after the frame that follows the input.
-5. `totalStyleAndLayoutDuration`, and `longestScript.entry`, which carries `forcedStyleAndLayoutDuration`.
-6. It ships bundler plugins under `react-scan/react-component-name/*`; what they match was not checked.
+1. Both build plugins default to development-only. Set `enabled: true` or `enabled: 'production'` to include the library in a production build. Production React does not supply render times, so those reports have less timing evidence.
+2. Its main entry does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended". Two other entries in 0.5.7 run there anyway: `react-scan/all-environments` skips that check, and `react-scan/lite`, a headless one, attaches to every renderer whatever its build.
+3. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK, with span streaming (its default), names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
+4. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
+5. It keeps every fiber render from the pointerup or keydown as one set, until the interaction's Event Timing entry arrives or a second after the frame that follows the input.
+6. `totalStyleAndLayoutDuration`, and `longestScript.entry`, which carries `forcedStyleAndLayoutDuration`.
+7. It ships bundler plugins under `react-scan/react-component-name/*`; what they match was not checked.
 
 Checked on 2026-09-26 against aidenybai/react-scan at 0fb3186 (0.5.7 on npm), getsentry/sentry-javascript at
 bd3ce5f (11.0.0), reactjs/react.dev at 44b0b5f and web-vitals 6.2.2's types. In development, React's Components track is the
@@ -488,7 +437,7 @@ The [docs](docs/README.md) have the rest.
   and its own [time per interaction](docs/how-it-works.md#time-per-interaction).
 - <a id="known-limits"></a>**[Known limits](docs/known-limits.md)**: what it can't see, and where it has to guess. Worth reading before
   you trust a verdict on a big app.
-- [Benchmarks](docs/benchmarks/README.md) on real open-source apps, and the [design notes](docs/interaction-attribution-design.md).
+- [Benchmark plan and pending integrations](docs/benchmarks/README.md) for the five-app cohort, and the [design notes](docs/interaction-attribution-design.md).
 
 ## Troubleshooting
 
