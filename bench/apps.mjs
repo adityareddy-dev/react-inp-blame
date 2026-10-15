@@ -13,12 +13,11 @@ const COHORT = [
   ['reactive-resume', 'Reactive Resume', 'amruthpillai/reactive-resume'],
 ];
 
-// The regression cohort recaptures the apps the 0.25.0 baseline was measured on. It is kept apart
-// from the five the amendment fixed, and its runs are labelled as their own cohort.
-const REGRESSION = [
-  ['hyperdx', 'HyperDX', 'hyperdxio/hyperdx'],
-  ['kaneo', 'Kaneo', 'usekaneo/kaneo'],
-];
+// The regression cohort (hyperdx and kaneo, from the 0.25.0 baseline) is not registered. The task
+// names them, but the cohort is the five apps above, and their upstream repositories are not yet
+// confirmed. Register them only after the user confirms the repositories and a dated amendment is
+// committed.
+const REGRESSION = [];
 
 function entry(cohort, index, [id, title, repository]) {
   return {
