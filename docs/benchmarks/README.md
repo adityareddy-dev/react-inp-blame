@@ -1,5 +1,7 @@
 # What react-inp-blame costs on real apps
 
+The next run follows the [2026-10-14 protocol](protocol-2026-10-14.md), published before fresh-app selection. This page retains historical results.
+
 A second run, on five apps with 0.12.0 from npm and with every blame checked against the apps' source, is
 [real-apps.md](real-apps.md).
 
