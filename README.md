@@ -254,10 +254,10 @@ Read the [known limits](docs/known-limits.md) before trusting a name.
 
 ## How reliable is it
 
-On hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other 54, 35 were wrong and 19 misleading.
-Every verdict stayed in the count. Each was read twice, with a third read where the two disagreed on a scored axis. The [accuracy page](docs/benchmarks/real-apps.md) gives the context for this check. The bar I set for 1.0 was at least 38 right and at most 6 wrong on those 62, and it isn't met. No later version has been graded on fresh apps.
+On hyperdx and kaneo, 1.0.0 was right on 38 of 62 verdicts. The wrong and misleading counts for 1.0.0 are not in yet. The tables below are the last full grade, 0.25.0: 8 right, 35 wrong and 19 misleading of the same 62.
+Every verdict stayed in the count. Each was read twice, with a third read where the two disagreed on a scored axis. The [accuracy page](docs/benchmarks/real-apps.md) gives the context for this check. The bar I set for 1.0 was at least 38 right and at most 6 wrong on those 62. The right count meets it. The wrong count is not in yet, so I can't say the bar is met.
 
-These are separate checks of what each report says.
+These are separate checks of what each 0.25.0 report says, the last full grade.
 
 | Check | Right | Wrong | Misleading | Cannot tell | Blank |
 | --- | ---: | ---: | ---: | ---: | ---: |
