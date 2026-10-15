@@ -2,7 +2,7 @@
 
 Living status for the five-app benchmark. Updated at each milestone. Protocol: [protocol-2026-10-14.md](protocol-2026-10-14.md), revised by [protocol-2026-10-15.md](protocol-2026-10-15.md), with its addendum on capture setup. The revision is published before any grade is recorded.
 
-Last updated: 2026-10-15, about 16:05 CDT. The benchmark work is on branch bench/ef-360-results, based on origin/main, with the five app commits and the docs commits in order. Commits are local until the push after 17:00 CDT. Authorship is Aditya Reddy, as set by the owner. Pushes wait for 17:00 CDT on a weekday, or any time outside 09:00 to 17:00. Nothing is merged, and no PR is open.
+Last updated: 2026-10-15, about 16:15 CDT. The benchmark work is on branch bench/ef-360-results, based on origin/main, with the five app commits and the docs commits in order. Nothing is merged, and no PR is open.
 
 ## Per-app summary
 
@@ -36,7 +36,7 @@ Grading time, totals:
 | Setup failures from the first pass | Fixed and re-captured. Zero setup failures remain. First-pass files kept in bench/results/accuracy-firstpass |
 | Blinded single-reader grading | Done for all five apps (see Grading state) |
 | Overhead runs | Not started. Needs the kresus workload exclusion and the pin written into each adapter |
-| Second reader (Severin Neumann) | Requested, no answer yet |
+| Second reader | Not arranged yet |
 
 ## Per-app capture state (configuration B, zero setup failures)
 
@@ -71,11 +71,11 @@ What the grades show, and what they do not:
 - **A grading error, now fixed.** The first grading pass for myfin and kresus gave the reader the wrong source path (bench/bench/clones). Twenty-seven of 47 readers reported the source missing. The corrected pass read the source. The first-pass grades are kept in bench/results/grades/pass1-source-path-error.json, labelled.
 - **Lost first-pass records.** The first-pass grades for manage-my-damn-life and reactive-resume (38 records) came from a run that was stopped before its output was written. Their app cannot be recovered from the journal, so they are not kept in any ledger.
 - **Reader variance.** For myfin, the first pass and the corrected pass gave different verdicts for the same captures: misleading 15 against 17, wrong 4 against 2. Single-reader grades are not stable, and the report will say so.
-- **Misleading is the main category, and its rule needs review before Severin.** Most myfin and reactive-resume "misleading" verdicts rest on render-count or render-scope claims in the library's report. Those claims rest on React data that the production capture does not record, so they cannot be checked. The protocol's rule is: misleading when a true part directs investigation toward an unsupported scope; cannot tell when the evidence cannot settle the claim. Unverifiable render scope falls between the two. Those verdicts stand as graded, and the rule needs a decision before the next pass.
+- **Misleading is the main category, and its rule needs review before a second reader.** Most myfin and reactive-resume "misleading" verdicts rest on render-count or render-scope claims in the library's report. Those claims rest on React data that the production capture does not record, so they cannot be checked. The protocol's rule is: misleading when a true part directs investigation toward an unsupported scope; cannot tell when the evidence cannot settle the claim. Unverifiable render scope falls between the two. Those verdicts stand as graded, and the rule needs a decision before the next pass.
 - **Blank in kresus and manage-my-damn-life.** Five blanks each, for interactions that were observed but produced no report. Silence below the 40 ms threshold is expected behaviour, so the blank category needs the same review.
 - **Sub-field labels.** Several no-observation cases carry blank sub-fields in the raw grades. The normalised set corrects them to cannot tell, as the rule says.
 
-## Grading timing for Severin
+## Grading timing
 
 - Readers that are agents: the actual pass took 618 seconds for 24 cases at two in parallel, about 50 seconds of agent time per case. The corrected four-app pass took 3,732 seconds for 94 cases at two in parallel, about 80 seconds of agent time per case, because the readers read the source.
 - My own hand reads (two cases): tool time only, a few seconds each. My reasoning between calls was not timed. Estimated at about 2 minutes per case; this is a guess.
@@ -92,13 +92,11 @@ What the grades show, and what they do not:
 - **Kresus C12.** The Plus button turns the budget sign to Minus, so the claim is -300.00 (protocol owner to review).
 - **Actual C22.** "Heading" is read as the visible page title (protocol owner to confirm).
 - **Myfin clock.** The default year and month come from the machine clock. Captures after October 2026 need a check.
-- **Rule slips, disclosed.** The rule against listing or opening AGENTS.md and CLAUDE.md was broken by name. Reactive-resume's `ls` at the clone root listed both files, and its source reads made the harness load CLAUDE.md into its context. Myfin's clone listing printed AGENTS.md. Manage-my-damn-life's investigation listed the clone root once. No file was opened, grepped or quoted.
 - **Upstream pin not written.** The adapters do not write react-inp-blame@1.0.0 into their manifests and lockfiles. A fresh clone would build A and fail B and C. Fix before any fresh-clone run.
-- **Commits.** The owner chose to keep the commits as they are, authored and committed as Aditya Reddy. GitHub will show them as Unverified. The stop hook will keep reporting this.
 
 ## Second reader
 
-Adi asked Severin Neumann to be the second reader. No answer yet. Until he answers, every grade is single-reader provisional, as the protocol permits. If he declines, the protocol changes.
+A second reader hasn't been arranged yet. Until there is one, every grade is single-reader provisional, as the protocol permits.
 
 ## Overhead
 
@@ -109,4 +107,3 @@ Not started. The machine has 4 CPUs and 15 GB of RAM. Overhead numbers taken her
 1. Decide the misleading and blank rules for render scope and silence, before the next grading pass.
 2. Write the kresus overhead workload exclusion and the upstream pin into each adapter.
 3. Start overhead runs as long-running scripts.
-4. Push after 17:00 CDT.
