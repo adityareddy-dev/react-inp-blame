@@ -53,7 +53,7 @@ const MIME = {
 };
 
 /** Minimal static server. Cheaper and quieter than `vite preview`, which keeps a watcher alive. */
-function serve(root, port) {
+export function serve(root, port) {
   const server = http.createServer((req, res) => {
     const url = decodeURIComponent((req.url || '/').split('?')[0]);
     let file = path.join(root, url === '/' ? 'index.html' : url);
@@ -85,7 +85,7 @@ function serve(root, port) {
 // Runs before any of the app's own scripts, so it observes every interaction from the first one.
 // Identical in A, B and C, so whatever it costs is common to all three.
 
-const COLLECTOR = () => {
+export const COLLECTOR = () => {
   const w = window;
   w.__bench = { events: [], loaf: [], longTasks: [], firstInput: null, errors: [] };
   w.__benchLoadedAt = performance.now();
@@ -155,7 +155,7 @@ const COLLECTOR = () => {
 
 // Pulled out of the page at the end of a run. Computes INP the standard way, independently of
 // anything the library does, so B and C are not scored by the thing under test.
-const HARVEST = () => {
+export const HARVEST = () => {
   const b = window.__bench;
 
   // One latency per interactionId: the longest Event Timing entry in that group, which is how
@@ -265,9 +265,11 @@ const HARVEST = () => {
     inpInteraction: inp,
     eventEntryCount: b.events.length,
     firstInput: b.firstInput,
+    loafEntries: b.loaf,
     loafCount: b.loaf.length,
     loafBlockingMs: b.loaf.reduce((s, f) => s + (f.blockingDuration || 0), 0),
     loafTotalMs: b.loaf.reduce((s, f) => s + (f.duration || 0), 0),
+    longTaskEntries: b.longTasks,
     longTaskCount: b.longTasks.length,
     longTaskMs: b.longTasks.reduce((s, t) => s + t.duration, 0),
     // The part of each long task past the 50 ms budget, which is what delays input.
@@ -281,7 +283,8 @@ const HARVEST = () => {
 
 // ---------------------------------------------------------------- one run
 
-async function runOnce({ browser, app, config, url, throttle, runIndex, warmup, schedule = null }) {
+// caseId, when given, runs only that case's step: the accuracy capture takes one case per fresh run.
+export async function runOnce({ browser, app, config, url, throttle, runIndex, warmup, schedule = null, caseId = null }) {
   // The app's own deterministic reset (database back to its seed) before every run, so a run never
   // starts from the last run's data.
   if (app.beforeRun) await app.beforeRun(config);
@@ -334,7 +337,8 @@ async function runOnce({ browser, app, config, url, throttle, runIndex, warmup, 
 
     const stepResults = [];
     const pageNow = () => page.evaluate(() => performance.now());
-    for (const step of app.steps) {
+    const steps = caseId ? app.steps.filter((s) => s.name.split(' ')[0] === caseId) : app.steps;
+    for (const step of steps) {
       const before = step.before ? await step.before(page) : {};
       // The page's own clock on either side of the step, so a report can be tied back to the
       // step that caused it: Event Timing start times are on this clock too.
@@ -593,7 +597,10 @@ async function main() {
   if (failures.length) process.exitCode = 1;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only when run directly, so that other scripts can import the collector and the run.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
