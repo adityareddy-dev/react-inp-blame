@@ -50,7 +50,7 @@
   {
     "id": "C09",
     "action": "Click the eye button of the Skills section row again ('Show Skills on the page').",
-    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "reset": "Seeded resume restored before the run. Before the run, the Skills section is hidden from the page through its eye button (the state C08 creates), unless it is already hidden, so the run has a hidden section to show again.",
     "expectedStateChange": "The eye button's aria-pressed becomes false and its label becomes 'Hide Skills from the page'; the stored sections.skills.hidden is false."
   },
   {
@@ -62,25 +62,25 @@
   {
     "id": "C11",
     "action": "In the new Experience entry card, type a value into the Position field.",
-    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "reset": "Seeded resume restored before the run. Before the run, a new Experience entry is added through the section's add control (the entry C10 adds), unless this page already shows that entry, so the run has an entry to type into.",
     "expectedStateChange": "The entry card's accessible label shows the typed position; the stored sections.experience.items entry's position equals the typed value."
   },
   {
     "id": "C12",
     "action": "In an Experience entry card, type a value into the Company field.",
-    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "reset": "Seeded resume restored before the run. Before the run, a new Experience entry is added through the section's add control (the entry C10 adds), unless this page already shows that entry, so the run has an entry to type into.",
     "expectedStateChange": "The Company input value equals the typed company; the stored entry's company equals it."
   },
   {
     "id": "C13",
     "action": "Open an Experience entry's options menu and choose 'Hide from page'.",
-    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "reset": "Seeded resume restored before the run. Before the run, the Experience section is opened through its row, so the seeded entry exp-seed-1 is on screen.",
     "expectedStateChange": "The entry is marked hidden (its card shows the hidden note), the menu item label changes to 'Show on page', and the stored entry hidden flag is true."
   },
   {
     "id": "C14",
     "action": "Click 'Delete entry' on the entry added in C10.",
-    "reset": "Seeded resume restored before the run; the case asserts a change relative to its own before-state.",
+    "reset": "Seeded resume restored before the run. Before the run, a new Experience entry is added through the section's add control (the entry C10 adds), unless this page already shows that entry, and the stored items are read back; the run then deletes that entry.",
     "expectedStateChange": "The entry card is removed, the Experience entry count decreases by one, and the stored sections.experience.items length decreases by one."
   },
   {

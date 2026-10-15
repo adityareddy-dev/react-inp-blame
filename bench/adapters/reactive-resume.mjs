@@ -557,7 +557,10 @@ function unlinkDist() {
 
 /** The configuration whose database the stored reads use. beforeRun sets it before each run. */
 let activeLetter = 'a';
-/** What a step records for a later step to assert: C06 reads both states, C10 to C14 follow one new entry. */
+/**
+ * What a step records for a later step to assert: C06 reads both states, C10 to C14 follow one new entry. Each of
+ * C11 to C14 makes that entry in its own before-step when the page does not show it, so each runs alone.
+ */
 const observed = {};
 
 const SUMMARY_SENTENCE = 'Now leads frontend work for a payments team and mentors two engineers.';
@@ -604,6 +607,27 @@ async function addEntry(page, id, addName, key) {
 	await pollFor(() => cardsOf(page, id).count(), (n) => n === before + 1, 10000);
 	observed[key] = await newestCard(page, id).getAttribute('data-entry-id');
 	return observed[key];
+}
+
+/**
+ * The Experience entry that C10 adds, for the before-steps of C11 to C14. A page that already shows it (the ordered
+ * workload, where C10 ran first on this page) keeps it; otherwise the section's add control makes one.
+ */
+async function ensureNewExperience(page) {
+	await openSection(page, 'experience', 'Add experience');
+	const id = observed.newExperienceId;
+	if (id && (await cardById(page, 'experience', id).count()) === 1) return id;
+	return addEntry(page, 'experience', 'Add experience', 'newExperienceId');
+}
+
+/** The Skills section hidden from the page, the state C08 creates. A section that is already hidden is left as it is. */
+async function ensureSkillsHidden(page) {
+	const show = rowOf(page, 'skills').getByRole('button', { name: 'Show Skills on the page', exact: true });
+	if (await show.isVisible()) return;
+	await rowOf(page, 'skills').getByRole('button', { name: 'Hide Skills from the page', exact: true }).click();
+	await show.waitFor({ state: 'visible', timeout: 5000 });
+	const data = await storedUntil((d) => d.sections.skills.hidden === true);
+	if (data.sections.skills.hidden !== true) throw new Error('precondition: stored sections.skills.hidden is not true');
 }
 
 /** Waits until the Design mode is the one shown; the editor bar tab is labelled Design. */
@@ -763,6 +787,9 @@ const STEPS = [
 	},
 	{
 		name: 'C09 show the Skills section on the page again',
+		before: async (page) => {
+			await ensureSkillsHidden(page);
+		},
 		run: async (page) => {
 			await rowOf(page, 'skills').getByRole('button', { name: 'Show Skills on the page', exact: true }).click();
 		},
@@ -796,6 +823,9 @@ const STEPS = [
 	},
 	{
 		name: 'C11 type a position into the new Experience entry',
+		before: async (page) => {
+			await ensureNewExperience(page);
+		},
 		run: async (page) => {
 			await cardById(page, 'experience', observed.newExperienceId).getByLabel('Position', { exact: true }).fill('Staff engineer');
 		},
@@ -814,6 +844,9 @@ const STEPS = [
 	},
 	{
 		name: 'C12 type a company into an Experience entry',
+		before: async (page) => {
+			await ensureNewExperience(page);
+		},
 		run: async (page) => {
 			await cardById(page, 'experience', observed.newExperienceId).getByLabel('Company', { exact: true }).fill('Harbor Systems');
 		},
@@ -831,6 +864,9 @@ const STEPS = [
 	},
 	{
 		name: 'C13 hide an Experience entry from the page',
+		before: async (page) => {
+			await openSection(page, 'experience', 'Add experience');
+		},
 		run: async (page) => {
 			const card = cardById(page, 'experience', 'exp-seed-1');
 			await card.getByRole('button', { name: 'Entry options', exact: true }).click();
@@ -851,7 +887,12 @@ const STEPS = [
 	},
 	{
 		name: 'C14 delete the Experience entry added in C10',
-		before: () => ({ items: storedResume().sections.experience.items.length, id: observed.newExperienceId }),
+		before: async (page) => {
+			const id = await ensureNewExperience(page);
+			const data = await storedUntil((d) => d.sections.experience.items.some((item) => item.id === id));
+			if (!data.sections.experience.items.some((item) => item.id === id)) throw new Error('precondition: the stored items lack the entry');
+			return { items: data.sections.experience.items.length, id };
+		},
 		run: async (page) => {
 			await cardById(page, 'experience', observed.newExperienceId).getByRole('button', { name: 'Delete entry', exact: true }).click();
 		},
