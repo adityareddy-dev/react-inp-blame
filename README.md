@@ -1,15 +1,33 @@
 # react-inp-blame
 
-For a slow interaction in your React app, react-inp-blame shows a badge and a report of where the time went.
-The report includes a component or handler name when it has one.
-It can be wrong, check the name against the profiler.
+Click **Log in** in the demo. The report shows a 400 ms interaction, about 399 ms in the handler, and
+a React render that landed after the screen updated. INP didn't count that later render. Without the
+timeline, it is easy to investigate the render and miss the handler.
+
+react-inp-blame joins browser interaction timing to the React tree and shows where the time went,
+with a component or handler name when it has one. The name can be wrong, check it against the profiler.
+1.0.0 makes the API and report shape stable, with [documented exceptions](#versions). It does not
+make the attribution reliable: the latest [unseen-app accuracy check](#how-reliable-is-it) is below.
 
 ![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](docs/media/overlay.gif)
 
 **[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow on
 purpose. Click something and read what the badge blames.
 
+## 30-second quickstart
+
+In an existing Next.js or Vite React app:
+
     npm install react-inp-blame
+
+Use the setup below for your framework, restart its dev server, then click a slow control and open the
+badge. Both setups are development-only by default. Production needs an
+[explicit opt-in](docs/install.md#numbers-in-development).
+
+[Next.js](#start-with-nextjs-142-or-later) · [Vite](#start-with-vite) ·
+[API reference](docs/api.md) · [Browser support](#browser-support) ·
+[React and framework versions](#versions) · [web-vitals and telemetry](#send-attribution-with-inp) ·
+[Benchmarks and reproduction](#benchmarks-and-reproduction)
 
 ## Start with Next.js 14.2 or later
 
@@ -111,6 +129,58 @@ onInteraction((report) => console.log(report.verdict, report.explanation.blame))
 
 To read the whole report of the last interaction in the console, add `debugGlobal: true` to `runtime` and
 run `__REACT_INP_BLAME__.last()`.
+
+## Send attribution with INP
+
+The [web-vitals attribution build](https://github.com/GoogleChrome/web-vitals) owns the page's INP
+measurement. This library adds React context to it. For component names on the interaction target,
+`generateTarget` needs no runtime installation:
+
+```ts
+import { onINP } from 'web-vitals/attribution';
+import { generateTarget } from 'react-inp-blame/web-vitals';
+
+onINP((metric) => console.log(metric), { generateTarget });
+```
+
+Use web-vitals 5.1 or later. Production component names need the build plugin's display-name transform.
+For the whole report, `attributeINP(metric)` reads the installed library's report for that interaction.
+[The integration guide](docs/web-vitals.md) covers both paths and the cases where no report is available.
+
+Event Timing supplies the interaction's duration and phases. Long Animation Frames adds script and
+forced-layout evidence on Chromium 123 and later. It does not supply React component names, and
+coinciding work alone does not prove what caused it. Without that API, reports leave those details out.
+
+For an existing OpenTelemetry web-vitals pipeline, add the processor before the processor that exports:
+
+```ts
+import { InpBlameLogRecordProcessor } from 'react-inp-blame/otel';
+
+const loggerProvider = new LoggerProvider({
+  processors: [
+    new InpBlameLogRecordProcessor(),
+    new BatchLogRecordProcessor({ exporter }),
+  ],
+});
+```
+
+Here `LoggerProvider`, `BatchLogRecordProcessor` and `exporter` come from your telemetry setup.
+The [complete OTLP recipe](docs/opentelemetry.md#opentelemetrys-web-sdk) includes their imports,
+the exporter and instrumentation registration. Enable the library in production and sample it first,
+or the processor has no reports to attach. `/otel` is experimental through 1.x, its attributes are not
+standard OpenTelemetry conventions, and a component name is attribution to investigate, not proof.
+
+## Benchmarks and reproduction
+
+The [live demo](https://adityareddy-dev.github.io/react-inp-blame/) has deliberately slow scenarios.
+For a local copy, use Node 22.18 or later, run `npm ci`, `npm run build` and `npm run dev` from this
+repository, then open the address Vite prints. `npm test` runs the demo checks after
+`npx playwright install chromium firefox webkit` ([contributor setup](CONTRIBUTING.md#setup)).
+
+The [benchmark harness](bench/README.md) records the app commits, patches, build configurations and
+commands behind the [published overhead runs](docs/benchmarks/README.md) and
+[real-app results](docs/benchmarks/real-apps.md). Those measurements are of older releases, not a
+new 1.0.0 benchmark. The [accuracy check](#how-reliable-is-it) also remains a historical result.
 
 ## What 1.0 means
 
