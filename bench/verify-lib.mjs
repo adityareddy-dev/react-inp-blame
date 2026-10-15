@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { apps } from './apps.mjs';
+import { allApps as apps, cohortIds } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SPEC = process.env.BENCH_NPM_LIB ?? 'react-inp-blame@1.0.0';
@@ -50,7 +50,7 @@ const want = hashes(root);
 // The apps a run is over. Checking every app made a run over some of them record a failed check
 // whenever the others were on another version.
 const appArg = process.argv.includes('--app') ? process.argv[process.argv.indexOf('--app') + 1] : null;
-const ids = appArg ? appArg.split(',') : Object.keys(apps);
+const ids = appArg ? appArg.split(',') : cohortIds;
 for (const id of ids) if (!apps[id]) throw new Error(`no such app: ${id}`);
 
 const result = { spec: SPEC, integrity: info.integrity, shasum: info.shasum, files: Object.keys(want).length, apps: {} };

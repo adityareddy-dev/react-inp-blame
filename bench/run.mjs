@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { apps, checkConfigs, checkReady } from './apps.mjs';
+import { allApps as apps, cohortIds, checkConfigs, checkReady } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -21,7 +21,7 @@ const noBuild = process.argv.includes('--no-build');
 const dryRun = process.argv.includes('--dry-run');
 const argv = process.argv.slice(2).filter((a) => a !== '--no-build');
 const appArg = argv.includes('--app') ? argv[argv.indexOf('--app') + 1] : null;
-const appIds = appArg ? appArg.split(',') : Object.keys(apps);
+const appIds = appArg ? appArg.split(',') : cohortIds;
 const CONFIGS = (process.env.BENCH_ORDER ?? 'A,B,C').split(',');
 checkConfigs(appIds, CONFIGS);
 if (dryRun) {

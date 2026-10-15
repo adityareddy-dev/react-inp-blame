@@ -12,7 +12,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 const BOOTSTRAP = 10000;
-const SEED = 0x5eed1234;
+// Protocol: bootstrap seed 359.
+const SEED = 359;
 
 // ---------------------------------------------------------------- stats
 
