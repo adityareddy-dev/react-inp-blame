@@ -1,61 +1,77 @@
 # EF-360 status
 
-Living status for the five-app benchmark. Updated at each milestone. Protocol: [protocol-2026-10-14.md](protocol-2026-10-14.md), revised by [protocol-2026-10-15.md](protocol-2026-10-15.md), which is published before any scored capture.
+Living status for the five-app benchmark. Updated at each milestone. Protocol: [protocol-2026-10-14.md](protocol-2026-10-14.md), revised by [protocol-2026-10-15.md](protocol-2026-10-15.md), with its addendum on capture setup. The revision is published before any grade is recorded.
 
-Last updated: 2026-10-15, 13:58 CDT. Commits are local. Nothing is pushed. Pushes wait for 17:00 CDT on a weekday or any time outside 09:00 to 17:00. Nothing is merged.
+Last updated: 2026-10-15, about 14:45 CDT. Commits are local. Nothing is pushed. Pushes wait for 17:00 CDT on a weekday, or any time outside 09:00 to 17:00. Nothing is merged. The branch is 7 commits ahead and 5 behind origin. Authorship of the unpushed commits is an open question for the owner (see the stop-hook notes below).
 
 ## Milestones
 
 | Step | State |
 | --- | --- |
 | Harness and registry of the five apps | Done |
-| Protocol revision 2026-10-15, with every changed case and its reason | Done, with open items listed in the revision |
-| Adapter and case reconciliation, one agent per app, then coordinator review | Done. Five apps reconciled |
-| Real databases: kresus Postgres 5442, manage-my-damn-life Postgres 5443, reactive-resume Postgres 5444, myfin MariaDB 5451 | Running |
-| Ordered workload on A, B and C, all five apps | Passes for all five on the reconciled cases (agent runs; coordinator verification pending) |
-| Per-case check on B, first accuracy capture run | Not started |
-| Accuracy captures | Not started |
-| Grading (single reader, provisional) | Not started |
-| Overhead runs | Not started. Kresus workload definition pending (see revision) |
+| Protocol revision 2026-10-15, with every changed case and reason | Done |
+| Addendum: capture setup for manage-my-damn-life-nextjs C12 and reactive-resume C09, C11 to C14 | Done, written before any grade for those apps |
+| Real databases | Postgres 5442 (kresus), 5443 (manage-my-damn-life), 5444 (reactive-resume), all running. MariaDB 5451 (myfin), started by its adapter |
+| First capture pass, all five apps, configuration B, one case per fresh run | Done |
+| Setup failures from the first pass | Fixed and re-captured. Zero setup failures remain in the accuracy directory. First-pass files kept in bench/results/accuracy-firstpass |
+| Blinded single-reader grading, actual | Done: 24 cases |
+| Blinded single-reader grading, myfin, kresus | Running |
+| Blinded single-reader grading, manage-my-damn-life-nextjs, reactive-resume | Running |
+| Overhead runs | Not started. Needs the kresus workload exclusion and the pin written into each adapter |
+| Second reader (Severin Neumann) | Requested, no answer yet |
 
-## Per-app state
+## Per-app capture state (configuration B, zero setup failures)
 
-| App | Cases hash after revision | Ordered workload A, B, C | Case changes | Registry | Open |
+| App | Cases | Matched | Partial | No observable latency | Cases hash after revision and addendum |
 | --- | --- | --- | --- | --- | --- |
-| actual | 56359e8dc1a569f3 | 24/24 each, 0 page errors (agent runs) | 5 text, 1 action | ready | Pin not written by the adapter; A bundle contains a dependency-list string; port 5310 was held by a kresus scratch server during its run |
-| myfin | 47f1fd193a7fb653 | 24/24 each, 0 page errors (agent runs) | 7 text, 1 action | ready | Pin not written by the adapter; API on 5325; clock dependence (seed 2025-11 to 2026-10) |
-| kresus | 7ab4337c66995a58 | Per-case 23/23 each, 0 page errors. Ordered session fails C07, C17, C21 | 7 text, 22 step checks | ready | Overhead workload excludes C07, C17, C21 (revision); pin not written; C12 sign rewrite needs review |
-| manage-my-damn-life-nextjs | b8622596ba492ef3 | 24/24 each, 0 page errors, Postgres 5443 | 2 text (C16) | ready | Pin not written by the adapter |
-| reactive-resume | 3ba7ee435907aaa7 | 23/23 each, 0 page errors, Postgres 5444 | 1 action (C23) | ready | Pin not written by the adapter |
+| actual | 24 | 2 | 4 | 18 | 56359e8dc1a569f3 |
+| myfin | 24 | 20 | 0 | 4 | 47f1fd193a7fb653 |
+| kresus | 23 | 4 | 17 | 2 | 7ab4337c66995a58 |
+| manage-my-damn-life-nextjs | 24 | 4 | 5 | 15 | 6f45a31bc381e754 |
+| reactive-resume | 23 | 14 | 2 | 7 | 99bb10f2d6208628 |
 
-Smoke results come from the reconciliation agents' runs. The coordinator has not yet re-run them. Those runs are part of the first capture pass.
+The matched, partial and no-observation counts are not stable between runs. Two full captures of the same manage-my-damn-life code changed the class of six cases. Those counts are first-pass captures, not final results.
 
-## Failures, blockers and disclosed slips
+## Grading state
 
-- **Pin not written by the adapters.** react-inp-blame@1.0.0 exists in each clone's working tree. The adapters do not write it, so a fresh clone would build A and fail B and C on the library import. Fix before any fresh-clone run.
-- **Kresus ordered session.** Three cases pass alone and fail in the ordered session. They are excluded from the overhead workload only, as the revision says. Overhead for kresus is blocked until the workload is written into the adapter.
-- **Kresus C12.** The Plus button turns the budget sign to Minus, so the claim is rewritten to -300.00. This departs from the frozen 300.00. It needs the protocol owner's review.
-- **Actual C22.** "Heading" in the frozen claim is read as the visible page title, which the app renders as text, not an ARIA heading. It needs the protocol owner's confirmation.
-- **Myfin clock.** Default year and month come from the machine clock. Captures and overhead after October 2026 need a check.
-- **Slips.** The rule against listing or opening AGENTS.md and CLAUDE.md was broken by name, though no file was opened or quoted. Reactive-resume's `ls` at the clone root listed AGENTS.md and CLAUDE.md, and its source reads made the harness load the clone's CLAUDE.md into its context. Myfin's directory listing of the clone printed AGENTS.md. The agents disclosed these; they are recorded here.
-- **Database start.** Myfin's MariaDB is started by its adapter as the bench user, which needs root and `runuser`. It is running now (pid 9746).
+Single reader, provisional. Each case has one blinded reader, and every grade is recorded with its raw labels.
+
+- **actual, 24 graded.** 20 cannot tell, 2 wrong (C05, C07), 1 misleading (C08), 1 blank (C11). Ledger: bench/results/grades/actual.json.
+- Nine actual cases with no observable latency carry blank sub-fields. The rule says cannot tell. The ledger keeps the raw labels and a normalised set.
+- My hand reads of C05 and C07 said cannot tell, against the reader's wrong. The two readings differ, and both are kept.
+- Myfin, kresus, manage-my-damn-life-nextjs and reactive-resume: grading running.
+
+## Grading timing for Severin
+
+- Readers that are agents: 24 actual cases took 618 seconds at two in parallel, about 50 seconds of agent time per case.
+- My own hand reads (two cases): tool time only, a few seconds per case. My reasoning between calls was not timed. Estimated at about 2 minutes per case; this is a guess.
+- Cases to grade: 118 across the five apps (actual 24, myfin 24, kresus 23, manage-my-damn-life-nextjs 24, reactive-resume 23).
+
+## Failures, fixes and disclosed issues
+
+- **Manage-my-damn-life connections.** The first pass ran out of Postgres connections from C17 on. The app creates a new Sequelize pool for each call, and the pools close only after 10 to 12 seconds idle. The adapter now waits for the role's connections to drain before each run (up to 40 s), and restarts the server only if they remain. The upstream one-line fix in src/helpers/api/db.ts is not applied, because that code is upstream.
+- **Manage-my-damn-life C12.** The first pass read the date format before it loaded and so lost the edit. The before-step now waits for the saved format.
+- **Reactive-resume C09 to C14.** These depend on earlier cases in the same session, and captures run each case alone. The before-steps now create the state the cases need. C18 to C21 failed in the first re-capture from a browser that had closed. Re-run alone, all four captured as matched.
+- **Stray server.** A diagnostic next-server on port 5320 served the nine-case re-capture of manage-my-damn-life. The first attempt at the re-capture was therefore not run on its own server. It was killed, and the full capture was re-run on a clean server. The results files are from that clean run.
+- **Myfin.** The MariaDB start is run by the adapter as the bench user. It worked in this pass.
+- **Kresus C12.** The Plus button turns the budget sign to Minus, so the claim is -300.00 (protocol owner to review).
+- **Actual C22.** "Heading" is read as the visible page title (protocol owner to confirm).
+- **Myfin clock.** The default year and month come from the machine clock. Captures after October 2026 need a check.
+- **Rule slips, disclosed.** The rule against listing or opening AGENTS.md and CLAUDE.md was broken by name. Reactive-resume's `ls` at the clone root listed both files, and its source reads made the harness load CLAUDE.md into its context. Myfin's clone listing printed AGENTS.md. Manage-my-damn-life's investigation listed the clone root once. No file was opened, grepped or quoted.
+- **Upstream pin not written.** The adapters do not write react-inp-blame@1.0.0 into their manifests and lockfiles. A fresh clone would build A and fail B and C. Fix before any fresh-clone run.
+- **Stop-hook commits.** Seven unpushed commits are unsigned, and their committer email is Aditya Reddy's noreply address. GitHub will show them as Unverified. Options are open with the owner: keep as is, change only the committer, or sign.
 
 ## Second reader
 
 Adi asked Severin Neumann to be the second reader. No answer yet. Until he answers, every grade is single-reader provisional, as the protocol permits. If he declines, the protocol changes.
 
-## Grading plan and timing
-
-Not yet measured. Filled in once the first accuracy captures exist, from timing two or three real captures graded by hand, with per-case minutes stated as measured or as a guess.
-
 ## Overhead
 
-Not started. The machine has 4 CPUs and 15 GB of RAM. Overhead numbers taken on this machine are shared-CPU measurements and say so in the report. Overhead runs start after accuracy captures, as long-running scripts. Myfin alone is about 9.7 hours of overhead runs.
+Not started. The machine has 4 CPUs and 15 GB of RAM. Overhead numbers taken here are shared-CPU measurements, and the report says so. Overhead runs start after grading and the workload changes, as long-running scripts. Myfin alone is about 9.7 hours of overhead runs, and kresus's workload excludes C07, C17 and C21.
 
 ## Next steps
 
-1. Rebuild the branch as one commit per app, plus one docs commit. Local only.
-2. Run the first capture pass for each app on B, one case per fresh run. Each case's pass or setup failure is recorded.
-3. Grade captures and time it for the Severin request.
-4. Write the kresus overhead workload into its adapter, and the pin write into each adapter.
-5. Start overhead as long-running scripts.
+1. Finish grading for the four remaining apps and record the ledger for each.
+2. Write the kresus overhead workload exclusion and the upstream pin into each adapter.
+3. Start overhead runs as long-running scripts.
+4. Push after 17:00 CDT, after the owner has chosen how to handle the commit identity.
