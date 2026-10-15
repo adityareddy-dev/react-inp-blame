@@ -1,33 +1,57 @@
-# react-inp-blame
+<h1 align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.svg">
+  <img alt="react-inp-blame: interaction attribution for INP, with a 400 ms click split into its handler" src="docs/media/banner-light.svg" width="880">
+</picture>
+</h1>
 
-Click **Log in** in the demo. The report shows a 400 ms interaction, about 399 ms in the handler, and
-a React render that landed after the screen updated. INP didn't count that later render. Without the
+<div align="center">
+
+<a href="https://www.npmjs.com/package/react-inp-blame"><img alt="npm version" src="https://img.shields.io/npm/v/react-inp-blame"></a>
+<a href="https://github.com/adityareddy-dev/react-inp-blame/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/adityareddy-dev/react-inp-blame/actions/workflows/ci.yml/badge.svg"></a>
+<a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/react-inp-blame"></a>
+<a href="#versions"><img alt="Node engines" src="https://img.shields.io/node/v/react-inp-blame"></a>
+
+</div>
+
+<div align="center">
+
+![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](docs/media/overlay.gif)
+
+</div>
+
+Click **Log in** in [the demo](https://adityareddy-dev.github.io/react-inp-blame/). The report shows a 400 ms interaction, about 399 ms in the handler, and
+a React render that landed after the screen updated. INP (Interaction to Next Paint) didn't count that later render. Without the
 timeline, it is easy to investigate the render and miss the handler.
 
-react-inp-blame joins browser interaction timing to the React tree and shows where the time went,
+react-inp-blame joins browser interaction timing to the React tree and shows where the time went and what kind of work it was,
 with a component or handler name when it has one. The name can be wrong, check it against the profiler.
 1.0.0 makes the API and report shape stable, with [documented exceptions](#versions). It does not
 make the attribution reliable: the latest [unseen-app accuracy check](#how-reliable-is-it) is below.
 
-![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](docs/media/overlay.gif)
+> [!WARNING]
+> The verdict can be wrong. On hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other 54, 35 were wrong and 19 misleading. The [accuracy check](#how-reliable-is-it) below has the full split.
 
 **[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow on
 purpose. Click something and read what the badge blames.
+
+<div align="center">
+
+[Next.js](#start-with-nextjs-142-or-later) · [Vite](#start-with-vite) · [API reference](docs/api.md) · [Browser support](#browser-support) · [React and framework versions](#versions) · [web-vitals and telemetry](#send-attribution-with-inp) · [Benchmarks and reproduction](#benchmarks-and-reproduction) · [How reliable is it](#how-reliable-is-it) · [Troubleshooting](#troubleshooting)
+
+</div>
 
 ## 30-second quickstart
 
 In an existing Next.js or Vite React app:
 
-    npm install react-inp-blame
+```sh
+npm install react-inp-blame
+```
 
 Use the setup below for your framework, restart its dev server, then click a slow control and open the
 badge. Both setups are development-only by default. Production needs an
 [explicit opt-in](docs/install.md#numbers-in-development).
-
-[Next.js](#start-with-nextjs-142-or-later) · [Vite](#start-with-vite) ·
-[API reference](docs/api.md) · [Browser support](#browser-support) ·
-[React and framework versions](#versions) · [web-vitals and telemetry](#send-attribution-with-inp) ·
-[Benchmarks and reproduction](#benchmarks-and-reproduction)
 
 ## Start with Next.js 14.2 or later
 
@@ -83,21 +107,24 @@ React Router in framework mode, Remix, TanStack Start and Astro write their own 
 never sees on its own, so each has a setup of its own: [React Router](docs/install.md#install-with-react-router),
 [Remix](docs/install.md#install-with-remix), [TanStack Start](docs/install.md#install-with-tanstack-start), [Astro](docs/install.md#install-with-astro).
 
-**What you will see.** Reload the page. A small dark badge sits in the corner, bottom-right by default,
+### What you will see
+
+Reload the page. A small dark badge sits in the corner, bottom-right by default,
 and reads `INP —` until you interact. Click something slow and it shows the page's INP so far in
 milliseconds: green at 200 or under, amber up to 500, red above. Click the badge for a panel of the recent
 slow interactions, newest first, and click a row for the whole explanation. A click, tap or key press of
 40 ms or more gets a row (the `threshold` option), so a 150 ms click has one, though the badge stays green
 and the panel says Good: INP counts anything up to 200 ms as good. The demo above sets
-`position: 'bottom-left'`, which is why its badge sits on the left: its own explanation column has the
-right-hand side. From the demo's sign-in page, in development, this is `report.verdict`, which the row
-spreads over its header and body:
+`position: 'bottom-left'`, so the badge stays clear of the explanation panel, which opens on the right.
+This is `report.verdict` for the demo's sign-in click, in development. The row spreads it over its header and body:
 
-    400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
-    about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms
-    after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them
-    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and
-    what started it can't be told.
+```text
+400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
+about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms
+after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them
+inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and
+what started it can't be told.
+```
 
 `overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
@@ -107,15 +134,19 @@ repo can use `'query'` and each developer opts in with the `localStorage` line. 
 development-only: `enabled` defaults to `'development'`, so a production build carries nothing from
 either plugin until you say `enabled: true` or `enabled: 'production'`. So `vite preview` and
 `next start`, which serve a production build, show no badge by default, and the build prints a line
-saying it left the library out. The line on Next.js 15.3 to 16.2 stays in every build, but compiles to
-nothing in the ones `enabled` leaves out.
+saying it left the library out. The `instrumentation-client.ts` line on Next.js 15.3 to 16.2 stays in every build, but compiles to
+nothing where `enabled` leaves the library out.
 
-**Numbers in development.** It is a development tool first, so most numbers you see come from React's
+### Numbers in development
+
+It is a development tool first, so most numbers you see come from React's
 development build, which is slower than production, and under `<StrictMode>` React renders every component
 twice there. The badge rates what it measured on the same scale, marks the build `dev`, and the panel says to
 check anything amber or red in a production build: add `enabled: true` and `runtime: { overlay: 'query' }`,
 run `next build` and `next start` or `vite build` and `vite preview`, and open the page with `?inp-blame`
 ([Numbers in development](docs/install.md#numbers-in-development)).
+
+### Read reports in code
 
 If you would rather read reports than look at a badge, drop `overlay` and subscribe:
 
@@ -130,7 +161,33 @@ onInteraction((report) => console.log(report.verdict, report.explanation.blame))
 To read the whole report of the last interaction in the console, add `debugGlobal: true` to `runtime` and
 run `__REACT_INP_BLAME__.last()`.
 
+## How the verdict is built
+
+```mermaid
+flowchart TD
+    input["Click, tap or key press"] --> entries["Event Timing entries: pointerdown, pointerup, click, keydown, keyup"]
+    input --> ring["Capture listener keeps the last 8 inputs"]
+    entries --> frame["Entries painted within 8 ms count as one frame"]
+    frame --> headline["Headline: the longest single entry"]
+    frame --> hold["Time the entries span past the headline goes to holdMs"]
+    headline --> page["Page INP: picked from the longest kept headlines"]
+    commit["React commit, read through __REACT_DEVTOOLS_GLOBAL_HOOK__"] --> join{"Input matches a same-type entry within 1 ms, or a pointerdown or keydown press?"}
+    ring --> join
+    join -->|yes| walk["Walk the fiber tree: component times and names, plus handler props"]
+    walk --> blame["Blame: its kind and name, and how sure it is"]
+    blame --> verdict["Verdict: headline, cause and notes, built on first read"]
+    input --> hydr{"Landed on server HTML that React has not hydrated?"}
+    hydr -->|yes| hydration["report.hydration: waited or not-hydrated"]
+    hydration --> blame
+    laf["Long Animation Frames: scripts and forced layout"] --> verdict
+```
+
+The steps come from the [design notes](docs/interaction-attribution-design.md) and [How it works](docs/how-it-works.md). The commit join does not use `interactionId`.
+
 ## Send attribution with INP
+
+<details>
+<summary>web-vitals and OpenTelemetry setups</summary>
 
 The [web-vitals attribution build](https://github.com/GoogleChrome/web-vitals) owns the page's INP
 measurement. This library adds React context to it. For component names on the interaction target,
@@ -167,10 +224,15 @@ const loggerProvider = new LoggerProvider({
 Here `LoggerProvider`, `BatchLogRecordProcessor` and `exporter` come from your telemetry setup.
 The [complete OTLP recipe](docs/opentelemetry.md#opentelemetrys-web-sdk) includes their imports,
 the exporter and instrumentation registration. Enable the library in production and sample it first,
-or the processor has no reports to attach. `/otel` is experimental through 1.x, its attributes are not
-standard OpenTelemetry conventions, and a component name is attribution to investigate, not proof.
+or the processor has no reports to attach. `/otel` is experimental through 1.x. Its attributes are not
+standard OpenTelemetry conventions. Treat a component name as attribution to investigate.
+
+</details>
 
 ## Benchmarks and reproduction
+
+<details>
+<summary>Running the demo locally, and the benchmark harness</summary>
 
 The [live demo](https://adityareddy-dev.github.io/react-inp-blame/) has deliberately slow scenarios.
 For a local copy, use Node 22.18 or later, run `npm ci`, `npm run build` and `npm run dev` from this
@@ -181,6 +243,8 @@ The [benchmark harness](bench/README.md) records the app commits, patches, build
 commands behind the [published overhead runs](docs/benchmarks/README.md) and
 [real-app results](docs/benchmarks/real-apps.md). Those measurements are of older releases, not a
 new 1.0.0 benchmark. The [accuracy check](#how-reliable-is-it) also remains a historical result.
+
+</details>
 
 ## What 1.0 means
 
@@ -264,6 +328,7 @@ Capped ancestor means a production verdict whose component walk stopped at its b
 | kaneo prod 1x | 2 | 0 / 2 | 0 / 2 / 0 | 2 / 0 |
 | kaneo prod 4x | 8 | 0 / 8 | 4 / 4 / 0 | 7 / 1 |
 
+
 The reasons and trace measurements are supporting evidence, they have no separate accuracy grade. There
 is no separate score for every component count or later-render note, those claims affect the name grade.
 
@@ -284,7 +349,7 @@ If a report names the wrong component or handler, or a slow interaction gets no 
 an issue with the [wrong or missing blame form](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=wrong-or-missing-blame.yml).
 The report itself is what makes it diagnosable. Add `debugGlobal: true` to `runtime` (or to `install()`) and
 run `JSON.stringify(__REACT_INP_BLAME__.last(), null, 2)` in the console right after the slow interaction, or
-print `JSON.stringify(report)` from `onInteraction`; with no report, paste `stats()` instead. What the badge
+print `JSON.stringify(report)` from `onInteraction`. With no report, paste `stats()` instead. What the badge
 shows is a good start, but the JSON has everything its sentence was built from.
 
 The form also asks for the versions of react-inp-blame, react and react-dom, and Next.js or Vite, the bundler,
@@ -299,6 +364,9 @@ its entry under [Troubleshooting](#troubleshooting).
 ---
 
 ## Compared with other tools
+
+<details>
+<summary>The comparison table, its footnotes and the date it was checked</summary>
 
 | | react-inp-blame | Sentry `reactComponentAnnotation` | react-scan | web-vitals attribution | React 19.2 Performance tracks |
 | --- | --- | --- | --- | --- | --- |
@@ -316,13 +384,15 @@ its entry under [Troubleshooting](#troubleshooting).
 4. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
 5. It keeps every fiber render from the pointerup or keydown as one set, until the interaction's Event Timing entry arrives or a second after the frame that follows the input.
 6. `totalStyleAndLayoutDuration`, and `longestScript.entry`, which carries `forcedStyleAndLayoutDuration`.
-7. It ships bundler plugins under `react-scan/react-component-name/*`; what they match was not checked.
+7. It ships bundler plugins under `react-scan/react-component-name/*`. What they match was not checked.
 
 Checked on 2026-09-26 against aidenybai/react-scan at 0fb3186 (0.5.7 on npm), getsentry/sentry-javascript at
 bd3ce5f (11.0.0), reactjs/react.dev at 44b0b5f and web-vitals 6.2.2's types. In development, React's Components track is the
 better source of per-component durations, and react-scan's notifications already tie a slow interaction to the components
 that rendered for it. Its `all-environments` entry starts the same tracking in a production build. What this library adds
-is Long Animation Frames' forced layout inside that join, in either build, and the sentence.
+is Long Animation Frames' forced layout inside that join, in either build, and the plain-language verdict.
+
+</details>
 
 ## Browser support
 
@@ -338,10 +408,13 @@ leaves out prints nothing, so a tool that forwards console warnings gets no even
 Animation Frames, `frames` and `laterFrames` are `null` and the explanation leaves out the forced-layout and
 script sentences. On a page without cross-origin isolation, Playwright's Firefox 148 and WebKit 26.4 step
 `performance.now()` in whole milliseconds, too coarse to time a quick component: when eight or more of a
-commit's components are timed, every one reads a whole millisecond and they average under 4 ms, the report
-leaves their times out and blame built on render times is `'inferred'`.
+commit's components are timed, every one reads a whole millisecond and they average under 4 ms. Then the report
+leaves their times out, and blame built on render times is marked `'inferred'`.
 
 ## Versions
+
+<details>
+<summary>Versions tested in CI, and what 1.x promises</summary>
 
 | | CI runs | Outside that |
 | --- | --- | --- |
@@ -353,11 +426,17 @@ leaves their times out and blame built on render times is `'inferred'`.
 | [webpack](docs/install.md#webpack-or-rspack) | 5.111 | Not tried |
 | Node, for the build plugins | Installs and loads on 20.19, tests on 22 and 24 | `engines` asks for 20.19 |
 
+Load one copy of the library per page. Two copies from different releases may refuse to share it, and the second
+says so in the console ([another-copy](#another-copy)).
+
 The peer dependencies are all `*` and optional, on purpose. npm refuses to install beside a prerelease that a
 range leaves out, even for an optional peer, and `next@canary` or a React canary is a prerelease of a version no
 range written today can name. So a real range would stop those installs with an ERESOLVE error, where the library
 itself says what is wrong: the Next.js wrapper checks the version at build time, and `install()` checks each
 react-dom as it registers.
+
+<details>
+<summary>Under Jest: the config a test that loads the package needs</summary>
 
 **Under Jest.** The package is ES modules only, and Jest's default runtime loads everything as CommonJS, so a
 test that reaches it fails with "Cannot use import statement outside a module" (from Jest 30.5, "Must use import
@@ -384,9 +463,11 @@ Jest leaves a file uncompiled when any one of them matches. Where the config or 
 the one above with `'\\.jsx?$'` as its key: Jest runs a file through the first entry whose key matches, so one
 for `.ts` files as well would take them from ts-jest. Jest 30.5's error also offers Node 24.9 or later, but there
 Jest loads the package as it is only from Jest 30.4 and only when run with
-`NODE_OPTIONS=--experimental-vm-modules`; on Node 20 and 22, or an older Jest, not even then. CI checks all of it
+`NODE_OPTIONS=--experimental-vm-modules`. On Node 20 and 22, or an older Jest, not even then. CI checks all of it
 on Jest 30, ts-jest 29, the Next.js `apps/next-demo` pins and Node 20.19, except a pnpm install, the `babel` key
 and the flag on Node 24.19 and on older Jest, which were checked by hand.
+
+</details>
 
 **What 1.x promises.** From 1.0.0 the package follows semantic versioning. That covers every export and the
 options it takes, and the shape of a report. Only a major release removes or renames an export, an entry point,
@@ -422,11 +503,10 @@ Node line once it is past its end of life upstream, and the CHANGELOG says so un
 one. Dropping anything else the table lists waits for 2.0.0. The canaries run in CI every day but are not
 supported: a canary can break the library, and the fix comes in an ordinary release.
 
-Load one copy of the library per page. Two copies from different releases may refuse to share it, and the second
-says so in the console ([another-copy](#another-copy)).
-
 CI keeps a copy of the type declarations each entry point publishes, `/otel`'s included, and fails when a build's
 differ from it. No change to the surface goes out unseen, and the pull request that makes one says why.
+
+</details>
 
 ## What it costs
 
@@ -435,7 +515,7 @@ runs. On two of the demo's scenarios, a click that re-renders 801 components and
 1441, the library's own time was 1.3 to 3.4 ms per interaction at the median and 3.8 ms at worst at p95, in
 production and development builds ([how that was measured](docs/how-it-works.md#time-per-interaction)). With
 `enabled` at its default, neither plugin adds anything to a production build (on Next.js 15.3 to 16.2 the
-line's module stays, as an empty function); where it loads:
+line's module stays, as an empty function). The table shows where each part loads:
 
 <!-- size:start -->
 | Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
@@ -493,7 +573,7 @@ The [docs](docs/README.md) have the rest.
 ## Troubleshooting
 
 Each warning the library prints ends with a link into this README. Most land on their line below, which
-opens the answer in [docs/troubleshooting.md](docs/troubleshooting.md); the Vite plugin's setup advice lands
+opens the answer in [docs/troubleshooting.md](docs/troubleshooting.md). The Vite plugin's setup advice lands
 on its setup under [Documentation](#documentation). To see whether the library installed at all, and why not,
 add `debugGlobal: true` and read `__REACT_INP_BLAME__.stats()`. If your problem is not listed, open a
 [setup problem](https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=setup-problem.yml) issue
