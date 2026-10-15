@@ -1,0 +1,146 @@
+[
+  {
+    "id": "C01",
+    "action": "Click the \"Ally Savings\" account in the sidebar.",
+    "reset": "Fresh browser context; ready() imports the upstream Actual demo budget file (actual-demo-budget.zip) through the welcome screen.",
+    "expectedStateChange": "The account page header (account-name) reads \"Ally Savings\" and its balance (account-balance) reads \"1,772.80\"."
+  },
+  {
+    "id": "C02",
+    "action": "Click the \"Roth IRA\" account in the sidebar.",
+    "reset": "Fresh browser context and demo budget, as C01.",
+    "expectedStateChange": "The account page header reads \"Roth IRA\" and its balance reads \"2,745.81\"."
+  },
+  {
+    "id": "C03",
+    "action": "Click the \"Mortgage\" account in the sidebar.",
+    "reset": "Fresh browser context and demo budget, as C01.",
+    "expectedStateChange": "The account page header reads \"Mortgage\" and its balance reads \"-318,541.44\", the negative value the sidebar shows for it."
+  },
+  {
+    "id": "C04",
+    "action": "Click \"All accounts\" in the sidebar.",
+    "reset": "Fresh browser context and demo budget, as C01.",
+    "expectedStateChange": "The account page header reads \"All Accounts\" and its balance reads \"-47,998.09\", the value the sidebar shows for it."
+  },
+  {
+    "id": "C05",
+    "action": "On Ally Savings, open Filter, choose Payee, type \"Kroger\", choose \"Kroger\" from the list it shows, and press Apply.",
+    "reset": "Fresh browser context and demo budget; the account is opened first if needed.",
+    "expectedStateChange": "The transaction table shows fewer rows than before the filter, and every visible payee cell reads \"Kroger\"."
+  },
+  {
+    "id": "C06",
+    "action": "On Ally Savings with the Payee filter active, click \"Delete filter\".",
+    "reset": "Fresh browser context and demo budget; the Payee filter is applied first if it is not already active.",
+    "expectedStateChange": "No filter chip remains, and the transaction list's total height returns to its unfiltered value. The list is virtualised, so its height stands in for the row count."
+  },
+  {
+    "id": "C07",
+    "action": "On Ally Savings, click \"Add New\", enter payee \"Kroger\" and debit 12.34, then press Add.",
+    "reset": "Fresh browser context and demo budget; the new transaction exists only in that run.",
+    "expectedStateChange": "The account balance drops from \"1,772.80\" to \"1,760.46\" and the first row shows payee \"Kroger\" with debit \"12.34\"."
+  },
+  {
+    "id": "C08",
+    "action": "On Ally Savings, select the first transaction row and choose Delete from the Select menu.",
+    "reset": "Fresh browser context and demo budget; the first row is whatever is listed first at that point, so its amount is read before the delete.",
+    "expectedStateChange": "The transaction list's total height drops by one row, and the account balance changes by the amount of the deleted row. The list is virtualised, so its height stands in for the row count."
+  },
+  {
+    "id": "C09",
+    "action": "On Ally Savings, open the account menu, choose \"Manage table columns\", turn off Notes and Save.",
+    "reset": "Fresh browser context and demo budget; Notes is visible at the start of each run.",
+    "expectedStateChange": "No transaction row contains a notes cell, and the Notes column header is gone."
+  },
+  {
+    "id": "C10",
+    "action": "On Ally Savings, open \"Manage table columns\", turn off Category and Save.",
+    "reset": "Fresh browser context and demo budget; Category is visible at the start of each run.",
+    "expectedStateChange": "No transaction row contains a category cell, and the Category column header is gone."
+  },
+  {
+    "id": "C11",
+    "action": "From the account page, click \"Budget\" in the sidebar.",
+    "reset": "Fresh browser context and demo budget; the account page is opened first if needed.",
+    "expectedStateChange": "The budget table (budget-table) is visible and the account page header is no longer shown."
+  },
+  {
+    "id": "C12",
+    "action": "On the budget page, set the budgeted amount for \"Food\" in the current month to 100.",
+    "reset": "Fresh browser context and demo budget; the budget page is opened first if needed.",
+    "expectedStateChange": "The Food budget cell for the current month reads \"100.00\" and the budgeted total changes."
+  },
+  {
+    "id": "C13",
+    "action": "On the budget page, use the \"Restaurants\" balance menu to transfer all of its balance to \"Food\".",
+    "reset": "Fresh browser context and demo budget; the budget page is in the current month, as at ready().",
+    "expectedStateChange": "The Restaurants balance reads \"0.00\" and the Food balance increases by the amount Restaurants held before."
+  },
+  {
+    "id": "C14",
+    "action": "On the budget page, click \"Next month\".",
+    "reset": "Fresh browser context and demo budget; the budget page is opened first if needed.",
+    "expectedStateChange": "The selected month (selected-budget-month) moves to the following month, its data-month attribute changes."
+  },
+  {
+    "id": "C15",
+    "action": "Click \"Reports\" in the sidebar.",
+    "reset": "Fresh browser context and demo budget; the budget page is opened first if needed.",
+    "expectedStateChange": "The reports page (reports-page) is visible and the budget table is no longer shown."
+  },
+  {
+    "id": "C16",
+    "action": "Click \"Schedules\" in the sidebar.",
+    "reset": "Fresh browser context and demo budget; the budget page is opened first if needed.",
+    "expectedStateChange": "The schedules page is visible and the budget table is no longer shown."
+  },
+  {
+    "id": "C17",
+    "action": "Click \"Settings\" in the sidebar.",
+    "reset": "Fresh browser context and demo budget; the budget page is opened first if needed.",
+    "expectedStateChange": "The settings page (settings) is visible with its section navigation, and the budget table is no longer shown."
+  },
+  {
+    "id": "C18",
+    "action": "On Settings, click the \"Rules\" section link.",
+    "reset": "Fresh browser context and demo budget; the settings page is opened first if needed.",
+    "expectedStateChange": "The Rules section is selected in the settings navigation and its content replaces the General section content."
+  },
+  {
+    "id": "C19",
+    "action": "On Settings, click the \"Payees\" section link.",
+    "reset": "Fresh browser context and demo budget; the settings page is opened first if needed.",
+    "expectedStateChange": "The Payees section is selected in the settings navigation and the payee list shows the seeded payee \"Kroger\"."
+  },
+  {
+    "id": "C20",
+    "action": "Press Control+K (Meta+K on macOS) to open the command bar and type \"Ally\".",
+    "reset": "Fresh browser context and demo budget; the command bar is closed at the start of each run.",
+    "expectedStateChange": "The Command Bar combobox is visible and its results list includes \"Ally Savings\"."
+  },
+  {
+    "id": "C21",
+    "action": "Click the help menu button in the sidebar footer.",
+    "reset": "Fresh browser context and demo budget; the help menu is closed at the start of each run.",
+    "expectedStateChange": "A help menu opens and it lists at least one menu item."
+  },
+  {
+    "id": "C22",
+    "action": "Click the notifications button in the sidebar.",
+    "reset": "Fresh browser context and demo budget; the notifications view is not open at the start of each run.",
+    "expectedStateChange": "The notifications view opens at /notifications and shows its own \"Notifications\" heading."
+  },
+  {
+    "id": "C23",
+    "action": "Click \"Add account\" in the sidebar.",
+    "reset": "Fresh browser context and demo budget; no account dialog is open at the start of each run.",
+    "expectedStateChange": "The \"Add account\" dialog (heading \"Add account\") is visible with its Name and Balance fields."
+  },
+  {
+    "id": "C24",
+    "action": "In the open \"Add account\" dialog, click Cancel.",
+    "reset": "Fresh browser context and demo budget; the dialog is opened first if it is not already open.",
+    "expectedStateChange": "The \"Add account\" dialog is no longer visible and no account is added to the sidebar."
+  }
+]

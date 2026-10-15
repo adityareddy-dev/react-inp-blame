@@ -53,15 +53,18 @@ for (const script of ['bench.mjs', 'run.mjs']) {
     assert.deepEqual(JSON.parse(r.out).configs, ['A', 'B']);
   });
 
-  test(`${script} stops before installation or collection for pending integrations`, () => {
-    const result = spawnSync(process.execPath, [path.join(HERE, script), '--app', 'actual'], {
+  test(`${script} stops before installation or collection for pending integrations`, (t) => {
+    // Whichever cohort app is still pending, so the test holds as apps move from pending to ready.
+    const pending = Object.keys(apps).find((id) => apps[id].status !== 'ready');
+    if (!pending) return t.skip('every cohort app is ready');
+    const result = spawnSync(process.execPath, [path.join(HERE, script), '--app', pending], {
       cwd: HERE,
       encoding: 'utf8',
       timeout: 60000,
       env: { ...process.env, BENCH_ORDER: 'A,B,C' },
     });
     assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
-    assert.match(result.stderr, /actual: integration pending/);
+    assert.ok(result.stderr.includes(`${pending}: integration pending`), result.stderr);
     assert.doesNotMatch(result.stdout, /== install|== build|== bench/);
   });
 
