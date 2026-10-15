@@ -4,7 +4,8 @@ The harness is separate from the npm package and root workspace. Its only cohort
 [five selected everyday apps](../docs/benchmarks/real-apps.md), defined in [apps.mjs](apps.mjs).
 All five integrations are pending. App clones, build outputs and measured results are not
 included. The retired cohort's adapters, patches, login scripts and one-off experiment have
-been removed, with prior records retained in Git history.
+been removed from the current tree. This does not purge Git history; a rewrite requires separately
+confirmed refs.
 
 ## Check the Cohort
 

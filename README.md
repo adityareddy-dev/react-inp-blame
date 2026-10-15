@@ -313,7 +313,7 @@ its entry under [Troubleshooting](#troubleshooting).
 | Zero dependencies                                       | yes                                                                               | no                                | no (11 in 0.5.7)                   | yes                    | part of React                        |
 | Needs a build step for names                            | in production builds: the plugins add it                                          | yes                               | not in development⁷                | no names               | not in development                   |
 
-1. A development tool first: the plugins leave it out of production builds unless `enabled` says otherwise. Turned on there, it fails closed on a browser or React it does not know, and `sampleRate` limits the page loads it runs on. In 0.12.0 that cost about 209 ms of page load on the shadcn/ui docs site, and about 5 ms inside each interaction on the twenty CRM ([What it costs](#what-it-costs)).
+1. A development tool first: the plugins leave it out of production builds unless `enabled` says otherwise. Turned on there, it fails closed on a browser or React it does not know, and `sampleRate` limits the page loads it runs on.
 2. Its main entry does not start when every React renderer on the page is a production build, unless `dangerouslyForceRunInProduction` is set, which its README calls "not recommended". Two other entries in 0.5.7 run there anyway: `react-scan/all-environments` skips that check, and `react-scan/lite`, a headless one, attaches to every renderer whatever its build.
 3. Its build step puts `data-sentry-component` on the outermost element each component returns. Since 11.0.0 the SDK, with span streaming (its default), names an INP span after the first of those on the target or its four nearest ancestors, or `Click` or `Key press` when there is none, and keeps the DOM path in `browser.web_vital.inp.target`.
 4. Profiling builds list only components under a `<Profiler>`, or every component with the React Developer Tools extension enabled.
@@ -456,14 +456,7 @@ line's module stays, as an empty function); where it loads:
 of date or a size passes its budget in `scripts/size-budget.json`. The table before 0.8.0 said 39.0 and
 14.4 KB for `/auto`, figures from 0.1.0 that had not been measured again as the entry grew.
 
-On four open-source apps, built with and without it, 15 paired runs each unthrottled and at 4x CPU:
-[docs/benchmarks](docs/benchmarks/README.md). INP did not move on any of them. On a Next.js site
-with thousands of components, page load took about 75 ms longer unthrottled, most likely from the
-name stamps. A second run on five apps with 0.12.0 from npm,
-[docs/benchmarks/real-apps.md](docs/benchmarks/real-apps.md), found INP flat again. Page load on that
-same site was about 209 ms longer unthrottled that time (the interval runs from 73 to 254), and on
-twenty, whose commits run past the 5,000 components the walk reads before it stops, reading them cost
-about 5 ms inside each interaction, 10 at 4x.
+No overhead results exist for the [current benchmark cohort](docs/benchmarks/real-apps.md).
 
 ## Labels and personal data
 
@@ -500,7 +493,7 @@ The [docs](docs/README.md) have the rest.
   and its own [time per interaction](docs/how-it-works.md#time-per-interaction).
 - <a id="known-limits"></a>**[Known limits](docs/known-limits.md)**: what it can't see, and where it has to guess. Worth reading before
   you trust a verdict on a big app.
-- [Benchmarks](docs/benchmarks/README.md) on real open-source apps, and the [design notes](docs/interaction-attribution-design.md).
+- [Benchmark plan and pending integrations](docs/benchmarks/README.md), and the [design notes](docs/interaction-attribution-design.md).
 
 ## Troubleshooting
 

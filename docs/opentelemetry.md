@@ -308,8 +308,8 @@ User Timing measures picks those up, whatever this entry sends.
 
 ## Limits
 
-- **The verdict can be wrong.** On apps it had not been tuned on, 0.12.0 was right on 11 of 43 verdicts
-  ([the runs](benchmarks/real-apps.md)). For anything that alerts, filter on `blame.confidence` `measured`.
+- **The verdict can be wrong.** See the [accuracy boundary](benchmarks/real-apps.md#accuracy-boundary).
+  For anything that alerts, filter on `blame.confidence` `measured`.
 - **`reportAllChanges`, or any SDK that reports INP before the page is hidden,** can send a record before the
   library has its report, which then says `no-report`. Honeycomb passes its `inp` options straight to
   web-vitals, so a `reportAllChanges` there does this.

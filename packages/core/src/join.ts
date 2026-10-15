@@ -39,7 +39,7 @@ const RENDER_MIN_COMPONENTS = 10;
 const RENDER_MIN_COMPONENTS_BESIDE_HANDLER = 50;
 // A count this large is a slow render under a long task too, where nothing measured it and the working time was the
 // larger part: hyperdx re-rendered 3104 components in 38 ms of working time and the sentence said the rest went to
-// waiting and painting. The Sheet's 59 and excalidraw's 149, which had to stay unblamed, are far under it.
+// waiting and painting.
 const RENDER_MIN_COMPONENTS_UNMEASURED = 1000;
 // Past that line the count has to explain the working time as well, in one of two ways. Fifty of one
 // component is a list, and a list costs its row times its length whatever the row costs: 150 SlowRow in
@@ -54,9 +54,7 @@ const RENDER_MAX_MS_PER_COMPONENT_BESIDE_HANDLER = 2;
 // piece of the app's code does not make an interaction slow on its own. The component has to have rendered
 // once, and its own render has to be half of the commit's render time or more, the total the sentence
 // prints. Under half, most of the time is in the components under it, and naming the one would send the
-// reader after the smaller part. TanStack Table sorting 200,000 rows spent 257 of 277 ms in TableBody's own
-// render and about 17 in the components under it; told only "637 components", a reader memoises the rows
-// and gains nothing.
+// reader after the smaller part.
 const OWN_RENDER_MIN_MS = HANDLER_MIN_MS;
 const OWN_RENDER_MIN_SHARE = 0.5;
 // A commit's committing and effects are worth saying beside its render from 5 ms and a fifth of its time in all.
@@ -89,8 +87,7 @@ const HELD_SAID_SHARE = 0.1;
 const LATER_MIN_MS = 10;
 const LATER_MIN_COMPONENTS = 25;
 // Forced layout is worth a sentence from 4 ms, a quarter of a frame. It is Long Animation Frames'
-// forcedStyleAndLayoutDuration, style recalculation and layout together, so the sentences say both: opening
-// a shadcn/ui Sheet, a Chrome trace put about 80 ms of it on styles and 1 ms on layout.
+// forcedStyleAndLayoutDuration, style recalculation and layout together, so the sentences say both.
 const FORCED_LAYOUT_MIN_MS = 4;
 // It takes the blame instead from half of the window it was counted across, on top of the long task
 // above. Several things share that window (the handler, React's render, the commit, this library's own
@@ -100,10 +97,8 @@ const FORCED_LAYOUT_MIN_MS = 4;
 const FORCED_LAYOUT_MIN_SHARE = 0.5;
 /** The share of a forced layout that has to be outside React's commit, by the scripts it was charged to or by what the commit took, for the sentence to rule a layout effect out. */
 const FORCED_LAYOUT_IN_REACT_SHARE = 0.5;
-// Where no render was timed (a production build, or no commit joined at all), the long task is too
-// high a bar: on the shadcn docs a sheet opened with 44 to 49 ms of layout in 55 ms of working time,
-// and the blame went to a render known only by its counts, then back to the layout on the run where
-// it reached 50. There the layout is the only measured duration in the window, so it is held to what
+// Where no render was timed (a production build, or no commit joined at all), layout is the only
+// measured duration in the window, so it is held to what
 // the handler is: under 25 ms it did not make the interaction slow on its own.
 const FORCED_LAYOUT_MIN_MS_NO_DURATIONS = HANDLER_MIN_MS;
 // The browser charges forced layout per script, so a window holding several of them holds several
@@ -1560,10 +1555,7 @@ function explain(r: InteractionReport): Explanation {
   // A count says what React rendered and nothing about how long it took, so a render known by its count
   // alone is held to the working time it sat in: a long task, the bar the handler is held to without
   // durations (below) and the one LONG_TASK_MS promises. Under it, and with nothing that measured it, the count
-  // is not a slow render, however large. excalidraw finishing a rectangle re-rendered 149 components in 2.8 ms
-  // of working time, with 34 of the click's 40 ms on the screen update, and closing a shadcn/ui Sheet re-rendered
-  // 56 in 17 ms of working time, most of it one style recalculation that no frame under 50 ms reports; both read
-  // as the render. The same bar keeps a render out of the blame where its working time was the smaller part of
+  // is not a slow render, however large. The same bar keeps a render out of the blame where its working time was the smaller part of
   // the interaction: a screen update longer than 50 ms of working time is over a long task itself, and
   // `screenOutranks` gives it the verdict. The bar is taken on the figure the sentence prints, or 49.6 ms
   // read as "50 ms of working time, short of a long task".
@@ -1571,7 +1563,7 @@ function explain(r: InteractionReport): Explanation {
   const countSays = (x: CommitSummary) => (handlerName ? countExplains(x) : x.rendered >= RENDER_MIN_COMPONENTS);
   // Under the bar, the handler's script a long animation frame measured holding the commit, 20 ms or more and not
   // mostly forced layout. The frame measured that script and its layout, which no frame does for an unseen
-  // restyle like the Sheet's, so the count can take the render there, bounded by the script's measured time.
+  // restyle, so the count can take the render there, bounded by the script's measured time.
   const measuredHolder = (x: CommitSummary) => {
     const s = holderOf(x);
     return s && ranAsHandler(s) && s.duration >= SCRIPT_MIN_MS && s.forcedLayout < FORCED_LAYOUT_MIN_SHARE * s.duration ? s : null;
@@ -1724,10 +1716,7 @@ function explain(r: InteractionReport): Explanation {
    * React's renders that committed inside that script, after the handlers, however long the screen update
    * and whichever phase was the longer: the screen update's clause says them, as its blame or in the note
    * below, which is kept for them. That is what a virtualizer's scroll listener spends its time on when it
-   * calls flushSync, or React's own task for an update it scheduled. On TanStack Table's virtualized rows at
-   * 4x a checkbox's frame waited on `DIV.onscroll` for 174 ms, a render of the 721 rows it forced, which the
-   * report held and the sentence never tied to the script. Tied only over 100 ms, the same render in a 96 ms
-   * screen update stayed in the working time and was put down to an effect. React's own task is tied only
+   * calls flushSync, or React's own task for an update it scheduled. React's own task is tied only
    * where the screen update outranks the working time. Under that, its render is the one the handlers
    * scheduled, a transition started from the click, and stays in the working time as the interaction's
    * render: tied to the task, a 100 ms render of 721 rows after 200 ms of handlers was put on a script named
@@ -2781,8 +2770,7 @@ function explain(r: InteractionReport): Explanation {
     const small = shortOf ?? (c ? `React's render was small (${renderPhrase(c)})` : noneWorking);
     // A script cut by the interaction's edges ran for longer than the part counted here.
     const ofIt = Math.round(ranScript.ms) < Math.round(ranScript.script.duration) ? ' of it' : '';
-    // A script that started after the handlers says so wherever it is named: said bare, a 22 ms timer after a
-    // Sheet's 49 ms of working time read as the handler's. So does a timer the input waited behind, which with
+    // A script that started after the handlers says so wherever it is named. So does a timer the input waited behind, which with
     // no note on the script after the handlers was said bare too, and then again as the wait. It is the wait,
     // and the note on the wait is left out, only where it held half of it: a 30 ms timer in a 120 ms wait left
     // the other 90 ms said nowhere.
@@ -2811,10 +2799,7 @@ function explain(r: InteractionReport): Explanation {
   } else if (r.frames) {
     // Long Animation Frames lists frames of 50 ms and up, so no frame over the interaction says its frame
     // was under one, and that what the browser spent in it recalculating styles and layout was never
-    // measured. Without durations that is where a count used to name a render: opening a shadcn/ui Sheet
-    // on a phone forces four whole-document style recalculations inside 31 ms of working time, no frame
-    // reported them, and the report read "re-rendering 59 components inside DismissableLayer". The sentence
-    // says what is known instead, and that the working time is under a long task, which is why nothing in
+    // measured. The sentence says what is known, and that the working time is under a long task, which is why nothing in
     // it is blamed. Whether the interaction forced any is not known either, so the sentence says "any". A
     // frame that did overlap says the same of the working time, without the clause: the frame was long,
     // and its scripts are either too short to name or the handler's, which holds React's render (above).
@@ -2959,8 +2944,7 @@ function explain(r: InteractionReport): Explanation {
   // A render the clause ties to the script is said there and nowhere else, so the note is kept for it at
   // any length and whichever phase was the longer: a render the script forced is the script's, as
   // insideLate says, and not left in the working time as an effect's. Over PRESENTATION_NOTE_MS the note
-  // is kept with no such render too, the way closedByTheScreen keeps a render the screen update outranked:
-  // on twenty's select-all, 762 ms of the screen updating went unsaid behind 947 ms of rendering. Where the
+  // is kept with no such render too, the way closedByTheScreen keeps a render the screen update outranked. Where the
   // frame waited on the next press the note says that at any length, as the blame would: typing fast, the script
   // after the handlers is the next key's handler, and not why this key's screen update was slow. With no listener
   // of that press on record, under PRESENTATION_NOTE_MS its render alone says so (`byRender`). For a next click with
@@ -2980,7 +2964,7 @@ function explain(r: InteractionReport): Explanation {
     notes.push("This browser's clock steps in whole milliseconds, too coarse to time each component, so no component's time is shown and React's total is a sum of whole-millisecond readings.");
   }
   // One minifier's name among readable ones is most likely a dependency's component that sets no
-  // displayName, which no build step in the app can name: on Twenty, React Router's RouterProvider read "hl".
+  // displayName, which no build step in the app can name.
   // Said where the report sends the reader to it, as the blame or as what React rendered inside anywhere in
   // the text, a whole name ("inside Ta" is not "inside TableBody"), and never as a guess at what it is.
   const said = [cause, ...notes].join(' ');

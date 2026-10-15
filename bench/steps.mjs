@@ -1,6 +1,6 @@
 // Each scripted step's slowest interaction and its blame: per app and pass, the slowest
-// interaction (from the harness's own observer), what the library blamed for it in config B (and
-// in F, labelled apart, for tt-virtual-fix), and the library's own accounting for each
+// interaction (from the harness's own observer), what the library blamed for it in config B,
+// and the library's own accounting for each
 // configuration it was in. Reads one results JSON.
 //   node steps.mjs results/<file>.json [app,app] [--verdicts]
 import { readFileSync } from 'node:fs';
@@ -46,8 +46,8 @@ for (const [k, rs] of groups) {
         });
       row[c] = median(per);
     }
-    // What config B's library said about the slowest report in the step, run by run, and F's apart.
-    const blames = new Map(configs.filter((c) => c === 'B' || c === 'F').map((c) => [c, new Map()]));
+    // What config B's library said about the slowest report in the step, run by run.
+    const blames = new Map(configs.filter((c) => c === 'B').map((c) => [c, new Map()]));
     const verdicts = new Map();
     for (const r of rs.filter((x) => blames.has(x.config))) {
       const tally = blames.get(r.config);
@@ -73,7 +73,7 @@ for (const [k, rs] of groups) {
     console.log(`- ${row.name}: ${configs.map((c) => `${c} ${r1(row[c])}`).join(', ')} | ${blamed.join('; ')}`);
     if (showVerdicts) for (const [b, v] of row.verdicts) console.log(`    [${b}] ${v}`);
   }
-  // One line per configuration. B, C and F are different builds, and a median across them is none of theirs.
+  // One line per configuration. B and C are different builds, and a median across them is none of theirs.
   for (const c of configs) {
     const libRuns = rs.filter((r) => r.config === c && r.lib?.stats);
     if (!libRuns.length) continue;

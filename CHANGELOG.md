@@ -45,8 +45,8 @@ None from 0.26.0.
   not "inside DBSearchPageContent". The name was where the walk stopped, not where the render went.
 - On a production build a render of 1000 components or more takes the blame without a long task of working time,
   where the working time was the larger part of the interaction. hyperdx re-rendered 3104 components in 38 ms of a
-  40 ms click and the sentence said the rest went to waiting and painting. A shadcn/ui Sheet's 59 components and
-  excalidraw's 149 stay under the line, and a screen update longer than the working time keeps the verdict.
+  40 ms click and the sentence said the rest went to waiting and painting. A screen update longer than the
+  working time keeps the verdict.
 
 ## [0.25.0] - 2026-10-05
 
@@ -143,9 +143,7 @@ None from 0.26.0.
   runs from the script's start or the handlers', whichever is later, and so holds the handler too. The largest
   names the layout where it could hold at least half of it. Where none could, `name` and `detail` are null and the
   cause says React committed that many times there and none took long enough to hold most of it. One commit in the
-  forcing script is named as before. The cause describes the commit the blame names, so a Sheet closing inside the
-  forcing script beside a 500-row Table rendered later reads Dialog with '56 components' again, and the sentence
-  says the Sheet's render rather than the Table's.
+  forcing script is named as before. The cause describes the commit the blame names.
 - **The Performance panel's entry, the badge panel's component list and web-vitals' `hotPath` and `components`
   follow the commit a layout or render blame names.** Before, all three took the heaviest commit, which could be a
   render the blame doesn't name, such as a key press's larger render beside a blame on its release's own. Now a
@@ -220,8 +218,7 @@ None from 0.26.0.
 - A layout forced in a script several commits ran in: `name` and `detail` go from the commit that rendered most to
   the one whose time could hold most of the layout, or to null where none could hold half of it.
 - A layout forced in a script one commit ran in, beside a larger render in a later script: `name` and `detail` go
-  back to where that commit's render started, with the whole commit's count ('Dialog', '56 components' where 0.20.0
-  to 0.22.0 gave 'DismissableLayer', '15 of 56 components').
+  back to where that commit's render started, with the whole commit's count.
 - A render blame in a build that times renders, where a commit's committing and effects reach 5 ms and a fifth of
   its time: that commit can now be the one named over one that rendered longer but took less time in all, with
   each commit's committing and effects counted where they reach 5 ms, and `ms` is its own.
@@ -383,7 +380,7 @@ None from 0.26.0.
   path. A HashRouter or query-routed app loses the route detail it had there. The `react` object `attributeINP`
   adds stays at `schemaVersion: 3`, since it carries no URL. Since 0.1.0.
 - **`blame.detail` is display text, like the headline.** It was listed with the data, so a dashboard could group on
-  strings like '15 of 56 components'. Now the JSDoc and the API page list it with `verdict`, `cause` and `notes`:
+  its strings. Now the JSDoc and the API page list it with `verdict`, `cause` and `notes`:
   its wording, and what it picks to say, can change in any version, so show it and never parse it. The blame's
   `kind`, `name`, `ms` and `confidence` stay data, so group on those. Blame.kind's JSDoc and the API page also
   define each of the eight kinds, which are all there are in 1.x, and say that a slow event listener is both a
@@ -425,11 +422,8 @@ None from 0.26.0.
   'touch' for a tap in WebKit, and a frame that waited on it says it waited on the next tap. A press whose pointer
   the library did not see keeps 'Click' in its row.
 - **A layout blame is named after the render's start only where the forcing script's commit is the one the cause
-  describes.** With a Sheet closing inside the forcing script and a 500-row Table rendering later, the blame was `{
-  name: 'Dialog', detail: '56 components' }` beside a cause that never names Dialog. Now it is 'DismissableLayer'
-  with '15 of 56 components', as 0.18.0 had it. Since 0.19.0. The Performance panel's interaction entry takes the
-  start a layout blame names, where that is the heaviest render's start: a Sheet close blamed on Dialog drew '160
-  ms click · DismissableLayer', and now draws '160 ms click · Dialog'.
+  describes.** Since 0.19.0. The Performance panel's interaction entry takes the
+  start a layout blame names, where that is the heaviest render's start.
 - **The render a layout blame names counts in the note and the Summary, however small.** A 4-component Popover
   commit a layout blame named was 'too small to count', so the Summary read 'React renders before the paint 0, and
   1 too small to count'. Now it reads '1', and 'React rendered N times before the screen updated' counts that
@@ -521,18 +515,13 @@ None from 0.26.0.
   the count starts at 0 and one tap on the page reads 1 interaction. A tap there too quick to send an Event Timing
   entry, under 16 ms, is still counted, since nothing says where it landed. Since 0.1.0.
 - **A forced layout is named after the component the render started from where that holds the whole commit.**
-  Closing a shadcn/ui Sheet in a production build gave `blame` `{ kind: 'layout', name: 'DismissableLayer', detail:
-  '15 of 56 components' }`, a part of the commit that held none of the read: Radix's `Presence` reads
-  `animationName` in a layout effect, above DismissableLayer and beside it. It now gives `name: 'Dialog'` and
-  `detail: '56 components'`, the component the cause already said the render went "from ... down". Where the render
+  Where the render
   started at one root of several, or where the component rendered many times over is the one the render is named
   after (a TreeNode in a tree of them), the name and detail are as before. A render blame on the same commit is
   unchanged, so the two can now name different components, and a dashboard that groups layout blames by `name` sees
   these under the new one. Since 0.13.0. The layout sentence also names its window once and says what forces a
-  layout before what React rendered: "Of the 116 ms it took to handle the click, the browser spent 108 ms
-  recalculating styles and layout, leaving 8 ms for ... That happens when code reads an element's size right after
-  changing styles, often in a layout effect. React was re-rendering 181 components inside Tabs." It said "spent"
-  twice, and "That happens" came after the re-render and read as being about it. Since 0.2.0.
+  layout before what React rendered. It said "spent" twice, and "That happens" came after the re-render
+  and read as being about it. Since 0.2.0.
 - **A screen update blamed on React's own task names the component React rendered inside it.** Where the screen
   update outranked the working time and the script after the handlers was React's scheduler task, `blame.name` was
   `'MessagePort.onmessage'`, and on a phone the row read "screen took 148 ms to update · MessagePort.onmessage", in
@@ -593,9 +582,8 @@ None from 0.26.0.
   script the browser recorded in that time was TimerHandler:setTimeout (app.js), 49 ms." In React 18 and 19, since
   0.16.0.
 - **The READMEs call it a development tool first, production optional.** The comparison table's first row read
-  "Production-safe" with a yes for this library. It now reads "Runs in a production build" with "optional", and
-  both READMEs give what 0.12.0 cost where it was turned on: about 209 ms of page load on the shadcn/ui docs site,
-  and about 5 ms inside each interaction on the twenty CRM. The docs also say that under `labels: 'attributes'` an
+  "Production-safe" with a yes for this library. It now reads "Runs in a production build" with "optional".
+  The docs also say that under `labels: 'attributes'` an
   `aria-label`, test id or `id` built from user data goes out as your code wrote it, in `target.label`,
   `target.selector` and `generateTarget`'s string, that react-scan's `lite` and `all-environments` entries run on
   production builds, and that each report goes out as a User Timing measure any `PerformanceObserver` on the page
@@ -653,15 +641,13 @@ None from 0.26.0.
   render most likely still took the 200 ms of working time, and only the forced layout's note is said, as under a
   screen update that outranked the layout. In React 18 and 19, since 0.16.0.
 - **The Performance panel's Summary counts what the tooltip counts, and a render the build did not time has no
-  length.** Opening the shadcn/ui Sheet, the tooltip said "React rendered 3 times before the screen updated" while
-  the Summary's "React renders before the paint" said 6, counting an empty commit and two small ones. The row now
-  counts what the sentence counts and names the rest: "3, and 3 too small to count", "2, a hydration, and 1 too
+  length.** The row now
+  counts what the sentence counts and names the rest: "2, a hydration, and 1 too
   small to count" for a click that hydrated server-rendered HTML first, or "1, and 1 forced by a script" where a
-  scroll listener after the handlers rendered. Every commit is still drawn in the React renders track. The
-  Summary's "Handlers and React rendering 469 ms" sat beside a tooltip's 474 ms, with the library's own 5 ms two
-  rows down, and now reads "469 ms, not counting react-inp-blame itself", or where a keydown and keyup painted
-  together, "146 ms, 30 ms of it between the keydown's handlers and the keyup's, not counting react-inp-blame
-  itself". The "react-inp-blame itself" row shows only from half a millisecond, so it no longer reads "0 ms". In a
+  scroll listener after the handlers rendered. Every commit is still drawn in the React renders track.
+  The Summary's handlers and React rendering row now says that it excludes the library's own time,
+  and identifies time between one event's handlers and the next's.
+  The "react-inp-blame itself" row shows only from half a millisecond, so it no longer reads "0 ms". In a
   production build each React renders entry started 0.5 ms before its commit and hovered as "0.50 ms React render ·
   OrderSummary (801 components)" beside a tooltip that put about 170 ms on that render. It is now drawn with no
   length where it committed and named "React render · OrderSummary (801 components, time not measured)", and before
@@ -956,10 +942,7 @@ None from 0.26.0.
   ms before the next frame". A script now takes that clause and the painting blame's name only when it ran for half
   of the screen update. Below that the sentence reads "...mostly the browser recalculating styles and layout and
   painting the frame: 250 ms.", and `blame.name` is null. Since 0.1.0.
-- **A screen update over 100 ms is said even when the working time was longer.** twenty's select-all spent 947 ms
-  rendering and then 762 ms updating the screen, and the report never mentioned the 762 ms. It now has the note
-  "After the handler finished, the screen took another 762 ms to update, mostly the browser recalculating styles
-  and layout and painting the frame: 712 ms." Since 0.1.0.
+- **A screen update over 100 ms is said even when the working time was longer.** Since 0.1.0.
 - **A render that a script after the handlers forced is tied to that script however long each part took.** On a
   production build where the handlers rendered 3 components and a 150 ms scroll listener re-rendered 721 rows, the
   verdict named the 721 components inside TableBody. It now reads "React's render was small (re-rendering 3
@@ -1080,11 +1063,7 @@ None from 0.26.0.
   anything before the input, so a timer that ran while a key was held is not counted there, and the sentence
   says "No long animation frame says what ran in 54 ms of it, before the keyup came, so the wait counted is the
   other 90 ms."
-- **A render a script forced after the handlers is said to be what that script did.** On TanStack Table's
-  virtualized rows at 4x, a checkbox's screen update waited 174 ms on react-virtual's scroll listener, which
-  re-rendered the rows through `flushSync`. The sentence named the listener and not the render, and counted
-  that render in the working time before it. It now reads "... ran for 174 ms before the next frame, and React
-  rendered inside it: 150 ms re-rendering 721 components inside TableBody", the handlers' own render or code
+- **A render a script forced after the handlers is said to be what that script did.** The handlers' own render or code
   is still said beside it, and the render no longer counts toward "React rendered N times", which points at an
   effect. A render in React's own scheduler task, where an effect's update runs, still counts. It is only tied
   to the script where it committed inside it, and began inside it where the build says when a render began.
@@ -1125,10 +1104,7 @@ None from 0.26.0.
 
 ### Added
 
-- **A minifier's name in a build that keeps readable names gets a note.** On Twenty the verdict read "React
-  was most likely re-rendering at least 4917 components inside hl.", where `hl` is React Router's
-  `RouterProvider`: a dependency's component with no `displayName`, which the Vite plugin, the Next.js wrapper
-  and the loader never stamp. Where a component the report names, as the blame or as the one React rendered
+- **A minifier's name in a build that keeps readable names gets a note.** Where a component the report names, as the blame or as the one React rendered
   inside, in the cause or in a note, is one or two characters, and the report holds at least five other names
   and most of them are readable, a note now says it looks like a name a minifier left, most likely on a
   dependency's component, and that selecting it in React DevTools shows its props and what rendered it, which
@@ -1161,30 +1137,18 @@ None from 0.26.0.
 - **A render known only by its counts is not blamed under a long task of working time, and where no long
   animation frame covered the interaction the report says how much of that time went to styles and layout
   is unmeasured.** A production build records no render durations, so a render there was blamed on its
-  count alone, whatever working time it sat in. Finishing a rectangle in excalidraw re-rendered 149
-  components inside FixedSideContainer in 2.8 ms of working time, with 34 of the click's 40 ms on the screen
-  update, and read "React was most likely re-rendering 149 components inside FixedSideContainer": the screen
-  update is only weighed from 50 ms, so nothing outranked the count. Closing a shadcn/ui Sheet re-rendered
-  56 components in 17 ms of a 48 ms click and read the same way, when most of those 17 ms is one style
-  recalculation Radix's Presence forces, which no frame under 50 ms reports. A render known by its count is
+  count alone, whatever working time it sat in. A render known by its count is
   now held to the 50 ms of working time the handler is held to without durations, the bar the `LONG_TASK_MS`
   comment describes, taken on the figure the sentence prints. From it the verdict reads as it did. Under it
   the count is not a slow render, however large, and the cause leads with the working time and says the
-  count sat in it, short of a long task, rather than calling the render small. Opening the same Sheet on a
-  phone now reads "In 31 ms of working time, short of a long task, React was mounting 59 components, 31 of
-  them inside DismissableLayer; the rest went to waiting and painting. No long animation frame covered the
-  click, so how much of the working time went to any styles and layout it forced is unmeasured." (the 59 was
-  measured; the 31 and the name come from a read of Radix's source, as the entry below says). The last
+  count sat in it, short of a long task, rather than calling the render small. The unmeasured-layout
   sentence is there where the browser supports Long Animation Frames and none covered the interaction: its
   frame was under 50 ms, and what the browser spent in it recalculating styles and layout, if anything, was
   never measured. Where a frame covered the interaction the cause opens the same way, naming a script the
   frame listed outside the handlers where one ran for 20 ms or more, and where the browser reports no frames
   it ends by saying so. Where the count still names
   the render, its sentence gives the working time the count is read against, after a comma so a count's own
-  clause ("31 of them inside DismissableLayer") does not read as what took it: releasing Control after
-  select-all in excalidraw now ends ", in the 55 ms of working time.", and 55 ms hung on the chrome's 161
-  components is a claim a reader can weigh, since the same render took 7 ms on another key press in the same
-  session. The note a screen update leaves about the render it outran follows the same bar, so 40 ms of
+  clause does not read as what took it. The note a screen update leaves about the render it outran follows the same bar, so 40 ms of
   working time before a 200 ms screen update no longer says React was "still re-rendering" in it. The
   panel's line for a report that blames nothing is "nothing stood out"; the cause under it says where the
   time went. `blame.kind` changes only for a production build's render under 50 ms of working time whose
@@ -1197,40 +1161,27 @@ None from 0.26.0.
   working time was `'painting'` before and stays so; only its note changes. Builds with durations are
   unchanged. The report's `schemaVersion` stays 3.
 - **The count a render is said to be "inside" a component is that component's own, and the render is named
-  from where it started where that holds them all.** On cal.com, switching an event type to its advanced tab
-  read "React spent 180 ms re-rendering 1216 components inside Form", where 1216 was the whole commit's
-  count, about a third of it above Form and beside it, and nothing named EventTypeWeb, the root the render
-  started from and the component that holds the form's state. Where the walk counted fewer components inside
+  from where it started where that holds them all.** Where the walk counted fewer components inside
   the component a render is named after than in the commit, the sentence now gives both, with the component
-  the render started from where it holds every one counted and a reader could search for it: "re-rendering
-  1216 components from EventTypeWeb down, 812 of them inside EventAdvancedWebWrapper" (the 1216 was measured;
-  the 812 and the name come from a read of cal.com's source, and a run may move them). Where other roots
-  rendered beside the one the path starts from, as the two code blocks of the shadcn/ui install tabs do, no
-  start is said: "re-rendering 181 components, 79 of them inside RovingFocusGroup". A render named after
+  the render started from where it holds every one counted and a reader could search for it. Where other roots
+  rendered beside the one the path starts from, no start is said. A render named after
   the component it started from holds the whole count and reads as it did. So does one named after the
   component it was mostly made of, whose count is in that clause already, and a hydration blame, named after
   the boundary or the page that holds every component hydrated. A walk cut short says both counts as lower
   bounds: "at least 5000 components from App down, at least 800 of them inside Heavy". The clause for what
-  a render was mostly made of says which count it is of once two have been said, "mostly Controller (700 of
-  the 1216, 100 ms)", and the one for a component's own render follows the count as before. The wording is
+  a render was mostly made of says which count it is of once two have been said,
+  and the one for a component's own render follows the count as before. The wording is
   the same wherever the render is said: in the cause of a render blame and of a handler blame, in the React
-  clause of a layout blame, in the note on a later render and in the panel's rows. `blame.detail` is "812 of
-  1216 components" on such a render, where it was "1216 components", "at least 800 of at least 5000
-  components" on a walk cut short, and a layout blame named after its commit carries the same value; a
+  clause of a layout blame, in the note on a later render and in the panel's rows. `blame.detail` gives both
+  counts on such a render, and lower bounds on a walk cut short. A layout blame named after its commit carries the same value; a
   hydration blame keeps the whole count. `blame.kind` does not change, and `blame.detail` keeps its meaning,
   so `schemaVersion` stays at 3.
 - **The hot path spends its steps on names a reader could search for and passes a library's layers.** The
   path spends at most twelve steps below the component it starts from, and until now every name on it spent
-  one. On the shadcn/ui docs, switching the install tabs to npm was named after
-  RovingFocusGroupCollectionProviderProvider, since Radix's layers between one part and the next
-  (`TabsProvider`, `Primitive.div`, `CollectionProvider`, `ProviderProvider`, `CollectionSlot`, `.Slot`,
-  `.SlotClone`) and shadcn's parts named like the Radix parts they render (`Tabs` over `Tabs`, `TabsList` over
-  `TabsList`) spent all twelve; on cal.com a provider and a minified name spent the two that would have
-  reached the tab below the form. A name a reader could not search for (a Slot, `Primitive.div`, a styling
+  one. A name a reader could not search for (a Slot, `Primitive.div`, a styling
   wrapper, a minifier's) or a Provider or a Context now spends no step, and neither does a wrapper named after
   the component it renders, so the path runs deeper and the render is named after the deepest name on it that
-  is none of those: RovingFocusGroup on those tabs, Radix's own but a name to search for, and
-  EventAdvancedWebWrapper on cal.com. `hotPath` holds every name on the chain as it did, the layers included,
+  is none of those. `hotPath` holds every name on the chain as it did, the layers included,
   so it gets longer where they used to spend the steps, and so do the "Heaviest path" on the Performance
   panel's track and `react.hotPath` from `attributeINP`. A chain of nothing but a minifier's names is still
   named after its end. `blame.name` changes on such a render, to a component further in. A walk cut short
@@ -1238,30 +1189,20 @@ None from 0.26.0.
   for the component above it. `hotPath` keeps its meaning, so `schemaVersion` stays at 3.
 - **A render that mounted most of what it rendered reads as "mounting".** Radix's Portal renders null and
   sets mounted in a layout effect, so a dialog's content mounts in a commit of its own, under a Portal for
-  each of the dialog's children, and opening a Sheet on the shadcn/ui docs read "React was re-rendering 59
-  components inside DismissableLayer" of a commit that rendered about 57 of the 59 for the first time. Where
-  more than half of a commit's components rendered for the first time, the sentence now reads "mounting 59
-  components, 31 of them inside DismissableLayer" (the 59 was measured, the 31 and the 57 are from a read of
-  Radix's source; with the overlay under a Portal of its own the path's Portal does not hold the 59, so no
-  start is said), a handler blame's clause says React mounted them, and the panel's rows say "mounted". A
+  each of the dialog's children. Where
+  more than half of a commit's components rendered for the first time, the sentence now reads "mounting",
+  a handler blame's clause says React mounted them, and the panel's rows say "mounted". A
   hydration reads as hydrating, as before. Which blame the interaction gets does not change, so
   `schemaVersion` stays at 3.
-- **A component Linaria's `styled` made is named the way a styled-components one is.** Twenty styles with
-  Linaria, whose Babel plugin names each styled element after its variable, and some 270 of them are
-  `StyledContainer`: selecting every row read "at least 4632 components inside StyledContainer", the wrapper
-  div in RecordIndexContainer, which sends a reader to any of 270 files. Told by the mark Linaria leaves on
+- **A component Linaria's `styled` made is named the way a styled-components one is.** Told by the mark Linaria leaves on
   the component (`__wyw_meta`, `__linaria` on older releases) rather than by its name, it now reads
   `styled.div` or `Styled(Card)`, so it is passed for the component above it wherever a styled-components
-  wrapper is, and that render is named after RecordIndexContainer. The name changes wherever the walk names
+  wrapper is. The name changes wherever the walk names
   the component, `target.owners` and `generateTarget`'s path included. `schemaVersion` stays at 3.
-- **A render that was mostly one component's own render says so.** Sorting TanStack Table's virtualized rows
-  example (200,000 rows) by a click on a header read "React spent 277 ms re-rendering 637 components inside
-  TableBody", which sends a reader off to memoise the rows. 257 ms of it was TableBody's own render: the sort
-  runs inside `table.getRowModel()`, which TableBody calls while it renders, and the components under it took
-  about 17 ms. Where React timed each component, and one of them rendered once and spent 25 ms or more, and
-  half of the commit's render time or more, in its own render, the sentence now reads "React spent 277 ms
-  re-rendering 637 components inside TableBody (257 ms of it in TableBody's own render)", and `blame.detail`
-  is "TableBody's own render" where it was "637 components". A hydration blame, and a layout blame named after
+- **A render that was mostly one component's own render says so.** Where React timed each component,
+  and one of them rendered once and spent 25 ms or more, and half of the commit's render time or more,
+  in its own render, the sentence now identifies that component's own render, and `blame.detail`
+  identifies the own render rather than giving a component count. A hydration blame, and a layout blame named after
   its commit, take their `detail` from the same rule, so they can carry that value too. A render blame of that
   kind also gets a note: that time is usually work the component does as it renders, like a sort or a filter,
   which memoising the components under it does not speed up. A render whose time is spread over its
@@ -1269,48 +1210,33 @@ None from 0.26.0.
   components, where no component has a time of its own. `blame.detail` changes value for those renders and
   keeps its meaning, so `schemaVersion` stays at 3.
 - **A render is "mostly" one component only where that component is most of it.** 0.12.0 named the component
-  that rendered most whenever it rendered more than once, however small its share, and on real apps that read
-  "re-rendering 59 components inside DismissableLayer, mostly Label (4 of them)" (the shadcn/ui docs) and
-  "1298 components inside SidePanelSubPageRouter, mostly (anonymous) (124 of them)" (Twenty). The clause is
+  that rendered most whenever it rendered more than once, however small its share. The clause is
   now said only where that component is half of the components rendered or more, not counting the wrappers a
-  styling library puts around each element, or half of the render's time where React timed it. "460
-  components inside CommandList, mostly (anonymous) (422 of them)" reads as before, and so does "721
-  components inside TableBody, mostly TableBodyRow (36 of them, 13 ms)", 13 ms of a 24 ms render. Where it is
+  styling library puts around each element, or half of the render's time where React timed it. Where it is
   not, the sentence stops at the component the render is named after, and `blame.detail` is the component count
-  ("59 components") where it was "Label ×4", as its description always said. The panel's line for a later
+  rather than the repeated component, as its description always said. The panel's line for a later
   render follows the same rule. Which kind of blame an interaction gets does not change. `blame.detail` keeps
   its meaning, so `schemaVersion` stays at 3.
 - **Forced layout reads as "recalculating styles and layout".** The figure is Long Animation Frames'
-  `forcedStyleAndLayoutDuration`, which holds style recalculation and layout together, and a Chrome trace of a
-  shadcn/ui Sheet opening had about 80 ms of style recalculation in it against 1 ms of layout. The cause of a
+  `forcedStyleAndLayoutDuration`, which holds style recalculation and layout together. The cause of a
   layout blame, the note beside another blame, the note on a later render and the panel's row now say styles
   and layout. `blame.kind` is still `'layout'` and no field changes name, so `schemaVersion` stays at 3.
 - **A render after an `input`, `change` or `submit` a script dispatched past the paint no longer joins the
-  interaction before it.** Picking a page size with Playwright's `selectOption` after sorting a TanStack
-  Table example by Full Name put the page-size render on the sort click, which read "A second React render
-  landed 1017 ms after the screen updated: 91 ms re-rendering 417 components inside App. INP doesn't count
-  it, but people still wait for it." `selectOption` fires `input` and `change` from script and presses
-  nothing, so the ring had nothing newer than the click. A capture listener on the window now notes those
+  interaction before it.** A capture listener on the window now notes those
   events when a script dispatches one outside any input's task, and a render after one that came after an
   interaction's paint joins nothing, as after a newer input. Such an event is never an interaction of its
   own. One the browser fires still carries on the input before it, as an option picked from a native
   select or dictated text did, and so does one a script fires in that event's task, as a select's onChange
-  firing `input` on another field does. The sort click now has no later render and no note. `followUps`
+  firing `input` on another field does. `followUps`
   loses the render and no blame changes, since a blame never rests on a later render. A page whose own code
   dispatches one of those events after the paint loses the renders after it too (README, Known limits).
 - **Past 50 published reports, the ten slowest and every report INP can still point at are kept.**
-  `reports()` let the oldest go first, whatever it was, and drawing sixty rectangles in excalidraw pushed
-  out the 64 ms key press that was the page's INP: `inp().report` came back null, and `attributeINP` gave
-  `react: null` for the one interaction INP named. The oldest still goes first unless it is one of the ten
+  The oldest still goes first unless it is one of the ten
   slowest, as many as web-vitals keeps candidates for INP, or one INP can still point at: the estimate's,
   and those of the candidates it moves down to every 50 interactions. `reports()` still returns 50 at
   most, oldest first, and no report changes.
 - **A quick press is not published for the render its own release made, and the note on that render no
-  longer says INP leaves it out.** A 32 ms pointerdown on excalidraw's canvas was published only because
-  the pointerup that ended the stroke rendered in its own dispatch, 37 ms after the press painted, and the
-  note read "A second React render landed 37 ms after the screen updated: ... INP doesn't count it, but
-  people still wait for it." That render ran inside the pointerup's own Event Timing entry, part of the
-  same interaction, so INP does count it: a slower release would have raised the interaction's latency. A
+  longer says INP leaves it out.** A
   render made in the dispatch of the input it is stamped with (`CommitSummary.inDispatch`, under Added),
   or landing inside one of the interaction's entries before its paint, no longer makes an interaction
   under `threshold` worth publishing. That takes in a render that began after the entry's input and
@@ -1319,16 +1245,13 @@ None from 0.26.0.
   after it, waits for that entry before it publishes the press, since the entry may hold it. A newer
   interaction's entry ends the wait, and so does the page being hidden, as a release under 16 ms sends
   none. Where a report with such a render is published on its own duration, the note is about a render
-  INP left out if it has one, and otherwise reads "A second React render landed 37 ms after the screen
-  updated, on the release:" and what the render did, with nothing about INP. The panel's line for a later
+  INP left out if it has one, and otherwise describes the render on the release, with nothing about INP.
+  The panel's line for a later
   render and its "Rendered after the paint" list now name that same render, where they took the heaviest
   of all. `followUps` keeps the render and no blame changes.
-- **A long animation frame is folded into every published report it overlaps, not only the newest.** On
-  an undo in excalidraw, Control pressed 8 ms before z, z's handler ran for about 59 ms in the frame both
-  key presses painted in, and only z's report, the newer one, took the frame when it arrived. Control's
-  report read "After the key press was handled, the screen took another 64 ms to update." with
-  `blame.name` null. Every report the frame overlaps, in its window or its later renders, now takes it as
-  a new revision. A painting blame like Control's stays painting and gains ", mostly because a script
+- **A long animation frame is folded into every published report it overlaps, not only the newest.**
+  Every report the frame overlaps, in its window or its later renders, now takes it as
+  a new revision. A painting blame stays painting and gains ", mostly because a script
   (...) ran for N ms before the next frame." where a script ran 20 ms or more of the screen update, and
   `blame.name` becomes that script's name where it was null. Any other blame is worked out again with the
   frame, as the newest report's always was, so it can change kind: a 'none' becomes 'script' where a
@@ -1848,31 +1771,25 @@ under Changed first.
   listed the script that kept it. The sentence now names that script, says whether it was already
   running or ran first, and how much of the wait it held. `explanation.blame.name` carries the script's
   invoker (`"TimerHandler:setTimeout"`) when it filled at least half of the wait, and is `null` as
-  before otherwise; the overlay row shows it. Found on TanStack Table's fuzzy filter example at a
-  million rows, where a key press waited 843 ms behind a debounced filter. With no script on record
+  before otherwise; the overlay row shows it. With no script on record
   the old sentence stands.
 - **A slow listener React did not attach gets a name.** A shortcut bound on the document has no React
   handler, so a `handler` verdict could only say "code outside React". The sentence now adds the
-  longest script the browser recorded in the working time, with its file ("#document.onkeydown
-  (excalidraw/reactUtils.ts), 115 ms"), and `blame.name` carries that invoker when it covers at least
+  longest script the browser recorded in the working time, with its file, and `blame.name` carries that invoker when it covers at least
   half of the time blamed; `blame.detail` is then `null`, since a document listener lives in no
-  component. A handler React does name is unchanged. Found on Excalidraw's undo at 1,536 shapes.
-- **A click on an icon is labelled by its button.** A click on an icon button lands on the svg's
-  `line` or `path`, and the report said "click on line". `target.label` now comes from the control
+  component. A handler React does name is unchanged.
+- **A click on an icon is labelled by its button.** `target.label` now comes from the control
   within five ancestors of where the click landed (a button, link, summary, label, form field, or an
-  element with a control's ARIA role), so it reads `button "main-menu-trigger"`. `target.selector` is
+  element with a control's ARIA role). `target.selector` is
   still the element the browser reported.
 - **Forced layout takes the blame from 25 ms where no render was timed.** That is a production
   build, or an interaction no commit joined. The floor was 50 ms everywhere, which left a band where
-  a measured layout lost to a render known only by its component count: opening a Sheet on the shadcn docs spent 44 to 49 ms of
-  55 ms of working time on layout and was reported as a render, and the Dialog beside it changed
-  verdict between runs at 49 and 50 ms. It still has to be half the window it was counted across. A
+  a measured layout lost to a render known only by its component count.
+  It still has to be half the window it was counted across. A
   commit with render durations keeps the 50 ms floor. In every build a layout no longer takes the
   blame from a longer wait before the handlers: that is a `waiting` verdict, as it is for a handler.
-- **Text nobody can see is not a label.** With `labels: 'text'` a key press with nothing focused lands
-  on the body, and the body's first text in a Vite page is its `noscript` line, so the report read
-  `key press on body "You need to enable JavaScript to run thi"`. The first run of text now skips
-  `noscript`, `script`, `style` and `template`. Found on Twenty's record table (the twentyhq/twenty CRM).
+- **Text nobody can see is not a label.** The first run of text now skips
+  `noscript`, `script`, `style` and `template`.
 - **The overlay's rows open from the keyboard.** A row was a clickable `div` that could not take the
   focus, so from the keyboard alone there was no way to open one into its explanation. Its header is
   now a button in the Tab order (`role="button"`, with `aria-expanded`), and Enter or Space opens and
@@ -2073,26 +1990,23 @@ under Changed first.
   are written in, reached the minifier unnamed and the blame named `t` or `Wr`. It now stamps any
   top-level capitalised binding whose value is a function, including the `React.memo`, `forwardRef` and
   generic forms, reading the source with strings, templates, comments, regular expressions and JSX
-  masked out. Across Excalidraw and two TanStack Table examples (301 files) that took the components it
-  names from 57 to 256, and every component the corpus can identify in those files, 316 of 316, now has
-  a name, counting the 60 the apps already name themselves with a `displayName` of their own. It also
+  masked out. It also
   reads the top level as brace depth rather than as indentation and skips a name the module imports.
   Two passes that were quadratic are linear: a 1 MB run of word characters used not to finish, and
   10,000 components in one file took 8 seconds. Both are now under 100 ms.
 - **A stamp could throw at load and take the page down.** The stamp was a bare
   `Foo.displayName = "Foo"`, which fails on a frozen component, on a read-only `displayName`, on
   anything that is not an object, and on a name the loader read wrong; a module is strict, so that is
-  a page that does not load rather than a name that does not appear. Evaluating 76 stamped modules
-  under Node, in both the order Next.js transforms in and the order Vite does, 22 of them threw. The
+  a page that does not load rather than a name that does not appear. The
   stamp now checks the value first, with `typeof Foo === "function" && Object.isExtensible(Foo) && …`
   for a function and a `try` for a `memo` or `forwardRef` object, and it never replaces a `displayName`
-  your own code has set, including one from a naming HOC. All 76 load. The loader also stops naming a
+  your own code has set, including one from a naming HOC. The loader also stops naming a
   called function expression (`const Foo = function () {…}()`, `.call`, `.bind`), skips a module whose
   first statement is `"use server"`, and reads three shapes correctly that it used to misread: a
   pattern after `if (…)`, a backtick in JSX text, and a named function expression written at column 0
   inside `memo(` or an array. What the guard costs is tree shaking under terser and SWC, which could
-  drop an unused component under the bare assignment; Rollup still drops it, esbuild still keeps it,
-  and the 301-file corpus gives exactly the same names as before. See Known limits in the README.
+  drop an unused component under the bare assignment; Rollup still drops it and esbuild still keeps it.
+  See Known limits in the README.
 - **A click on a checkbox, a radio or a select reported `handler: null`.** The event-to-prop table had
   one entry per native event and did not know that React fires `onChange` from the *click* on a checkbox
   or a radio, from `change` on a select or a file input, and from `input` on a text field. It now
@@ -2105,12 +2019,11 @@ under Changed first.
   argument; without it a key press reaches no `onSubmit`. Every one of these would rather return null
   than name a handler that did not run.
 - **A render could be credited to an interaction two steps back.** A commit made outside any dispatch
-  is stamped with whatever input the ring last held, so sorting a table and then changing its page size
-  told the sort click it had re-rendered 417 components a second after it had painted. A follow-up now
+  is stamped with whatever input the ring last held. A follow-up now
   attaches only when no newer input arrived before that commit, and the follow-up window runs from the
   paint rather than from the input, so a slow interaction keeps the render that followed it. What is
   fixed is the case with a real user input behind the second render: the input ring is the whole of the
-  evidence, so a page-size change made by script, which fires no trusted input of its own, still leaves
+  evidence, so an update made by script, which fires no trusted input of its own, still leaves
   its render attached to the click before it.
 - **An inferred blame read like a measured one.** Every sentence the explanation can produce is now
   paired with its confidence: an inferred blame says "most likely" in the headline sentence and in the
@@ -2120,11 +2033,10 @@ under Changed first.
 - **Forced layout could never be blamed on a production build, however large.** The one branch that
   weighed anything against a render needed React's render durations to subtract them, and a production
   build records none, so a layout the browser had measured came out as a footnote under a render nobody
-  had timed: 108 ms of layout inside 116 ms of working time was reported as a re-render of 181 components
-  with `ms: null`. `explanation.blame.kind` gains `'layout'`, taken from 50 ms when the layout is half the
+  had timed. `explanation.blame.kind` gains `'layout'`, taken from 50 ms when the layout is half the
   window it was measured across, larger than React's render, larger than the time outside it, and not
-  outweighed by the screen update that followed; the sentence says what is left over ("leaving 8 ms for
-  React's render and commit, its layout effects and the click handler together"), which is what makes the
+  outweighed by the screen update that followed; the sentence says what is left over for
+  React's render and commit, its layout effects and the click handler together, which is what makes the
   demotion of the render a measurement. Its `name` and `detail` are where the layout happened, not what
   forced it, which nothing records: the joined commit's subtree and what it was mostly made of, dropped
   for the invoker the browser charged the script to where that commit only overlapped the interaction in
@@ -2140,9 +2052,7 @@ under Changed first.
   and its forced layout had to be apportioned by time. A `switch` over `explanation.blame.kind` that
   TypeScript checks for exhaustiveness now has a case missing.
 - **Two interactions of the same shape could get opposite verdicts.** The render was tested before the
-  screen update, so a component count decided which: paging a calendar forward one month (5 ms of working
-  time, 82 of the screen updating) read `render` and `'inferred'`, while toggling a theme (2 ms and 85)
-  read `painting` and `'measured'`. A render, a handler and a forced layout are all bounded by the working
+  screen update, so a component count decided which. A render, a handler and a forced layout are all bounded by the working
   time they ran in, so the screen update is now weighed against that window once, and every branch inside
   it steps aside where the screen update is longer. Hydration is the exception and sits above the
   comparison: an input that landed on un-hydrated HTML is worth saying whatever else took longer. Because
@@ -2151,11 +2061,9 @@ under Changed first.
   A branch closed that way leaves a note naming what it would have blamed, so a 200 ms render inside a
   425 ms interaction is still reported when the 215 ms of screen update after it takes the verdict.
 - **`where` named the innermost owner, which on a design-system app is never the app's own component.**
-  Across seven interactions on one real App Router site it printed `in header`, `in Primitive.button`
-  twice, `in Primitive.input`, `in Primitive.div` and `in _`, with the component the reader would
-  recognise sitting further up the same chain every time. `target.component` is now the nearest owner
+  `target.component` is now the nearest owner
   whose name a reader could search their own code for: capitalised, as React requires of a component
-  name, so a column definition's `header: ({ table }) => …` no longer reads as an HTML tag; at least three
+  name; at least three
   characters, since a minified dependency that ships no `displayName` leaves one and two character names;
   and every part of a dotted name the same, so `Primitive.button`, which names the element that was
   clicked, gives way to the component above it. `target.owners` still carries the whole chain, and where

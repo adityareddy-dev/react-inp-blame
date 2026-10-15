@@ -242,7 +242,7 @@ function main() {
   if (versions.npm) p(`| Library from npm | \`${String(versions.npm).replace(/\s+/g, ' ').slice(0, 200)}\` |`);
   for (const [id, v] of Object.entries(versions.apps)) {
     // Only the packages this app actually has: a Vite app has no `next`, a Next app has no `vite`.
-    const pkgs = ['react', 'react-dom', 'vite', 'next', '@tanstack/react-table', 'react-inp-blame']
+    const pkgs = ['react', 'react-dom', 'vite', 'next', 'react-inp-blame']
       .filter((name) => v[name])
       .map((name) => `${name} ${v[name]}`);
     p(`| ${id} | commit \`${v.commit}\`, ${pkgs.join(', ')} |`);

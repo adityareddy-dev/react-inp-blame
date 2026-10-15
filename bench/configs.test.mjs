@@ -16,6 +16,13 @@ test('the cohort contains exactly the five selected everyday apps', () => {
   assert.deepEqual(Object.keys(apps), [
     'actual', 'myfin', 'kresus', 'manage-my-damn-life-nextjs', 'reactive-resume',
   ]);
+  assert.deepEqual(Object.values(apps).map((app) => app.repository), [
+    'https://github.com/actualbudget/actual',
+    'https://github.com/afaneca/myfin',
+    'https://github.com/kresusapp/kresus',
+    'https://github.com/intri-in/manage-my-damn-life-nextjs',
+    'https://github.com/amruthpillai/reactive-resume',
+  ]);
 });
 
 function dryRun(script, args, order) {
@@ -53,16 +60,21 @@ for (const script of ['bench.mjs', 'run.mjs']) {
     assert.deepEqual(JSON.parse(r.out).configs, ['A', 'B']);
   });
 
-  test(`${script} stops before installation or collection for pending integrations`, () => {
-    const result = spawnSync(process.execPath, [path.join(HERE, script), '--app', 'actual'], {
-      cwd: HERE,
-      encoding: 'utf8',
-      timeout: 60000,
-      env: { ...process.env, BENCH_ORDER: 'A,B,C' },
-    });
-    assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
-    assert.match(result.stderr, /actual: integration pending/);
-    assert.doesNotMatch(result.stdout, /== install|== build|== bench/);
+  test(`${script} stops before installation or collection for every pending integration`, () => {
+    for (const id of Object.keys(apps)) {
+      const options = script === 'run.mjs' ? [[], ['--no-build']] : [[]];
+      for (const flags of options) {
+        const result = spawnSync(process.execPath, [path.join(HERE, script), '--app', id, ...flags], {
+          cwd: HERE,
+          encoding: 'utf8',
+          timeout: 60000,
+          env: { ...process.env, BENCH_ORDER: 'A,B,C' },
+        });
+        assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
+        assert.ok(result.stderr.includes(`${id}: integration pending`), result.stderr);
+        assert.doesNotMatch(result.stdout, /== install|== build|== bench/);
+      }
+    }
   });
 
   test(`${script} refuses an app that isn't there`, () => {

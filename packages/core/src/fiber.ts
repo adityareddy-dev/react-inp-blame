@@ -23,8 +23,7 @@ const MAX_DEPTH = 1000;
 const HOT_PATH_SHARE = 0.6;
 // The hot path spends at most this many steps below the component it starts from: enough to reach the
 // subtree to blame in a real tree, few enough to read in one line. A library's layers between the
-// components that spend them are named on the path but spend no step (`passedLayer`): on the shadcn/ui
-// docs Radix's alone would spend all twelve.
+// components that spend them are named on the path but spend no step (`passedLayer`).
 const HOT_PATH_STEPS = 12;
 // A commit keeps its most-rendered components and its outermost ones up to these counts. A report
 // names a culprit; it is not a profile.
@@ -449,8 +448,7 @@ function stylingName(f: Fiber, elementType: unknown): string | null {
     if ('__emotion_base' in t) return `Styled(${baseName(t.__emotion_base)})`;
     if (typeof t.styledComponentId === 'string') return typeof t.target === 'string' ? `styled.${t.target}` : `Styled(${baseName(t.target)})`;
     // Linaria's `styled` marks the forwardRef it returns with what it extends, as `__wyw_meta` on newer
-    // releases and `__linaria` on older ones, and its Babel plugin names each one after its variable:
-    // Twenty has some 270 called `StyledContainer`.
+    // releases and `__linaria` on older ones, and its Babel plugin names each one after its variable.
     const linaria = t.__wyw_meta ?? t.__linaria;
     if (linaria) return typeof linaria.extends === 'string' ? `styled.${linaria.extends}` : `Styled(${baseName(linaria.extends)})`;
   }
@@ -1220,8 +1218,7 @@ function unreachedBeside(f: Fiber, root: Fiber): boolean {
 
 function sharedAncestor(top: Agg[]): string | null {
   let name: string | null = null;
-  // The innermost that is not a library's layer, where there is one: on Twenty the innermost shared component
-  // was a styling wrapper, one of 270 called StyledContainer, with the app's own component right above it.
+  // The innermost that is not a library's layer, where there is one.
   let named: string | null = null;
   let list = top;
   while (list.length === 1 && !list[0]!.performed) {

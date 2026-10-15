@@ -2,8 +2,8 @@
 
 The current benchmark cohort is [five everyday apps](real-apps.md). No accuracy or overhead
 results exist for it yet. Retired app integrations and their measurement tables have been
-removed from the current tree rather than mixed with the new cohort. Prior records remain in
-Git history, not as results for the replacement apps.
+removed from the current tree rather than mixed with the new cohort. Deleting current-tree
+files does not purge Git history. A history rewrite requires separately confirmed refs.
 
 - [Current apps and integration status](real-apps.md)
 - [Harness setup and dry runs](../../bench/README.md)

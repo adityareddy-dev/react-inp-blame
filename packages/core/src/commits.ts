@@ -41,11 +41,8 @@ export const readableName = (name: string): boolean =>
 /**
  * A layer the hot path names but spends no step on, and a render is not named after, so that the steps go
  * on components a reader could search for and reach them where there are any: a name a reader could not
- * search for (`readableName`), and a Provider or a Context, which renders what it is given. On the
- * shadcn/ui docs Radix's layers alone (`Primitive.div`, `.Slot`, `.SlotClone`, `TabsProvider`,
- * `CollectionProvider`, `ProviderProvider`) spent the twelve steps between Tabs and the trigger that
- * rendered, and on cal.com a provider and a minified name spent the two that would have reached the tab
- * below the form. A library's readable parts (Radix's RovingFocusGroup, DismissableLayer) are not layers:
+ * search for (`readableName`), and a Provider or a Context, which renders what it is given.
+ * A library's readable parts (Radix's RovingFocusGroup, DismissableLayer) are not layers:
  * names alone cannot tell them from the app's. A framework that knows its own can say so (`frameworkLayers`).
  */
 const PROVIDER = /Provider$|Context$/;
@@ -93,8 +90,7 @@ export function leafName(c: CommitSummary): string | null {
  * The component a commit's render started from, for a sentence that says where it went: the top of its hot
  * path, where the path goes below it, the name is not a layer, and it holds the whole commit
  * (`startRendered`), since "from X down" claims the count under X, and the path starts at the heaviest of
- * the roots that rendered, not at all of them. It is often where the cause is: on cal.com the form's state
- * lives in EventTypeWeb, and the render was named after a component eleven layers down. A layout blame is
+ * the roots that rendered, not at all of them. A layout blame is
  * named after it too, where the sentence says "from X down", since the read that forced the layout can be
  * anywhere in what React rendered.
  */
@@ -126,8 +122,7 @@ export function mostlyComponent(c: CommitSummary): CommitSummary['components'][n
   return weight(readable) >= weight(first) / 2 ? readable : first;
 }
 
-// A sentence says a commit was "mostly" one component from half of it. On the shadcn/ui docs a render of 59
-// components read "mostly Label (4 of them)", which sends a reader to the wrong file.
+// A sentence says a commit was "mostly" one component from half of it.
 const MOSTLY_MIN_SHARE = 0.5;
 
 /**

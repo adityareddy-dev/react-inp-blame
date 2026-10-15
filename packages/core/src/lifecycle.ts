@@ -24,8 +24,7 @@ import type { CommitSummary, FrameSummary, InteractionReport, ReactStatus } from
 export const MAX_REPORTS = 50;
 /**
  * The slowest published reports, kept however old they are: as many as web-vitals keeps candidates for
- * INP. Kept first in, first out, the reports of sixty quick rectangles drawn in excalidraw pushed out the
- * key press that was the page's INP. They outlive a soft navigation too, where the estimate starts over
+ * INP. They outlive a soft navigation too, where the estimate starts over
  * and web-vitals, unless asked to report soft navigations, does not.
  */
 export const KEPT_SLOWEST = 10;

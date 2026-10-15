@@ -1,5 +1,4 @@
-// report.test.mjs: report.mjs and before-after.mjs over a small results file in the shape bench.mjs
-// writes, the failure text a run can leave in it, and the address shadcn's next start listens on.
+// report.test.mjs: report.mjs over synthetic results in the shape bench.mjs writes.
 // Nothing installed, no browser, no server, the file is made up in a temp folder.
 //
 //   node --test report.test.mjs      # or npm test
@@ -108,7 +107,7 @@ function node(script, file, ...args) {
 }
 
 test('the Source line names the results file without its folder', () => {
-  const file = results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'] });
+  const file = results({ app: 'synthetic', configs: ['A', 'B', 'C'] });
   const md = node('report.mjs', file);
   assert.match(md, /^Source: `2026-09-29T00-00-00-000Z\.json`$/m);
   assert.ok(!md.includes(path.dirname(file)));
@@ -119,9 +118,9 @@ test('a failure keeps its text with the home folder cut to ~, in both slash form
   const error = `ENOENT ${home}${path.sep}bench${path.sep}a.json, then ${home.replaceAll('\\', '/')}/bench/b.json`;
   const md = node(
     'report.mjs',
-    results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], skip: ['C:4'], failures: [{ app: 'tt-fuzzy', config: 'C', throttle: 1, runIndex: 4, error }] }),
+    results({ app: 'synthetic', configs: ['A', 'B', 'C'], skip: ['C:4'], failures: [{ app: 'synthetic', config: 'C', throttle: 1, runIndex: 4, error }] }),
   );
-  const line = md.split('\n').find((l) => l.startsWith('- `tt-fuzzy` C x1 run 5:'));
+  const line = md.split('\n').find((l) => l.startsWith('- `synthetic` C x1 run 5:'));
   assert.ok(line, md);
   assert.ok(!line.includes(home) && !line.includes(home.replaceAll('\\', '/')), line);
   assert.match(line, /ENOENT ~.bench.a\.json, then ~\/bench\/b\.json$/);
@@ -129,19 +128,19 @@ test('a failure keeps its text with the home folder cut to ~, in both slash form
 
 test('a failure is numbered as the console numbered it, from 1, and a warm-up is called one', () => {
   const failures = [
-    { app: 'tt-fuzzy', config: 'B', throttle: 1, runIndex: -1, warmup: true, error: 'warm-up timed out' },
-    { app: 'tt-fuzzy', config: 'B', throttle: 1, runIndex: 2, error: 'step did nothing' },
+    { app: 'synthetic', config: 'B', throttle: 1, runIndex: -1, warmup: true, error: 'warm-up timed out' },
+    { app: 'synthetic', config: 'B', throttle: 1, runIndex: 2, error: 'step did nothing' },
   ];
-  const md = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], skip: ['B:2'], failures }));
-  assert.match(md, /^- `tt-fuzzy` B x1 warmup: warm-up timed out$/m);
-  assert.match(md, /^- `tt-fuzzy` B x1 run 3: step did nothing$/m);
+  const md = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'], skip: ['B:2'], failures }));
+  assert.match(md, /^- `synthetic` B x1 warmup: warm-up timed out$/m);
+  assert.match(md, /^- `synthetic` B x1 run 3: step did nothing$/m);
   assert.doesNotMatch(md, /run -1/);
 });
 
 test('the run count names each configuration when a failed run leaves them uneven', () => {
-  const even = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'] }));
+  const even = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'] }));
   assert.match(even, /^10 runs per configuration \(A, B, C\)\.$/m);
-  const uneven = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], skip: ['C:4'] }));
+  const uneven = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'], skip: ['C:4'] }));
   assert.match(uneven, /^A 10, B 10, C 9 runs\.$/m);
   assert.doesNotMatch(uneven, /runs per configuration/);
 });
@@ -151,19 +150,19 @@ test('the library check shows in the report, and a copy that differs is said at 
     JSON.stringify({
       spec: 'react-inp-blame@0.12.0',
       files: 40,
-      apps: { 'tt-fuzzy': { installed: 'a/tt/node_modules/react-inp-blame', version: '0.12.0', match, differs: match ? [] : ['dist/index.js'], extra: [] } },
+      apps: { synthetic: { installed: 'fixture/node_modules/react-inp-blame', version: '0.12.0', match, differs: match ? [] : ['dist/index.js'], extra: [] } },
     });
   const top = (md) => md.slice(0, md.indexOf('## Configurations'));
 
-  const ok = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], libCheck: check(true) }));
-  assert.match(ok, /^\| react-inp-blame in tt-fuzzy \| matches `react-inp-blame@0\.12\.0` byte for byte \|$/m);
+  const ok = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'], libCheck: check(true) }));
+  assert.match(ok, /^\| react-inp-blame in synthetic \| matches `react-inp-blame@0\.12\.0` byte for byte \|$/m);
   assert.doesNotMatch(top(ok), /\*\*/);
 
-  const bad = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], libCheck: check(false) }));
-  assert.match(bad, /^\| react-inp-blame in tt-fuzzy \| DIFFERS from `react-inp-blame@0\.12\.0`: `dist\/index\.js` \|$/m);
+  const bad = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'], libCheck: check(false) }));
+  assert.match(bad, /^\| react-inp-blame in synthetic \| DIFFERS from `react-inp-blame@0\.12\.0`: `dist\/index\.js` \|$/m);
   assert.match(top(bad), /\*\*The library check failed\.\*\*/);
 
-  const none = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'] }));
+  const none = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'] }));
   assert.match(top(none), /\*\*The library was not checked\.\*\*/);
 });
 
@@ -177,7 +176,7 @@ function failed(app, configs, t = null) {
 }
 
 test('a pass where every B run failed says so, not that B reported nothing and logged nothing', () => {
-  const md = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], ...failed('tt-fuzzy', ['B']) }));
+  const md = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'], ...failed('synthetic', ['B']) }));
   assert.match(md, /^10 runs per configuration \(A, C\)\.$/m);
   assert.match(md, /^No B runs in this pass, see Failures\.$/m);
   assert.doesNotMatch(md, /No reports\./);
@@ -185,23 +184,23 @@ test('a pass where every B run failed says so, not that B reported nothing and l
 });
 
 test('a pass where every run failed says so once and prints nothing else for it', () => {
-  const md = node('report.mjs', results({ app: 'excalidraw', configs: ['A', 'B', 'C'], throttles: [1, 4], ...failed('excalidraw', ['A', 'B', 'C'], 4) }));
+  const md = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'], throttles: [1, 4], ...failed('synthetic', ['A', 'B', 'C'], 4) }));
   const pass = md.slice(md.indexOf('### 4x CPU throttling'));
   assert.equal(pass.trim(), '### 4x CPU throttling\n\nEvery run in this pass failed, see Failures.');
   assert.match(md.slice(0, md.indexOf('### 4x')), /^Nothing: no errors or warnings in any configuration\.$/m);
 });
 
-test('an app with no A and no F gets no pointer to before-after.mjs', () => {
-  const md = node('report.mjs', results({ app: 'tt-fuzzy', configs: ['A', 'B', 'C'], ...failed('tt-fuzzy', ['A']) }));
+test('an app with no baseline gets no comparison table', () => {
+  const md = node('report.mjs', results({ app: 'synthetic', configs: ['A', 'B', 'C'], ...failed('synthetic', ['A']) }));
   assert.match(md, /^No A runs in this pass, so no baseline to pair against and no A\/B\/C table\. See Failures\.$/m);
-  assert.doesNotMatch(md, /before-after/);
+  assert.doesNotMatch(md, /\| metric \|/);
 });
 
 test('steps.mjs gives each configuration its own stats line', () => {
   const abc = node(
     'steps.mjs',
     results({
-      app: 'tt-fuzzy',
+      app: 'synthetic',
       configs: ['A', 'B', 'C'],
       each: (r) => {
         if (r.config === 'C') r.lib.overheadTotalMs = 30;
@@ -212,4 +211,3 @@ test('steps.mjs gives each configuration its own stats line', () => {
   assert.match(abc, /^  B stats \(median over 10 runs\): .*overheadTotalMs 1,/m);
   assert.match(abc, /^  C stats \(median over 10 runs\): .*overheadTotalMs 30,/m);
 });
-

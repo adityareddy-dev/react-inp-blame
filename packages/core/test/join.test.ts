@@ -513,8 +513,6 @@ function clickedInside(owners: string[]): { component: string | null; owners: re
 }
 
 test('where names the nearest owner a reader could go and look for, and the whole chain stays in the data', () => {
-  // The innermost owner of a real app's element is usually its design system's, and in a production
-  // build it is often a name the minifier chose. These chains are the shadcn/ui documentation site's.
   const table = ['header', 'TableHead', 'TableRow', 'TableHeader', 'Table', 'DataTableDemo'];
   assert.deepEqual(clickedInside(table), { component: 'TableHead', owners: table, where: 'button in TableHead' });
 
@@ -550,8 +548,7 @@ test('a short or uncapitalised name is only ever passed over for one that is bet
 });
 
 test("a Radix Slot is passed over for the component that rendered it, since it renders nothing of its own", () => {
-  // The chain under a Radix DropdownMenu item, as a production build with the shadcn wrappers around it
-  // reads it. Each `X.Slot` is the Slot that X rendered to merge its props into its child, and the collection
+  // Each `X.Slot` is the Slot that X rendered to merge its props into its child, and the collection
   // item slot before it renders only that Slot; the roving focus item is the first component that does more.
   const item = ['Primitive.div', 'Primitive.span.Slot', 'Primitive.span', 'RovingFocusGroupCollectionItemSlot.Slot', 'RovingFocusGroupCollectionItemSlot', 'RovingFocusGroupItem'];
   assert.equal(clickedInside(item).component, 'RovingFocusGroupItem');
@@ -1528,8 +1525,6 @@ test('a render after an input or change a script dispatched past the paint is no
 });
 
 test("the render a held press's release made inside its own entry is not said to be left out of INP", () => {
-  // A 32 ms pointerdown on excalidraw's canvas painted, and the pointerup that ended the stroke rendered
-  // in its own dispatch 38 ms later. INP timed that render: it is inside the pointerup's entry.
   const pressed = [entry('pointerdown', 0, 32, 2, 24), entry('pointerup', 60, 24, 61, 72)];
   const ring = [input(0, 'pointerdown'), input(60, 'pointerup', { gestureTs: 0, work: { endedAt: 72, ownEndedAt: 72, unjoined: [] } })];
   const release = commit(70, 60, { gestureTs: 0, inputType: 'pointerup', total: 12 });
@@ -1991,10 +1986,6 @@ test('a blame says whether it was measured or inferred', () => {
 });
 
 test('forced layout the browser measured outranks a render no build timed', () => {
-  // Switching a tabbed code block on a documentation site: a 128 ms click whose 116 ms of working
-  // time was 108 ms of the browser recalculating layout, measured from a long animation frame,
-  // against a render a production build of React records no duration for at all. Blaming the render
-  // sends the reader memoising components when the fix is a layout read.
   const tabs = [entry('click', 0, 128, 2, 118)];
   const thrash = [frame(0, 128, [script('DIV#root.onmousedown', 2, 116, 108)])];
   const rerender = commit(60, 0, {
@@ -2043,9 +2034,6 @@ test('forced layout the browser measured outranks a render no build timed', () =
 });
 
 test('without render durations a forced layout under a long task still takes the blame from 25 ms', () => {
-  // Opening a sheet on a documentation site, production build: a 64 ms click, 55 ms of working time,
-  // 47 ms of it layout. At a 50 ms floor the same click came back a render on one run and a layout
-  // on the next, on a millisecond or two of difference.
   const open = [entry('click', 0, 64, 2, 57)];
   const counted = commit(30, 0, { hasDurations: false, total: 0, rendered: 59, roots: ['Dialog'], hotPath: ['Dialog', 'DismissableLayer'] });
   const layout = (forced: number) => report(open, [counted], [frame(0, 64, [script('#document.onclick', 2, 55, forced)])], [input(0, 'click')]).explanation.blame;
@@ -4689,8 +4677,6 @@ test('a render is said to be mostly one component only where that component is h
   const counted = (rendered: number, hotPath: string[], components: [string, number][]) =>
     report(click, [commit(50, 0, { hasDurations: false, total: 0, rendered, roots: [hotPath[0]!], hotPath, components: components.map(([name, count]) => ({ name, count, self: null, total: null })) })], []).explanation;
 
-  // Shaped like reports 0.12.0 gave on the shadcn/ui docs and on Twenty, where the most-rendered component
-  // was a small part of the render.
   const dialog = counted(59, ['DismissableLayer'], [['Label', 4], ['Button', 3], ['DialogTitle', 1]]);
   assert.match(dialog.cause, /^React was most likely re-rendering 59 components inside DismissableLayer, in the 97 ms of working time\. /);
   assert.equal(dialog.blame.detail, '59 components');
@@ -4751,44 +4737,39 @@ test('a render is said to be mostly one component only where that component is h
   assert.doesNotMatch(list.cause, /mostly/);
 });
 
-/**
- * TanStack Table's virtualized rows example with 200,000 rows, sorted by a click on "Last Name", as a profiling
- * build reported it: TableBody sorts the rows inside `table.getRowModel()`, which it calls while it renders, so
- * 257 of the 277 ms are its own and the components under it took about 17.
- */
 const tableSort = (opts: Partial<CommitSummary> = {}, at = 290) =>
   commit(at, 0, {
-    rendered: 637,
-    total: 277,
+    rendered: 600,
+    total: 260,
     roots: ['App'],
     hotPath: ['App', 'TableBody'],
     components: [
-      { name: 'TableBody', count: 1, self: 257.4, total: 274.7 },
-      { name: 'TableBodyRow', count: 31, self: 8.4, total: 0.6 },
-      { name: 're', count: 288, self: 4.9, total: 0.1 },
-      { name: 'cell', count: 279, self: 1, total: 0.1 },
-      { name: 'App', count: 1, self: 0.9, total: 277 },
+      { name: 'TableBody', count: 1, self: 240, total: 258 },
+      { name: 'TableBodyRow', count: 30, self: 10, total: 1 },
+      { name: 're', count: 280, self: 5, total: 0.1 },
+      { name: 'cell', count: 280, self: 2, total: 0.1 },
+      { name: 'App', count: 1, self: 1, total: 260 },
     ],
     ...opts,
   });
 
 test("a render that was mostly one component's own render says so, rather than sending the reader to the components under it", () => {
   const r = report([entry('click', 0, 304, 2, 296)], [tableSort()], []).explanation;
-  assert.equal(r.cause, "React spent 277 ms re-rendering 637 components inside TableBody (257 ms of it in TableBody's own render).");
-  assert.deepEqual(r.blame, { kind: 'render', name: 'TableBody', detail: "TableBody's own render", ms: 277, confidence: 'measured' });
+  assert.equal(r.cause, "React spent 260 ms re-rendering 600 components inside TableBody (240 ms of it in TableBody's own render).");
+  assert.deepEqual(r.blame, { kind: 'render', name: 'TableBody', detail: "TableBody's own render", ms: 260, confidence: 'measured' });
   assert.deepEqual(r.notes, [
     "Time in TableBody's own render is usually work it does as it renders, like a sort or a filter, which memoising the components under it does not speed up.",
   ]);
 
   // Where that component is not the one the render is named after, it is still the one named.
   const beside = report([entry('click', 0, 304, 2, 296)], [tableSort({ hotPath: ['App', 'Table'] })], []).explanation;
-  assert.match(beside.cause, /inside Table \(257 ms of it in TableBody's own render\)\.$/);
+  assert.match(beside.cause, /inside Table \(240 ms of it in TableBody's own render\)\.$/);
   assert.equal(beside.blame.detail, "TableBody's own render");
 
   // A production build has no time for any one component, so there is nothing to say about one.
   const production = report([entry('click', 0, 304, 2, 296)], [tableSort({ hasDurations: false, total: 0, components: tableSort().components.map((x) => ({ ...x, self: null, total: null })) })], []).explanation;
-  assert.equal(production.blame.detail, '637 components');
-  assert.match(production.cause, /^React was most likely re-rendering 637 components inside TableBody, in the 294 ms of working time\. /);
+  assert.equal(production.blame.detail, '600 components');
+  assert.match(production.cause, /^React was most likely re-rendering 600 components inside TableBody, in the 294 ms of working time\. /);
   assert.doesNotMatch(production.cause, /own render/);
   assert.ok(!production.notes.some((n) => n.includes('own render')), production.notes.join(' | '));
 
@@ -4797,7 +4778,7 @@ test("a render that was mostly one component's own render says so, rather than s
   const screen = report([entry('click', 0, 425, 0, 210)], [tableSort({ startedAt: 10, total: 120, components: [{ name: 'TableBody', count: 1, self: 100, total: 118 }, ...tableSort().components.slice(1)] }, 200)], []).explanation;
   assert.equal(screen.blame.kind, 'painting');
   assert.ok(
-    screen.notes.includes("React still spent 120 ms re-rendering 637 components inside TableBody (100 ms of it in TableBody's own render) and 70 ms committing it in the 210 ms of working time before that."),
+    screen.notes.includes("React still spent 120 ms re-rendering 600 components inside TableBody (100 ms of it in TableBody's own render) and 70 ms committing it in the 210 ms of working time before that."),
     screen.notes.join(' | '),
   );
 
@@ -4810,7 +4791,7 @@ test("a render that was mostly one component's own render says so, rather than s
   assert.equal(both.blame.kind, 'painting');
   assert.ok(
     both.notes.includes(
-      "React still spent 80 ms re-rendering 637 components inside TableBody (60 ms of it in TableBody's own render), 80 ms committing it and 70 ms running its useEffect callbacks in the 240 ms of working time before that.",
+      "React still spent 80 ms re-rendering 600 components inside TableBody (60 ms of it in TableBody's own render), 80 ms committing it and 70 ms running its useEffect callbacks in the 240 ms of working time before that.",
     ),
     both.notes.join(' | '),
   );
@@ -4825,11 +4806,11 @@ test("one component's own render is named from 25 ms and half of the render, and
 
   // 25 ms is enough, and just under it is not, with the share well over half.
   const at25 = sorted(25, 40);
-  assert.equal(at25.cause, "React spent 40 ms re-rendering 637 components inside TableBody (25 ms of it in TableBody's own render).");
+  assert.equal(at25.cause, "React spent 40 ms re-rendering 600 components inside TableBody (25 ms of it in TableBody's own render).");
   assert.ok(named(at25), at25.cause);
   const under25 = sorted(24.9, 40);
-  assert.equal(under25.cause, 'React spent 40 ms re-rendering 637 components inside TableBody.');
-  assert.equal(under25.blame.detail, '637 components');
+  assert.equal(under25.cause, 'React spent 40 ms re-rendering 600 components inside TableBody.');
+  assert.equal(under25.blame.detail, '600 components');
   assert.ok(unnamed(under25), under25.cause);
 
   // Half of the render is enough, and just under half is not, with the time well over 25 ms.
@@ -4844,18 +4825,18 @@ test("one component's own render is named from 25 ms and half of the render, and
 
   // A walk cut short has counted only the part it reached, so no one component's share of it is known.
   const cut = sorted(100, 120, { truncated: true });
-  assert.equal(cut.blame.detail, 'at least 637 components, the rest not walked');
+  assert.equal(cut.blame.detail, 'at least 600 components, the rest not walked');
   assert.ok(unnamed(cut), cut.cause);
 
   // Without durations there is no time of a component's own to go by.
   const production = sorted(100, 120, { hasDurations: false, total: 0, components: tableSort().components.map((x) => ({ ...x, self: null, total: null })) });
-  assert.equal(production.blame.detail, '637 components');
+  assert.equal(production.blame.detail, '600 components');
   assert.ok(unnamed(production), production.cause);
 
   // A root outside ProfileMode with a <Profiler> under it can leave the commit's total below the
   // component's own time, and "100 ms of it" in a 60 ms render would be more than the whole.
   const profiler = sorted(100, 60);
-  assert.equal(profiler.blame.detail, '637 components');
+  assert.equal(profiler.blame.detail, '600 components');
   assert.ok(unnamed(profiler), profiler.cause);
 });
 
@@ -5694,13 +5675,6 @@ test("a commit whose hot path ends in a root the walk found no name for is named
 });
 
 test('a render is counted inside the component it is named after, from the one it started at where that holds them all, and is a mount where all of it was one', () => {
-  // Opening a Sheet on the shadcn/ui docs, production build, modelled on a reading of the app's source rather
-  // than on a walk of it. Radix's Portal renders null and sets mounted in a layout effect, so the sheet's
-  // overlay and its content each mount in a commit of their own from a Portal of their own, the two of them
-  // in one commit: 59 components, 57 of them new, about 31 of them inside DismissableLayer, the overlay's
-  // portal and the wrappers above it making up the rest. `roots` lists the two Portals once, so the count
-  // under the one the path starts from is what says that they were two. 0.12.0 read "re-rendering 59
-  // components inside DismissableLayer" beside the layout.
   const open = [entry('click', 0, 69, 2, 60)];
   const sheet = commit(30, 0, {
     hasDurations: false,
@@ -5760,9 +5734,6 @@ test('a render is counted inside the component it is named after, from the one i
   assert.deepEqual(switched.blame, { kind: 'render', name: 'RovingFocusGroup', detail: '79 of 181 components', ms: null, confidence: 'inferred' });
   assert.match(switched.cause, /^React was most likely re-rendering 181 components, 79 of them inside RovingFocusGroup, in the 116 ms of working time\. /);
 
-  // Switching a cal.com event type to its advanced tab, development build, by the same reading: 1216
-  // components from EventTypeWeb, the one root, where the form's state lives, about 800 of them inside the
-  // tab's wrapper. 0.12.0 stopped at Form, twelve layers down, and put all 1216 inside it.
   const advanced = commit(200, 0, {
     rendered: 1216,
     mounted: 40,
@@ -5801,8 +5772,6 @@ test('a render is counted inside the component it is named after, from the one i
   const several = report([entry('click', 0, 220, 3, 210)], [commit(200, 0, { ...advanced, roots: ['EventTypeWeb', 'CommandMenu'], startRendered: 1000 })], []).explanation;
   assert.equal(several.cause, 'React spent 180 ms re-rendering 1216 components, 812 of them inside EventAdvancedWebWrapper.');
 
-  // Selecting every row on Twenty, production build, the walk cut at its budget under several roots: the
-  // component they share is named and holds every count, so none is said to be inside a part of it.
   const rows = commit(400, 0, {
     hasDurations: false,
     total: 0,
@@ -5889,13 +5858,6 @@ test("a render blame is named where the render started where the times on the ho
 });
 
 test('a layout blame is named after the component the render started at where that holds the whole commit, and after the one the render is named after where none does', () => {
-  // Closing a Sheet on the shadcn/ui docs, production build, as the 0.13.0 retake read it on every run: 87 ms
-  // of layout forced in BODY.onclick, and 56 components re-rendered from Dialog, the one root, 15 of them
-  // inside DismissableLayer. The read is Radix's Presence reading animationName in a layout effect, in each of
-  // the four Presences the close re-renders, and none of them is inside DismissableLayer: the content's own
-  // sits above it on the path and the overlay's beside it. 0.13.0 named DismissableLayer and "15 of 56
-  // components", a part of the commit that held none of the read. Nothing records which component read a
-  // size, so the one named is the one that holds all of what React rendered, as "from Dialog down" does.
   const close = [entry('click', 0, 160, 3.2, 105)];
   const sheet = commit(60, 0, {
     hasDurations: false,
@@ -5944,9 +5906,6 @@ test('a layout blame is named after the component the render started at where th
   const old = report(close, [stored as CommitSummary], forced, [input(0, 'click')]).explanation;
   assert.deepEqual([old.blame.name, old.blame.detail], ['DismissableLayer', '56 components']);
 
-  // The same in a development build, on a page whose render started at its one root: layout forced in the
-  // click that switched a cal.com event type to its advanced tab is named after EventTypeWeb, which holds the
-  // 1216 components, not after the tab's wrapper, which holds 812 of them.
   const advanced = commit(200, 0, {
     rendered: 1216,
     mounted: 40,
@@ -6134,11 +6093,6 @@ test('a render known only by its counts is blamed under a long task of working t
 });
 
 test('a render known only by its counts is not blamed under a long task of working time, and where no frame covered the click the styles and layout it forced are said to be unmeasured', () => {
-  // Finishing a rectangle in excalidraw, production build: 2.6 ms of waiting, 2.8 of working time and 34.4
-  // updating the screen. Releasing the pointer re-rendered the chrome, 149 components inside
-  // FixedSideContainer, and no long animation frame covered the click. 0.12.0 read "re-rendering 149
-  // components inside FixedSideContainer, mostly PanelComponent (22 of them)": the screen update is only
-  // weighed from 50 ms, and beside the handler a count of 149 explained 2.8 ms many times over.
   const chrome = (rendered: number, panels: number) =>
     commit(4, 0, { hasDurations: false, total: 0, rendered, roots: ['InitializeApp'], hotPath: ['InitializeApp', 'LayerUI', 'FixedSideContainer'], components: [{ name: 'PanelComponent', count: panels, self: null, total: null }] });
   const release = (handler: string) => [input(0, 'click', { target: element('canvas', []) as unknown as Node, owners: ['InteractiveCanvas'], handler })];
@@ -6149,18 +6103,10 @@ test('a render known only by its counts is not blamed under a long task of worki
     'In 3 ms of working time, short of a long task, React was re-rendering 149 components inside FixedSideContainer; the rest went to waiting and painting. No long animation frame covered the click, so how much of the working time went to any styles and layout it forced is unmeasured.',
   );
   assert.ok(!rect.notes.some((n) => n.includes('still re-rendering')), rect.notes.join(' | '));
-  // The same step at 4x CPU slowdown: 1.4 waiting, 16.2 working, 22.1 updating the screen. Still under.
   const slower = report([entry('click', 0, 40, 1.4, 17.6)], [chrome(149, 22)], [], release('onPointerUp')).explanation;
   assert.equal(slower.blame.kind, 'none');
   assert.match(slower.cause, /^In 16 ms of working time, short of a long task, React was re-rendering 149 components inside FixedSideContainer; /);
 
-  // Closing a Sheet on the shadcn/ui docs, production build: 0.8 ms of waiting, 16.6 of working time and
-  // 30.5 updating the screen, 56 components re-rendered, the hot path ending on the content's Presence, no
-  // frame. A read of the source puts about two dozen of the 56 under that Presence; this fixture, like a
-  // report 0.12.0 stored, carries no count inside it, so the sentence puts the whole 56 there. Most of the
-  // working time is one style recalculation Radix's Presence forces on close; the same close at 4x CPU
-  // slowdown, once a frame reported it, measured 66 of its 79 ms as forced layout. 0.12.0 blamed the render
-  // here too.
   const presence = commit(10, 0, { hasDurations: false, total: 0, rendered: 56, roots: ['Portal'], hotPath: ['Portal', 'Presence'], components: [{ name: 'Presence', count: 4, self: null, total: null }] });
   const close = report([entry('click', 0, 48, 0.8, 17.4)], [presence], [], [input(0, 'click')]).explanation;
   assert.equal(close.blame.kind, 'none');
@@ -6169,9 +6115,6 @@ test('a render known only by its counts is not blamed under a long task of worki
     'In 17 ms of working time, short of a long task, React was re-rendering 56 components inside Presence; the rest went to waiting and painting. No long animation frame covered the click, so how much of the working time went to any styles and layout it forced is unmeasured.',
   );
   assert.doesNotMatch(close.cause, /most likely/);
-  // The same Sheet on a phone, opening: 17.9 ms of waiting, 31.4 of working time and 6 updating the screen,
-  // no frame, the sheet's 59 components mounted, 31 of them inside DismissableLayer. Four whole-document
-  // style recalculations sit in the working time and nothing measured them.
   const sheet = commit(30, 0, {
     hasDurations: false,
     total: 0,
@@ -6190,7 +6133,6 @@ test('a render known only by its counts is not blamed under a long task of worki
     phoneOpen.cause,
     'In 31 ms of working time, short of a long task, React was rendering 59 components, 31 of them inside DismissableLayer; the rest went to waiting and painting. No long animation frame covered the click, so how much of the working time went to any styles and layout it forced is unmeasured.',
   );
-  // And closing it on the phone: 17.3 waiting, 7.2 working, 15.4 on the screen; at 4x, 25.4, 37.1 and 16.1.
   assert.equal(report([entry('click', 0, 40, 17.3, 24.5)], [presence], [], [input(0, 'click')]).explanation.blame.kind, 'none');
   const phoneClose = report([entry('click', 0, 80, 25.4, 62.5)], [presence], [], [input(0, 'click')]).explanation;
   assert.equal(phoneClose.blame.kind, 'none');
@@ -6274,11 +6216,6 @@ test('a render known only by its counts is not blamed under a long task of worki
   for (const frames of [[frame(0, 70, [script('BUTTON.onclick', 6, 57.5)])], [], null]) {
     assert.match(heldLonger(frames).cause, /^React was most likely re-rendering 800 components inside List, mostly Row \(800 of them\), in the 55 ms of working time\. /);
   }
-  // A frame that covered the click and listed the handler's script: 300 components re-rendered inside List in
-  // 45 ms of working time, with 45 ms charged to the root's click listener. That script holds React's render
-  // as well as the handler, so it is not measured in the render's place. Until 0.23.0 the report blamed nothing
-  // here, as it does with no frame. The frame measured the script that held the render, though, which no frame
-  // does for the excalidraw and Sheet clicks above, so the count names the render in it, bounded by that script.
   const list = commit(20, 0, { hasDurations: false, total: 0, rendered: 300, roots: ['List'], hotPath: ['List'], components: [{ name: 'Row', count: 100, self: null, total: null }] });
   const handled = report([entry('click', 0, 70, 2, 47)], [list], [frame(0, 70, [script('DIV#root.onclick', 2, 45, 0)])], [input(0, 'click', { handler: 'onClick' })]).explanation;
   assert.deepEqual(handled.blame, { kind: 'render', name: 'List', detail: '300 components', ms: null, confidence: 'inferred' });
@@ -6298,11 +6235,6 @@ test('a render known only by its counts is not blamed under a long task of worki
   assert.equal(dev.blame.kind, 'render');
   assert.equal(dev.blame.confidence, 'measured');
 
-  // Releasing Control after select-all in excalidraw, production build: 0.6 ms of waiting, 55.4 of working
-  // time and 15.5 updating the screen, the whole chrome re-rendered (161 components inside FixedSideContainer,
-  // 29 of them PanelComponent) and the browser charged the frame's 55 ms to the document's keyup listener.
-  // Over a long task the count names the render as before, and the sentence gives the working time the
-  // count is read against, since the same render took 7 ms on the key's press later in the session.
   const control = { ...chrome(161, 29), inputType: 'keyup' };
   const held = [input(0, 'keyup', { target: element('div', []) as unknown as Node, owners: ['InitializeApp'] })];
   const selectAll = report([entry('keyup', 0, 72, 0.6, 56)], [control], [frame(0, 72, [script('#document.onkeyup', 0.6, 55, 0)])], held).explanation;
@@ -6378,14 +6310,12 @@ test("a minifier's name the report gives, in a build whose names are otherwise r
   const walk = (opts: Partial<CommitSummary>) => commit(50, 0, { hasDurations: false, total: 0, rendered: 60, roots: ['Feed'], hotPath: ['Feed'], components: app, ...opts });
   const click = [entry('click', 0, 120, 3, 100)];
 
-  // Twenty, where React Router's RouterProvider is minified in a build that names the app's own components:
-  // five readable names of the seven beside it.
   const records = named(['RecordTable', 'RecordTableRow', 'RecordTableCell', 'RecordTableCellDisplayMode', 'RecordShowPage', 'Wr', 'Qe', '(anonymous)']);
-  const twenty = report(click, [walk({ rendered: 4917, truncated: true, roots: ['hl'], hotPath: ['hl'], pathStart: 'only-root', components: records })], []).explanation;
-  assert.match(twenty.cause, /^React was most likely re-rendering at least 4917 components inside hl, in the 97 ms of working time\. .* A profiling build of React would give exact numbers\. The walk stopped partway through that render, so which components took the time isn't known\./);
-  assert.equal(twenty.blame.name, 'hl');
-  assert.ok(twenty.notes.includes(oddNote('hl')), twenty.notes.join('\n'));
-  assert.ok(!twenty.notes.some((n) => n.startsWith('Most component names')));
+  const truncated = report(click, [walk({ rendered: 5000, truncated: true, roots: ['hl'], hotPath: ['hl'], pathStart: 'only-root', components: records })], []).explanation;
+  assert.match(truncated.cause, /^React was most likely re-rendering at least 5000 components inside hl, in the 97 ms of working time\. .* A profiling build of React would give exact numbers\. The walk stopped partway through that render, so which components took the time isn't known\./);
+  assert.equal(truncated.blame.name, 'hl');
+  assert.ok(truncated.notes.includes(oddNote('hl')), truncated.notes.join('\n'));
+  assert.ok(!truncated.notes.some((n) => n.startsWith('Most component names')));
 
   // Named after "inside" where the blame is the handler's, and with the `$1` a clash adds.
   const handler = report([entry('click', 0, 300, 3, 280)], [walk({ hotPath: ['Dt$1'] })], [], loginClick('onClick')).explanation;
@@ -6434,8 +6364,6 @@ test("a minifier's name the report gives, in a build whose names are otherwise r
 });
 
 test('a render that committed inside the script the screen update waited on is said to be what that script did', () => {
-  // TanStack Table's virtualized rows at 4x: a checkbox click whose handlers rendered the rows, then a frame that
-  // waited on react-virtual's scroll listener, which rendered them again through flushSync.
   const rows = { rendered: 721, hotPath: ['App', 'TableBody'], components: [{ name: 'TableBodyRow', count: 36, self: 60, total: 60 }] };
   const handled = commit(165, 0, { ...rows, total: 160 });
   const forced = commit(340, 0, { ...rows, total: 150 });
@@ -6691,25 +6619,23 @@ test('a script after the handlers is what held the screen update only from half 
 });
 
 test('a screen update over 100 ms gets its note under another verdict where the working time was longer too', () => {
-  // twenty's select-all in a production build: a 1712 ms click, 947 ms of it the handler rendering 4632 components,
-  // then 762 ms of the screen updating, 712 of it the frame's own style, layout and paint.
   const rows = {
-    rendered: 4632,
-    roots: ['RecordIndexFiltersToContextStoreEffect', 'RecordTableHeaderCheckboxColumn'],
-    hotPath: ['RecordTableHeaderCheckboxColumn'],
-    components: [{ name: 'RecordTableCell', count: 4000, self: null, total: null }],
+    rendered: 4000,
+    roots: ['SelectionState', 'SelectionCheckbox'],
+    hotPath: ['SelectionCheckbox'],
+    components: [{ name: 'Cell', count: 3000, self: null, total: null }],
     hasDurations: false,
     total: 0,
   };
   const selectAll = report(
-    [entry('click', 0, 1712, 3, 950)],
-    [commit(940, 0, rows)],
-    [frame(0, 952, [script('#document.onclick', 3, 947)]), frame(960, 752, [], 1000)],
+    [entry('click', 0, 1600, 0, 900)],
+    [commit(890, 0, rows)],
+    [frame(0, 900, [script('#document.onclick', 0, 900)]), frame(910, 690, [], 950)],
     [input(0, 'click')],
   );
   assert.equal(selectAll.explanation.blame.kind, 'render');
   assert.deepEqual(selectAll.explanation.notes, [
-    'After the handler finished, the screen took another 762 ms to update, mostly the browser recalculating styles and layout and painting the frame: 712 ms.',
+    'After the handler finished, the screen took another 700 ms to update, mostly the browser recalculating styles and layout and painting the frame: 650 ms.',
   ]);
 
   // Over 100 ms, not at it or under it: 197 ms of working time, then 104, 100 and 96 ms of the screen updating.
@@ -6720,9 +6646,6 @@ test('a screen update over 100 ms gets its note under another verdict where the 
   assert.deepEqual(rendered(300).notes, []);
   assert.deepEqual(rendered(296).notes, []);
 
-  // TanStack Virtual's checkbox at 4x: the handler rendered the table for 129 ms, then the frame waited on the
-  // scroll listener, which forced a second render of it. That render is the script's, said with it, and not an
-  // effect's, even where the 143 ms of working time was longer than the 142 ms of the screen updating.
   const checkbox = (end: number) =>
     report(
       [entry('click', 0, end, 3, 146)],

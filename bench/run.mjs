@@ -1,18 +1,13 @@
 // run.mjs: the whole benchmark in one command.
 //
-//   node run.mjs --runs 15 --app tt-virtual     # one app
-//   node run.mjs --runs 3 --app tt-virtual      # smoke run
 //   node run.mjs --dry-run                      # check the apps and configurations, then exit
 //
-// README.md has the commands for the published runs. An app asked for a configuration it doesn't
-// have (cal-diy has only A and B, tt-virtual-fix only B and F) is refused before anything builds.
+// Collection is blocked until the selected integrations are verified; see README.md.
 //
 // Installs app dependencies if they are missing, builds each app once per configuration it has
 // from the same source, runs bench.mjs, then writes report.md next to the results JSON.
 //
-// It rebuilds every time. A build takes from under a second per configuration for the TanStack
-// examples to minutes for the Next.js apps, and a stale dist would silently invalidate the whole
-// comparison, which is a far worse trade than the wait.
+// It rebuilds every time: a stale dist would silently invalidate the comparison.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -54,8 +49,7 @@ for (const id of noBuild ? [] : appIds) {
     if (app.install) app.install(run);
     else run(NPM, ['install', '--no-audit', '--no-fund'], { cwd: app.dir });
   }
-  // An app whose build needs something generated first (shadcn-ui/ui generates its whole
-  // component registry from source) does that once, before the configuration builds.
+  // Generate prerequisites once, before the configuration builds.
   if (app.prepare) {
     console.log(`\n== prepare ${id}`);
     app.prepare(run);

@@ -276,8 +276,6 @@ test('a render whose walk could not tell where it started is named after no comp
 });
 
 test("the interaction entry takes the start a layout blame is named after, where that start is the heaviest render's", () => {
-  // Closing a Sheet on the shadcn/ui docs, production build: 56 components from Dialog down, 15 of them inside
-  // DismissableLayer, and 87 ms of layout forced in BODY.onclick. The tooltip blamed Dialog and the entry read DismissableLayer.
   const close = { ...click, duration: 160, processingStart: 3.2, processingEnd: 105 };
   const hotPath = ['Dialog', 'DialogProvider', 'SheetContent', 'Presence', 'Portal', 'DialogContent', 'FocusScope', 'DismissableLayer'];
   const sheet = commit(60, { rendered: 56, mounted: 0, roots: ['Dialog'], hotPath, startRendered: 56, pathRendered: 15, components: [{ name: 'Presence', count: 4, self: null, total: null }] });
@@ -345,9 +343,6 @@ test('the interaction entry takes the commit a render blame names where that is 
 });
 
 test("the interaction's count of renders before the paint is the tooltip's, and says how many were too small to count", () => {
-  // Shaped like opening the shadcn/ui Sheet: six commits before the paint, three with work in them, two small ones
-  // and an empty one beside them. The tooltip said React rendered 3 times and the Summary said 6. Five rendered
-  // something, and the empty one is the one left out.
   const small = (at: number, rendered: number) => commit(at, { rendered, roots: rendered ? ['Presence'] : [], hotPath: rendered ? ['Presence'] : [], components: rendered ? [{ name: 'Presence', count: rendered, self: null, total: null }] : [] });
   const r = report([commit(20), small(30, 0), commit(60), small(70, 2), commit(100), small(110, 3)]);
   assert.match(r.verdict, / React rendered 5 times before the screen updated,/);
@@ -495,8 +490,6 @@ test('the note, the sentences that count renders across commits and the Summary 
 });
 
 test("the Summary's handling time says what the tooltip's time to handle the click counts differently", () => {
-  // Opening the shadcn/ui Sheet, the tooltip said 401 ms "of the 474 ms spent handling the click" and the Summary
-  // said "Handlers and React rendering 469 ms", with react-inp-blame's own 5 ms two rows further down.
   const forcing = { invoker: 'DIV#root.onclick', name: '', source: 'app.js', start: 0, duration: 118, forcedLayout: 110 };
   const frames = [{ start: 0, duration: 130, blocking: 80, forcedLayout: 110, scripts: [forcing], styleAndLayoutStart: null }];
   const r = sealReport(buildReport([{ ...click, processingStart: 0, processingEnd: 120 }], [commit(90, { walkMs: 20 })], frames));

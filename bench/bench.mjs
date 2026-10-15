@@ -1,11 +1,8 @@
 // bench.mjs: what react-inp-blame costs on real open-source React apps, and what it finds there.
 //
-//   node bench.mjs --app tt-fuzzy               # one app, 15 runs per configuration, both throttle passes
-//   node bench.mjs --app tt-fuzzy --runs 3      # smoke run
-//   node bench.mjs --app tt-fuzzy --dry-run     # print what a run would cover, then exit without a browser
+//   node bench.mjs --dry-run                   # list selected apps without starting a browser
 //
-// README.md has the commands for the published runs. cal-diy has only A and B, and tt-virtual-fix
-// only B and F, so a run over every app in the default order is refused before it starts.
+// Collection is blocked until the selected integrations are verified; see README.md.
 //
 // Three configurations of the SAME production build per app:
 //   A  baseline, library absent from the bundle
@@ -409,7 +406,7 @@ function jsBytes(root) {
   return { totalJsBytes, files };
 }
 
-// A workspace app (excalidraw-app) has its packages hoisted to the repo root, so look up the tree.
+// Workspace packages may be hoisted to the repo root, so look up the tree.
 function pkgVersion(dir, name) {
   for (let d = dir; ; d = path.dirname(d)) {
     try {
@@ -422,17 +419,16 @@ function pkgVersion(dir, name) {
 
 async function collectVersions(browser, appIds) {
   const tarball = process.env.BENCH_TARBALL ? path.join(HERE, process.env.BENCH_TARBALL) : null;
-  const npmLib = process.env.BENCH_NPM_LIB ?? 'react-inp-blame@0.12.0';
+  const npmLib = process.env.BENCH_NPM_LIB ?? 'react-inp-blame@1.0.0';
   const per = {};
   for (const id of appIds) {
     const dir = apps[id].dir;
     per[id] = {
-      commit: tryExec('git rev-parse HEAD', apps[id].repoDir ?? path.join(HERE, 'clones', 'tt')),
+      commit: tryExec('git rev-parse HEAD', apps[id].repoDir ?? dir),
       react: pkgVersion(dir, 'react'),
       'react-dom': pkgVersion(dir, 'react-dom'),
       vite: pkgVersion(dir, 'vite'),
       next: pkgVersion(dir, 'next'),
-      '@tanstack/react-table': pkgVersion(dir, '@tanstack/react-table'),
       'react-inp-blame': pkgVersion(dir, 'react-inp-blame'),
       bundleBytes: Object.fromEntries(
         Object.entries(apps[id].dists).map(([c, d]) => [

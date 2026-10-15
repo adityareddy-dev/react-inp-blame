@@ -2,7 +2,7 @@
 //
 //   node verify-lib.mjs                     # table, every app
 //   node verify-lib.mjs --json              # what bench.mjs records
-//   node verify-lib.mjs --app tt-virtual,shadcn-v4   # these apps only; bench.mjs passes the run's
+//   node verify-lib.mjs --app actual,myfin         # selected apps; bench.mjs passes the run's
 //
 // Packs the release from the registry once (npm-lib/), then hashes every file of each app's
 // installed copy against it. A file that differs, or is missing, fails the check.

@@ -325,8 +325,6 @@ const chain = (names: string[], ...leaves: Record<string, unknown>[]) => names.r
 const walk = (tree: Record<string, unknown>) => walkCommit(root(tree) as any, 5000, 100, click, development) as CommitSummary;
 
 test("the hot path names every component on the chain and spends its steps on the ones a reader could search for, passing a library's layers and a wrapper named after what it renders", () => {
-  // The install tabs on the shadcn/ui docs, switched to npm: shadcn's Tabs parts over Radix's, each named like
-  // the part it renders, and between one part and the next the layers Radix renders, named as React sees them.
   const trigger = () =>
     chain(['TabsTrigger', 'TabsTrigger', 'RovingFocusGroupItem', 'RovingFocusGroupCollectionItemSlot', 'RovingFocusGroupCollectionItemSlot.Slot', 'RovingFocusGroupCollectionItemSlot.SlotClone', 'Primitive.button', 'Primitive.button.Slot', 'Primitive.button.SlotClone'], element('button', text()));
   const list = chain(
@@ -530,8 +528,6 @@ test('a walk cut short under several roots names the component above a styling w
   function Order() {}
   function Metrics() {}
   function Metric() {}
-  // Twenty styles with Linaria, whose Babel plugin names each styled element after its variable: some 270 of
-  // them are called StyledContainer, and the innermost component above every root was one of those.
   const styledDiv = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'StyledContainer', __wyw_meta: { className: 'x1', extends: 'div' } };
   const rows = (component: () => void, n: number) => Array.from({ length: n }, () => rendered(component, element('li', text())));
   const tree = () => root(fiber(0, RecordIndexContainer, [fiber(11, styledDiv, [rendered(Orders, ...rows(Order, 3000)), rendered(Metrics, ...rows(Metric, 6000))], 0)], 0));

@@ -16,7 +16,7 @@ compares and what it costs. These pages have the rest.
   its own time per interaction.
 - [Known limits](known-limits.md): what it can't see, and where it has to guess.
 - [Troubleshooting](troubleshooting.md): every warning it prints, and what to do about it.
-- [Benchmarks](benchmarks/README.md): what it costs, and what it blames, on real open-source apps.
+- [Benchmarks](benchmarks/README.md): the selected apps, pending integrations and measurement plan.
 - [Design notes](interaction-attribution-design.md): why it works the way it does.
 
 ## Terms

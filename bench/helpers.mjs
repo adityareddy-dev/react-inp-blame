@@ -1,4 +1,4 @@
-// Helpers shared by every app definition: apps.mjs and the apps kept in files of their own.
+// Helpers for app integrations.
 
 import { spawnSync } from 'node:child_process';
 
@@ -18,10 +18,6 @@ async function settle(page, quietMs = 400, timeoutMs = 20000) {
 export /**
  * Retry a read until it satisfies `ok`, then return it. Throws with the last value seen.
  *
- * This exists because excalidraw debounces its localStorage write, and under 4x CPU throttling
- * that debounce plus the work in front of it runs well past a fixed wait. Polling the assertion
- * is not the same as loosening it: the condition is unchanged, only how long it is given. It runs
- * after the measured window, so it cannot affect a timing.
  */
 async function pollFor(read, ok, timeoutMs = 20000, everyMs = 200) {
   const deadline = Date.now() + timeoutMs;

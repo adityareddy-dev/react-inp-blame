@@ -124,8 +124,6 @@ test('a quiet mouse click is not published for the render of a click Enter made 
 });
 
 test("a quick press is not published for the render its own release made, which INP timed, but is for one after it", () => {
-  // A 32 ms pointerdown on excalidraw's canvas, then the pointerup that ends the stroke, rendering inside
-  // its own dispatch 38 ms after the press painted. That render is inside the pointerup's entry.
   const input = (ts: number, type: string) => ({ ts, type, gestureTs: 7000, press: 1, target: null, owners: [], handler: null, dehydrated: null, work: { endedAt: ts, ownEndedAt: ts, unjoined: [] } });
   const ring = [input(7000, 'pointerdown'), input(7060, 'pointerup')];
   const { life, published, render } = lifecycle({ inputs: () => ring });
@@ -513,7 +511,6 @@ test('a report that cannot be revised for a long animation frame goes to dropped
 });
 
 test(`past ${MAX_REPORTS} published reports the oldest goes first, but never one of the ${KEPT_SLOWEST} slowest`, () => {
-  // A 304 ms key press, then sixty quick interactions, as drawing sixty rectangles in excalidraw makes.
   // Kept first in, first out, the key press was the first to go.
   const { life } = lifecycle();
   life.onEntries([entry(7, 'keydown', 304)]);
