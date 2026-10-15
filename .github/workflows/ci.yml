@@ -63,6 +63,9 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '20.19'
+      # npm 10 crashes resolving optional peer sets in the fresh fixture installs.
+      - run: npm install --global npm@11.6.2
+      - run: node --version && npm --version
       - run: node scripts/pack-smoke.mjs --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
   # A Vite app as `npm create vite -- --template react-ts` makes it, with docs/install.md's vite.config.ts,
