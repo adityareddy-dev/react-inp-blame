@@ -361,6 +361,84 @@ async function serverWebcalNames(page, auth) {
 const themeAttr = (page) => page.evaluate(() => document.documentElement.getAttribute('data-bs-theme'));
 const toggleIcon = (page) => page.locator('nav .ms-auto svg').nth(2);
 
+// ---------------------------------------------------------------- server processes and pools
+
+// The `next start` process each configuration runs, so a recycle can replace it and close() can stop it.
+const running = new Map();
+
+// Starts `next start` for one configuration and resolves once it answers. A start that fails kills what it spawned.
+async function launch(config, port) {
+  const key = keyOf(config);
+  const creds = pgCredentials();
+  const s = secrets();
+  const env = {
+    ...process.env,
+    NEXT_TELEMETRY_DISABLED: '1',
+    BENCH_CONFIG: config === 'A' ? '' : key,
+    BENCH_OUTDIR: `dist-${key}`,
+    ...pgEnv(key, creds),
+    AES_PASSWORD: s.aes,
+    NEXTAUTH_SECRET: s.nextauth,
+    NEXTAUTH_URL: `http://127.0.0.1:${port}/`,
+    USE_NEXT_AUTH: 'false',
+    ENFORCE_SESSION_TIMEOUT: 'true',
+    MAX_SESSION_LENGTH: '315360000',
+    MAX_CONCURRENT_LOGINS_ALLOWED: '3',
+    DISABLE_USER_REGISTRATION: 'true',
+  };
+  const log = fs.openSync(file(`next-${key}.log`), 'a');
+  const child = spawn(process.execPath, [path.join(CLONE, 'node_modules', 'next', 'dist', 'bin', 'next'), 'start', '-p', String(port), '-H', '127.0.0.1'], {
+    cwd: CLONE,
+    env,
+    detached: true,
+    stdio: ['ignore', log, log],
+  });
+  fs.closeSync(log); // the child holds its own copy of the descriptor
+  try {
+    await waitForHttp(`http://127.0.0.1:${port}/login`, 180000);
+  } catch (err) {
+    killTree(child);
+    throw err;
+  }
+  return child;
+}
+
+// Stops a `next start` process and everything it spawned, and resolves once the process has exited.
+function stop(child) {
+  return new Promise((resolve) => {
+    if (!child || child.exitCode !== null || child.signalCode !== null) return resolve();
+    child.once('exit', () => resolve());
+    killTree(child);
+  });
+}
+
+// Open connections from the app role to one configuration's database, counted by the superuser.
+async function appConnections(key) {
+  const c = pgCredentials();
+  const admin = pgClient('postgres', c.admin, c.adminPassword);
+  await admin.connect();
+  try {
+    const { rows } = await admin.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1 AND usename = $2', [dbName(key), c.user]);
+    return rows[0].n;
+  } finally {
+    await admin.end();
+  }
+}
+
+// The app builds a new Sequelize object per call (src/helpers/api/db.ts never stores the one it creates), and each
+// one keeps up to five connections until Sequelize's idle timeout, 10 s by default, closes them. Left alone, a
+// server shared by a whole capture adds about seven connections per run and runs out of the cluster's 100 slots
+// after about a dozen runs. Before each run this waits for those connections to close, and returns how many are
+// still open after `ms`, so the caller can restart the server, which closes every pool it holds.
+async function drain(key, ms = 40000) {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const open = await appConnections(key);
+    if (open === 0 || Date.now() > deadline) return open;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
 // ---------------------------------------------------------------- the adapter
 
 const SETTINGS = { route: '/accounts/settings', label: 'Settings', marker: 'General Settings' };
@@ -422,48 +500,28 @@ export default {
     const key = keyOf(config);
     secrets();
     prepareClone();
-    const creds = pgCredentials();
     await ensureDatabases([key]);
     migrate(key);
     servedPort.set(config, port);
-    const env = {
-      ...process.env,
-      NEXT_TELEMETRY_DISABLED: '1',
-      BENCH_CONFIG: config === 'A' ? '' : key,
-      BENCH_OUTDIR: `dist-${key}`,
-      ...pgEnv(key, creds),
-      AES_PASSWORD: secrets().aes,
-      NEXTAUTH_SECRET: secrets().nextauth,
-      NEXTAUTH_URL: `http://127.0.0.1:${port}/`,
-      USE_NEXT_AUTH: 'false',
-      ENFORCE_SESSION_TIMEOUT: 'true',
-      MAX_SESSION_LENGTH: '315360000',
-      MAX_CONCURRENT_LOGINS_ALLOWED: '3',
-      DISABLE_USER_REGISTRATION: 'true',
-    };
-    const log = fs.openSync(file(`next-${key}.log`), 'w');
-    const child = spawn(process.execPath, [path.join(CLONE, 'node_modules', 'next', 'dist', 'bin', 'next'), 'start', '-p', String(port), '-H', '127.0.0.1'], {
-      cwd: CLONE,
-      env,
-      detached: true,
-      stdio: ['ignore', log, log],
-    });
-    try {
-      await waitForHttp(`http://127.0.0.1:${port}/login`, 180000);
-    } catch (err) {
-      killTree(child);
-      throw err;
-    }
+    fs.writeFileSync(file(`next-${key}.log`), '');
+    running.set(config, await launch(config, port));
     return {
       close(cb) {
-        killTree(child);
-        if (child.exitCode !== null || child.signalCode !== null) cb();
-        else child.once('exit', () => cb());
+        stop(running.get(config)).then(() => cb());
       },
     };
   },
 
   async beforeRun(config) {
+    const port = servedPort.get(config);
+    if (port === undefined) throw new Error(`no server was started for configuration ${config}`);
+    const open = await drain(keyOf(config));
+    if (open > 0) {
+      // The pools did not close in time, so the server is restarted, which closes every pool it holds.
+      fs.appendFileSync(file(`pool-${keyOf(config)}.log`), `${new Date().toISOString()} restarted ${config}: ${open} connections still open\n`);
+      await stop(running.get(config));
+      running.set(config, await launch(config, port));
+    }
     await resetFromSeed(config);
   },
 
@@ -647,7 +705,10 @@ export default {
       async before(page) {
         await goSettings(page);
         await markToasts(page);
-        return { sample: await sampleText(page), format: await page.locator('input.form-control').nth(1).inputValue() };
+        // The saved settings arrive after the page has drawn. Read before that, the field is empty, and the saved
+        // value then overwrites the edit, so the step waits until the saved format is shown.
+        const read = async () => ({ sample: await sampleText(page), format: await page.locator('input.form-control').nth(1).inputValue() });
+        return expectState('C12 settings loaded', read, (s) => s.format !== '' && /Sample Output[^\n]*\d/.test(s.sample), null);
       },
       async run(page) {
         const current = await page.locator('input.form-control').nth(1).inputValue();

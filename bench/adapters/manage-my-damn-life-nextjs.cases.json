@@ -68,7 +68,7 @@
   {
     "id": "C12",
     "action": "On the Settings page, change the Date Format to the other of 'YYYY-MM-DD' and 'DD/MM/YYYY' and press the date/time Save.",
-    "reset": "Settings page open. Before: navigate to Settings if needed.",
+    "reset": "Settings page open with the saved date format shown. Before: navigate to Settings if needed and wait until the saved format is shown.",
     "expectedStateChange": "The 'Sample Output for Date and Time' text changes to the new date format and a 'Date Format: Updated successfully!' toast appears."
   },
   {
