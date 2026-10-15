@@ -6,22 +6,25 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { apps, checkConfigs, checkReady } from './apps.mjs';
+import { allApps as apps, cohortIds, checkConfigs, checkReady } from './apps.mjs';
+import { blockSchedule, permutations } from './schedule.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-// BENCH_ORDER reorders the interleaving (a check that a cost follows the build, not its slot).
+// BENCH_ORDER reorders the configurations inside each block's permutations, not the blocks.
 const CONFIGS = (process.env.BENCH_ORDER ?? 'A,B,C').split(',');
 const VIEWPORT = { width: 1280, height: 900 };
+
 
 // ---------------------------------------------------------------- args
 
 function parseArgs(argv) {
-  const out = { runs: 15, app: null, throttles: [1, 4], out: null, headed: false, dryRun: false };
+  const out = { blocks: 5, app: null, throttles: [1, 4], out: null, headed: false, dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--runs') out.runs = Number(argv[++i]);
+    if (a === '--blocks') out.blocks = Number(argv[++i]);
     else if (a === '--app') out.app = argv[++i];
     else if (a === '--throttle') out.throttles = argv[++i].split(',').map(Number);
     else if (a === '--out') out.out = argv[++i];
@@ -29,7 +32,9 @@ function parseArgs(argv) {
     else if (a === '--dry-run') out.dryRun = true;
     else throw new Error(`unknown flag ${a}`);
   }
-  if (!Number.isInteger(out.runs) || out.runs < 1) throw new Error('--runs must be a positive integer');
+  if (!Number.isInteger(out.blocks) || out.blocks < 1) throw new Error('--blocks must be a positive integer');
+  // Paired runs per configuration: one per block and permutation (5 x 6 = 30 by protocol).
+  out.runs = out.blocks * permutations(CONFIGS).length;
   return out;
 }
 
@@ -48,7 +53,7 @@ const MIME = {
 };
 
 /** Minimal static server. Cheaper and quieter than `vite preview`, which keeps a watcher alive. */
-function serve(root, port) {
+export function serve(root, port) {
   const server = http.createServer((req, res) => {
     const url = decodeURIComponent((req.url || '/').split('?')[0]);
     let file = path.join(root, url === '/' ? 'index.html' : url);
@@ -80,9 +85,9 @@ function serve(root, port) {
 // Runs before any of the app's own scripts, so it observes every interaction from the first one.
 // Identical in A, B and C, so whatever it costs is common to all three.
 
-const COLLECTOR = () => {
+export const COLLECTOR = () => {
   const w = window;
-  w.__bench = { events: [], loaf: [], firstInput: null, errors: [] };
+  w.__bench = { events: [], loaf: [], longTasks: [], firstInput: null, errors: [] };
   w.__benchLoadedAt = performance.now();
   w.__benchLastLongTask = 0;
 
@@ -138,7 +143,10 @@ const COLLECTOR = () => {
 
   try {
     new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) w.__benchLastLongTask = e.startTime + e.duration;
+      for (const e of list.getEntries()) {
+        w.__benchLastLongTask = e.startTime + e.duration;
+        w.__bench.longTasks.push({ startTime: e.startTime, duration: e.duration });
+      }
     }).observe({ type: 'longtask', buffered: true });
   } catch (err) {
     /* longtask is not essential; settle() falls back to load time */
@@ -147,7 +155,7 @@ const COLLECTOR = () => {
 
 // Pulled out of the page at the end of a run. Computes INP the standard way, independently of
 // anything the library does, so B and C are not scored by the thing under test.
-const HARVEST = () => {
+export const HARVEST = () => {
   const b = window.__bench;
 
   // One latency per interactionId: the longest Event Timing entry in that group, which is how
@@ -257,9 +265,15 @@ const HARVEST = () => {
     inpInteraction: inp,
     eventEntryCount: b.events.length,
     firstInput: b.firstInput,
+    loafEntries: b.loaf,
     loafCount: b.loaf.length,
     loafBlockingMs: b.loaf.reduce((s, f) => s + (f.blockingDuration || 0), 0),
     loafTotalMs: b.loaf.reduce((s, f) => s + (f.duration || 0), 0),
+    longTaskEntries: b.longTasks,
+    longTaskCount: b.longTasks.length,
+    longTaskMs: b.longTasks.reduce((s, t) => s + t.duration, 0),
+    // The part of each long task past the 50 ms budget, which is what delays input.
+    longTaskBlockingMs: b.longTasks.reduce((s, t) => s + Math.max(0, t.duration - 50), 0),
     heap,
     collectorErrors: b.errors,
     overlayPresent: !!document.getElementById('react-inp-blame'),
@@ -269,7 +283,11 @@ const HARVEST = () => {
 
 // ---------------------------------------------------------------- one run
 
-async function runOnce({ browser, app, config, url, throttle, runIndex, warmup }) {
+// caseId, when given, runs only that case's step: the accuracy capture takes one case per fresh run.
+export async function runOnce({ browser, app, config, url, throttle, runIndex, warmup, schedule = null, caseId = null }) {
+  // The app's own deterministic reset (database back to its seed) before every run, so a run never
+  // starts from the last run's data.
+  if (app.beforeRun) await app.beforeRun(config);
   // An app can add to the context: a signed-in app brings its storage state (per configuration,
   // since each build is its own origin), a phone app its viewport and touch.
   const extra = app.contextOptions ? await app.contextOptions(config) : {};
@@ -290,6 +308,16 @@ async function runOnce({ browser, app, config, url, throttle, runIndex, warmup }
       }
     });
     page.on('pageerror', (e) => pageErrors.push(String(e && e.message).slice(0, 600)));
+    // Script bytes the browser actually received for this run, counted on the wire.
+    const delivered = [];
+    page.on('requestfinished', async (req) => {
+      if (req.resourceType() !== 'script') return;
+      try {
+        delivered.push({ url: req.url(), bytes: (await req.sizes()).responseBodySize });
+      } catch {
+        /* the page closed before the body finished */
+      }
+    });
 
     await page.addInitScript(COLLECTOR);
 
@@ -309,7 +337,8 @@ async function runOnce({ browser, app, config, url, throttle, runIndex, warmup }
 
     const stepResults = [];
     const pageNow = () => page.evaluate(() => performance.now());
-    for (const step of app.steps) {
+    const steps = caseId ? app.steps.filter((s) => s.name.split(' ')[0] === caseId) : app.steps;
+    for (const step of steps) {
       const before = step.before ? await step.before(page) : {};
       // The page's own clock on either side of the step, so a report can be tied back to the
       // step that caused it: Event Timing start times are on this clock too.
@@ -340,10 +369,12 @@ async function runOnce({ browser, app, config, url, throttle, runIndex, warmup }
       throttle,
       runIndex,
       warmup,
+      schedule,
       readyMs,
       steps: stepResults,
       console: console_,
       pageErrors,
+      delivered,
       ...data,
     };
   } finally {
@@ -377,6 +408,7 @@ function libCheck(appIds) {
 function jsBytes(root) {
   const files = {};
   let totalJsBytes = 0;
+  let totalJsGzipBytes = 0;
   const walk = (dir, prefix) => {
     for (const entry of fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : []) {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -384,13 +416,18 @@ function jsBytes(root) {
         walk(path.join(dir, entry.name), rel);
         continue;
       }
-      const size = fs.statSync(path.join(dir, entry.name)).size;
+      const file = path.join(dir, entry.name);
+      const size = fs.statSync(file).size;
       files[rel] = size;
-      if (entry.name.endsWith('.js')) totalJsBytes += size;
+      if (entry.name.endsWith('.js')) {
+        totalJsBytes += size;
+        // Gzip of the same bytes this server sends uncompressed, at the level a CDN would use.
+        totalJsGzipBytes += zlib.gzipSync(fs.readFileSync(file), { level: 9 }).length;
+      }
     }
   };
   walk(root, '');
-  return { totalJsBytes, files };
+  return { totalJsBytes, totalJsGzipBytes, files };
 }
 
 function pkgVersion(dir, name) {
@@ -405,12 +442,12 @@ function pkgVersion(dir, name) {
 
 async function collectVersions(browser, appIds) {
   const tarball = process.env.BENCH_TARBALL ? path.join(HERE, process.env.BENCH_TARBALL) : null;
-  const npmLib = process.env.BENCH_NPM_LIB ?? 'react-inp-blame@0.12.0';
+  const npmLib = process.env.BENCH_NPM_LIB ?? 'react-inp-blame@1.0.0';
   const per = {};
   for (const id of appIds) {
     const dir = apps[id].dir;
     per[id] = {
-      commit: tryExec('git rev-parse HEAD', apps[id].repoDir ?? path.join(HERE, 'clones', 'tt')),
+      commit: tryExec('git rev-parse HEAD', apps[id].dir),
       react: pkgVersion(dir, 'react'),
       'react-dom': pkgVersion(dir, 'react-dom'),
       vite: pkgVersion(dir, 'vite'),
@@ -450,7 +487,7 @@ async function collectVersions(browser, appIds) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const appIds = args.app ? args.app.split(',') : Object.keys(apps);
+  const appIds = args.app ? args.app.split(',') : cohortIds;
   checkConfigs(appIds, CONFIGS);
   if (args.dryRun) {
     console.log(JSON.stringify({ runs: args.runs, throttles: args.throttles, apps: appIds, configs: CONFIGS }));
@@ -461,6 +498,8 @@ async function main() {
 
   const browser = await chromium.launch({
     headless: true,
+    // The bundled browser for this Playwright may not match the installed build; BENCH_CHROMIUM names one.
+    executablePath: process.env.BENCH_CHROMIUM || undefined,
     args: [
       '--disable-background-timer-throttling',
       '--disable-renderer-backgrounding',
@@ -509,18 +548,19 @@ async function main() {
               failures.push({ app: id, config: c, throttle, runIndex: -1, warmup: true, error: String(err && err.message) });
             }
           }
-          for (let i = 0; i < args.runs; i++) {
-            for (const c of CONFIGS) {
-              process.stdout.write(`  ${id} ${c} x${throttle} run ${i + 1}/${args.runs} ... `);
+          for (const slot of blockSchedule(id, `x${throttle}`, args.blocks, CONFIGS)) {
+            for (const [position, c] of slot.order.entries()) {
+              const schedule = { block: slot.block, permutation: slot.permutation, position };
+              process.stdout.write(`  ${id} ${c} x${throttle} block ${slot.block} ${slot.permutation} ... `);
               try {
-                const r = await runOnce({ browser, app, config: c, url: urlFor(c), throttle, runIndex: i, warmup: false });
+                const r = await runOnce({ browser, app, config: c, url: urlFor(c), throttle, runIndex: slot.runIndex, warmup: false, schedule });
                 runs.push(r);
                 process.stdout.write(
                   `INP ${r.inp === null ? 'n/a' : r.inp.toFixed(0)}ms  total ${r.totalInteractionMs.toFixed(0)}ms  loaf ${r.loafCount}\n`,
                 );
               } catch (err) {
                 process.stdout.write(`FAILED: ${err.message}\n`);
-                failures.push({ app: id, config: c, throttle, runIndex: i, error: String(err && err.message) });
+                failures.push({ app: id, config: c, throttle, runIndex: slot.runIndex, schedule, error: String(err && err.message) });
               }
             }
           }
@@ -557,7 +597,10 @@ async function main() {
   if (failures.length) process.exitCode = 1;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only when run directly, so that other scripts can import the collector and the run.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
