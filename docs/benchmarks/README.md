@@ -1,9 +1,11 @@
 # What react-inp-blame costs on real apps
 
-The next run follows the [2026-10-14 protocol](protocol-2026-10-14.md), published before fresh-app selection. This page retains historical results.
+The next run follows the [2026-10-14 protocol](protocol-2026-10-14.md), except for app selection, which a
+[dated amendment](amendment-2026-10-15.md) changes. Its five everyday apps are named in [real-apps.md](real-apps.md),
+where no results exist yet. This page retains historical results.
 
-A second run, on five apps with 0.12.0 from npm and with every blame checked against the apps' source, is
-[real-apps.md](real-apps.md).
+The previous run, on five apps with 0.12.0 from npm and with every blame checked against the apps' source, is
+also in [real-apps.md](real-apps.md).
 
 Measured overnight on 2026-09-23 on the 0.3.0 candidate: PR #5 (`fixes-before-0.3.0`, `d780ca2`)
 with #6 (`4fdebd8`), #7 (`f0505e3`) and #8 (`389d802`) on top, packed into one tarball, sha256

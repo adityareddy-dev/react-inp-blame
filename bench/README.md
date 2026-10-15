@@ -51,6 +51,11 @@ and bootstraps the median of the differences (10,000 resamples, a fixed seed, 95
 
 ## The apps
 
+The harness still defines the previous cohort, the five apps in [real-apps.md](../docs/benchmarks/real-apps.md)
+under its previous-cohort heading, plus the twenty, cal.diy and shadcn Sheet variants. The next cohort in that
+file has no entries here. Adding one means writing scripted steps against that app's real DOM, which has not
+been done. Until it is, running the harness measures the previous cohort.
+
 Each app lives in a folder under `bench/` at the commit the published runs measured. Make them by hand.
 The harness only reads them, apart from its builds and what the steps below say.
 
