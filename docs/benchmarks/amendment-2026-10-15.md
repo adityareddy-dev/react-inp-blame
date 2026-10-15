@@ -22,6 +22,7 @@ The protocol requires candidate lists and rankings to be kept. These are the one
 The first three were not carried into the final cohort, because the amendment switched to the category shortlist. The WealthX URL in its README differs from the search link, and none of the four has been checked for activity or licence.
 
 **Other pools searched, not ranked:**
+
 - Notes, todo and habit searches: [Note-Todo](https://github.com/eclipse-dev3/Note-Todo) had no build tool stated, so it was not confirmed.
 - Kanban and recipe searches: no recipe apps were found.
 - npm top 300 and top 1,000 by weekly downloads: these are libraries and developer tools, not complete apps. Only storybook and react-email are runnable apps in that set, and both are developer tools.

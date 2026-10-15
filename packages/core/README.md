@@ -128,12 +128,12 @@ Every verdict stayed in the count. Each was read twice, with a third read where 
 
 These are separate checks of what each report says.
 
-| Check | Right | Wrong | Misleading | Cannot tell | Blank |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Whole verdict | 8 | 35 | 19 | 0 | 0 |
-| Name and its explanation | 9 | 32 | 19 | 2 | 0 |
-| Kind of work | 49 | 13 | 0 | 0 | 0 |
-| Milliseconds charged to the blamed work | 36 | 0 | 0 | 0 | 26 |
+| Check                                   | Right | Wrong | Misleading | Cannot tell | Blank |
+| --------------------------------------- | ----: | ----: | ---------: | ----------: | ----: |
+| Whole verdict                           |     8 |    35 |         19 |           0 |     0 |
+| Name and its explanation                |     9 |    32 |         19 |           2 |     0 |
+| Kind of work                            |    49 |    13 |          0 |           0 |     0 |
+| Milliseconds charged to the blamed work |    36 |     0 |          0 |           0 |    26 |
 
 Kind asks whether the named work is the biggest part of the time in the trace. The milliseconds pass
 if they are within the larger of 10 ms and 20% of the trace's figure for that work. Blank means the report
@@ -149,26 +149,25 @@ Here is the same count split by app and run settings.
 
 Overall cells read right / wrong / misleading. Name cells add cannot tell as the last count. Kind cells read right / wrong / misleading. Milliseconds cells add blank as the last count. The kind and milliseconds axes do not permit misleading, their zeros reflect the rubric. Each row includes every verdict in that group. The marginal rows overlap, the eight app/build/throttle rows partition all 62. `dev` means development and `prod` means production. `1x` means no CPU throttling and `4x` means 4x CPU throttling.
 
-| Group | Verdicts | Overall | Name | Kind | Milliseconds |
-| --- | ---: | --- | --- | --- | --- |
-| All | 62 | 8 / 35 / 19 | 9 / 32 / 19 / 2 | 49 / 13 / 0 | 36 / 0 / 0 / 26 |
-| hyperdx | 39 | 6 / 19 / 14 | 6 / 19 / 14 / 0 | 37 / 2 / 0 | 16 / 0 / 0 / 23 |
-| kaneo | 23 | 2 / 16 / 5 | 3 / 13 / 5 / 2 | 12 / 11 / 0 | 20 / 0 / 0 / 3 |
-| dev | 30 | 6 / 12 / 12 | 6 / 12 / 12 / 0 | 25 / 5 / 0 | 27 / 0 / 0 / 3 |
-| prod | 32 | 2 / 23 / 7 | 3 / 20 / 7 / 2 | 24 / 8 / 0 | 9 / 0 / 0 / 23 |
-| 1x | 28 | 7 / 13 / 8 | 8 / 12 / 8 / 0 | 22 / 6 / 0 | 13 / 0 / 0 / 15 |
-| 4x | 34 | 1 / 22 / 11 | 1 / 20 / 11 / 2 | 27 / 7 / 0 | 23 / 0 / 0 / 11 |
-| hyperdx dev 1x | 11 | 4 / 3 / 4 | 4 / 3 / 4 / 0 | 11 / 0 / 0 | 8 / 0 / 0 / 3 |
-| hyperdx dev 4x | 6 | 0 / 3 / 3 | 0 / 3 / 3 / 0 | 6 / 0 / 0 | 6 / 0 / 0 / 0 |
-| hyperdx prod 1x | 10 | 1 / 6 / 3 | 1 / 6 / 3 / 0 | 8 / 2 / 0 | 0 / 0 / 0 / 10 |
-| hyperdx prod 4x | 12 | 1 / 7 / 4 | 1 / 7 / 4 / 0 | 12 / 0 / 0 | 2 / 0 / 0 / 10 |
-| kaneo dev 1x | 5 | 2 / 2 / 1 | 2 / 2 / 1 / 0 | 3 / 2 / 0 | 5 / 0 / 0 / 0 |
-| kaneo dev 4x | 8 | 0 / 4 / 4 | 0 / 4 / 4 / 0 | 5 / 3 / 0 | 8 / 0 / 0 / 0 |
-| kaneo prod 1x | 2 | 0 / 2 / 0 | 1 / 1 / 0 / 0 | 0 / 2 / 0 | 0 / 0 / 0 / 2 |
-| kaneo prod 4x | 8 | 0 / 8 / 0 | 0 / 6 / 0 / 2 | 4 / 4 / 0 | 7 / 0 / 0 / 1 |
+| Group           | Verdicts | Overall     | Name            | Kind        | Milliseconds    |
+| --------------- | -------: | ----------- | --------------- | ----------- | --------------- |
+| All             |       62 | 8 / 35 / 19 | 9 / 32 / 19 / 2 | 49 / 13 / 0 | 36 / 0 / 0 / 26 |
+| hyperdx         |       39 | 6 / 19 / 14 | 6 / 19 / 14 / 0 | 37 / 2 / 0  | 16 / 0 / 0 / 23 |
+| kaneo           |       23 | 2 / 16 / 5  | 3 / 13 / 5 / 2  | 12 / 11 / 0 | 20 / 0 / 0 / 3  |
+| dev             |       30 | 6 / 12 / 12 | 6 / 12 / 12 / 0 | 25 / 5 / 0  | 27 / 0 / 0 / 3  |
+| prod            |       32 | 2 / 23 / 7  | 3 / 20 / 7 / 2  | 24 / 8 / 0  | 9 / 0 / 0 / 23  |
+| 1x              |       28 | 7 / 13 / 8  | 8 / 12 / 8 / 0  | 22 / 6 / 0  | 13 / 0 / 0 / 15 |
+| 4x              |       34 | 1 / 22 / 11 | 1 / 20 / 11 / 2 | 27 / 7 / 0  | 23 / 0 / 0 / 11 |
+| hyperdx dev 1x  |       11 | 4 / 3 / 4   | 4 / 3 / 4 / 0   | 11 / 0 / 0  | 8 / 0 / 0 / 3   |
+| hyperdx dev 4x  |        6 | 0 / 3 / 3   | 0 / 3 / 3 / 0   | 6 / 0 / 0   | 6 / 0 / 0 / 0   |
+| hyperdx prod 1x |       10 | 1 / 6 / 3   | 1 / 6 / 3 / 0   | 8 / 2 / 0   | 0 / 0 / 0 / 10  |
+| hyperdx prod 4x |       12 | 1 / 7 / 4   | 1 / 7 / 4 / 0   | 12 / 0 / 0  | 2 / 0 / 0 / 10  |
+| kaneo dev 1x    |        5 | 2 / 2 / 1   | 2 / 2 / 1 / 0   | 3 / 2 / 0   | 5 / 0 / 0 / 0   |
+| kaneo dev 4x    |        8 | 0 / 4 / 4   | 0 / 4 / 4 / 0   | 5 / 3 / 0   | 8 / 0 / 0 / 0   |
+| kaneo prod 1x   |        2 | 0 / 2 / 0   | 1 / 1 / 0 / 0   | 0 / 2 / 0   | 0 / 0 / 0 / 2   |
+| kaneo prod 4x   |        8 | 0 / 8 / 0   | 0 / 6 / 0 / 2   | 4 / 4 / 0   | 7 / 0 / 0 / 1   |
 
-The kind of work was right more often than the name. Names were wrong on 32 verdicts and misleading on
-19. Two were unresolved. All 36 supplied blame figures passed the timing tolerance, but 26 verdicts supplied
+The kind of work was right more often than the name. Names were wrong on 32 verdicts and misleading on 19. Two were unresolved. All 36 supplied blame figures passed the timing tolerance, but 26 verdicts supplied
 none. In production, 23 of 32 supplied none. Passing that timing check does not show that the named component
 caused the time.
 
@@ -176,23 +175,23 @@ The graders also recorded their confidence and where evidence was missing. The g
 
 Capped ancestor means a production verdict whose component walk stopped at its budget and named an ancestor of the work. It is a flag, not a correctness grade. Reader confidence belongs to the selected grade, not the report's measured/inferred confidence. An evidence gap is a recorded limitation, not an automatic failure. These fields have no right/wrong/misleading grades.
 
-| Group | Verdicts | Capped ancestor: yes / no | Reader confidence: high / medium / low | Evidence gap: recorded / none |
-| --- | ---: | --- | --- | --- |
-| All | 62 | 1 / 61 | 25 / 36 / 1 | 50 / 12 |
-| hyperdx | 39 | 1 / 38 | 17 / 21 / 1 | 37 / 2 |
-| kaneo | 23 | 0 / 23 | 8 / 15 / 0 | 13 / 10 |
-| dev | 30 | 0 / 30 | 12 / 18 / 0 | 19 / 11 |
-| prod | 32 | 1 / 31 | 13 / 18 / 1 | 31 / 1 |
-| 1x | 28 | 1 / 27 | 11 / 16 / 1 | 25 / 3 |
-| 4x | 34 | 0 / 34 | 14 / 20 / 0 | 25 / 9 |
-| hyperdx dev 1x | 11 | 0 / 11 | 6 / 5 / 0 | 10 / 1 |
-| hyperdx dev 4x | 6 | 0 / 6 | 2 / 4 / 0 | 5 / 1 |
-| hyperdx prod 1x | 10 | 1 / 9 | 4 / 5 / 1 | 10 / 0 |
-| hyperdx prod 4x | 12 | 0 / 12 | 5 / 7 / 0 | 12 / 0 |
-| kaneo dev 1x | 5 | 0 / 5 | 1 / 4 / 0 | 3 / 2 |
-| kaneo dev 4x | 8 | 0 / 8 | 3 / 5 / 0 | 1 / 7 |
-| kaneo prod 1x | 2 | 0 / 2 | 0 / 2 / 0 | 2 / 0 |
-| kaneo prod 4x | 8 | 0 / 8 | 4 / 4 / 0 | 7 / 1 |
+| Group           | Verdicts | Capped ancestor: yes / no | Reader confidence: high / medium / low | Evidence gap: recorded / none |
+| --------------- | -------: | ------------------------- | -------------------------------------- | ----------------------------- |
+| All             |       62 | 1 / 61                    | 25 / 36 / 1                            | 50 / 12                       |
+| hyperdx         |       39 | 1 / 38                    | 17 / 21 / 1                            | 37 / 2                        |
+| kaneo           |       23 | 0 / 23                    | 8 / 15 / 0                             | 13 / 10                       |
+| dev             |       30 | 0 / 30                    | 12 / 18 / 0                            | 19 / 11                       |
+| prod            |       32 | 1 / 31                    | 13 / 18 / 1                            | 31 / 1                        |
+| 1x              |       28 | 1 / 27                    | 11 / 16 / 1                            | 25 / 3                        |
+| 4x              |       34 | 0 / 34                    | 14 / 20 / 0                            | 25 / 9                        |
+| hyperdx dev 1x  |       11 | 0 / 11                    | 6 / 5 / 0                              | 10 / 1                        |
+| hyperdx dev 4x  |        6 | 0 / 6                     | 2 / 4 / 0                              | 5 / 1                         |
+| hyperdx prod 1x |       10 | 1 / 9                     | 4 / 5 / 1                              | 10 / 0                        |
+| hyperdx prod 4x |       12 | 0 / 12                    | 5 / 7 / 0                              | 12 / 0                        |
+| kaneo dev 1x    |        5 | 0 / 5                     | 1 / 4 / 0                              | 3 / 2                         |
+| kaneo dev 4x    |        8 | 0 / 8                     | 3 / 5 / 0                              | 1 / 7                         |
+| kaneo prod 1x   |        2 | 0 / 2                     | 0 / 2 / 0                              | 2 / 0                         |
+| kaneo prod 4x   |        8 | 0 / 8                     | 4 / 4 / 0                              | 7 / 1                         |
 
 The reasons and trace measurements are supporting evidence, they have no separate accuracy grade. There
 is no separate score for every component count or later-render note, those claims affect the name grade.
@@ -582,7 +581,7 @@ or its data-testid or data-test. The text an element shows can be someone's name
 are made to be forwarded, so reading it is opt-in there: `install({ labels: 'text' })`, which names a
 form field by its `<label>` and anything else by its first run of text. Development builds read it by
 default. What the page's code wrote goes out as written, though: an aria-label,
-data-testid or id built from user data, such as `` aria-label={`Message ${user.name}`} ``, lands in
+data-testid or id built from user data, such as ``aria-label={`Message ${user.name}`}``, lands in
 `target.label` or `target.selector`, and the label in the verdict. An element inside a contenteditable
 editor, or inside one with the role `textbox`, `searchbox`, `combobox` or `spinbutton`, is named like a
 form field, and so is an element an EditContext is attached to, or one up to five elements inside it, so
@@ -679,13 +678,15 @@ Measured on this version's build by `scripts/size.mjs` in the repository, which 
 current:
 
 <!-- size:start -->
-| Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level) | Minified | Gzip |
-| --- | --- | --- |
-| `react-inp-blame/auto`: everything that loads with the page | 101.3 KB | 35.8 KB |
-| The badge and panel, a chunk loaded by `import()` only when shown | 18.1 KB | 7.1 KB |
-| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.3 KB | 11.7 KB |
-| `react-inp-blame/web-vitals`, on top of `/auto` | 1.6 KB | 0.9 KB |
-| `react-inp-blame/otel`, on top of `/auto` | 3.5 KB | 1.6 KB |
+
+| Bundle (rolldown 1.2.8, minified ESM, gzip at zlib's default level)                      | Minified | Gzip    |
+| ---------------------------------------------------------------------------------------- | -------- | ------- |
+| `react-inp-blame/auto`: everything that loads with the page                              | 101.3 KB | 35.8 KB |
+| The badge and panel, a chunk loaded by `import()` only when shown                        | 18.1 KB  | 7.1 KB  |
+| Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.3 KB  | 11.7 KB |
+| `react-inp-blame/web-vitals`, on top of `/auto`                                          | 1.6 KB   | 0.9 KB  |
+| `react-inp-blame/otel`, on top of `/auto`                                                | 3.5 KB   | 1.6 KB  |
+
 <!-- size:end -->
 
 `react-inp-blame/web-vitals` pulls in none of the hook, the observers or the badge: an app that only wants
