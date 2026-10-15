@@ -95,10 +95,9 @@ or red in a production build: add `enabled: true` and `runtime: { overlay: 'quer
 and `next start` or `vite build` and `vite preview`, and open the page with `?inp-blame`
 ([Numbers in development](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#numbers-in-development)).
 
-It is a development tool first, and production is optional. Turned on there, 0.12.0 cost about
-209 ms of page load on the shadcn/ui docs site, and about 5 ms inside each interaction on the twenty
-CRM (10 with the CPU slowed 4x), while INP did not move on any of the five apps measured
-([benchmarks](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md)).
+It is a development tool first, and production is optional. Production instrumentation has a
+cost. The [current five-app benchmark cohort](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md)
+has no accuracy or overhead results yet, and its integrations are pending.
 
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).

@@ -177,10 +177,10 @@ For a local copy, use Node 22.18 or later, run `npm ci`, `npm run build` and `np
 repository, then open the address Vite prints. `npm test` runs the demo checks after
 `npx playwright install chromium firefox webkit` ([contributor setup](CONTRIBUTING.md#setup)).
 
-The [benchmark harness](bench/README.md) records the app commits, patches, build configurations and
-commands behind the [published overhead runs](docs/benchmarks/README.md) and
-[real-app results](docs/benchmarks/real-apps.md). Those measurements are of older releases, not a
-new 1.0.0 benchmark. The [accuracy check](#how-reliable-is-it) also remains a historical result.
+The [benchmark harness](bench/README.md) now selects [five everyday apps](docs/benchmarks/real-apps.md).
+Their build and interaction integrations are pending, and no accuracy or overhead results exist
+for this cohort. The [measurement plan](docs/benchmarks/README.md) describes the protocol and
+selection amendment. The [accuracy check](#how-reliable-is-it) remains a separate historical result.
 
 ## What 1.0 means
 

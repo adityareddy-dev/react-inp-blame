@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { apps } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SPEC = process.env.BENCH_NPM_LIB ?? 'react-inp-blame@0.12.0';
+const SPEC = process.env.BENCH_NPM_LIB ?? 'react-inp-blame@1.0.0';
 const OUT = path.join(HERE, 'npm-lib');
 
 function pack() {

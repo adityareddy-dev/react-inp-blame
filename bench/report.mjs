@@ -226,7 +226,6 @@ function main() {
   p(`| **A** | baseline, library absent from the bundle |`);
   p(`| **B** | library installed, \`inpBlame({ enabled: true, runtime: { debugGlobal: true } })\` |`);
   p(`| **C** | as B plus \`overlay: true\` |`);
-  if (runs.some((r) => r.config === 'F')) p(`| **F** | as B with the app's own fix on top, \`tt-virtual-fix\` only |`);
   p();
   p(`\`debugGlobal: true\` is there, in every build but A, only so the harness can read \`stats()\` and \`reports()\` out of the page. It assigns one global at install and is not a measurement option.`);
   p();
@@ -290,15 +289,14 @@ function main() {
     for (const throttle of throttles) {
       p(`### ${throttle === 1 ? 'Unthrottled' : `${throttle}x CPU throttling`}`);
       p();
-      // The configurations this app actually ran: cal-diy has no C, and tt-virtual-fix has B and F only.
-      const configs = ['A', 'B', 'C', 'F'].filter((c) => pick(runs, app, c, throttle).length);
+      const configs = ['A', 'B', 'C'].filter((c) => pick(runs, app, c, throttle).length);
       if (!configs.length) {
         p(`Every run in this pass failed, see Failures.`);
         p();
         continue;
       }
       // Configurations this app ran or tried in some pass that have no run in this one.
-      const missing = ['A', 'B', 'C', 'F'].filter((c) => !configs.includes(c) && tried.some((r) => r.app === app && r.config === c));
+      const missing = ['A', 'B', 'C'].filter((c) => !configs.includes(c) && tried.some((r) => r.app === app && r.config === c));
       // A failed run is left out of runs, so the counts can differ. Then each one is named.
       const counts = configs.map((c) => pick(runs, app, c, throttle).length);
       if (new Set(counts).size <= 1) p(`${counts[0] ?? 0} runs per configuration (${configs.join(', ')}).`);
@@ -323,9 +321,6 @@ function main() {
         p();
         p(`Deltas are paired by run index and bootstrapped (${BOOTSTRAP} resamples of the per-run difference, percentile interval). "Interactions captured" counts only interactions whose longest Event Timing entry reached the 16 ms \`durationThreshold\`, so it moves when the library pushes a short interaction over that line; read it alongside total interaction time rather than instead of it. JS heap is a single \`performance.memory\` sample taken at the end of a run with no forced collection, so it reflects when the garbage collector happened to run and should not be read as a memory verdict.`);
         p();
-      } else if (configs.includes('F')) {
-        p(`No configuration A, so no baseline to pair against and no A/B/C table. For \`tt-virtual-fix\`, \`node before-after.mjs results/${path.basename(file)}\` compares F with B.`);
-        p();
       } else {
         p(`No A runs in this pass, so no baseline to pair against and no A/B/C table. See Failures.`);
         p();
@@ -334,7 +329,6 @@ function main() {
       // What the library says it cost itself.
       p(`#### What the library reports about its own cost`);
       p();
-      // Every configuration with the library in: B and C, or B and F for tt-virtual-fix.
       const withLib = configs.some((c) => c !== 'A') ? configs.filter((c) => c !== 'A') : ['B'];
       p(`| | ${withLib.join(' | ')} |`);
       p(`| --- |${withLib.map(() => ' ---: |').join('')}`);

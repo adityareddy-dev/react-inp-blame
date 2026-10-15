@@ -18,7 +18,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { apps, checkConfigs } from './apps.mjs';
+import { apps, checkConfigs, checkReady } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -44,6 +44,8 @@ if (dryRun) {
 `);
   process.exit(0);
 }
+
+checkReady(appIds);
 
 for (const id of noBuild ? [] : appIds) {
   const app = apps[id];

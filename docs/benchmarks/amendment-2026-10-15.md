@@ -32,4 +32,5 @@ The first three were not carried into the final cohort, because the amendment sw
 - No app in the final cohort has been cloned, built or run.
 - The five are not a random sample of everyday apps.
 - No result is implied by this amendment.
+- The current harness registry contains only these five selected apps, with every integration marked pending. Dry runs list the cohort, and collection is blocked until verified adapters and asserted steps exist. Retired adapters and result tables have been removed from the current tree, with prior records retained in Git history.
 - The dated schedule in the protocol is unchanged. Selection was done on 2026-10-15, ahead of the 2026-10-16 milestone.

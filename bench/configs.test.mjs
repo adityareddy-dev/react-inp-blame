@@ -8,8 +8,15 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { apps } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+test('the cohort contains exactly the five selected everyday apps', () => {
+  assert.deepEqual(Object.keys(apps), [
+    'actual', 'myfin', 'kresus', 'manage-my-damn-life-nextjs', 'reactive-resume',
+  ]);
+});
 
 function dryRun(script, args, order) {
   const env = { ...process.env };
@@ -25,31 +32,37 @@ function dryRun(script, args, order) {
 }
 
 for (const script of ['bench.mjs', 'run.mjs']) {
-  test(`${script} refuses every app in the default order, since cal-diy has no C`, () => {
+  test(`${script} lists the five apps in the default order`, () => {
     const r = dryRun(script, []);
+    assert.equal(r.status, 0, r.out);
+    const selection = JSON.parse(r.out);
+    assert.deepEqual(selection.apps, Object.keys(apps));
+    assert.deepEqual(selection.configs, ['A', 'B', 'C']);
+  });
+
+  test(`${script} refuses an unsupported configuration`, () => {
+    const r = dryRun(script, ['--app', 'actual'], 'A,D');
     assert.equal(r.status, 1, r.out);
-    assert.match(r.out, /cal-diy has no configuration C \(it has A, B\)/);
+    assert.match(r.out, /actual has no configuration D \(it has A, B, C\)/);
   });
 
-  test(`${script} refuses tt-virtual-fix in the default order`, () => {
-    const r = dryRun(script, ['--app', 'tt-virtual-fix']);
-    assert.equal(r.status, 1, r.out);
-    assert.match(r.out, /tt-virtual-fix has no configuration A, C \(it has B, F\)/);
-  });
-
-  test(`${script} takes tt-virtual-fix with BENCH_ORDER=B,F`, () => {
-    const r = dryRun(script, ['--app', 'tt-virtual-fix'], 'B,F');
+  test(`${script} takes a subset with BENCH_ORDER=A,B`, () => {
+    const r = dryRun(script, ['--app', 'actual,myfin'], 'A,B');
     assert.equal(r.status, 0, r.out);
+    assert.deepEqual(JSON.parse(r.out).apps, ['actual', 'myfin']);
+    assert.deepEqual(JSON.parse(r.out).configs, ['A', 'B']);
   });
 
-  test(`${script} takes cal-diy with BENCH_ORDER=A,B`, () => {
-    const r = dryRun(script, ['--app', 'cal-diy'], 'A,B');
-    assert.equal(r.status, 0, r.out);
-  });
-
-  test(`${script} takes apps that have A, B and C in the default order`, () => {
-    const r = dryRun(script, ['--app', 'tt-fuzzy,twenty']);
-    assert.equal(r.status, 0, r.out);
+  test(`${script} stops before installation or collection for pending integrations`, () => {
+    const result = spawnSync(process.execPath, [path.join(HERE, script), '--app', 'actual'], {
+      cwd: HERE,
+      encoding: 'utf8',
+      timeout: 60000,
+      env: { ...process.env, BENCH_ORDER: 'A,B,C' },
+    });
+    assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
+    assert.match(result.stderr, /actual: integration pending/);
+    assert.doesNotMatch(result.stdout, /== install|== build|== bench/);
   });
 
   test(`${script} refuses an app that isn't there`, () => {

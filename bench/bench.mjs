@@ -24,7 +24,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { apps, checkConfigs } from './apps.mjs';
+import { apps, checkConfigs, checkReady } from './apps.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // BENCH_ORDER reorders the interleaving (a check that a cost follows the build, not its slot).
@@ -473,6 +473,8 @@ async function main() {
     console.log(JSON.stringify({ runs: args.runs, throttles: args.throttles, apps: appIds, configs: CONFIGS }));
     return;
   }
+
+  checkReady(appIds);
 
   const browser = await chromium.launch({
     headless: true,
