@@ -1,5 +1,21 @@
 # react-inp-blame 0.12.0 on five open-source apps
 
+## Next cohort (selected 2026-10-15, not yet run)
+
+The next run uses five everyday apps, picked to match what people use react-inp-blame for: personal finance, budgeting, productivity and documents, not stress tests. Selection came from the [awesome-selfhosted](https://github.com/awesome-selfhosted/awesome-selfhosted) list, filtered to free software with a React front end, and I checked each repo's `package.json` for React and a Vite or Next.js build. The pool is small: the list gave only four React candidates in these categories, and one of those (a crypto wallet) was dropped as not everyday. There are no results for this cohort yet, and none of the five has been cloned, installed or built.
+
+| app | what | React and build | backend needed |
+| --- | --- | --- | --- |
+| [Actual](https://github.com/actualbudget/actual) | budgeting | React, Vite build in `packages/desktop-client` (monorepo) | none in local-first mode; sync server optional |
+| [myfin](https://github.com/afaneca/myfin) | budget tracker | React, Vite | [myfin-api](https://github.com/aFaneca/myfin-api) and MariaDB |
+| [kresus](https://github.com/kresusapp/kresus) | personal finance | React, Vite | Express and PostgreSQL |
+| [manage-my-damn-life-nextjs](https://github.com/intri-in/manage-my-damn-life-nextjs) | productivity and finance | Next.js | a database through Sequelize |
+| [Reactive Resume](https://github.com/amruthpillai/reactive-resume) | resume builder | React 19 on TanStack Start | PostgreSQL |
+
+Only Actual runs without a server. The others need `startServer` in the harness, as the cal.diy app already uses. The five apps on this page below are the previous cohort. They were tuned on, so they are no longer fresh, and their results stay here as the record of 0.12.0.
+
+## Previous cohort: 0.12.0 on five apps (measured 2026-09-25)
+
 Read this first (2026-10-09). Everything on this page is 0.12.0 on five apps, and the fixes listed under "Where the blame was wrong" were made for those same five apps, so they don't show how it does on one it hasn't seen. The latest check on apps it hadn't seen was 0.25.0 on hyperdx and kaneo, 62 verdicts, each graded twice with a third read where the two disagreed. It was right on 8. Of the other 54, 35 were wrong and 19 misleading. The bar I set for 1.0 on fresh apps was at least 60% right with at most 10% wrong, 38 and 6 on those 62, and it isn't met, so I've dropped it as the mark for 1.0, and 1.0.0 is 0.26.0's code under the API promise in the [README](../../README.md). An earlier check on 0.23.0 was stopped partway through grading and pointed the same way. 0.26.0 rewrites some of the sentences behind those misses and hasn't been run on fresh apps yet. The next benchmark gets its protocol pushed to this repo before any app is picked, and its grades and traces go up with the results.
 
 Measured on 2026-09-25 with react-inp-blame 0.12.0 as published on npm (integrity
