@@ -2,7 +2,27 @@
 
 Living status for the five-app benchmark. Updated at each milestone. Protocol: [protocol-2026-10-14.md](protocol-2026-10-14.md), revised by [protocol-2026-10-15.md](protocol-2026-10-15.md), with its addendum on capture setup. The revision is published before any grade is recorded.
 
-Last updated: 2026-10-15, about 15:20 CDT. Commits are local and nothing is pushed. The branch is 10 commits ahead of origin's last push and has been rewritten once. Authorship stays as Aditya Reddy, as set by the owner; the commits show as Unverified on GitHub, and that is accepted. Pushes wait for 17:00 CDT on a weekday, or any time outside 09:00 to 17:00. Nothing is merged.
+Last updated: 2026-10-15, about 16:05 CDT. The benchmark work is on branch bench/ef-360-results, based on origin/main, with the five app commits and the docs commits in order. Commits are local until the push after 17:00 CDT. Authorship is Aditya Reddy, as set by the owner. Pushes wait for 17:00 CDT on a weekday, or any time outside 09:00 to 17:00. Nothing is merged, and no PR is open.
+
+## Per-app summary
+
+Overhead has not run for any app. The 1x and 4x CPU results below are "not run", not zero.
+
+| App | Status | Grading minutes per case | Verdicts (single reader, provisional) | Overhead 1x | Overhead 4x | Left to do |
+| --- | --- | --- | --- | --- | --- | --- |
+| actual | Captured 24/24 on configuration B. Ordered workload passes A, B, C. Registry ready | About 0.9 (51 s agent time, first pass) | 20 cannot tell, 2 wrong, 1 misleading, 1 blank | Not run | Not run | Pin not written by the adapter. Config A bundle holds the string "react-inp-blame":`1.0.0`. Owner to confirm C22 "heading" reading. Overhead workload to define |
+| myfin | Captured 24/24 (20 matched). Ordered workload passes A, B, C. Registry ready | About 1.3 (79 s agent time, corrected pass) | 17 misleading, 5 cannot tell, 2 wrong | Not run | Not run | Pin not written. Clock dependence (seed 2025-11 to 2026-10). Render-scope rule for misleading verdicts. Overhead is about 9.7 hours for 180 runs |
+| kresus | Captured 23/23 (17 partial). Per-case passes A, B, C. Ordered session fails C07, C17, C21. Registry ready | About 1.3 (79 s agent time, corrected pass) | 10 misleading, 5 blank, 5 cannot tell, 2 wrong, 1 right | Not run | Not run | Overhead workload must exclude C07, C17, C21 (not yet written into the adapter). Pin not written. Owner to review the C12 sign rewrite. Blank rule to settle |
+| manage-my-damn-life-nextjs | Captured 24/24 after the connection fix (4 matched, 5 partial, 15 no observable latency). Ready | About 1.3 (79 s agent time, corrected pass) | 16 cannot tell, 5 blank, 3 misleading | Not run | Not run | Upstream one-line pool fix not applied (upstream code). Each run waits 10 to 12 s for connections to drain, which overhead must account for. Pin not written. C13 has the same unguarded before-read as C12 |
+| reactive-resume | Captured 23/23 after the before-step fixes (14 matched, 2 partial, 7 no observable latency). Ready | About 1.3 (79 s agent time, corrected pass) | 12 misleading, 9 cannot tell, 1 wrong, 1 blank | Not run | Not run | Pin not written. Blank and misleading rules to settle |
+
+Grading time, totals:
+
+- actual, first pass: 618 s wall for 24 cases, two in parallel.
+- myfin and kresus, first pass with the source path error: 2,421 s wall for 47 cases. Superseded by the corrected pass.
+- Four apps, corrected pass (myfin, kresus, manage-my-damn-life, reactive-resume): 3,732 s wall for 94 cases, two in parallel.
+- Hand reads (two cases): tool time only, a few seconds each. Reasoning time was not timed, so per-case minutes for a hand read are an estimate of about 2 minutes.
+- The four-app corrected pass ran as one batch, so per-app minutes are not measured separately. The 1.3-minute figure applies to all four.
 
 ## Milestones
 
