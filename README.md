@@ -1,7 +1,7 @@
 <h1 align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.svg">
-  <img alt="react-inp-blame: interaction attribution for INP, with a 400 ms click split into its handler" src="docs/media/banner-light.svg" width="880">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/59e3941a628392dd93fbded409b3a5689289c611/docs/media/banner-dark.svg">
+  <img alt="react-inp-blame: interaction attribution for INP, with a 400 ms click split into its handler" src="https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/59e3941a628392dd93fbded409b3a5689289c611/docs/media/banner-light.svg" width="880">
 </picture>
 </h1>
 
@@ -16,7 +16,7 @@
 
 <div align="center">
 
-![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](docs/media/overlay.gif)
+![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/59e3941a628392dd93fbded409b3a5689289c611/docs/media/overlay.gif)
 
 </div>
 
@@ -28,9 +28,6 @@ react-inp-blame joins browser interaction timing to the React tree and shows whe
 with a component or handler name when it has one. The name can be wrong, check it against the profiler.
 1.0.0 makes the API and report shape stable, with [documented exceptions](#versions). It does not
 make the attribution reliable: the latest [unseen-app accuracy check](#how-reliable-is-it) is below.
-
-> [!WARNING]
-> The verdict can be wrong. On hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other 54, 35 were wrong and 19 misleading. The [accuracy check](#how-reliable-is-it) below has the full split.
 
 **[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow on
 purpose. Click something and read what the badge blames.
