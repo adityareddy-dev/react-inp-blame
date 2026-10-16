@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { killTree, pollFor, waitForHttp } from '../helpers.mjs';
+import { yarnCommand } from './kresus-tools.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLONE = path.join(HERE, '..', 'clones', 'kresus');
@@ -29,9 +30,8 @@ const BUILD_BENCH = path.join(CLONE, 'build', 'bench');
 const PINNED_SHA = '41d388f0293762a7d510392917b373f45fd29ee7';
 const LIB_INTEGRITY =
     'sha512-wEQcaqyjZaZ6rnIC7vqkK3eSX4Zl9Y1wBlIFjg1LlfwcsLmsU5li0gBtzxlXhEwiSFnRSU/arBduorTMltkgJg==';
-const NODE24 = '/opt/node24/bin/node';
-const PATH24 = '/opt/node24/bin:/opt/node22/bin:/usr/local/bin:/usr/bin:/bin';
-const YARN = '/opt/node22/bin/yarn';
+const NODE24 = process.execPath;
+const PATH24 = process.platform === 'win32' ? process.env.PATH : '/opt/node24/bin:/opt/node22/bin:/usr/local/bin:/usr/bin:/bin';
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 const PG_PORT = 5442;
 // The harness names configurations A, B and C when it starts servers and resets data, and passes
@@ -152,7 +152,7 @@ must(spawnSync('psql', admin.concat(['-d', database, '-v', 'ON_ERROR_STOP=1', '-
 
 const log = path.join(state, 'seed-a.log');
 fs.writeFileSync(log, '');
-const child = spawn('/opt/node24/bin/node', [path.join(__dirname, 'launch.cjs')], {
+const child = spawn(process.execPath, [path.join(__dirname, 'launch.cjs')], {
     detached: true,
     stdio: ['ignore', fs.openSync(log, 'a'), fs.openSync(log, 'a')],
     env: Object.assign({}, process.env, {
@@ -276,7 +276,7 @@ function buildServer(run, env) {
     fs.cpSync(path.join(CLONE, 'server', 'providers', 'woob', 'py'), woob, { recursive: true });
     fs.chmodSync(path.join(woob, 'main.py'), 0o755);
     run(NODE24, [path.join(CLONE, 'node_modules', 'typescript', 'bin', 'tsc'), '--build', '--force', 'build/bench/tsconfig.json'],
-        { cwd: CLONE, env });
+        { cwd: CLONE, env, shell: false });
     fs.rmSync(path.join(build, 'build'), { recursive: true, force: true });
 }
 
@@ -518,11 +518,15 @@ export default {
         const head = spawnSync('git', ['-C', CLONE, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
         if (head !== PINNED_SHA) throw new Error(`the clone is at ${head}, not the pinned ${PINNED_SHA}`);
         const env = { ...process.env, PATH: PATH24 };
+        const yarn = (args) => {
+            const planned = yarnCommand(args);
+            run(planned.command, planned.args, { cwd: CLONE, env, shell: planned.shell });
+        };
         const pkg = JSON.parse(fs.readFileSync(path.join(CLONE, 'package.json'), 'utf8'));
         if (!pkg.devDependencies || !pkg.devDependencies['react-inp-blame']) {
-            run(YARN, ['add', 'react-inp-blame@1.0.0', '--dev', '--exact', '--network-timeout', '600000'], { cwd: CLONE, env });
+            yarn(['add', 'react-inp-blame@1.0.0', '--dev', '--exact', '--network-timeout', '600000']);
         }
-        run(YARN, ['install', '--frozen-lockfile', '--network-timeout', '600000'], { cwd: CLONE, env });
+        yarn(['install', '--frozen-lockfile', '--network-timeout', '600000']);
         if (!fs.readFileSync(path.join(CLONE, 'yarn.lock'), 'utf8').includes(LIB_INTEGRITY)) {
             throw new Error('yarn.lock does not pin react-inp-blame@1.0.0 to the expected integrity');
         }
@@ -530,6 +534,9 @@ export default {
 
     // PostgreSQL 16 as the bench user, on 127.0.0.1:5442, with its data under bench/state/kresus.
     prepare(run) {
+        if (process.platform === 'win32') {
+            throw new Error('Kresus native Windows service setup is unsupported: prepare requires Linux PostgreSQL 16 (chown/runuser) and Woob');
+        }
         const c = credentials();
         const pgdata = path.join(STATE, 'pgdata');
         if (!fs.existsSync(path.join(pgdata, 'PG_VERSION'))) {
@@ -558,7 +565,7 @@ export default {
         writeBenchFiles();
         const buildEnv = { ...process.env, PATH: PATH24, NODE_ENV: 'production', BENCH_CONFIG: config };
         run(NODE24, [path.join(CLONE, 'node_modules', 'vite', 'bin', 'vite.js'), 'build', '--mode', 'production',
-            '--config', 'build/bench/vite.bench.config.mjs'], { cwd: CLONE, env: buildEnv });
+            '--config', 'build/bench/vite.bench.config.mjs'], { cwd: CLONE, env: buildEnv, shell: false });
         buildServer(run, buildEnv);
         const out = path.join(CLONE, env.BENCH_OUTDIR);
         fs.rmSync(out, { recursive: true, force: true });
@@ -570,6 +577,7 @@ export default {
             // Configuration A seeds the database once; every run restores that seed.
             run(NODE24, [path.join(BUILD_BENCH, 'seed.cjs')], {
                 cwd: CLONE,
+                shell: false,
                 env: {
                     ...buildEnv,
                     BENCH_KRESUS_STATE: STATE,

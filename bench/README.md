@@ -57,6 +57,14 @@ selects the exact npm release for byte verification, default `react-inp-blame@1.
 `BENCH_TARBALL` records a local package tarball instead, which intentionally fails npm-byte
 verification when different. Match app package pins to the release under test.
 
+Kresus uses the current Node executable (Node 24 or newer). `BENCH_KRESUS_YARN` can select a
+Yarn classic executable or its `.js`/`.cjs` entry point. A script entry point runs through Node
+without a shell, including when its path contains spaces. The defaults remain
+`/opt/node22/bin/yarn` on Linux and `yarn.cmd` on Windows. Native Windows preserves its PATH
+for installation, but Kresus service setup still requires the Linux PostgreSQL 16 and Woob
+environment. `prepare` stops on Windows before creating service credentials. These command
+changes do not provide native Windows database, Python or credential storage support.
+
 Ignored outputs are `clones/`, `results/`, `state/`, `npm-lib/` and `report.md`. Inspect captures
 for local paths, credentials and personal labels before sharing.
 
