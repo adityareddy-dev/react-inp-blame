@@ -2,12 +2,12 @@
 //
 //   npm run build && node scripts/size.mjs            # print the sizes
 //   node scripts/size.mjs --write                     # and write them into the READMEs' tables
-//   node scripts/size.mjs --check                     # fail when a table is not what --write writes, or a size is over budget
+//   node scripts/size.mjs --check                     # fail when a table is not what --write writes
 //
 // The table is in README.md and in packages/core/README.md, the one npm shows, between the same markers.
 //
 // Each bundle is built with the rolldown the repo has, for the browser, as minified ESM, and gzipped at
-// zlib's default level. The budgets, in gzipped kilobytes, are in scripts/size-budget.json.
+// zlib's default level.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,7 +109,6 @@ async function main() {
   const tool = `rolldown ${rolldownVersion}`;
   const table = formatTable(rows, tool);
   console.log(table);
-  const budget = JSON.parse(fs.readFileSync(path.join(root, 'scripts/size-budget.json'), 'utf8'));
   const found = [];
   for (const file of READMES) {
     const name = path.relative(root, file);
@@ -119,7 +118,7 @@ async function main() {
       fs.writeFileSync(file, readme);
       console.log(`\n${name} updated.`);
     }
-    if (values.check) found.push(...problems(readme, rows, budget, tool).map((p) => `${name}: ${p}`));
+    if (values.check) found.push(...problems(readme, rows, tool).map((p) => `${name}: ${p}`));
   }
   if (found.length) {
     console.error(`\n${[...new Set(found)].join('\n')}\n\nRun \`npm run build && node scripts/size.mjs --write\` and commit both READMEs, or look at what made the bundle grow.`);

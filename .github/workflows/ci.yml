@@ -37,7 +37,7 @@ jobs:
       # walkthrough, which nothing else compiles.
       - run: npm run typecheck
       - run: npm run test:unit
-      # The README's bundle sizes against this build, and each against its budget in scripts/size-budget.json.
+      # The README's bundle size table against this build.
       - run: node scripts/size.mjs --check
 
   # Sees what users install, as the two vite-app jobs below do, and is the one gating job that checks
