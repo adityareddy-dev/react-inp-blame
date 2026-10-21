@@ -9,11 +9,12 @@
 //
 //   node scripts/otel-contract.mjs                    # pack packages/core, then install and check
 //   node scripts/otel-contract.mjs --tarball <path>   # a tarball that already exists
-//   node scripts/otel-contract.mjs --fresh            # no lockfile: every package at its latest release today
+//   node scripts/otel-contract.mjs --fresh            # no lockfile: latest SDKs with compatible OTel 2.x dependencies
 //
 // The SDKs are 0.x, and their web vitals code sits under experimental paths, so --fresh is the run that
 // finds out the day a release moves a hook, a type or the time an INP record is stamped with. A caret range
-// on a 0.x version takes patches only, so --fresh asks for each package's latest rather than for the ranges.
+// on a 0.x version takes patches only, so --fresh asks for each browser SDK's latest. Shared OTel
+// dependencies stay on the 2.x / 0.2xx line used by these setups until the browser SDKs support OTel 3.x.
 //
 // Plain JavaScript on Node's own modules, like vite-app.mjs.
 import assert from 'node:assert/strict';
@@ -30,6 +31,11 @@ const FIXTURE = path.join(root, 'fixtures/otel');
 const DOC = 'docs/opentelemetry.md';
 /** Printed after the install, so a failure says which releases it happened with. */
 const REPORTED = [
+  '@opentelemetry/api',
+  '@opentelemetry/api-logs',
+  '@opentelemetry/sdk-trace-base',
+  '@opentelemetry/exporter-logs-otlp-http',
+  '@opentelemetry/instrumentation',
   '@opentelemetry/sdk-logs',
   '@opentelemetry/browser-instrumentation',
   '@elastic/opentelemetry-browser',
@@ -40,6 +46,16 @@ const REPORTED = [
   'typescript',
   PACKAGE,
 ];
+// The browser setups use OTel 2.x, whose SDK peers exclude API 1.10. OTel 3.x also moves
+// experimental packages to 0.3xx and sdk-logs to 3.x. Resolve the newest release within this family.
+const FRESH_RANGES = {
+  '@opentelemetry/api': '>=1.9.1 <1.10.0',
+  '@opentelemetry/api-logs': '>=0.200.0 <0.300.0',
+  '@opentelemetry/exporter-logs-otlp-http': '>=0.200.0 <0.300.0',
+  '@opentelemetry/instrumentation': '>=0.200.0 <0.300.0',
+  '@opentelemetry/sdk-logs': '>=0.200.0 <0.300.0',
+  '@opentelemetry/sdk-trace-base': '^2.0.0',
+};
 // Left behind by a run in the fixture folder itself.
 const NOT_COPIED = new Set(['node_modules', 'src']);
 
@@ -108,7 +124,7 @@ function main() {
   assert.ok(fs.existsSync(tarball), `${tarball} does not exist`);
 
   const app = fs.mkdtempSync(path.join(os.tmpdir(), 'otel-'));
-  console.log(`${path.basename(tarball)} into ${app}, the SDKs in fixtures/otel${values.fresh ? ', each at its latest release' : ''}, on Node ${process.version}`);
+  console.log(`${path.basename(tarball)} into ${app}, the SDKs in fixtures/otel${values.fresh ? ', latest browser SDKs with OTel 2.x dependencies' : ''}, on Node ${process.version}`);
   try {
     fs.cpSync(FIXTURE, app, { recursive: true, filter: (source) => !NOT_COPIED.has(path.basename(source)) });
     if (values.fresh) {
@@ -116,7 +132,7 @@ function main() {
       const manifest = readJson(path.join(app, 'package.json'));
       const latest = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })
         .filter((name) => name !== PACKAGE)
-        .map((name) => `${name}@latest`);
+        .map((name) => quoted(`${name}@${FRESH_RANGES[name] ?? 'latest'}`));
       npm(`install --no-audit --no-fund ${latest.join(' ')} ${quoted(tarball)}`, app);
     } else {
       npm('ci --no-audit --no-fund', app);
