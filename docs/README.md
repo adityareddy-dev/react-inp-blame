@@ -18,6 +18,10 @@ compares and what it costs. These pages have the rest.
 - [Troubleshooting](troubleshooting.md): every warning it prints, and what to do about it.
 - [Benchmarks](benchmarks/README.md): what it costs, and what it blames, on real open-source apps.
 - [Design notes](interaction-attribution-design.md): why it works the way it does.
+- [Using the badge](using-the-badge.md): what the badge and panel show, the `overlay` option, development numbers, reading reports in code.
+- [Versions](versions.md): browser support notes, peer dependencies, Jest, the 1.x promise and the support window.
+- [Compared with other tools](comparison.md): Sentry, react-scan, web-vitals attribution and React 19.2 Performance tracks.
+- [Reliability and reporting](reliability.md): benchmarks and reproduction, reporting a wrong blame, the OpenTelemetry processor, cost and labels.
 
 ## Terms
 
