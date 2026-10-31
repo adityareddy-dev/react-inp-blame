@@ -107,8 +107,11 @@ initSDK({
 Elastic's browser SDK has no slot for a log processor, only each instrumentation's config, so the web vitals
 instrumentation's `applyCustomLogRecordData` hook is the way in. Take it as a stopgap: that hook may go
 ([opentelemetry-browser #440](https://github.com/open-telemetry/opentelemetry-browser/issues/440)), and a
-processor slot would be the better route. Checked with `@elastic/opentelemetry-browser` 0.3.0 and the
-`@opentelemetry/browser-instrumentation` 0.5.2 and web-vitals 5.3.0 it brings.
+processor slot would be the better route. Checked with `@elastic/opentelemetry-browser` 0.4.0.
+
+In 0.4.0, the instrumentation key changed from `@opentelemetry/instrumentation-web-vitals` to `web-vitals`,
+and `otlpEndpoint` moved to `exportConfig.url`. The hook is still `applyCustomLogRecordData`.
+See [Elastic's 0.4.0 breaking changes](https://github.com/elastic/elastic-otel-browser/blob/main/docs/release-notes/breaking-changes.md).
 
 ```ts
 // src/elastic.ts
@@ -117,9 +120,9 @@ import { inpBlameAttributes } from "react-inp-blame/otel";
 
 startBrowserSdk({
   serviceName: "shop",
-  otlpEndpoint: "https://collector.example.com",
+  exportConfig: { url: "https://collector.example.com" },
   instrumentations: {
-    "@opentelemetry/instrumentation-web-vitals": {
+    "web-vitals": {
       applyCustomLogRecordData: (record) => {
         record.attributes = {
           ...record.attributes,

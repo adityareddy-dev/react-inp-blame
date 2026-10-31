@@ -5,7 +5,7 @@
   "type": "module",
   "description": "The web SDKs whose INP hooks react-inp-blame/otel is documented with, at the versions docs/opentelemetry.md names. Run by scripts/otel-contract.mjs from a temp copy.",
   "dependencies": {
-    "@elastic/opentelemetry-browser": "0.3.0",
+    "@elastic/opentelemetry-browser": "0.4.0",
     "@embrace-io/web-sdk": "2.29.1",
     "@grafana/faro-web-sdk": "2.12.1",
     "@honeycombio/opentelemetry-web": "1.5.1",
