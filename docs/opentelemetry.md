@@ -315,7 +315,9 @@ User Timing measures picks those up, whatever this entry sends.
   ([the runs](benchmarks/real-apps.md)). For anything that alerts, filter on `blame.confidence` `measured`.
 - **`reportAllChanges`, or any SDK that reports INP before the page is hidden,** can send a record before the
   library has its report, which then says `no-report`. Honeycomb passes its `inp` options straight to
-  web-vitals, so a `reportAllChanges` there does this.
+  web-vitals, so a `reportAllChanges` there does this. So does OpenTelemetry's `WebVitalsInstrumentation`
+  with `reportAllChanges: true`, which `@opentelemetry/browser-instrumentation` 0.9.0 and later pass to
+  web-vitals ([opentelemetry-browser #450](https://github.com/open-telemetry/opentelemetry-browser/pull/450)).
 - **The telemetry set up before the library.** An interaction the page hides on before the browser hands its
   entries over says `no-report`, since web-vitals reports before the library has built the report. A flush at
   the hide for this order is planned for after 1.0. Until then, install first

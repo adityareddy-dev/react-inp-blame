@@ -11,6 +11,8 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 - Lead the repository README with the demo's slow login, a 30-second setup path, web-vitals and
   OpenTelemetry recipes, and links to the reproducible benchmark harness. Runtime, published types
   and attribution behavior are unchanged.
+- Name OpenTelemetry's `WebVitalsInstrumentation` with `reportAllChanges: true` (browser-instrumentation
+  0.9.0 and later) next to Honeycomb in the INP limits.
 
 ## [1.0.0] - 2026-10-10
 
