@@ -15,7 +15,7 @@ Click **Log in** in the demo. The report shows a 400 ms interaction, about 399 m
 
 react-inp-blame joins browser interaction timing to the React tree and shows where the time went, with a component or handler name when it has one. The name can be wrong, check it against the profiler. 1.0.0 makes the API and report shape stable, with [documented exceptions](#versions). That is an API promise, not an accuracy claim. Read the [validation status and limits](#how-reliable-is-it).
 
-**[Try the demo](https://adityareddy-dev.github.io/react-inp-blame/)**. Every scenario there is slow on purpose. Click something and read what the badge blames.
+**[Try the demo](https://reactinpblame.com/)**. Every scenario there is slow on purpose. Click something and read what the badge blames.
 
 ## 30-second quickstart
 
