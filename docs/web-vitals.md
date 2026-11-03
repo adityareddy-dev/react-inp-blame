@@ -101,6 +101,51 @@ onINP((metric) => {
 }, { generateTarget });
 ```
 
+## Sending it to Datadog
+
+Datadog's browser SDK records INP on its own, on the RUM view, as `@view.interaction_to_next_paint` with a
+CSS selector for the target, but it keeps no interaction id there, so nothing ties this library's report to it.
+A custom duration vital does the job instead, from web-vitals, with the blame in its context. The vital starts
+when the interaction did, so Datadog files it under the view the interaction happened in, next to that view's
+own INP. As with Sentry, an event can't be taken back, so the recipe sends the first report for each
+`metric.id`, and a slower interaction after the user comes back to the tab is left out of the vital, though
+Datadog's own INP on the view still rises with it. `addDurationVital` needs `@datadog/browser-rum` 6 or later,
+and like every RUM event it is sent only for the sessions Datadog samples.
+
+```ts
+import { datadogRum } from '@datadog/browser-rum';
+import { onINP } from 'web-vitals/attribution';
+import { attributeINP, generateTarget } from 'react-inp-blame/web-vitals';
+
+const sent = new Set<string>();
+onINP((metric) => {
+  if (sent.has(metric.id)) return; // the same page view, reported again as it was hidden again
+  sent.add(metric.id);
+  const { interactionTarget, react } = attributeINP(metric);
+  datadogRum.addDurationVital('inp', {
+    startTime: performance.timeOrigin + metric.entries[0].startTime, // when the interaction started
+    duration: metric.value,
+    context: {
+      rating: metric.rating,
+      target: interactionTarget, // 'ProfilePage > PhotoTile (button.tile)'
+      blame: react && {
+        kind: react.blame.kind,             // 'render', 'handler', 'layout', 'waiting', ...
+        name: react.blame.name,
+        confidence: react.blame.confidence, // 'measured' or 'inferred'
+      },
+      react_build: react?.reactBuild, // 'development' reads high, filter it out
+    },
+  });
+}, { generateTarget });
+```
+
+In the RUM Explorer the vitals are `@vital.name:inp`, with the blame under `@context`, such as
+`@context.blame.name`, which needs a facet before you can group by it. `@vital.duration` is in nanoseconds,
+as are all of Datadog's durations. On a production build of the [Vite fixture](../fixtures/vite-react-ts), a
+752 ms click arrived as one vital with `target: 'App (button.counter)'` and `blame.name: 'SlowList'`, on the
+same view whose own INP read 752 ms with the selector `#center>BUTTON.counter` (checked on 2026-11-03 with
+react-inp-blame 1.0.0, web-vitals 6.2.3 and `@datadog/browser-rum` 7.16.2).
+
 ## Sending it to Google Analytics 4
 
 This is web-vitals' own [example for Google Analytics](https://github.com/GoogleChrome/web-vitals#send-attribution-data),
@@ -132,11 +177,11 @@ onINP((metric) => {
 GA4 reports show a parameter only once it is registered as an event-scoped custom dimension, and GA4 takes at
 most 100 characters of a parameter's value, where `generateTarget` allows 120, so a long path can lose its end.
 
-On Next.js, the body of either `onINP` callback goes in the `useReportWebVitals` one above, for
-`metric.name === 'INP'`, with the Sentry one's `sent` at the top of that module. That metric comes from the
+On Next.js, the body of any of these `onINP` callbacks goes in the `useReportWebVitals` one above, for
+`metric.name === 'INP'`, with the Sentry or Datadog one's `sent` at the top of that module. That metric comes from the
 build without attribution, so `interactionTarget` is undefined there, and so is `navigationURL`.
 
-Neither recipe sends a label or a sentence. `attributeINP` holds component, handler and script names, and
+None of the recipes sends a label or a sentence. `attributeINP` holds component, handler and script names, and
 `generateTarget` an element's tag, id and test id or classes, but a report's `target.label`, `verdict` and
 other sentences can hold text the page shows: under `labels: 'text'`, and by default in a development build
 (see [Labels and personal data](api.md#labels-and-personal-data)). If you forward those as well, install with
