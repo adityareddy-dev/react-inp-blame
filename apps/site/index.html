@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>react-inp-blame</title>
+<meta name="description" content="For a slow click, tap or key press in a React app, react-inp-blame shows where the time went and names the component or handler behind it. It can be wrong. Send it with web-vitals to Sentry or GA4, or with OpenTelemetry (experimental) to Honeycomb or Elastic.">
+<meta name="color-scheme" content="dark light">
+<meta property="og:type" content="website">
+<meta property="og:title" content="react-inp-blame">
+<meta property="og:description" content="When a click, tap or key press in your React app is slow, this names the component or the handler behind it and says where the time went.">
+<meta property="og:url" content="https://reactinpblame.com/">
+<meta property="og:image" content="https://reactinpblame.com/media/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23f5a524'/%3E%3C/svg%3E">
+<script>
+  /* Restore a theme the visitor chose before first paint. No stored choice means the system's. */
+  try { var t = localStorage.getItem('rib-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  /* Old lab links (reactinpblame.com/#lab/...) now live under /demo/. */
+  if (/^#lab\//.test(location.hash)) location.replace('/demo/' + location.hash);
+</script>
+<link rel="stylesheet" href="./src/site.css">
+<link rel="stylesheet" href="./src/landing.css">
+<script type="module" src="./src/main.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-head"><div class="wrap">
+  <a class="brand" href="#top">react-inp-blame</a>
+  <nav class="site-nav" aria-label="Sections"><ul>
+    <li><a href="#web-vitals">With web-vitals</a></li>
+    <li><a href="#otel">With OpenTelemetry</a></li>
+    <li><a href="#see">What you see</a></li>
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#honest">Honesty</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="#docs">Docs</a></li>
+    <li><a href="#faq">FAQ</a></li>
+  </ul></nav>
+  <a class="btn btn--ghost btn--sm" href="https://github.com/adityareddy-dev/react-inp-blame">GitHub</a>
+  <button class="theme-toggle" type="button" aria-label="Switch theme" hidden>
+    <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3"/></svg>
+    <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1Z"/></svg>
+  </button>
+</div></header>
+
+<main id="main">
+
+<section class="hero" id="top"><div class="wrap">
+  <div class="hero-copy">
+    <p class="eyebrow">Interaction to Next Paint, for React</p>
+    <h1 class="hero-title">react-inp-blame</h1>
+    <p class="lede">When a click, tap or key press in your React app is slow, this names the component or the handler behind it and says where the time went.</p>
+    <p class="install"><code>npm install react-inp-blame</code></p>
+    <div class="route-ctas">
+      <a class="route-cta route-cta--primary" href="#web-vitals"><span class="route-cta-title">With web-vitals</span><span class="route-cta-sub">The React side added to web-vitals' INP attribution, sent to Sentry or to GA4.</span></a>
+      <a class="route-cta" href="#otel"><span class="route-cta-title">With OpenTelemetry <span class="tag tag--experimental">experimental</span></span><span class="route-cta-sub">The blame added to the INP event, in OpenTelemetry, Honeycomb, Elastic.</span></a>
+    </div>
+  </div>
+  <div class="hero-device"><div class="device"><span class="device-glow"></span>
+    <video class="device-media" data-phone muted playsinline loop autoplay preload="auto" poster="/media/phone-demo-poster.png" width="720" height="1500" aria-label="A phone showing a slow tap on a login button, then the react-inp-blame panel opening: 400 ms, click on login, most likely onClick in SignInPage.">
+      <source src="/media/phone-demo.webm" type='video/webm; codecs="vp9"'>
+    </video>
+  </div></div>
+</div></section>
+
+<section class="works-with" aria-label="Works with"><div class="wrap"><p>Works with</p><ul><li>web-vitals</li><li>Sentry</li><li>Google Analytics 4</li><li>OpenTelemetry</li><li>Honeycomb</li><li>Elastic</li><li>Embrace</li><li>Grafana Faro</li></ul></div></section>
+
+<section class="section" id="what"><div class="wrap">
+  <div class="section-head"><h2>Where the time went, in plain words</h2><p>For a slow click, tap or key press in a React app, it shows where the time went and names the component or handler.</p></div>
+  <div class="benefits">
+    <div class="benefit"><h3>Names the code</h3><p>The component or handler most likely behind the slow interaction, in your own names.</p></div>
+    <div class="benefit"><h3>Splits the time</h3><p>Waiting, working and updating the screen, so you know which of the three to fix.</p></div>
+    <div class="benefit"><h3>Sees what INP misses</h3><p>A second React render that landed after the paint is joined to the click. INP doesn't count it, and people still wait for it.</p></div>
+    <div class="benefit"><h3>Fits the tools you have</h3><p>It rides on web-vitals attribution, or on the INP event OpenTelemetry already sends.</p></div>
+    <div class="benefit"><h3>Says "most likely"</h3><p>Every blame is marked measured or inferred, and the sentence says so when it is guessing.</p></div>
+    <div class="benefit"><h3>A development tool first</h3><p>The Vite plugin and the Next.js wrapper leave it out of production builds unless you turn it on.</p></div>
+  </div>
+</div></section>
+
+<section class="band section" id="badge"><div class="wrap">
+  <div class="section-head"><h2>A badge in the corner, a panel when you need it</h2></div>
+  <figure class="surface recording"><video data-phone muted playsinline loop autoplay preload="metadata" poster="/media/overlay.png" width="1800" height="1050" aria-label="The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation"><source src="/media/overlay.webm" type="video/webm"><source src="/media/overlay.mp4" type="video/mp4"></video><figcaption>The demo's sign-in page, recorded with the library running.</figcaption></figure>
+  <div class="feature-split">
+    <ul class="feature-list">
+      <li><h3>A badge you can ignore</h3><p>A small dark badge sits in the corner and has no number until you interact. Then it shows the page's INP so far in milliseconds: green at 200 or under, amber up to 500, red above.</p></li>
+      <li><h3>A panel of the slow ones</h3><p>Click the badge for the recent slow interactions, newest first. Each row names the component or handler and splits the time into waiting, working and updating the screen.</p></li>
+      <li><h3>A row that explains itself</h3><p>Click a row for the whole explanation in plain sentences, including what React rendered after the paint and which components it was.</p></li>
+      <li><h3>The same report in code</h3><p>Everything on the panel is also a report your code can read with <code>onInteraction</code>, so it can go to the tools you already use.</p></li>
+    </ul>
+  </div>
+</div></section>
+
+<section class="section" id="web-vitals"><div class="wrap"><div class="route">
+  <div class="route-head"><h2>With web-vitals</h2><p>The React side added to web-vitals' INP attribution, sent to Sentry or to GA4. One option on <code>onINP</code>, and the component path lands where web-vitals puts a CSS selector.</p></div>
+  <div class="route-body">
+    <div class="code-grid code-grid--stack"><figure class="code"><figcaption class="code-title">Add the React side to onINP</figcaption><pre tabindex="0"><code><span class="tok-k">import</span> { onINP } <span class="tok-k">from</span> <span class="tok-s">'web-vitals/attribution'</span>;
+<span class="tok-k">import</span> { generateTarget } <span class="tok-k">from</span> <span class="tok-s">'react-inp-blame/web-vitals'</span>;
+
+<span class="tok-f">onINP</span>(send, { generateTarget });
+<span class="tok-c">// attribution.interactionTarget: 'ProfilePage &gt; PhotoTile (button.tile)'</span></code></pre></figure></div>
+    <div class="code-grid code-grid--stack"><figure class="code"><figcaption class="code-title">Sentry metric</figcaption><pre tabindex="0"><code><span class="tok-k">import</span> * as Sentry <span class="tok-k">from</span> <span class="tok-s">'@sentry/browser'</span>; <span class="tok-c">// or @sentry/react, @sentry/nextjs</span>
+<span class="tok-k">import</span> { onINP } <span class="tok-k">from</span> <span class="tok-s">'web-vitals/attribution'</span>;
+<span class="tok-k">import</span> { attributeINP, generateTarget } <span class="tok-k">from</span> <span class="tok-s">'react-inp-blame/web-vitals'</span>;
+
+<span class="tok-k">const</span> sent = <span class="tok-k">new</span> Set&lt;string&gt;();
+<span class="tok-f">onINP</span>((metric) =&gt; {
+  if (sent.<span class="tok-f">has</span>(metric.id)) <span class="tok-k">return</span>; <span class="tok-c">// the same page view, reported again</span>
+  sent.<span class="tok-f">add</span>(metric.id);
+  <span class="tok-k">const</span> { interactionTarget, react } = <span class="tok-f">attributeINP</span>(metric);
+  Sentry.metrics.<span class="tok-f">distribution</span>(<span class="tok-s">'inp'</span>, metric.value, {
+    unit: <span class="tok-s">'millisecond'</span>,
+    attributes: {
+      rating: metric.rating,
+      target: interactionTarget, <span class="tok-c">// 'ProfilePage &gt; PhotoTile (button.tile)'</span>
+      <span class="tok-s">'blame.kind'</span>: react?.blame.kind, <span class="tok-c">// 'render', 'handler', 'layout', 'waiting', ...</span>
+      <span class="tok-s">'blame.name'</span>: react?.blame.name ?? <span class="tok-k">undefined</span>,
+      <span class="tok-s">'blame.confidence'</span>: react?.blame.confidence, <span class="tok-c">// 'measured' or 'inferred'</span>
+      <span class="tok-s">'react.build'</span>: react?.reactBuild ?? <span class="tok-k">undefined</span>, <span class="tok-c">// 'development' reads high</span>
+    },
+  });
+}, { generateTarget });</code></pre></figure><figure class="code"><figcaption class="code-title">GA4 gtag</figcaption><pre tabindex="0"><code><span class="tok-k">import</span> { onINP } <span class="tok-k">from</span> <span class="tok-s">'web-vitals/attribution'</span>;
+<span class="tok-k">import</span> { attributeINP, generateTarget } <span class="tok-k">from</span> <span class="tok-s">'react-inp-blame/web-vitals'</span>;
+
+<span class="tok-f">onINP</span>((metric) =&gt; {
+  <span class="tok-k">const</span> { interactionTarget, react } = <span class="tok-f">attributeINP</span>(metric);
+  <span class="tok-c">// gtag() is the global the Google tag defines, typed by @types/gtag.js</span>
+  <span class="tok-f">gtag</span>(<span class="tok-s">'event'</span>, metric.name, {
+    value: metric.delta, <span class="tok-c">// delta, so the values can be summed</span>
+    metric_id: metric.id,
+    metric_value: metric.value,
+    metric_delta: metric.delta,
+    page_location: metric.navigationURL,
+    debug_target: interactionTarget, <span class="tok-c">// 'ProfilePage &gt; PhotoTile (button.tile)'</span>
+    debug_blame_kind: react?.blame.kind,
+    debug_blame_name: react?.blame.name ?? <span class="tok-k">undefined</span>,
+    debug_blame_confidence: react?.blame.confidence, <span class="tok-c">// 'measured' or 'inferred'</span>
+    debug_react_build: react?.reactBuild ?? <span class="tok-k">undefined</span>, <span class="tok-c">// 'development' reads high</span>
+  });
+}, { generateTarget });</code></pre></figure></div>
+    <div class="prose">
+      <p>It needs web-vitals 5.1 or later. <code>generateTarget</code> needs no <code>install()</code> and never throws. <code>attributeINP(metric)</code> adds a <code>react</code> field with the blame, its confidence, the handler and the hot path. Sentry metrics need Sentry 10.25 or later.</p>
+      <p>Component names in production need the <code>displayName</code> transform from the Next.js wrapper, the Vite plugin or the loader. Without it a path reads <code>a &gt; b (button.tile)</code>.</p>
+      <p><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/web-vitals.md">Read the web-vitals guide</a></p>
+    </div>
+  </div>
+</div></div></section>
+
+<section class="band section" id="otel"><div class="wrap"><div class="route" data-kind="experimental">
+  <div class="route-head"><h2>With OpenTelemetry <span class="tag tag--experimental">experimental</span></h2><p>The blame added to the INP event, in OpenTelemetry, Honeycomb, Elastic. It lands as <code>react_inp_blame.*</code> attributes, so you can group and filter on it beside the INP value. Export names and attribute names can change in any minor release, 1.x included.</p></div>
+  <div class="route-body">
+    <div class="code-grid code-grid--stack"><figure class="code"><figcaption class="code-title">Turn it on in production, sampled (Next.js)</figcaption><pre tabindex="0"><code><span class="tok-k">import</span> { withInpBlame } <span class="tok-k">from</span> <span class="tok-s">"react-inp-blame/next"</span>;
+
+<span class="tok-k">export</span> <span class="tok-k">default</span> <span class="tok-f">withInpBlame</span>(
+  {
+    /* your config */
+  },
+  {
+    enabled: true, <span class="tok-c">// production builds too</span>
+    runtime: { sampleRate: <span class="tok-n">0.1</span> }, <span class="tok-c">// on one page load in ten</span>
+  },
+);</code></pre></figure><figure class="code"><figcaption class="code-title">OpenTelemetry web SDK</figcaption><pre tabindex="0"><code><span class="tok-c">// src/telemetry.ts</span>
+<span class="tok-k">import</span> { logs } <span class="tok-k">from</span> <span class="tok-s">"@opentelemetry/api-logs"</span>;
+<span class="tok-k">import</span> { WebVitalsInstrumentation } <span class="tok-k">from</span> <span class="tok-s">"@opentelemetry/browser-instrumentation/experimental/web-vitals"</span>;
+<span class="tok-k">import</span> { OTLPLogExporter } <span class="tok-k">from</span> <span class="tok-s">"@opentelemetry/exporter-logs-otlp-http"</span>;
+<span class="tok-k">import</span> { registerInstrumentations } <span class="tok-k">from</span> <span class="tok-s">"@opentelemetry/instrumentation"</span>;
+<span class="tok-k">import</span> {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+} <span class="tok-k">from</span> <span class="tok-s">"@opentelemetry/sdk-logs"</span>;
+<span class="tok-k">import</span> { InpBlameLogRecordProcessor } <span class="tok-k">from</span> <span class="tok-s">"react-inp-blame/otel"</span>;
+
+<span class="tok-k">const</span> loggerProvider = <span class="tok-k">new</span> <span class="tok-f">LoggerProvider</span>({
+  processors: [
+    <span class="tok-k">new</span> <span class="tok-f">InpBlameLogRecordProcessor</span>(), <span class="tok-c">// first, so every processor after it sends the attributes</span>
+    <span class="tok-k">new</span> <span class="tok-f">BatchLogRecordProcessor</span>({
+      exporter: <span class="tok-k">new</span> <span class="tok-f">OTLPLogExporter</span>({
+        url: <span class="tok-s">"https://collector.example.com/v1/logs"</span>,
+      }),
+    }),
+  ],
+});
+logs.<span class="tok-f">setGlobalLoggerProvider</span>(loggerProvider);
+<span class="tok-f">registerInstrumentations</span>({
+  instrumentations: [<span class="tok-k">new</span> <span class="tok-f">WebVitalsInstrumentation</span>()],
+  loggerProvider,
+});</code></pre></figure></div>
+    <div class="code-grid"><figure class="code"><figcaption class="code-title">Honeycomb</figcaption><pre tabindex="0"><code><span class="tok-c">// src/honeycomb.ts</span>
+<span class="tok-k">import</span> { HoneycombWebSDK } <span class="tok-k">from</span> <span class="tok-s">"@honeycombio/opentelemetry-web"</span>;
+<span class="tok-k">import</span> { inpBlameAttributes } <span class="tok-k">from</span> <span class="tok-s">"react-inp-blame/otel"</span>;
+
+<span class="tok-k">const</span> sdk = <span class="tok-k">new</span> <span class="tok-f">HoneycombWebSDK</span>({
+  apiKey: <span class="tok-s">"your-ingest-key"</span>,
+  serviceName: <span class="tok-s">"shop"</span>,
+  webVitalsInstrumentationConfig: {
+    inp: {
+      applyCustomAttributes: (vital, span) =&gt;
+        span.<span class="tok-f">setAttributes</span>(<span class="tok-f">inpBlameAttributes</span>(vital)),
+    },
+  },
+});
+sdk.<span class="tok-f">start</span>();</code></pre></figure><figure class="code"><figcaption class="code-title">Elastic</figcaption><pre tabindex="0"><code><span class="tok-c">// src/elastic.ts</span>
+<span class="tok-k">import</span> { startBrowserSdk } <span class="tok-k">from</span> <span class="tok-s">"@elastic/opentelemetry-browser"</span>;
+<span class="tok-k">import</span> { inpBlameAttributes } <span class="tok-k">from</span> <span class="tok-s">"react-inp-blame/otel"</span>;
+
+<span class="tok-f">startBrowserSdk</span>({
+  serviceName: <span class="tok-s">"shop"</span>,
+  exportConfig: { url: <span class="tok-s">"https://collector.example.com"</span> },
+  instrumentations: {
+    <span class="tok-s">"web-vitals"</span>: {
+      applyCustomLogRecordData: (record) =&gt; {
+        record.attributes = {
+          ...record.attributes,
+          ...<span class="tok-f">inpBlameAttributes</span>(record),
+        };
+      },
+    },
+  },
+});</code></pre></figure></div>
+    <div class="prose">
+      <p>This route needs the library running in production, so turn it on there and sample it. With the defaults every record says <code>react_inp_blame.status: not-installed</code>. Install the library before the telemetry setup, and put the processor first in the list.</p>
+      <p>Embrace and Grafana Faro have setups too. The entry sends component, handler and script names and numbers, never an element's text, <code>target.label</code> or a verdict sentence.</p>
+      <p><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/opentelemetry.md">Read the OpenTelemetry guide</a></p>
+    </div>
+  </div>
+</div></div></section>
+
+<section class="section" id="see"><div class="wrap split split--flip">
+  <div class="prose">
+    <div class="section-head"><h2>What you see</h2></div>
+    <p>This is the library's real panel, for a click on <code>login</code> in the demo. The report shows a 400 ms interaction, about 399 ms of it in the handler, and a React render that landed after the screen updated. INP didn't count that later render.</p>
+    <p>Without the timeline it is easy to investigate the render and miss the handler. The panel says <strong>most likely</strong> where it is guessing, and a profiling build of React gives exact numbers.</p>
+    <figure class="code code--wrap"><figcaption class="code-title">report.verdict for the same click in a development build, the run the README prints</figcaption><pre tabindex="0"><code>400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and what started it can't be told.</code></pre></figure>
+    <div class="callout"><strong>It can be wrong.</strong> A component name is a lead to investigate, not proof that the component caused the delay.</div>
+    <div class="btn-row"><a class="btn btn--primary" href="/demo/">Try the live demo</a></div>
+  </div>
+  <div class="panel" role="group" aria-label="The react-inp-blame panel for a click on login">
+    <div class="panel-head"><div class="panel-ms">400 <small>ms</small> <span class="rating">Needs improvement</span></div><p class="panel-sub">Page INP so far, from click on "login", 25 interactions</p></div>
+    <div class="panel-row"><div><span>Click on "login"</span><span class="panel-row-ms">400 ms</span></div><p>most likely the <b>onClick</b> handler in SignInPage</p><p class="clip">then <b>ProfilePage</b> re-rendered after the paint, PhotoTile ×240</p></div>
+    <div class="phasebar" role="img" aria-label="Waiting 1 ms, Working 399 ms, Updating the screen 0 ms"><span class="seg-0" style="width:1%"></span><span class="seg-1" style="width:98%"></span><span class="seg-2" style="width:1%"></span></div>
+    <div class="legend"><span class="seg-0">Waiting 1 ms</span><span class="seg-1">Working 399 ms</span><span class="seg-2">Updating the screen 0 ms</span></div>
+    <p class="panel-note">The onClick handler most likely took the 399 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.</p>
+    <p class="panel-note">A second React render landed 294 ms after the screen updated: re-rendering 256 components inside ProfilePage, mostly PhotoTile (240 of them). INP doesn't count it, but people still wait for it.</p>
+    <p class="panel-title">Rendered after the paint, 256 components</p>
+    <ul class="panel-list"><li><b>PhotoTile</b><span>240 rendered</span></li><li><b>Pill</b><span>4 rendered</span></li><li><b>PhaseBar</b><span>3 rendered</span></li></ul>
+  </div>
+</div></section>
+
+<section class="band section" id="how"><div class="wrap">
+  <div class="section-head"><h2>How it works</h2><p>It reads what the browser and React already expose, and joins the two. No component needs to change.</p></div>
+  <ol class="steps">
+    <li><h3>It listens to the browser</h3><p>Event Timing gives each interaction's duration and its three phases. On Chromium 123 and later, Long Animation Frames adds which scripts ran and how much forced layout they caused.</p></li>
+    <li><h3>It reads React's fiber tree</h3><p>Through the hook React exposes for developer tools, it walks each commit and counts what rendered. It checks the shapes it reads and stops cleanly outside react-dom 17 to 19, with one warning.</p></li>
+    <li><h3>It joins them and picks a blame</h3><p>The blame is a render, a handler, a layout, a script, a hydration, waiting or painting. Each is marked measured or inferred, because a production build of React records no render times.</p></li>
+    <li><h3>It hands you the report</h3><p>You get the badge and panel, a report in code, web-vitals attribution, or attributes on the OpenTelemetry INP event.</p></li>
+  </ol>
+  <p class="more"><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/how-it-works.md">Read how it works</a></p>
+</div></section>
+
+<section class="section" id="honest"><div class="wrap">
+  <div class="section-head"><h2>It can be wrong, and it says so</h2><p>These numbers are from the repository's docs, not from a slide.</p></div>
+  <dl class="facts">
+    <div class="fact"><dt>Whole verdicts right on apps it had not seen, 0.25.0 on hyperdx and kaneo. 35 were wrong and 19 misleading. No later version has been graded on fresh apps.</dt><dd>8 of 62</dd></div>
+    <div class="fact"><dt>The library's own time per interaction at the median, in production and development builds, on two of the demo's scenarios. 3.8 ms at worst at p95.</dt><dd>1.3 to 3.4 ms</dd></div>
+    <div class="fact"><dt>Gzip, what loads with the page (<code>react-inp-blame/auto</code>). The badge and panel are another 7.1 KB, loaded only when shown.</dt><dd>35.8 KB</dd></div>
+    <div class="fact"><dt>Gzip for the web-vitals entry on top of that. The OpenTelemetry entry adds 1.6 KB.</dt><dd>0.9 KB</dd></div>
+  </dl>
+  <div class="callout"><strong>No accuracy result exists for 1.0.</strong> 1.0.0 makes the API and the report shape stable. That is a promise about the API, not a claim that the name it gives is right. Check a verdict against a browser performance trace before you act on it.</div>
+  <ul class="feature-list">
+    <li><h3>Production React times no renders</h3><p>There the blame rests on counts and is marked <code>inferred</code>. A profiling build of React turns it into a measured blame.</p></li>
+    <li><h3>Some browsers see less</h3><p>Event Timing's <code>interactionId</code> is required: Chromium 96, Firefox 144, Safari 26.2. Long Animation Frames evidence is Chromium 123 and later only.</p></li>
+    <li><h3>Quiet interactions get no report</h3><p>After the page's first input, an interaction that paints in under 16 ms sends the browser no Event Timing entry, however heavy the render after it.</p></li>
+    <li><h3>You can send a wrong one back</h3><p>If it names the wrong component, or a slow interaction gets no report, open an issue with the form built for it.</p></li>
+  </ul>
+  <p class="more"><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/known-limits.md">Known limits</a>, <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/reliability.md">reliability and reporting</a>, <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/comparison.md">compared with other tools</a> and <a href="https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=wrong-or-missing-blame.yml">report a wrong blame</a></p>
+</div></section>
+
+<section class="band section" id="install"><div class="wrap">
+  <div class="section-head"><h2>Install</h2><p>Add the package, then the setup for your framework, and restart the dev server. Both setups are development-only by default.</p></div>
+  <figure class="code"><figcaption class="code-title">npm</figcaption><pre tabindex="0"><code>npm install react-inp-blame</code></pre></figure>
+  <div class="code-grid code-grid--stack"><figure class="code"><figcaption class="code-title">Vite</figcaption><pre tabindex="0"><code><span class="tok-c">// vite.config.ts</span>
+<span class="tok-k">import</span> { defineConfig } <span class="tok-k">from</span> <span class="tok-s">"vite"</span>;
+<span class="tok-k">import</span> react <span class="tok-k">from</span> <span class="tok-s">"@vitejs/plugin-react"</span>;
+<span class="tok-k">import</span> { inpBlame } <span class="tok-k">from</span> <span class="tok-s">"react-inp-blame/vite"</span>;
+
+<span class="tok-k">export</span> <span class="tok-k">default</span> <span class="tok-f">defineConfig</span>({
+  plugins: [<span class="tok-f">react</span>(), <span class="tok-f">inpBlame</span>({ runtime: { overlay: true } })],
+});</code></pre></figure><figure class="code"><figcaption class="code-title">Next.js 14.2 or later</figcaption><pre tabindex="0"><code><span class="tok-c">// next.config.ts</span>
+<span class="tok-k">import</span> <span class="tok-k">type</span> { NextConfig } <span class="tok-k">from</span> <span class="tok-s">"next"</span>;
+<span class="tok-k">import</span> { withInpBlame } <span class="tok-k">from</span> <span class="tok-s">"react-inp-blame/next"</span>;
+
+<span class="tok-k">const</span> nextConfig: NextConfig = { /* config options here */
+};
+
+<span class="tok-c">// Your config first, this library's options second.</span>
+<span class="tok-k">export</span> <span class="tok-k">default</span> <span class="tok-f">withInpBlame</span>(nextConfig, { runtime: { overlay: true } });
+
+<span class="tok-c">// instrumentation-client.ts, Next.js 15.3 to 16.2 only</span>
+<span class="tok-k">export</span> { onRouterTransitionStart } <span class="tok-k">from</span> <span class="tok-s">"react-inp-blame/next-client"</span>;</code></pre></figure></div>
+  <p class="more">Production needs an explicit opt-in. React Router, Remix, TanStack Start, Astro and webpack have setups of their own in <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md">the install guide</a>.</p>
+</div></section>
+
+<section class="section" id="docs"><div class="wrap">
+  <div class="section-head"><h2>Docs</h2></div>
+  <div class="doclist">
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/web-vitals.md"><b>With web-vitals</b><span>The React side in web-vitals' attribution, sent to Sentry or GA4.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/opentelemetry.md"><b>With OpenTelemetry</b><span>Experimental. The blame on the INP event in OpenTelemetry, Honeycomb, Elastic, Embrace or Grafana Faro.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md"><b>Install</b><span>Every setup in full.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/using-the-badge.md"><b>Using the badge</b><span>What the badge and panel show, the overlay option and reading reports in code.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/api.md"><b>API</b><span>onInteraction, install(), every field of a report.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/how-it-works.md"><b>How it works</b><span>Hydration, the INP estimate, what it reads from React, and its time per interaction.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/known-limits.md"><b>Known limits</b><span>What it can't see, and where it has to guess.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/troubleshooting.md"><b>Troubleshooting</b><span>Every warning it prints, and what to do about it.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/CHANGELOG.md"><b>Changelog</b><span>Every release, with its blame changes.</span></a>
+  </div>
+</div></section>
+
+<section class="band section" id="faq"><div class="wrap">
+  <div class="section-head"><h2>Questions</h2></div>
+  <div class="faq">
+    <details><summary>Does it change my app?</summary><p>The Vite plugin and the Next.js wrapper add an install script that runs before React, and a transform that keeps component names in production. Your components are not edited. With <code>enabled</code> left at its default, neither plugin adds anything to a production build.</p></details>
+    <details><summary>Should I use the web-vitals route or the OpenTelemetry one?</summary><p>If you already send web-vitals to Sentry or GA4, use web-vitals: it is one option on <code>onINP</code>. If your INP event goes through OpenTelemetry's web vitals instrumentation, Honeycomb, Elastic, Embrace or Grafana Faro, use OpenTelemetry. That route is experimental, so its names can change in a minor release.</p></details>
+    <details><summary>Can I run it in production?</summary><p>It is a development tool first, and production is optional. Turn it on with <code>enabled: true</code> and sample it with <code>sampleRate</code>. Its own time was 1.3 to 3.4 ms per interaction at the median on two demo scenarios, and what loads with the page is 35.8 KB gzip.</p></details>
+    <details><summary>Does it send what people type?</summary><p>No. <code>target.label</code> never reads a form field's value. The OpenTelemetry entry sends component, handler and script names and numbers only. A label that your own code builds from user data would go out as written, so check the ids and test ids you set.</p></details>
+    <details><summary>Which browsers and versions does it support?</summary><p>It needs Event Timing's <code>interactionId</code>: Chromium 96, Firefox 144, Safari 26.2. It reads react-dom 17, 18 and 19, runs with Next.js 14.2 or later, and its CI covers Vite 6.4, 7.3 and 8.3 and a build on Vite 5.</p></details>
+    <details><summary>What if it blames the wrong component?</summary><p>That happens, and it is how the blame gets better. Add <code>debugGlobal: true</code>, copy the report JSON right after the slow interaction, and open a wrong or missing blame issue on GitHub.</p></details>
+  </div>
+</div></section>
+
+<section class="section"><div class="wrap"><div class="closing">
+  <h2>Find the code behind your slowest click</h2>
+  <p>Add it to web-vitals, or to the INP event OpenTelemetry already sends.</p>
+  <div class="btn-row"><a class="btn btn--primary" href="#web-vitals">With web-vitals</a><a class="btn btn--ghost" href="#otel">With OpenTelemetry</a><a class="btn btn--ghost" href="/demo/">Try the live demo</a></div>
+</div></div></section>
+
+</main>
+
+<footer class="site-foot"><div class="wrap foot-cols">
+  <div><h2>react-inp-blame</h2><p>Interaction attribution for INP in React. MIT licensed. The name it gives can be wrong.</p></div>
+  <div><h2>Project</h2><ul><li><a href="https://github.com/adityareddy-dev/react-inp-blame">GitHub</a></li><li><a href="https://www.npmjs.com/package/react-inp-blame">npm package</a></li><li><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/SECURITY.md">Security</a></li></ul></div>
+  <div><h2>Learn</h2><ul><li><a href="/demo/">Live demo</a></li><li><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/README.md">Docs</a></li><li><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/known-limits.md">Known limits</a></li><li><a href="https://github.com/adityareddy-dev/react-inp-blame/issues/new?template=wrong-or-missing-blame.yml">Report a wrong blame</a></li></ul></div>
+</div></footer>
+</body>
+</html>

@@ -15,7 +15,7 @@ Click **Log in** in the demo. The report shows a 400 ms interaction, about 399 m
 
 react-inp-blame joins browser interaction timing to the React tree and shows where the time went, with a component or handler name when it has one. The name can be wrong, check it against the profiler. 1.0.0 makes the API and report shape stable, with [documented exceptions](#versions). That is an API promise, not an accuracy claim. Read the [validation status and limits](#how-reliable-is-it).
 
-**[Try the demo](https://reactinpblame.com/)**. Every scenario there is slow on purpose. Click something and read what the badge blames.
+**[Try the demo](https://reactinpblame.com/demo/)**, or read the [landing page](https://reactinpblame.com/). Every scenario in the demo is slow on purpose. Click something and read what the badge blames.
 
 ## 30-second quickstart
 
@@ -150,7 +150,7 @@ Reports are made to be forwarded to error trackers and analytics, so `target.lab
 The [docs](docs/README.md) have the rest.
 
 - **Install**, every setup in full: <a id="install-with-nextjs-142-or-later"></a>[Next.js](docs/install.md#install-with-nextjs-142-or-later), <a id="install-with-vite"></a>[Vite](docs/install.md#install-with-vite), <a id="install-with-react-router"></a>[React Router](docs/install.md#install-with-react-router), <a id="install-with-remix"></a>[Remix](docs/install.md#install-with-remix), <a id="install-with-tanstack-start"></a>[TanStack Start](docs/install.md#install-with-tanstack-start), <a id="install-with-astro"></a>[Astro](docs/install.md#install-with-astro), [webpack or Rspack](docs/install.md#webpack-or-rspack), and a Vite build with [no HTML page](docs/install.md#no-html-page-in-the-build) (Laravel, Rails, Django).
-- <a id="with-web-vitals"></a>**[With web-vitals](docs/web-vitals.md)**: the React side added to web-vitals' INP attribution, <a id="sending-it-to-sentry"></a>[sent to Sentry](docs/web-vitals.md#sending-it-to-sentry), <a id="sending-it-to-datadog"></a>[to Datadog](docs/web-vitals.md#sending-it-to-datadog) or <a id="sending-it-to-google-analytics-4"></a>[to GA4](docs/web-vitals.md#sending-it-to-google-analytics-4).
+- <a id="with-web-vitals"></a>**[With web-vitals](docs/web-vitals.md)**: the React side added to web-vitals' INP attribution, <a id="sending-it-to-sentry"></a>[sent to Sentry](docs/web-vitals.md#sending-it-to-sentry) or <a id="sending-it-to-google-analytics-4"></a>[to GA4](docs/web-vitals.md#sending-it-to-google-analytics-4).
 - <a id="with-opentelemetry"></a>**[With OpenTelemetry](docs/opentelemetry.md)**, experimental: the blame added to the INP event OpenTelemetry, Honeycomb, Elastic, Embrace or Grafana Faro already sends.
 - <a id="api"></a>**[API](docs/api.md)**: `onInteraction`, <a id="installoptions"></a>[`install(options)`](docs/api.md#installoptions), <a id="interactionreport"></a>[every field of a report](docs/api.md#interactionreport) and <a id="the-badge-and-panel"></a>[the badge and panel](docs/api.md#the-badge-and-panel).
 - <a id="reference"></a>**[How it works](docs/how-it-works.md)**: <a id="clicks-that-land-before-hydration"></a>[clicks before hydration](docs/how-it-works.md#clicks-that-land-before-hydration), <a id="the-inp-estimate"></a>[the INP estimate](docs/how-it-works.md#the-inp-estimate), <a id="what-it-reads-from-react"></a>[what it reads from React](docs/how-it-works.md#what-it-reads-from-react) and its own [time per interaction](docs/how-it-works.md#time-per-interaction).
