@@ -112,6 +112,13 @@ const FIXTURES = {
     reported: ['webpack', 'webpack-dev-server', 'babel-loader', '@babel/core', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
     typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
   },
+  // Rspack with the same entry import, names loader and vendor chunk as the webpack fixture.
+  rspack: {
+    readme: '## Install with Vite',
+    files: [],
+    reported: ['@rspack/core', '@rspack/cli', '@rspack/dev-server', 'babel-loader', '@babel/core', 'react', 'react-dom', 'typescript', '@playwright/test', PACKAGE],
+    typecheck: (app) => run('tsc -p tsconfig.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json'], { cwd: app }),
+  },
   // Remix 2, on the React 18 its template brings. @remix-run/react imports react-router-dom, which imports
   // react-dom, so the root route loads react-dom before the client entry does.
   remix: {

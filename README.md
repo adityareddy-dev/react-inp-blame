@@ -120,7 +120,7 @@ Notes on timer precision and missing APIs: [browser support notes](docs/versions
 | Vite                                         | 6.4, 7.3 and 8.3; a build on Vite 5                                                         | Not tried below 5                                                                                        |
 | React Router, Remix, TanStack Start          | React Router 7.18 and 8.4, Remix 2.17 on Vite, TanStack Start 1.168                         | Not tried                                                                                                |
 | Astro                                        | 7.3                                                                                         | Not tried                                                                                                |
-| [webpack](docs/install.md#webpack-or-rspack) | 5.111                                                                                       | Not tried                                                                                                |
+| [webpack and Rspack](docs/install.md#webpack-or-rspack) | webpack 5.111 and Rspack 2.3                                                        | Not tried                                                                                                |
 | Node, for the build plugins                  | Installs and loads on 20.19, tests on 22 and 24                                             | `engines` asks for 20.19                                                                                 |
 
 Peer dependency notes, Jest setup, the 1.x promise and the support window are in [Versions](docs/versions.md).
