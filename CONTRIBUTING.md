@@ -11,8 +11,8 @@ we can agree on the approach before you spend time on it.
 - `apps/next-demo`: the Next.js checks in `e2e/` (load order, hydration, `useReportWebVitals`, a Pages
   Router page), run
   under `next dev` and two production builds.
-- `scripts/react-matrix.mjs`: generates the copies of the demo pinned to React 19.2, 19.1, 18.3, 18.2
-  and 17.
+- `scripts/react-matrix.mjs`: generates the copies of the demo pinned to React 19.2, 19.1, 19.0, 18.3, 18.2,
+  18.1, 18.0 and 17.
 - `scripts/pack-smoke.mjs`: installs the packed tarball into throwaway apps and checks it there.
 - `fixtures/vite-react-ts`: the app `npm create vite` makes, with the Vite config from docs/install.md and one slow
   component. `scripts/vite-app.mjs` installs the packed tarball into a copy of it and runs its specs.
@@ -90,12 +90,12 @@ iPhone 15 in WebKit. `npm test` and `npm run test:prod` include it. To run only 
     npx playwright test --project=android-dev --project=iphone-dev
     INP_MODE=prod npx playwright test --project=android-prod --project=iphone-prod
 
-The React matrix runs the demo's attribution and input-delay specs against React 19.2.8, 19.1.9, 18.3.1,
-18.2.0 and 17.0.2 (legacy root), on the dev server and a production build:
+The React matrix runs the demo's attribution, input-delay and ambient specs against React 19.2.8, 19.1.9, 19.0.0,
+18.3.1, 18.2.0, 18.1.0, 18.0.0 and 17.0.2 (legacy root), on the dev server and a production build:
 
     node scripts/react-matrix.mjs
     npm install
-    npm test -w apps/demo-react192            # or demo-react191, demo-react190, demo-react18, demo-react182, demo-react17
+    npm test -w apps/demo-react192            # or demo-react191, demo-react190, demo-react18, demo-react182, demo-react181, demo-react180, demo-react17
     npm run test:prod -w apps/demo-react192   # the same, production build
 
 The `apps/demo-react*` folders are generated and gitignored. Change `apps/demo` and run
@@ -104,7 +104,8 @@ change `package-lock.json`.
 
 Run the suites one at a time. Each starts its server on a fixed port (the demo on 5177 and 5178, the
 create-vite fixture on 5179 and 5180, the React Router ones on 5181 and 5182 (8) and 5185 and 5186 (7),
-the TanStack Start one on 5183 and 5184, the React matrix copies on two ports each from 5187 to 5196,
+the TanStack Start one on 5183 and 5184, the React matrix copies on two ports each from 5187 to 5196, 5212 to 5213,
+and 5216 to 5219 (demo-react181 on 5216/5217 and demo-react180 on 5218/5219),
 Next.js on 5199, 5198 and 5197, the Astro one on 5200 and 5201, the Remix one on 5202 and 5203, the vendor-chunk one on 5204 and 5205, the vendor-groups one on 5214 and 5215), and outside CI a server already listening on that port is reused. A
 server left over from another suite would be tested in place of the right one, so stop it before the
 next suite starts. The fixtures never reuse one, so a server still on one of their ports fails
