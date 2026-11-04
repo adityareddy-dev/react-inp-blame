@@ -31,6 +31,8 @@ we can agree on the approach before you spend time on it.
   `fixtures/component-libraries` is `fixtures/vite-react-ts` with styled-components, @emotion/styled,
   lucide-react and Radix's DropdownMenu, each in the case where its own components used to be what a
   report named.
+- `fixtures/rspack`: the webpack fixture adapted for Rspack, keeping babel-loader, the names loader
+  and a shared vendor chunk. Run with `npm run test:vite-app -- --fixture rspack`.
 - `api/`: the types every entry point publishes, as `scripts/api-snapshot.mjs` prints them. A unit test
   fails when they change.
 - `docs/`: the design notes (`interaction-attribution-design.md`).
@@ -106,7 +108,7 @@ Run the suites one at a time. Each starts its server on a fixed port (the demo o
 create-vite fixture on 5179 and 5180, the React Router ones on 5181 and 5182 (8) and 5185 and 5186 (7),
 the TanStack Start one on 5183 and 5184, the React matrix copies on two ports each from 5187 to 5196, 5212 to 5213,
 and 5216 to 5219 (demo-react181 on 5216/5217 and demo-react180 on 5218/5219),
-Next.js on 5199, 5198 and 5197, the Astro one on 5200 and 5201, the Remix one on 5202 and 5203, the vendor-chunk one on 5204 and 5205, the vendor-groups one on 5214 and 5215), and outside CI a server already listening on that port is reused. A
+Next.js on 5199, 5198 and 5197, the Astro one on 5200 and 5201, the Remix one on 5202 and 5203, the vendor-chunk one on 5204 and 5205, the vendor-groups one on 5214 and 5215, the Rspack one on 5220 and 5221), and outside CI a server already listening on that port is reused. A
 server left over from another suite would be tested in place of the right one, so stop it before the
 next suite starts. The fixtures never reuse one, so a server still on one of their ports fails
 their run.
