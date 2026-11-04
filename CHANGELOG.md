@@ -6,6 +6,15 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+### Testing
+
+- Run the React compatibility suites on 18.0.0 and 18.1.0, in development and production builds
+  ([#91](https://github.com/adityareddy-dev/react-inp-blame/pull/91)), contributed by
+  [Japneet Singh](https://github.com/Orcus01).
+- Check the Rspack setup with a packed-package fixture, in development and production builds
+  ([#92](https://github.com/adityareddy-dev/react-inp-blame/pull/92)), contributed by
+  [Japneet Singh](https://github.com/Orcus01).
+
 ### Documentation
 
 - Lead the repository README with the demo's slow login, a 30-second setup path, web-vitals and
