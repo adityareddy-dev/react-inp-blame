@@ -1,0 +1,57 @@
+/*
+ * Page-specific styles for the landing page. Everything else comes from site.css; this file holds only
+ * what the shared components do not cover, built from the same tokens.
+ */
+
+/* The theme button is revealed by main.js, so a visitor without scripts never sees a dead control. */
+.theme-toggle[hidden] { display: none; }
+.theme-toggle .icon-moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: none; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: block; }
+}
+
+/* A route: its head, then the code and notes under it. */
+.route-body { display: grid; gap: var(--s-5); min-width: 0; }
+.route-body .prose a { font-weight: 600; }
+
+/* A sentence of links or a note under a block. */
+.more { margin-top: var(--s-5); max-width: var(--measure); color: var(--muted); }
+.btn-row { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+
+/* The long verdict sentence wraps instead of scrolling. */
+.code--wrap pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* The panel's list heading, in the panel's own colours. */
+.panel-title { margin-top: var(--s-4); color: var(--p-ink); font-size: var(--t-xs); font-weight: 600; }
+.panel-title + .panel-list { margin-top: var(--s-3); }
+
+/* In "what you see" the section head sits inside the text column and needs no extra gap above. */
+.prose > .section-head { margin-bottom: 0; }
+
+/* The honesty section stacks its facts, callout and list with room between them. */
+#honest .facts { margin-bottom: var(--s-6); }
+#honest .callout { margin-bottom: var(--s-6); }
+
+/* Hold the phone's place while the video loads, so nothing jumps. */
+.device-media { background: transparent; }
+
+/* A section head inside a muted text column keeps the heading colour. */
+.prose .section-head h2 { color: var(--ink); }
+
+/* ---------- the recorded demo under "a badge in the corner" ---------- */
+.recording { margin: 0 0 var(--s-7); padding: var(--s-3); max-width: calc(900px + 2 * var(--s-3)); }
+.code + .code-grid { margin-top: var(--s-4); }
+.recording video, .recording img { display: block; width: 100%; height: auto; border-radius: var(--r-md); }
+/* WebKit plays an opaque render of the hero phone; this clips it to the phone body (BODY x6 y6 r108 on 720x1500). */
+.device-media--clip { clip-path: inset(0.4% 0.83% round 15% / 7.2%); }
+/* On a phone the badge recording would shrink to a third of its size, so crop to the left, where the badge and panel sit. */
+@media (max-width: 759px) { .recording video, .recording img { aspect-ratio: 4 / 5; object-fit: cover; object-position: 0 100%; } }
+.recording figcaption { margin-top: var(--s-3); color: var(--muted); font-size: var(--t-sm); }
+.feature-split .feature-list { display: grid; gap: var(--s-6) var(--s-8); }
+@media (min-width: 760px) { .feature-split .feature-list { grid-template-columns: 1fr 1fr; } }
+
+/* The real overlay cuts this line off with an ellipsis when the panel is narrow; so does this one. */
+.panel-row .clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

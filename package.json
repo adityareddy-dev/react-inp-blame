@@ -13,8 +13,12 @@
   ],
   "scripts": {
     "build": "npm run build -w packages/core",
+    "build:site": "vite build apps/site",
+    "build:demo": "INP_DEMO_HOSTED=1 npm run build -w apps/demo -- --base=/demo/ --outDir=../site/dist/demo --emptyOutDir",
+    "build:pages": "npm run build && npm run build:site && npm run build:demo",
     "dev": "npm run dev -w apps/demo",
     "test": "npm run test -w apps/demo",
+    "render:video": "npm --prefix apps/video install && npm --prefix apps/video run render",
     "test:pack": "node scripts/pack-smoke.mjs",
     "test:prod": "npm run test:prod -w apps/demo",
     "test:unit": "node --import ./packages/core/test/ts-imports.ts --test packages/core/test/*.test.ts",

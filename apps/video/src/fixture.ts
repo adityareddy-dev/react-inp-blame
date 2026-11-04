@@ -1,0 +1,151 @@
+import type { InpEstimate } from '../../../packages/core/src/inp';
+import type { InteractionReport } from '../../../packages/core/src/types';
+
+/**
+ * The report the library produced for a slow click on "login" in the demo's sign-in page, as
+ * window.__REACT_INP_BLAME__.reports() returned it (schemaVersion 4), with the timings of the run the
+ * landing page quotes: 400 ms, 1 ms waiting, 399 ms working, 0 ms updating the screen, a second render of
+ * 256 components 294 ms after the paint, and the two sentences that run's panel said. The badge and the
+ * panel in the video are the library's own overlay (packages/core/src/overlay.ts) drawing this.
+ */
+const START = 7054.1;
+const DURATION = 400;
+const END = START + DURATION;
+
+export const report = {
+  schemaVersion: 4,
+  interactionId: 4681,
+  type: 'click',
+  reactStatus: 'reading',
+  reactBuild: 'production',
+  strictMode: null,
+  pointerType: 'mouse',
+  start: START,
+  end: END,
+  duration: DURATION,
+  holdMs: 0.1,
+  entries: [
+    { name: 'pointerdown', startTime: START, duration: DURATION, processingStart: START + 1, processingEnd: START + 1.3 },
+    { name: 'pointerup', startTime: START + 0.1, duration: DURATION, processingStart: START + 5, processingEnd: START + 5.1 },
+    { name: 'click', startTime: START + 0.1, duration: DURATION, processingStart: START + 5.1, processingEnd: END },
+  ],
+  inputDelay: 1,
+  processing: 399,
+  walkMs: 0,
+  presentation: 0,
+  nextInput: null,
+  target: {
+    selector: 'button[data-test="login"]',
+    label: 'button "login"',
+    component: 'SignInPage',
+    owners: ['SignInPage', 'SignInDemo', 'App'],
+    handler: 'onClick',
+  },
+  hydration: null,
+  navigationURL: 'http://127.0.0.1/',
+  navigationType: 'navigate',
+  startedNavigation: null,
+  commits: [
+    {
+      at: START + 380,
+      sinceInput: 380,
+      inputTs: START + 0.1,
+      gestureTs: START,
+      inputType: 'click',
+      rendered: 2,
+      mounted: 0,
+      effectMounts: 0,
+      effectRuns: 0,
+      effectMountName: null,
+      hydrated: false,
+      hydratedTarget: null,
+      truncated: false,
+      roots: ['SignInPage'],
+      hotPath: ['SignInPage'],
+      pathStart: 'only-root',
+      startRendered: 2,
+      pathRendered: 2,
+      strictMode: false,
+      components: [
+        { name: 'PasswordField', count: 1, self: null, total: null },
+        { name: 'SignInPage', count: 1, self: null, total: null },
+      ],
+      hasDurations: false,
+      coarseClock: false,
+      total: 0,
+      startedAt: null,
+      effectsStartedAt: null,
+      effectsEndedAt: null,
+      didError: false,
+      walkMs: 0.2,
+      inDispatch: true,
+      joinedBy: 'exact',
+    },
+  ],
+  followUps: [
+    {
+      at: END + 294,
+      sinceInput: 694,
+      inputTs: START + 0.1,
+      gestureTs: START,
+      inputType: 'click',
+      rendered: 256,
+      mounted: 0,
+      effectMounts: 0,
+      effectRuns: 0,
+      effectMountName: null,
+      hydrated: false,
+      hydratedTarget: null,
+      truncated: false,
+      roots: ['SignInDemo'],
+      hotPath: ['SignInDemo', 'ProfilePage'],
+      pathStart: 'only-root',
+      startRendered: 256,
+      pathRendered: 241,
+      strictMode: false,
+      components: [
+        { name: 'PhotoTile', count: 240, self: null, total: null },
+        { name: 'Pill', count: 4, self: null, total: null },
+        { name: 'PhaseBar', count: 3, self: null, total: null },
+        { name: 'Entry', count: 3, self: null, total: null },
+        { name: 'GroupEntry', count: 3, self: null, total: null },
+        { name: 'ProfilePage', count: 1, self: null, total: null },
+        { name: 'Journey', count: 1, self: null, total: null },
+        { name: 'SignInDemo', count: 1, self: null, total: null },
+      ],
+      hasDurations: false,
+      coarseClock: false,
+      total: 0,
+      startedAt: null,
+      effectsStartedAt: null,
+      effectsEndedAt: null,
+      didError: false,
+      walkMs: 0.2,
+      inDispatch: false,
+      joinedBy: 'exact',
+    },
+  ],
+  unjoinedCommits: 0,
+  frames: [],
+  laterFrames: [],
+  revision: 3,
+  overheadMs: 1.4,
+  explanation: {
+    headline: '400 ms click',
+    blame: { kind: 'handler', name: 'onClick', detail: 'SignInPage', ms: null, confidence: 'inferred' },
+    rating: 'needs-improvement',
+    where: 'button "login" in SignInPage',
+    cause: 'The onClick handler most likely took the 399 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.',
+    notes: [
+      "A second React render landed 294 ms after the screen updated: re-rendering 256 components inside ProfilePage, mostly PhotoTile (240 of them). INP doesn't count it, but people still wait for it.",
+    ],
+    phases: [
+      { label: 'Waiting', ms: 1, hint: 'Before the handler could start. The main thread was busy.' },
+      { label: 'Working', ms: 399, hint: 'Event handlers and React rendering.' },
+      { label: 'Updating the screen', ms: 0, hint: 'From the end of the handlers to the next painted frame.' },
+    ],
+  },
+  verdict: '',
+} as unknown as InteractionReport;
+
+export const inp = { value: DURATION, rating: 'needs-improvement', interactionId: 4681, interactionCount: 25, report } as unknown as InpEstimate;

@@ -1,0 +1,23 @@
+{
+  "name": "react-inp-blame-video",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "The phone demo on the landing page: the library's own badge and panel, rendered with Remotion over a transparent background.",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.540",
+    "@remotion/fonts": "4.0.540",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.540"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "typescript": "^5.6.0"
+  }
+}

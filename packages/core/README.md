@@ -6,7 +6,7 @@ It can be wrong, check the name against the profiler.
 
 ![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/main/docs/media/overlay.gif)
 
-**[Try the demo](https://reactinpblame.com/)**. Every scenario there is slow
+**[Try the demo](https://reactinpblame.com/demo/)**. Every scenario there is slow
 on purpose. Click something and read what the badge blames.
 
     npm install react-inp-blame

@@ -4,7 +4,7 @@ Longer text moved out of the [README](../README.md).
 
 ## Benchmarks and reproduction
 
-The [live demo](https://reactinpblame.com/) has deliberately slow scenarios.
+The [live demo](https://reactinpblame.com/demo/) has deliberately slow scenarios.
 For a local copy, use Node 22.18 or later, run `npm ci`, `npm run build` and `npm run dev` from this
 repository, then open the address Vite prints. `npm test` runs the demo checks after
 `npx playwright install chromium firefox webkit` ([contributor setup](../CONTRIBUTING.md#setup)).
