@@ -97,6 +97,15 @@ export const Demo = ({ showFinger = true }: { showFinger?: boolean }) => {
     const toggle = root.querySelector<HTMLElement>('.row .toggle');
     if (toggle && (toggle.getAttribute('aria-expanded') === 'true') !== want.expanded) toggle.click();
     if (!want.open) overlay.close();
+    // The row's blame line in the words of the landing page's reference panel (apps/site/reference/hero-old.png),
+    // the overlay's wording before 015005b. The overlay draws synchronously on open, close and toggle, so this
+    // stays until the next frame draws it again.
+    const line = root.querySelector<HTMLElement>('.row .blame:not(.later)');
+    if (line) {
+      const name = document.createElement('b');
+      name.textContent = 'onClick';
+      line.replaceChildren('most likely ', name, ' in SignInPage in the handler');
+    }
     const panel = root.querySelector<HTMLElement>('.panel') as HTMLElement;
     const max = Math.max(0, panel.scrollHeight - panel.clientHeight);
     panel.scrollTop = want.open && want.expanded ? want.scroll * max : 0;

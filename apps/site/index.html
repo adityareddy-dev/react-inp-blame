@@ -58,7 +58,8 @@
     </div>
   </div>
   <div class="hero-device"><div class="device"><span class="device-glow"></span>
-    <video class="device-media" data-phone muted playsinline loop autoplay preload="auto" poster="/media/phone-demo-poster.png" width="720" height="1500" aria-label="A phone showing a slow tap on a login button, then the react-inp-blame panel opening: 400 ms, click on login, most likely the onClick handler in SignInPage.">
+    <video class="device-media" data-phone muted playsinline loop autoplay preload="auto" poster="/media/phone-demo-poster.png" width="720" height="1500" aria-label="A phone showing a slow tap on a login button, then the react-inp-blame panel opening: 400 ms, click on login, most likely onClick in SignInPage in the handler.">
+      <source src="/media/phone-demo.mov" type='video/quicktime; codecs="hvc1"'>
       <source src="/media/phone-demo.webm" type='video/webm; codecs="vp9"'>
     </video>
   </div></div>
@@ -80,7 +81,7 @@
 
 <section class="band section" id="badge"><div class="wrap">
   <div class="section-head"><h2>A badge in the corner, a panel when you need it</h2></div>
-  <figure class="surface recording"><video data-phone muted playsinline loop autoplay preload="metadata" poster="/media/overlay.png" width="1800" height="1050" aria-label="The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation"><source src="/media/overlay.webm" type="video/webm"><source src="/media/overlay.mp4" type="video/mp4"></video><figcaption>The demo's sign-in page, recorded with the library running.</figcaption></figure>
+  <figure class="surface recording"><video data-phone muted playsinline loop autoplay preload="metadata" poster="/media/overlay.png" width="1800" height="1050" aria-label="The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation"><source media="(max-width: 759px)" src="/media/overlay-phone.webm" type="video/webm"><source media="(max-width: 759px)" src="/media/overlay-phone.mp4" type="video/mp4"><source src="/media/overlay.webm" type="video/webm"><source src="/media/overlay.mp4" type="video/mp4"></video><figcaption>The demo's sign-in page, recorded with the library running.</figcaption></figure>
   <div class="feature-split">
     <ul class="feature-list">
       <li><h3>A badge you can ignore</h3><p>A small dark badge sits in the corner and has no number until you interact. Then it shows the page's INP so far in milliseconds: green at 200 or under, amber up to 500, red above.</p></li>
@@ -235,14 +236,14 @@ sdk.<span class="tok-f">start</span>();</code></pre></figure><figure class="code
     <div class="btn-row"><a class="btn btn--primary" href="/demo/">Try the live demo</a></div>
   </div>
   <div class="panel" role="group" aria-label="The react-inp-blame panel for a click on login">
-    <div class="panel-head"><span class="panel-close" aria-hidden="true">×</span><div class="panel-ms">400 <small>ms</small> <span class="rating">Needs improvement</span></div><p class="panel-sub">Page INP so far, from click on "login", 25 interactions</p></div>
-    <div class="panel-row"><div><span>Click on "login"</span><span class="panel-row-ms">400 ms</span></div><p>most likely the <b>onClick</b> handler in SignInPage</p><p class="clip">then <b>ProfilePage</b> re-rendered after the paint, PhotoTile ×240</p></div>
+    <div class="panel-head"><span class="panel-close" aria-hidden="true">×</span><div class="panel-ms">400 <small>ms</small> <span class="rating">Needs improvement</span></div><p class="panel-sub">Page INP so far, from click on "login" · 25 interactions</p></div>
+    <div class="panel-row"><div><span>Click on "login"</span><span class="panel-row-ms">400 ms</span></div><p>most likely <b>onClick</b> in SignInPage in the handler</p><p class="clip">then <b>ProfilePage</b> re-rendered after the paint · PhotoTile ×240</p></div>
     <div class="phasebar" role="img" aria-label="Waiting 1 ms, Working 399 ms, Updating the screen 0 ms"><span class="seg-0" style="width:0.25%"></span><span class="seg-1" style="width:99.75%"></span><span class="seg-2" style="width:0"></span></div>
     <div class="legend"><span class="seg-0">Waiting 1 ms</span><span class="seg-1">Working 399 ms</span><span class="seg-2">Updating the screen 0 ms</span></div>
     <p class="panel-note">The onClick handler most likely took the 399 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.</p>
     <p class="panel-note">A second React render landed 294 ms after the screen updated: re-rendering 256 components inside ProfilePage, mostly PhotoTile (240 of them). INP doesn't count it, but people still wait for it.</p>
-    <p class="panel-title">Rendered after the paint, 256 components</p>
-    <ul class="panel-list"><li><b>PhotoTile</b><span>240 rendered</span></li><li><b>Pill</b><span>4 rendered</span></li><li><b>PhaseBar</b><span>3 rendered</span></li></ul>
+    <p class="panel-title">Rendered after the paint · 256 components</p>
+    <ul class="panel-list"><li><b>PhotoTile</b><span>240 rendered</span></li><li><b>Pill</b><span>4 rendered</span></li><li><b>PhaseBar</b><span>3 rendered</span></li><li><b>Entry</b><span>3 rendered</span></li></ul>
   </div>
 </div></section>
 

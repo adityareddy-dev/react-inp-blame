@@ -308,7 +308,7 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
 .route-cta-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); font: 700 var(--t-md) / 1.3 var(--font-ui); }
 .route-cta-sub { font-size: var(--t-sm); line-height: 1.45; opacity: 0.86; }
 .route-cta--primary .route-cta-sub { opacity: 0.92; }
-@media (min-width: 560px) { .route-ctas { grid-template-columns: 1fr 1fr; } }
+@container (min-width: 620px) { .route-ctas { grid-template-columns: 1fr 1fr; } }
 
 .hero-device { display: grid; place-items: center; }
 @media (min-width: 900px) {
@@ -492,10 +492,13 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
 .recording { margin: 0 0 var(--s-7); padding: var(--s-3); max-width: calc(900px + 2 * var(--s-3)); }
 .code + .code-grid { margin-top: var(--s-4); }
 .recording video, .recording img { display: block; width: 100%; height: auto; border-radius: var(--r-md); }
-/* WebKit plays an opaque render of the hero phone; this clips it to the phone body (BODY x6 y6 r108 on 720x1500). */
+/* A WebKit that can't play the HEVC MOV gets an opaque render of the hero phone; this clips it to the phone body
+   (BODY x6 y6 r108 on 720x1500). */
 .device-media--clip { clip-path: inset(0.4% 0.83% round 15% / 7.2%); }
-/* On a phone the badge recording would shrink to a third of its size, so crop to the left, where the badge and panel sit. */
-@media (max-width: 759px) { .recording video, .recording img { aspect-ratio: 4 / 5; object-fit: cover; object-position: 0 100%; } }
+/* On a phone the badge recording would shrink to a third of its size, so it plays its own cut of the same recording
+   (overlay-phone.*, 872x716, picked by <source media> and main.js): the demo phone, the Log in card, the panel and
+   the badge, without the banner above them. A browser that ignores <source media> shows the same area cropped. */
+@media (max-width: 759px) { .recording video, .recording img { aspect-ratio: 872 / 716; object-fit: cover; object-position: 0 100%; } }
 .recording figcaption { margin-top: var(--s-3); color: var(--muted); font-size: var(--t-sm); }
 .feature-split .feature-list { display: grid; gap: var(--s-6) var(--s-8); }
 @media (min-width: 760px) { .feature-split .feature-list { grid-template-columns: 1fr 1fr; } }
@@ -503,11 +506,14 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
 /* The real overlay cuts this line off with an ellipsis when the panel is narrow; so does this one. */
 .panel-row .clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* The two route buttons share one title row and one sub row, so the experimental tag never pushes one out of line. */
-@media (min-width: 560px) {
+/* Side by side, the two route buttons share one title row and one sub row, and each title stays on one line with
+   its tag, so neither button gets an empty band. They sit side by side only when the hero copy column is wide
+   enough for that (.hero-copy is the container); narrower, they stack. */
+@container (min-width: 620px) {
   .route-ctas { grid-template-rows: auto auto; }
-  .route-cta { grid-row: span 2; grid-template-rows: subgrid; row-gap: var(--s-1); align-content: start; }
-  .route-cta-title { align-content: flex-start; }
+  .route-cta { grid-row: span 2; grid-template-rows: subgrid; row-gap: var(--s-1); align-content: start; padding-inline: var(--s-4); }
+  .route-cta-title { flex-wrap: nowrap; white-space: nowrap; }
+  .route-cta-title .tag { padding: 0 0.5em; }
 }
 
 /* The four steps use the width of the band on a laptop, in reading order 1 to 4. */
@@ -517,7 +523,7 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
 
 .facts code { white-space: nowrap; }
 
-/* WebKit plays the clipped opaque render, so the shadow goes on the wrapper where it follows the clip. */
+/* On the clipped opaque render the shadow goes on the wrapper, where it follows the clip. */
 .device-media--clip { filter: none; }
 .device:has(.device-media--clip) { filter: drop-shadow(0 28px 36px rgba(0, 0, 0, 0.45)); }
 
@@ -528,4 +534,18 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
 .panel-list li { background: linear-gradient(var(--seg-1), var(--seg-1)) left bottom / var(--bar, 2%) 2px no-repeat, linear-gradient(var(--p-rule), var(--p-rule)) left bottom / 100% 2px no-repeat; border-bottom: 0; padding-bottom: calc(var(--s-2) + 2px); }
 .panel-list li:nth-child(1) { --bar: 100%; }
 .panel-list li:nth-child(2) { --bar: 1.7%; }
-.panel-list li:nth-child(3) { --bar: 1.25%; }
+.panel-list li:nth-child(3), .panel-list li:nth-child(4) { --bar: 1.25%; }
+
+/* On a phone the phone comes right after the lede, so it shows in the first screen; the install line and the two
+   routes follow it. .hero-copy steps aside (display: contents), so the hero's wrap becomes the title's container. */
+@media (max-width: 599px) {
+  .hero .wrap { gap: var(--s-5); container-type: inline-size; justify-items: start; }
+  .hero-copy { display: contents; }
+  .hero .eyebrow { order: 1; }
+  .hero-title { order: 2; }
+  .hero .lede { order: 3; }
+  .hero-device { order: 4; justify-self: stretch; padding-block: var(--s-2) var(--s-4); }
+  .hero .install { order: 5; }
+  .route-ctas { order: 6; }
+  .hero .device { width: min(var(--device-w), calc(56svh * 720 / 1500)); }
+}
