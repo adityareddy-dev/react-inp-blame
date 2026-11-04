@@ -279,7 +279,10 @@ test('restyle storm: the browser restyling the page is what a click waits on, an
 
   await clearReports(page);
   await page.focus('[data-test=trigger]');
-  await page.keyboard.press('Enter');
+  // Both key events go at once, so the keyup is queued before the keydown is handled and runs ahead of the frame
+  // the keydown asks for. A press sends the keyup only after the keydown is handled, and on a busy machine that
+  // frame can start first, restyling before the keyup and leaving nothing between the handlers.
+  await Promise.all([page.keyboard.down('Enter'), page.keyboard.up('Enter')]);
   await waitForFrames(page);
   const key = await lastReport(page);
   expect(key.explanation.blame, key.verdict).toMatchObject({ kind: 'waiting', name: null, confidence: 'measured' });
