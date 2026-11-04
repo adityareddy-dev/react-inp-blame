@@ -9,6 +9,12 @@
     <meta property="og:title" content="react-inp-blame demo" />
     <meta property="og:description" content="For a slow click, tap or key press in a React app, react-inp-blame shows where the time went and names a component or handler when it has one. It can be wrong. Everything in this demo is slow on purpose." />
     <meta property="og:url" content="https://reactinpblame.com/" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23f5a524'/%3E%3C/svg%3E" />
+    <script>
+      /* The landing page and the demo share one origin, so a theme chosen there is used here. No stored choice means the system's. */
+      try { var t = localStorage.getItem('rib-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -206,7 +206,7 @@ function ProfilePage({ profile, onReset }: { profile: Profile; onReset: () => vo
           <div>
             <b>{profile.name}</b>
           </div>
-          <div style={{ color: '#555' }}>Signed in. Every photo below measured itself while rendering, which is the fourth mistake.</div>
+          <div className="signed-in">Signed in. Every photo below measured itself while rendering, which is the fourth mistake.</div>
           <p>
             <button className="linkbtn" data-test="reset" onClick={onReset}>
               Start over
