@@ -171,4 +171,9 @@ Each warning the library prints ends with a link into this README. Most land on 
 
 ---
 
+## Contributors
+
+- [Japneet Singh](https://github.com/Orcus01): [React 18.0 and 18.1 compatibility runs](https://github.com/adityareddy-dev/react-inp-blame/pull/91)
+  and the [Rspack fixture](https://github.com/adityareddy-dev/react-inp-blame/pull/92).
+
 [Docs](docs/README.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · MIT license
