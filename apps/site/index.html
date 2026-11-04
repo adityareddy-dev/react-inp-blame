@@ -20,7 +20,6 @@
   if (/^#lab\//.test(location.hash)) location.replace('/demo/' + location.hash);
 </script>
 <link rel="stylesheet" href="./src/site.css">
-<link rel="stylesheet" href="./src/landing.css">
 <script type="module" src="./src/main.js"></script>
 </head>
 <body>
@@ -59,13 +58,13 @@
     </div>
   </div>
   <div class="hero-device"><div class="device"><span class="device-glow"></span>
-    <video class="device-media" data-phone muted playsinline loop autoplay preload="auto" poster="/media/phone-demo-poster.png" width="720" height="1500" aria-label="A phone showing a slow tap on a login button, then the react-inp-blame panel opening: 400 ms, click on login, most likely onClick in SignInPage.">
+    <video class="device-media" data-phone muted playsinline loop autoplay preload="auto" poster="/media/phone-demo-poster.png" width="720" height="1500" aria-label="A phone showing a slow tap on a login button, then the react-inp-blame panel opening: 400 ms, click on login, most likely the onClick handler in SignInPage.">
       <source src="/media/phone-demo.webm" type='video/webm; codecs="vp9"'>
     </video>
   </div></div>
 </div></section>
 
-<section class="works-with" aria-label="Works with"><div class="wrap"><p>Works with</p><ul><li>web-vitals</li><li>Sentry</li><li>Google Analytics 4</li><li>OpenTelemetry</li><li>Honeycomb</li><li>Elastic</li><li>Embrace</li><li>Grafana Faro</li></ul></div></section>
+<section class="works-with" aria-label="Works with"><div class="wrap"><p>Works with</p><ul><li>web-vitals</li><li>Sentry</li><li>Google Analytics 4</li><li>OpenTelemetry</li><li>Honeycomb</li><li>Elastic</li><li>Datadog</li><li>Embrace</li><li>Grafana Faro</li></ul></div></section>
 
 <section class="section" id="what"><div class="wrap">
   <div class="section-head"><h2>Where the time went, in plain words</h2><p>For a slow click, tap or key press in a React app, it shows where the time went and names the component or handler.</p></div>
@@ -117,7 +116,7 @@
       <span class="tok-s">'blame.kind'</span>: react?.blame.kind, <span class="tok-c">// 'render', 'handler', 'layout', 'waiting', ...</span>
       <span class="tok-s">'blame.name'</span>: react?.blame.name ?? <span class="tok-k">undefined</span>,
       <span class="tok-s">'blame.confidence'</span>: react?.blame.confidence, <span class="tok-c">// 'measured' or 'inferred'</span>
-      <span class="tok-s">'react.build'</span>: react?.reactBuild ?? <span class="tok-k">undefined</span>, <span class="tok-c">// 'development' reads high</span>
+      <span class="tok-s">'react.build'</span>: react?.reactBuild ?? <span class="tok-k">undefined</span>, <span class="tok-c">// 'development' reads high, filter it out</span>
     },
   });
 }, { generateTarget });</code></pre></figure><figure class="code"><figcaption class="code-title">GA4 gtag</figcaption><pre tabindex="0"><code><span class="tok-k">import</span> { onINP } <span class="tok-k">from</span> <span class="tok-s">'web-vitals/attribution'</span>;
@@ -136,7 +135,7 @@
     debug_blame_kind: react?.blame.kind,
     debug_blame_name: react?.blame.name ?? <span class="tok-k">undefined</span>,
     debug_blame_confidence: react?.blame.confidence, <span class="tok-c">// 'measured' or 'inferred'</span>
-    debug_react_build: react?.reactBuild ?? <span class="tok-k">undefined</span>, <span class="tok-c">// 'development' reads high</span>
+    debug_react_build: react?.reactBuild ?? <span class="tok-k">undefined</span>, <span class="tok-c">// 'development' reads high, filter it out</span>
   });
 }, { generateTarget });</code></pre></figure></div>
     <div class="prose">
@@ -154,7 +153,7 @@
 
 <span class="tok-k">export</span> <span class="tok-k">default</span> <span class="tok-f">withInpBlame</span>(
   {
-    /* your config */
+    <span class="tok-c">/* your config */</span>
   },
   {
     enabled: true, <span class="tok-c">// production builds too</span>
@@ -231,14 +230,14 @@ sdk.<span class="tok-f">start</span>();</code></pre></figure><figure class="code
     <div class="section-head"><h2>What you see</h2></div>
     <p>This is the library's real panel, for a click on <code>login</code> in the demo. The report shows a 400 ms interaction, about 399 ms of it in the handler, and a React render that landed after the screen updated. INP didn't count that later render.</p>
     <p>Without the timeline it is easy to investigate the render and miss the handler. The panel says <strong>most likely</strong> where it is guessing, and a profiling build of React gives exact numbers.</p>
-    <figure class="code code--wrap"><figcaption class="code-title">report.verdict for the same click in a development build, the run the README prints</figcaption><pre tabindex="0"><code>400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and what started it can't be told.</code></pre></figure>
+    <figure class="code code--wrap"><figcaption class="code-title">report.verdict from another run of this click, in a development build (the run the README prints)</figcaption><pre tabindex="0"><code>400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and what started it can't be told.</code></pre></figure>
     <div class="callout"><strong>It can be wrong.</strong> A component name is a lead to investigate, not proof that the component caused the delay.</div>
     <div class="btn-row"><a class="btn btn--primary" href="/demo/">Try the live demo</a></div>
   </div>
   <div class="panel" role="group" aria-label="The react-inp-blame panel for a click on login">
-    <div class="panel-head"><div class="panel-ms">400 <small>ms</small> <span class="rating">Needs improvement</span></div><p class="panel-sub">Page INP so far, from click on "login", 25 interactions</p></div>
+    <div class="panel-head"><span class="panel-close" aria-hidden="true">×</span><div class="panel-ms">400 <small>ms</small> <span class="rating">Needs improvement</span></div><p class="panel-sub">Page INP so far, from click on "login", 25 interactions</p></div>
     <div class="panel-row"><div><span>Click on "login"</span><span class="panel-row-ms">400 ms</span></div><p>most likely the <b>onClick</b> handler in SignInPage</p><p class="clip">then <b>ProfilePage</b> re-rendered after the paint, PhotoTile ×240</p></div>
-    <div class="phasebar" role="img" aria-label="Waiting 1 ms, Working 399 ms, Updating the screen 0 ms"><span class="seg-0" style="width:1%"></span><span class="seg-1" style="width:98%"></span><span class="seg-2" style="width:1%"></span></div>
+    <div class="phasebar" role="img" aria-label="Waiting 1 ms, Working 399 ms, Updating the screen 0 ms"><span class="seg-0" style="width:0.25%"></span><span class="seg-1" style="width:99.75%"></span><span class="seg-2" style="width:0"></span></div>
     <div class="legend"><span class="seg-0">Waiting 1 ms</span><span class="seg-1">Working 399 ms</span><span class="seg-2">Updating the screen 0 ms</span></div>
     <p class="panel-note">The onClick handler most likely took the 399 ms: React re-rendered only 2 components. A profiling build of React would give exact numbers.</p>
     <p class="panel-note">A second React render landed 294 ms after the screen updated: re-rendering 256 components inside ProfilePage, mostly PhotoTile (240 of them). INP doesn't count it, but people still wait for it.</p>
@@ -290,7 +289,7 @@ sdk.<span class="tok-f">start</span>();</code></pre></figure><figure class="code
 <span class="tok-k">import</span> <span class="tok-k">type</span> { NextConfig } <span class="tok-k">from</span> <span class="tok-s">"next"</span>;
 <span class="tok-k">import</span> { withInpBlame } <span class="tok-k">from</span> <span class="tok-s">"react-inp-blame/next"</span>;
 
-<span class="tok-k">const</span> nextConfig: NextConfig = { /* config options here */
+<span class="tok-k">const</span> nextConfig: NextConfig = { <span class="tok-c">/* config options here */</span>
 };
 
 <span class="tok-c">// Your config first, this library's options second.</span>
@@ -304,7 +303,7 @@ sdk.<span class="tok-f">start</span>();</code></pre></figure><figure class="code
 <section class="section" id="docs"><div class="wrap">
   <div class="section-head"><h2>Docs</h2></div>
   <div class="doclist">
-    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/web-vitals.md"><b>With web-vitals</b><span>The React side in web-vitals' attribution, sent to Sentry or GA4.</span></a>
+    <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/web-vitals.md"><b>With web-vitals</b><span>The React side in web-vitals' attribution, sent to Sentry, Datadog or GA4.</span></a>
     <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/opentelemetry.md"><b>With OpenTelemetry</b><span>Experimental. The blame on the INP event in OpenTelemetry, Honeycomb, Elastic, Embrace or Grafana Faro.</span></a>
     <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md"><b>Install</b><span>Every setup in full.</span></a>
     <a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/using-the-badge.md"><b>Using the badge</b><span>What the badge and panel show, the overlay option and reading reports in code.</span></a>

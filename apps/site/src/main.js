@@ -23,6 +23,8 @@ if (toggle) {
 }
 
 /* ---------- active nav link ---------- */
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+const navEl = document.querySelector('.site-nav');
 const links = [...document.querySelectorAll('.site-nav a[href^="#"]')];
 const byId = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
 const targets = [...byId.keys()].map((id) => document.getElementById(id)).filter(Boolean);
@@ -35,6 +37,11 @@ if ('IntersectionObserver' in window && targets.length) {
       const on = !!active && byId.get(active.id) === a;
       if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
     });
+    // On a phone the nav row scrolls sideways, so bring the active link into view inside it (never the page).
+    const cur = navEl && navEl.querySelector('a[aria-current]');
+    if (cur && navEl.scrollWidth > navEl.clientWidth) {
+      navEl.scrollTo({ left: Math.max(0, cur.offsetLeft - 20), behavior: reduce.matches ? 'auto' : 'smooth' });
+    }
   };
   const io = new IntersectionObserver((entries) => {
     entries.forEach((e) => (e.isIntersecting ? visible.add(e.target) : visible.delete(e.target)));
@@ -45,7 +52,6 @@ if ('IntersectionObserver' in window && targets.length) {
 
 /* ---------- the phone ---------- */
 const videos = [...document.querySelectorAll('video[data-phone]')];
-const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
 const ua = navigator.userAgent;
 // WebKit (Safari, and every iOS browser) ignores the alpha in WebM, so the hero phone gets an opaque H.264
 // render of the same video, clipped to the phone body by CSS. Only the hero video changes; the badge recording

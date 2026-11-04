@@ -52,6 +52,9 @@
  * FOCUS: every control shows a 2px --focus ring with a 3px offset on :focus-visible. Text on its surface is
  * 4.5:1 or better in both themes (checked, not assumed).
  *
+ * LANDING PAGE ONLY (the last block of this file): the theme icon swap, route body, recording, panel bars and the
+ * few rules the shared components do not cover. The landing page links this one stylesheet.
+ *
  * COMPONENT INDEX (class names a page may use; see the spec for one-line usage):
  *   page:     .wrap .section .section-head .prose .band .skip .sr-only .surface .tag .tag--experimental
  *   chrome:   .site-head .brand .site-nav .theme-toggle .site-foot .foot-cols
@@ -240,7 +243,7 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
 .surface { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: var(--s-5); }
 
 .section-head { display: grid; gap: var(--s-3); margin-bottom: var(--s-6); max-width: var(--measure); }
-.section-head h2 { font: 700 var(--t-2xl) / 1.15 var(--font-display); letter-spacing: -0.02em; max-width: var(--measure-head); text-wrap: balance; }
+.section-head h2 { font: 700 var(--t-2xl) / 1.15 var(--font-display); letter-spacing: -0.02em; max-width: 24ch; text-wrap: pretty; }
 .section-head p { color: var(--muted); font-size: var(--t-md); }
 .prose { max-width: var(--measure); display: grid; gap: var(--s-4); color: var(--muted); }
 .prose h3 { font: 500 var(--t-md) / 1.3 var(--font-display); color: var(--ink); margin-top: var(--s-3); }
@@ -273,7 +276,7 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
 .site-nav a[aria-current="true"], .site-nav a[aria-current="page"] { color: var(--ink); }
 .theme-toggle { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--rule); border-radius: var(--r-md); background: transparent; color: var(--muted); cursor: pointer; transition: color var(--quick) var(--ease), border-color var(--quick) var(--ease); }
 .theme-toggle:hover { color: var(--ink); border-color: var(--accent); }
-@media (min-width: 900px) {
+@media (min-width: 1180px) {
   .site-nav { order: 0; flex: 0 1 auto; overflow: visible; margin-right: var(--s-2); }
   .site-head .brand { margin-right: auto; }
 }
@@ -329,7 +332,7 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
 .works-with { padding-block: var(--s-6); border-block: 1px solid var(--rule-2); }
 .works-with .wrap { display: grid; gap: var(--s-3) var(--s-6); align-items: center; }
 .works-with p { color: var(--faint); font-size: var(--t-sm); }
-.works-with ul { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-6); }
+.works-with ul { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5); }
 .works-with li { color: var(--muted); font: 500 var(--t-md) / 1.4 var(--font-display); }
 @media (min-width: 900px) { .works-with .wrap { grid-template-columns: auto 1fr; } }
 
@@ -445,3 +448,84 @@ code, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; font-variant-
   .btn--primary, .route-cta--primary { border: 1px solid ButtonText; }
   .eyebrow::before, .brand::before { background: Highlight; }
 }
+
+/* ======================= landing page only ======================= */
+/* The theme button is revealed by main.js, so a visitor without scripts never sees a dead control. */
+.theme-toggle[hidden] { display: none; }
+.theme-toggle .icon-moon { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: none; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: block; }
+}
+
+/* A route: its head, then the code and notes under it. */
+.route-body { display: grid; gap: var(--s-5); min-width: 0; }
+.route-body .prose a { font-weight: 600; }
+
+/* A sentence of links or a note under a block. */
+.more { margin-top: var(--s-5); max-width: var(--measure); color: var(--muted); }
+.btn-row { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+
+/* The long verdict sentence wraps instead of scrolling. */
+.code--wrap pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* The panel's list heading, in the panel's own colours. */
+.panel-title { margin-top: var(--s-4); color: var(--p-ink); font-size: var(--t-xs); font-weight: 600; }
+.panel-title + .panel-list { margin-top: var(--s-3); }
+
+/* In "what you see" the section head sits inside the text column and needs no extra gap above. */
+.prose > .section-head { margin-bottom: 0; }
+
+/* The honesty section stacks its facts, callout and list with room between them. */
+#honest .facts { margin-bottom: var(--s-6); }
+#honest .callout { margin-bottom: var(--s-6); }
+
+/* Hold the phone's place while the video loads, so nothing jumps. */
+.device-media { background: transparent; }
+
+/* A section head inside a muted text column keeps the heading colour. */
+.prose .section-head h2 { color: var(--ink); }
+
+/* ---------- the recorded demo under "a badge in the corner" ---------- */
+.recording { margin: 0 0 var(--s-7); padding: var(--s-3); max-width: calc(900px + 2 * var(--s-3)); }
+.code + .code-grid { margin-top: var(--s-4); }
+.recording video, .recording img { display: block; width: 100%; height: auto; border-radius: var(--r-md); }
+/* WebKit plays an opaque render of the hero phone; this clips it to the phone body (BODY x6 y6 r108 on 720x1500). */
+.device-media--clip { clip-path: inset(0.4% 0.83% round 15% / 7.2%); }
+/* On a phone the badge recording would shrink to a third of its size, so crop to the left, where the badge and panel sit. */
+@media (max-width: 759px) { .recording video, .recording img { aspect-ratio: 4 / 5; object-fit: cover; object-position: 0 100%; } }
+.recording figcaption { margin-top: var(--s-3); color: var(--muted); font-size: var(--t-sm); }
+.feature-split .feature-list { display: grid; gap: var(--s-6) var(--s-8); }
+@media (min-width: 760px) { .feature-split .feature-list { grid-template-columns: 1fr 1fr; } }
+
+/* The real overlay cuts this line off with an ellipsis when the panel is narrow; so does this one. */
+.panel-row .clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The two route buttons share one title row and one sub row, so the experimental tag never pushes one out of line. */
+@media (min-width: 560px) {
+  .route-ctas { grid-template-rows: auto auto; }
+  .route-cta { grid-row: span 2; grid-template-rows: subgrid; row-gap: var(--s-1); align-content: start; }
+  .route-cta-title { align-content: flex-start; }
+}
+
+/* The four steps use the width of the band on a laptop, in reading order 1 to 4. */
+@media (min-width: 1000px) {
+  .steps { max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-8); }
+}
+
+.facts code { white-space: nowrap; }
+
+/* WebKit plays the clipped opaque render, so the shadow goes on the wrapper where it follows the clip. */
+.device-media--clip { filter: none; }
+.device:has(.device-media--clip) { filter: drop-shadow(0 28px 36px rgba(0, 0, 0, 0.45)); }
+
+/* The real panel's extras: the close mark, the amber rating dot on the row, a count bar under each component. */
+.panel-head { position: relative; }
+.panel-close { position: absolute; top: var(--s-3); right: var(--s-4); color: var(--p-muted); font-size: var(--t-md); line-height: 1; }
+.panel-row > div > span:first-child::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: var(--s-2); border-radius: 50%; background: var(--amber); }
+.panel-list li { background: linear-gradient(var(--seg-1), var(--seg-1)) left bottom / var(--bar, 2%) 2px no-repeat, linear-gradient(var(--p-rule), var(--p-rule)) left bottom / 100% 2px no-repeat; border-bottom: 0; padding-bottom: calc(var(--s-2) + 2px); }
+.panel-list li:nth-child(1) { --bar: 100%; }
+.panel-list li:nth-child(2) { --bar: 1.7%; }
+.panel-list li:nth-child(3) { --bar: 1.25%; }
