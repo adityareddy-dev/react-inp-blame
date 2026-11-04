@@ -179,8 +179,8 @@ real backend yet.
 <a id="webpack-or-rspack"></a>
 **webpack or Rspack.** Make `import 'react-inp-blame/auto'` the first import of your entry module. That holds
 even with a `splitChunks` vendor chunk, because these bundlers run a module when it is first required, not
-when its chunk loads: CI builds a webpack 5 app with react-dom and the library in one vendor chunk
-(`fixtures/webpack`), in development and production; Rspack is not tried. `/auto` leaves the badge off: call
+when its chunk loads: CI builds webpack 5 and Rspack 2 apps with react-dom and the library in one vendor
+chunk (`fixtures/webpack` and `fixtures/rspack`), in development and production. `/auto` leaves the badge off: call
 `mountOverlay()` from `react-inp-blame` after it to show it. For names, add this rule to `module.rules`:
 `{ test: /\.[jt]sx$/, exclude: /node_modules/, enforce: 'pre', use: ['react-inp-blame/display-names-loader'] }`.
 `enforce: 'pre'` is what matters, as it is in the Next.js wrapper. The loader reads your source as text, so
