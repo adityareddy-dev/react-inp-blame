@@ -53,8 +53,8 @@ export function writtenTable(readme) {
 }
 
 /**
- * What is wrong with the README's table against what was measured. The table has to be exactly what
- * `--write` would put there, so a row a tenth of a kilobyte off is stale too, and so is a heading that names
+ * What is wrong with the README's table against what was measured. Ignoring LF versus CRLF line endings,
+ * the table has to be exactly what `--write` would put there, so a row a tenth of a kilobyte off is stale too, and so is a heading that names
  * another bundler version. `tool` is the bundler and its version, as `formatTable` takes it. Empty when all is well.
  */
 export function problems(readme, measured, tool) {
@@ -72,6 +72,6 @@ export function problems(readme, measured, tool) {
   }
   if (readmeRows.length !== measured.length) stale.push(`README.md's table has ${readmeRows.length} rows, the script measures ${measured.length}`);
   // Every row matches and the table still differs: the heading, or how it is laid out.
-  if (!stale.length && writtenTable(readme) !== formatTable(measured, tool)) stale.push("README.md's table is not what --write writes: its heading or its layout differs");
+  if (!stale.length && writtenTable(readme).replaceAll('\r\n', '\n') !== formatTable(measured, tool)) stale.push("README.md's table is not what --write writes: its heading or its layout differs");
   return stale;
 }
