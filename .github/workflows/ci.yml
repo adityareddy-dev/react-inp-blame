@@ -119,6 +119,30 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node scripts/vite-app.mjs --fresh --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
 
+  datadog:
+    name: Datadog RUM recipe from the packed tarball
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            fixtures/datadog/package-lock.json
+      - run: npm ci
+      - run: npm pack -w packages/core --pack-destination "$RUNNER_TEMP"
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/vite-app.mjs --fixture datadog --tarball "$RUNNER_TEMP"/react-inp-blame-*.tgz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: datadog-rum-payload
+          path: test-results/datadog
+          if-no-files-found: ignore
+
   # react-inp-blame/otel through each web SDK docs/opentelemetry.md has a setup for, from fixtures/otel's
   # lockfile, with the packed tarball: each SDK's own web-vitals fed one slow click in Node, and the page's
   # setup blocks compiled against the SDKs' types. Node only, no browser.

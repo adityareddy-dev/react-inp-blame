@@ -40,6 +40,23 @@ const PACKAGE = 'react-inp-blame';
  * without checking.
  */
 const FIXTURES = {
+  datadog: {
+    baseFixture: 'vite-react-ts',
+    playwrightArgs: ['--output', path.join(root, 'test-results/datadog')],
+    readme: '## Install with Vite',
+    files: [],
+    reported: ['@datadog/browser-rum', 'web-vitals', 'vite', 'react', 'react-dom', '@playwright/test', PACKAGE],
+    prepare: (app) => {
+      const doc = fs.readFileSync(path.join(root, 'docs/web-vitals.md'), 'utf8').replace(/\r\n/g, '\n');
+      const section = doc.split('## Sending it to Datadog\n')[1]?.split('\n## ')[0];
+      const recipe = section?.match(/\n```ts\n([\s\S]*?)\n```/)?.[1];
+      assert.ok(recipe, 'docs/web-vitals.md has no Datadog TypeScript recipe');
+      fs.writeFileSync(path.join(app, 'src/recipe.ts'), `${recipe}\n`);
+      const main = path.join(app, 'src/main.tsx');
+      fs.writeFileSync(main, `import './datadog.ts';\n${fs.readFileSync(main, 'utf8')}`);
+    },
+    typecheck: (app) => run('tsc -p tsconfig.e2e.json', process.execPath, [path.join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.e2e.json'], { cwd: app }),
+  },
   'vite-react-ts': {
     readme: '## Install with Vite',
     files: ['vite.config.ts'],
@@ -321,7 +338,10 @@ function main() {
   const app = fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
   console.log(`${path.basename(tarball)} into ${app}, the app in fixtures/${name}${values.fresh ? ', dependencies resolved today' : ''}, on Node ${process.version}${installer}`);
   try {
+    const baseFixture = FIXTURES[name].baseFixture;
+    if (baseFixture) fs.cpSync(path.join(root, 'fixtures', baseFixture), app, { recursive: true, filter: (source) => !NOT_COPIED.has(path.basename(source)) });
     fs.cpSync(fixture, app, { recursive: true, filter: (source) => !NOT_COPIED.has(path.basename(source)) });
+    FIXTURES[name].prepare?.(app);
     if (values.pnpm) {
       pnpmInstall(app, tarball, values.fresh);
     } else if (values.fresh) {
@@ -340,6 +360,7 @@ function main() {
     // A step of its own, so a type error in docs/install.md's config reads as one.
     (values.pnpm ? pnpm : npm)('run build', app);
     FIXTURES[name].typecheck(app);
+    playwright.unshift(...(FIXTURES[name].playwrightArgs ?? []));
     const cli = path.join(app, 'node_modules/@playwright/test', readJson(path.join(app, 'node_modules/@playwright/test/package.json')).bin.playwright);
     run(['playwright test', ...playwright].join(' '), process.execPath, [cli, 'test', ...playwright], {
       cwd: app,

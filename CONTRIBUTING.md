@@ -78,6 +78,7 @@ From the repository root:
     npm run test:prod -w apps/next-demo           # Next.js, Turbopack production build
     npm run test:prod:webpack -w apps/next-demo   # Next.js, webpack production build
     npm run test:pack                             # the packed tarball, installed into throwaway apps
+    npm run test:vite-app -- --fixture datadog     # the published Datadog recipe, production build and local RUM payload
     npm run test:vite-app                         # a create-vite app with @vitejs/plugin-react, from the packed tarball
 
 The Vite demo runs its specs in Chromium, and `cross-browser.spec.ts` in Firefox and WebKit as well.
@@ -175,6 +176,12 @@ changing its `package.json`, refresh its lock with `npm install --package-lock-o
 held to docs/install.md's blocks the same way: `vite.config.ts` for all but Astro, `src/client.tsx` as well for
 TanStack Start, and `astro.config.mjs` for Astro, whose type check is `astro check`. The React Router and
 Remix apps drop the template's Google Fonts links, since a font request that fails would fail their specs.
+
+The `datadog` fixture reuses the Vite app and adds the Datadog RUM SDK and web-vitals from its own
+lockfile. The runner reads the Datadog TypeScript block from `docs/web-vitals.md` into the app before
+building it, so CI checks the code users paste. Its Chromium test sends one slow click through the
+production build and captures the RUM transport locally, checking the vital's blame, duration and view.
+It uses port 5222, waits for the SDK’s normal batch and saves the payload under `test-results/datadog`.
 
 Two things the demo's suite leaves out of a normal run:
 
