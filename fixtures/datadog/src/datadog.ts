@@ -1,4 +1,5 @@
 import { datadogRum } from '@datadog/browser-rum';
+import { onINP } from 'web-vitals/attribution';
 import './recipe';
 
 datadogRum.init({
@@ -18,6 +19,10 @@ datadogRum.startView('slow-click');
 declare global {
   interface Window {
     startNextRumView: () => void;
+    inpReports: { id: string; value: number }[];
   }
 }
 window.startNextRumView = () => datadogRum.startView('after-click');
+// Keep callback snapshots without changing the published recipe.
+window.inpReports = [];
+onINP(({ id, value }) => window.inpReports.push({ id, value }));
