@@ -15,7 +15,17 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
   ([#92](https://github.com/adityareddy-dev/react-inp-blame/pull/92)), contributed by
   [Japneet Singh](https://github.com/Orcus01).
 
+### Tooling
+
+- Accept CRLF line endings when checking the README bundle-size table
+  ([#97](https://github.com/adityareddy-dev/react-inp-blame/pull/97)), contributed by
+  [Japneet Singh](https://github.com/Orcus01).
+
 ### Documentation
+
+- List the component-libraries and webpack fixture ports in the contributor guide
+  ([#96](https://github.com/adityareddy-dev/react-inp-blame/pull/96)), contributed by
+  [Japneet Singh](https://github.com/Orcus01).
 
 - Lead the repository README with the demo's slow login, a 30-second setup path, web-vitals and
   OpenTelemetry recipes, and links to the reproducible benchmark harness. Runtime, published types
