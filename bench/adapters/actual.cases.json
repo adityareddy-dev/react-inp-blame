@@ -1,0 +1,122 @@
+[
+  {
+    "id": "C01",
+    "action": "open checking account",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Bank of America transaction table and account balance are visible"
+  },
+  {
+    "id": "C02",
+    "action": "open savings account",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Ally Savings transaction table and account balance are visible"
+  },
+  {
+    "id": "C03",
+    "action": "open credit card account",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "HSBC transaction table and account balance are visible"
+  },
+  {
+    "id": "C04",
+    "action": "open Roth retirement account",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Roth IRA transaction table and account balance are visible"
+  },
+  {
+    "id": "C05",
+    "action": "open Vanguard retirement account",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Vanguard 401k transaction table and account balance are visible"
+  },
+  {
+    "id": "C06",
+    "action": "open on-budget accounts",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "On Budget Accounts transaction table is visible"
+  },
+  {
+    "id": "C07",
+    "action": "open all accounts",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "All Accounts transaction table is visible"
+  },
+  {
+    "id": "C08",
+    "action": "advance budget month",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Selected month changes from 2017-01 to 2017-02"
+  },
+  {
+    "id": "C09",
+    "action": "go to previous budget month",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Selected month changes from 2017-01 to 2016-12"
+  },
+  {
+    "id": "C10",
+    "action": "edit Food budget",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "January Food budget changes to 325.00"
+  },
+  {
+    "id": "C11",
+    "action": "edit Restaurants budget",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "January Restaurants budget changes to 123.00"
+  },
+  {
+    "id": "C12",
+    "action": "search transactions for Kroger",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Nonempty result rows all contain Kroger and visible rows differ from the unfiltered list"
+  },
+  {
+    "id": "C13",
+    "action": "search for an absent transaction",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Search input contains bench-no-such-payee and no transaction rows remain"
+  },
+  {
+    "id": "C14",
+    "action": "clear transaction search",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Previously filtered search is empty and unfiltered rows return"
+  },
+  {
+    "id": "C15",
+    "action": "select a transaction",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "First transaction changes from unselected to selected"
+  },
+  {
+    "id": "C16",
+    "action": "open transaction entry",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "An editable new-transaction row appears"
+  },
+  {
+    "id": "C17",
+    "action": "edit transaction note",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Selected transaction note changes to bench-edited-note and is stored"
+  },
+  {
+    "id": "C18",
+    "action": "toggle transaction cleared state",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Selected transaction stored cleared flag changes from its previous value"
+  },
+  {
+    "id": "C19",
+    "action": "open schedules",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Seeded schedules and Add new schedule are visible"
+  },
+  {
+    "id": "C20",
+    "action": "open reports dashboard",
+    "reset": "Fresh browser context, userAgent playwright, upstream fixed 2017-01-01 demo budget. Each before() restores its own page precondition without altering the case action.",
+    "expectedStateChange": "Reports dashboard and Net Worth card are visible"
+  }
+]
