@@ -283,6 +283,35 @@ export const HARVEST = () => {
 
 // ---------------------------------------------------------------- one run
 
+/** Wait for a paint and observer/report delivery, outside the action's measured window. */
+export async function drainObservers(page) {
+  return page.evaluate(async () => {
+    const started = performance.now();
+    const limit = 2000;
+    let painted = false;
+    await Promise.race([
+      new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => { painted = true; resolve(); }))),
+      new Promise((resolve) => setTimeout(resolve, limit)),
+    ]);
+    let fingerprint = '';
+    let changedAt = performance.now();
+    while (painted && performance.now() - started < limit) {
+      const b = window.__bench;
+      const reports = window.__REACT_INP_BLAME__?.reports() ?? [];
+      const next = JSON.stringify([b.events.length, b.loaf.length, b.longTasks.length,
+        reports.map((r) => [r.interactionId, r.revision, r.end])]);
+      const now = performance.now();
+      if (next !== fingerprint) { fingerprint = next; changedAt = now; }
+      // Chromium may deliver Event Timing after the paint task. Quiet alone at the first poll is insufficient.
+      if (now - started >= 250 && now - changedAt >= 150) {
+        return { settled: true, startedAt: started, completedAt: now, waitedMs: now - started, minMs: 250, quietMs: 150, limitMs: limit };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`Observer/report drain did not settle within ${limit}ms (painted=${painted})`);
+  });
+}
+
 // caseId, when given, runs only that case's step: the accuracy capture takes one case per fresh run.
 export async function runOnce({ browser, app, config, url, throttle, runIndex, warmup, schedule = null, caseId = null }) {
   // The app's own deterministic reset (database back to its seed) before every run, so a run never
@@ -326,7 +355,7 @@ export async function runOnce({ browser, app, config, url, throttle, runIndex, w
 
     const t0 = Date.now();
     await page.goto(url, { waitUntil: 'load', timeout: 120000 });
-    await app.ready(page);
+    const readiness = await app.ready(page);
     const readyMs = Date.now() - t0;
 
     // Configuration C is only meaningful if the badge is actually on the page. Its code arrives by
@@ -353,7 +382,12 @@ export async function runOnce({ browser, app, config, url, throttle, runIndex, w
       stepResults.push({ name: step.name, wallMs, pageStart, pageEnd });
     }
 
+    const drain = await drainObservers(page);
     const data = await page.evaluate(HARVEST);
+    const inScenario = (event) => stepResults.some((step) => event.startTime >= step.pageStart && event.startTime <= step.pageEnd);
+    // Keep the original whole-run diagnostics, and identify setup input explicitly.
+    const scenarioInteractions = data.interactions.filter(inScenario);
+    const setupInteractions = data.interactions.filter((event) => !inScenario(event));
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 
     if (config !== 'A' && !data.lib) {
@@ -370,7 +404,13 @@ export async function runOnce({ browser, app, config, url, throttle, runIndex, w
       runIndex,
       warmup,
       schedule,
+      drain,
+      metricScope: 'whole-run diagnostics, including setup; scenarioInteractions excludes setup',
+      measurementStatus: app.measurementStatus ?? null,
+      scenarioInteractions,
+      setupInteractions,
       readyMs,
+      readiness: readiness ?? null,
       steps: stepResults,
       console: console_,
       pageErrors,
@@ -468,7 +508,7 @@ async function collectVersions(browser, appIds) {
     node: process.version,
     playwright: JSON.parse(fs.readFileSync(path.join(HERE, 'node_modules', 'playwright-core', 'package.json'), 'utf8')).version,
     chromium: browser.version(),
-    chromiumPath: chromium.executablePath(),
+    chromiumPath: process.env.BENCH_CHROMIUM || chromium.executablePath(),
     os: `${process.platform} ${process.arch}`,
     tarball: tarball
       ? {

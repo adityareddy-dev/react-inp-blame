@@ -54,14 +54,14 @@ for (const script of ['bench.mjs', 'run.mjs']) {
   });
 
   test(`${script} stops before installation or collection for pending integrations`, () => {
-    const result = spawnSync(process.execPath, [path.join(HERE, script), '--app', 'actual'], {
+    const result = spawnSync(process.execPath, [path.join(HERE, script), '--app', 'myfin'], {
       cwd: HERE,
       encoding: 'utf8',
       timeout: 60000,
       env: { ...process.env, BENCH_ORDER: 'A,B,C' },
     });
     assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
-    assert.match(result.stderr, /actual: integration pending/);
+    assert.match(result.stderr, /myfin: integration pending/);
     assert.doesNotMatch(result.stdout, /== install|== build|== bench/);
   });
 
