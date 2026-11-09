@@ -108,6 +108,15 @@ test('the Source line names the results file without its folder', () => {
   assert.ok(!md.includes(path.dirname(file)));
 });
 
+test('pilot diagnostics disclose setup input and pending protocol collection', () => {
+  const file = results({ app: 'actual', configs: ['A', 'B', 'C'], each: (run) => {
+    run.measurementStatus = 'functional pilot';
+  } });
+  const md = node('report.mjs', file);
+  assert.match(md, /Pilot diagnostics only\. Whole-run metrics include setup input/);
+  assert.match(md, /Protocol overhead and accuracy collection remain pending/);
+});
+
 test('a failure keeps its text with the home folder cut to ~, in both slash forms', () => {
   const home = os.homedir();
   const error = `ENOENT ${home}${path.sep}bench${path.sep}a.json, then ${home.replaceAll('\\', '/')}/bench/b.json`;

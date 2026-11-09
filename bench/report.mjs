@@ -206,6 +206,10 @@ function main() {
   p(`Source: \`${path.basename(file)}\``);
   p(`Started ${data.started}, finished ${data.finished}. \`--runs ${data.args.runs}\`, throttle passes ${data.args.throttles.join(', ')}x.`);
   p();
+  if (runs.some((run) => run.measurementStatus)) {
+    p('Pilot diagnostics only. Whole-run metrics include setup input. Scenario-only and setup interactions are recorded separately in the JSON. Protocol overhead and accuracy collection remain pending.');
+    p();
+  }
   // verify-lib.mjs's JSON, which bench.mjs keeps even when the check fails. A run on a copy that isn't
   // the release says so up here, not only inside the results file.
   let libCheck = null;

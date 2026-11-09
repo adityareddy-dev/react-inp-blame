@@ -2,8 +2,8 @@
 
 The harness is separate from the npm package and root workspace. Its only cohort is the
 [five selected everyday apps](../docs/benchmarks/real-apps.md), defined in [apps.mjs](apps.mjs).
-All five integrations are pending. App clones, build outputs and measured results are not
-included.
+Actual has a verified functional integration. The other four integrations remain pending.
+App clones, build outputs and measured results are not included.
 
 ## Check the Cohort
 
@@ -25,7 +25,7 @@ stop before installation or browser startup for pending integrations.
 
 Each registry entry reserves a clone path under `bench/clones/<id>` and three distinct ports
 on `127.0.0.1`, in the range 5310-5324. The `dist-a`, `dist-b`, `dist-c` names are reserved
-output locations, not verified upstream build settings.
+output locations, verified for Actual only.
 
 | Configuration | Build |
 | --- | --- |
@@ -47,7 +47,24 @@ collection. The independent browser observer measures timing, while library stat
 self-accounting. `report.mjs` pairs A/B/C runs by index and bootstraps their differences.
 
 `node report.mjs results/<file>.json` and `node steps.mjs results/<file>.json` read captures.
-The tests use synthetic results only. They are not measurements of the selected apps.
+The unit tests use synthetic results. They are not measurements of the selected apps.
+
+## Actual Functional Pilot
+
+Actual uses pinned production builds and a fresh synthetic demo budget per context. Its 20
+frozen cases support sequential and isolated execution. With an available Chromium binary:
+
+```sh
+export BENCH_CHROMIUM=/path/to/chromium
+node run.mjs --app actual --blocks 1
+node actual-pilot.mjs
+npm run test:drain
+node capture.mjs --app actual --cases C12,C18,C20 --out results/pilot/capture
+```
+
+These commands validate local integration. Whole-run diagnostics include setup input,
+recorded separately from scenario interactions. Protocol overhead, independent Chrome traces,
+React profiles and accuracy grading remain pending. This is author-run integration evidence.
 
 ## Environment and Outputs
 
