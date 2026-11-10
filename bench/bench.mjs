@@ -312,6 +312,56 @@ export async function drainObservers(page) {
   });
 }
 
+/**
+ * The same measures as the whole-run ones, from the scenario steps alone, so the setup clicks that
+ * build the demo budget do not count. Fewer than 50 interactions, so the INP estimate is the worst.
+ */
+export function scenarioMetrics(interactions, loaf, longTasks) {
+  return {
+    interactionCount: interactions.length,
+    inp: interactions.length ? Math.max(...interactions.map((i) => i.duration)) : null,
+    totalInteractionMs: interactions.reduce((s, i) => s + i.duration, 0),
+    loafCount: loaf.length,
+    loafBlockingMs: loaf.reduce((s, f) => s + (f.blockingDuration || 0), 0),
+    longTaskCount: longTasks.length,
+    longTaskBlockingMs: longTasks.reduce((s, t) => s + Math.max(0, t.duration - 50), 0),
+  };
+}
+
+/**
+ * The scripts this run received, matched to the build's files, with the gzip size of each. The local
+ * server sends them uncompressed, so the gzip figure is what a compressing server would deliver for
+ * this route. A script that matches no build file is listed and left out of the totals.
+ */
+export function deliveredJs(app, config, delivered) {
+  const root = path.join(app.dir, app.dists[config]);
+  const seen = new Map();
+  const unmatched = [];
+  for (const d of delivered) {
+    let file = null;
+    try {
+      const u = new URL(d.url);
+      if (u.protocol.startsWith('http')) file = path.join(root, decodeURIComponent(u.pathname));
+    } catch {
+      /* not a URL */
+    }
+    if (!file || !file.startsWith(root + path.sep) || !fs.existsSync(file)) {
+      unmatched.push(d.url.slice(0, 200));
+      continue;
+    }
+    if (seen.has(file)) continue;
+    const bytes = fs.readFileSync(file);
+    seen.set(file, { path: path.relative(root, file), wireBytes: d.bytes, bytes: bytes.length, gzipBytes: zlib.gzipSync(bytes, { level: 9 }).length });
+  }
+  const files = [...seen.values()];
+  return {
+    files,
+    unmatched,
+    totalBytes: files.reduce((s, f) => s + f.bytes, 0),
+    totalGzipBytes: files.reduce((s, f) => s + f.gzipBytes, 0),
+  };
+}
+
 // caseId, when given, runs only that case's step: the accuracy capture takes one case per fresh run.
 export async function runOnce({ browser, app, config, url, throttle, runIndex, warmup, schedule = null, caseId = null }) {
   // The app's own deterministic reset (database back to its seed) before every run, so a run never
@@ -352,6 +402,33 @@ export async function runOnce({ browser, app, config, url, throttle, runIndex, w
 
     const cdp = await context.newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle });
+    // The page throttle does not reach dedicated workers. Ask each worker too and keep the browser's
+    // answer, so a throttled run says whether its workers were slowed rather than assuming it.
+    const workerThrottle = [];
+    if (throttle !== 1) {
+      let id = 0;
+      const pending = new Map();
+      cdp.on('Target.receivedMessageFromTarget', (e) => {
+        const m = JSON.parse(e.message);
+        const entry = m.id && pending.get(m.id);
+        if (!entry) return;
+        pending.delete(m.id);
+        entry.applied = !m.error;
+        entry.error = m.error ? m.error.message : null;
+      });
+      cdp.on('Target.attachedToTarget', (e) => {
+        if (!e.targetInfo.type.includes('worker')) return;
+        const entry = { type: e.targetInfo.type, url: e.targetInfo.url.slice(0, 200), applied: null, error: null };
+        workerThrottle.push(entry);
+        pending.set(++id, entry);
+        const message = JSON.stringify({ id, method: 'Emulation.setCPUThrottlingRate', params: { rate: throttle } });
+        cdp.send('Target.sendMessageToTarget', { sessionId: e.sessionId, message }).catch((err) => {
+          entry.applied = false;
+          entry.error = String(err && err.message);
+        });
+      });
+      await cdp.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: false });
+    }
 
     const t0 = Date.now();
     await page.goto(url, { waitUntil: 'load', timeout: 120000 });
@@ -388,6 +465,7 @@ export async function runOnce({ browser, app, config, url, throttle, runIndex, w
     // Keep the original whole-run diagnostics, and identify setup input explicitly.
     const scenarioInteractions = data.interactions.filter(inScenario);
     const setupInteractions = data.interactions.filter((event) => !inScenario(event));
+    const scenario = scenarioMetrics(scenarioInteractions, data.loafEntries.filter(inScenario), data.longTaskEntries.filter(inScenario));
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 
     if (config !== 'A' && !data.lib) {
@@ -409,6 +487,9 @@ export async function runOnce({ browser, app, config, url, throttle, runIndex, w
       measurementStatus: app.measurementStatus ?? null,
       scenarioInteractions,
       setupInteractions,
+      scenario,
+      workerThrottle,
+      deliveredJs: deliveredJs(app, config, delivered),
       readyMs,
       readiness: readiness ?? null,
       steps: stepResults,

@@ -105,6 +105,12 @@ const METRICS = [
   { key: 'loafBlocking', label: 'LoAF blocking (ms)', get: (r) => r.loafBlockingMs },
   { key: 'loafCount', label: 'LoAF count', get: (r) => r.loafCount },
   { key: 'ready', label: 'Load to ready (ms)', get: (r) => r.readyMs },
+  { key: 'scenarioInp', label: 'Scenario INP estimate (ms)', get: (r) => r.scenario?.inp ?? null },
+  { key: 'scenarioTotal', label: 'Scenario interaction time (ms)', get: (r) => r.scenario?.totalInteractionMs ?? null },
+  { key: 'scenarioLoafBlocking', label: 'Scenario LoAF blocking (ms)', get: (r) => r.scenario?.loafBlockingMs ?? null },
+  { key: 'scenarioLongTaskBlocking', label: 'Scenario long-task blocking (ms)', get: (r) => r.scenario?.longTaskBlockingMs ?? null },
+  { key: 'longTaskBlocking', label: 'Long-task blocking (ms)', get: (r) => r.longTaskBlockingMs ?? null },
+  { key: 'jsGzipKB', label: 'Delivered JS, gzip (KB)', get: (r) => (r.deliveredJs ? r.deliveredJs.totalGzipBytes / 1024 : null) },
   {
     key: 'heap',
     label: 'JS heap used (MB)',
@@ -318,7 +324,7 @@ function main() {
           if (!vals.A.length) continue;
           const dB = bootstrapMedianDelta(paired(runs, app, throttle, m, 'A', 'B'));
           const dC = bootstrapMedianDelta(paired(runs, app, throttle, m, 'A', 'C'));
-          const unit = m.key === 'heap' ? 'MB' : m.key.startsWith('loafCount') || m.key === 'captured' ? '' : 'ms';
+          const unit = m.key === 'heap' ? 'MB' : m.key === 'jsGzipKB' ? 'KB' : m.key.startsWith('loafCount') || m.key === 'captured' ? '' : 'ms';
           p(
             `| ${m.label} | ${fmt(median(vals.A))} | ${fmt(quantile(vals.A, 0.9))} | ${fmt(median(vals.B))} | ${fmt(quantile(vals.B, 0.9))} | ${fmt(median(vals.C))} | ${fmt(quantile(vals.C, 0.9))} | ${deltaCell(dB, unit)} | ${deltaCell(dC, unit)} |`,
           );
