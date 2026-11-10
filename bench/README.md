@@ -63,8 +63,9 @@ node capture.mjs --app actual --cases C12,C18,C20 --out results/pilot/capture
 ```
 
 These commands validate local integration. Whole-run diagnostics include setup input,
-recorded separately from scenario interactions. Protocol overhead, independent Chrome traces,
-React profiles and accuracy grading remain pending. This is author-run integration evidence.
+recorded separately from scenario interactions. The first overhead measurement is in
+[actual-overhead-2026-11-10.md](../docs/benchmarks/actual-overhead-2026-11-10.md). Independent
+Chrome traces, React profiles and accuracy grading remain pending. This is author-run evidence.
 
 ## Environment and Outputs
 

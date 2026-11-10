@@ -1,9 +1,10 @@
 # Benchmarks
 
-The current benchmark cohort is [five everyday apps](real-apps.md). No accuracy or overhead
-results exist for it yet.
+The current benchmark cohort is [five everyday apps](real-apps.md). One overhead measurement
+exists, for [Actual](actual-overhead-2026-11-10.md). No accuracy result exists yet.
 
 - [Current apps and integration status](real-apps.md)
+- [Actual overhead, 2026-11-10](actual-overhead-2026-11-10.md)
 - [Harness setup and dry runs](../../bench/README.md)
 - [Accuracy and overhead protocol, 2026-10-14](protocol-2026-10-14.md)
 - [Selection-method amendment, 2026-10-15](amendment-2026-10-15.md)

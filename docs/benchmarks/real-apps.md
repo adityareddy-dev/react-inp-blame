@@ -1,8 +1,9 @@
 # Real-app benchmarks
 
 The current cohort contains exactly five everyday open-source apps. The machine-readable
-registry is [bench/apps.mjs](../../bench/apps.mjs). There are no accuracy or overhead results
-for this cohort.
+registry is [bench/apps.mjs](../../bench/apps.mjs). Actual has one
+[overhead measurement](actual-overhead-2026-11-10.md). There are no accuracy results for this
+cohort.
 
 | ID | App | Purpose | Integration work to verify |
 | --- | --- | --- | --- |
@@ -12,8 +13,8 @@ for this cohort.
 | `manage-my-damn-life-nextjs` | [Manage My Damn Life](https://github.com/intri-in/manage-my-damn-life-nextjs) | Productivity and finance | Next.js; verify database setup through Sequelize and deterministic reset |
 | `reactive-resume` | [Reactive Resume](https://github.com/amruthpillai/reactive-resume) | Resume building | Verify current React/framework versions, production build and PostgreSQL requirements from upstream source |
 
-Actual is an author-run functional integration. Protocol overhead and accuracy collection
-remain pending. The other four apps remain selection-time leads with unverified setup.
+Actual is an author-run integration with one overhead measurement, where 4x CPU reaches the
+main thread but not Actual's workers. Accuracy grading remains pending. The other four apps remain selection-time leads with unverified setup.
 
 Selection came from a category shortlist, not a random sample. The departure from the original
 seeded selection is recorded in the [selection amendment](amendment-2026-10-15.md).
