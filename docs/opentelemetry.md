@@ -50,14 +50,13 @@ runtime on the page. Every record this entry sees there says `not-installed`, si
 
 The processor goes first in `processors`. A `SimpleLogRecordProcessor` exports the record the moment it is
 emitted, so behind one the attributes would miss the export. Checked with
-`@opentelemetry/browser-instrumentation` 0.8.1, `@opentelemetry/sdk-logs` 0.222.0 and web-vitals 6.2.2.
+`@opentelemetry/browser-instrumentation` 0.11.0, `@opentelemetry/sdk-logs` 0.223.1 and web-vitals 6.2.3.
 
 ```ts
 // src/telemetry.ts
 import { logs } from "@opentelemetry/api-logs";
 import { WebVitalsInstrumentation } from "@opentelemetry/browser-instrumentation/experimental/web-vitals";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
-import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import {
   BatchLogRecordProcessor,
   LoggerProvider,
@@ -75,10 +74,7 @@ const loggerProvider = new LoggerProvider({
   ],
 });
 logs.setGlobalLoggerProvider(loggerProvider);
-registerInstrumentations({
-  instrumentations: [new WebVitalsInstrumentation()],
-  loggerProvider,
-});
+new WebVitalsInstrumentation().enable({ loggerProvider });
 ```
 
 The processor adds nothing to any other record, other web vitals included. Where you would rather not touch
