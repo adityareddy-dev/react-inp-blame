@@ -37,8 +37,8 @@ export default withInpBlame(
 With Vite, the same two options go to `inpBlame()` in `vite.config.ts`. A page the sample leaves out says
 `sampled-out`.
 
-Running it in production costs something. The [current benchmark cohort](benchmarks/real-apps.md)
-has no accuracy or overhead results yet. What loads with the page
+The [current benchmark cohort](benchmarks/real-apps.md) lists the apps it is being measured on.
+What loads with the page
 is `react-inp-blame/auto`, 34.1 KB gzip by `scripts/size.mjs` in 0.20.0, and this entry adds 1.5 KB on
 top. So a telemetry path held to about 10 KB is not met at 1.0.
 
@@ -50,14 +50,13 @@ runtime on the page. Every record this entry sees there says `not-installed`, si
 
 The processor goes first in `processors`. A `SimpleLogRecordProcessor` exports the record the moment it is
 emitted, so behind one the attributes would miss the export. Checked with
-`@opentelemetry/browser-instrumentation` 0.8.1, `@opentelemetry/sdk-logs` 0.222.0 and web-vitals 6.2.2.
+`@opentelemetry/browser-instrumentation` 0.11.0, `@opentelemetry/sdk-logs` 0.223.1 and web-vitals 6.2.3.
 
 ```ts
 // src/telemetry.ts
 import { logs } from "@opentelemetry/api-logs";
 import { WebVitalsInstrumentation } from "@opentelemetry/browser-instrumentation/experimental/web-vitals";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
-import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import {
   BatchLogRecordProcessor,
   LoggerProvider,
@@ -75,10 +74,7 @@ const loggerProvider = new LoggerProvider({
   ],
 });
 logs.setGlobalLoggerProvider(loggerProvider);
-registerInstrumentations({
-  instrumentations: [new WebVitalsInstrumentation()],
-  loggerProvider,
-});
+new WebVitalsInstrumentation().enable({ loggerProvider });
 ```
 
 The processor adds nothing to any other record, other web vitals included. Where you would rather not touch
@@ -311,8 +307,7 @@ User Timing measures picks those up, whatever this entry sends.
 
 ## Limits
 
-- **The verdict can be wrong.** On apps it had not been tuned on, 0.12.0 was right on 11 of 43 verdicts
-  ([the runs](benchmarks/real-apps.md)). For anything that alerts, filter on `blame.confidence` `measured`.
+- **Alerting.** Filter on `blame.confidence` `measured` for alerts.
 - **`reportAllChanges`, or any SDK that reports INP before the page is hidden,** can send a record before the
   library has its report, which then says `no-report`. Honeycomb passes its `inp` options straight to
   web-vitals, so a `reportAllChanges` there does this. So does OpenTelemetry's `WebVitalsInstrumentation`

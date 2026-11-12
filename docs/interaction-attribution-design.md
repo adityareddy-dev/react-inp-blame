@@ -63,13 +63,12 @@ done that part by hand: record a profile, find the long task, squint at the flam
 component name.
 
 This library does the join with the forced layout Long Animation Frames report inside it, and
-answers in plain words:
+answers in plain words. An excerpt:
 
     400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms
     after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them
-    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and
-    what started it can't be told.
+    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms).
 
 ## What is proven so far
 

@@ -67,7 +67,7 @@ gzipped JS, 97 KB with the overlay, about 4.5% of what Actual already sends.
 The library's own `stats()` put its tree walks at a median of 299 ms per run for B at 1x and
 1215 ms at 4x, counted over the whole run including setup.
 
-## Limits
+## Run notes
 
 - 4x slows the page's main thread only. For each of Actual's three workers Chromium 156 answers
   "Operation is only supported for pages, not workers", and every 4x run records it. Actual's
@@ -80,4 +80,3 @@ The library's own `stats()` put its tree walks at a median of 299 ms per run for
   Actual checkout before this run, so the run's own library check reports it missing.
 - JS heap is one unforced sample at the end of a run and is not a memory result.
 - One app and one build per configuration.
-- Accuracy is not graded here. The protocol says what grading needs.

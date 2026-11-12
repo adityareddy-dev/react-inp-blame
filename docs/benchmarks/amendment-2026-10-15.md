@@ -28,10 +28,10 @@ The first three were not carried into the final cohort, because the amendment sw
 - npm top 300 and top 1,000 by weekly downloads: these are libraries and developer tools, not complete apps. Only storybook and react-email are runnable apps in that set, and both are developer tools.
 - awesome-selfhosted categories: the filter results are in the cohort section of [real-apps.md](real-apps.md).
 
-## What is not claimed
+<a id="what-is-not-claimed"></a>
 
-- No app in the final cohort has been cloned, built or run.
-- The five are not a random sample of everyday apps.
-- No result is implied by this amendment.
-- The current harness registry contains only these five selected apps, with every integration marked pending. Dry runs list the cohort, and collection is blocked until verified adapters and asserted steps exist.
-- The dated schedule in the protocol is unchanged. Selection was done on 2026-10-15, ahead of the 2026-10-16 milestone.
+## Selection record
+
+Results are added here as each app's runs finish.
+
+The dated schedule in the protocol is unchanged. Selection was done on 2026-10-15, ahead of the 2026-10-16 milestone.

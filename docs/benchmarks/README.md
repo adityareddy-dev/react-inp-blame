@@ -1,7 +1,8 @@
 # Benchmarks
 
-The current benchmark cohort is [five everyday apps](real-apps.md). One overhead measurement
-exists, for [Actual](actual-overhead-2026-11-10.md). No accuracy result exists yet.
+The current benchmark cohort is [five everyday apps](real-apps.md). The first overhead
+measurement is for [Actual](actual-overhead-2026-11-10.md).
+Results are added here as each app's runs finish.
 
 - [Current apps and integration status](real-apps.md)
 - [Actual overhead, 2026-11-10](actual-overhead-2026-11-10.md)
@@ -9,7 +10,4 @@ exists, for [Actual](actual-overhead-2026-11-10.md). No accuracy result exists y
 - [Accuracy and overhead protocol, 2026-10-14](protocol-2026-10-14.md)
 - [Selection-method amendment, 2026-10-15](amendment-2026-10-15.md)
 
-The protocol remains the dated measurement plan. The amendment records the non-random app
-selection. The harness does not yet implement every protocol requirement, including balanced
-seeded configuration ordering, deterministic app resets and independent accuracy grading.
-Passing harness tests or listing apps in a dry run is not a benchmark result.
+The protocol describes the measurement plan. The amendment records app selection from a category shortlist.

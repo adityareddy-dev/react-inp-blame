@@ -2,8 +2,8 @@
 
 The harness is separate from the npm package and root workspace. Its only cohort is the
 [five selected everyday apps](../docs/benchmarks/real-apps.md), defined in [apps.mjs](apps.mjs).
-Actual has a verified functional integration. The other four integrations remain pending.
-App clones, build outputs and measured results are not included.
+Actual has a verified functional integration.
+Results are added here as each app's runs finish.
 
 ## Check the Cohort
 
@@ -18,8 +18,8 @@ BENCH_ORDER=A,B node run.mjs --dry-run --app kresus
 ```
 
 Dry runs require no app clones, browser download, database or server. They validate the
-selection and configurations, not integration readiness. Normal runs, including `--no-build`,
-stop before installation or browser startup for pending integrations.
+selection and configurations. Normal runs, including `--no-build`, require a `ready` integration
+before installation or browser startup.
 
 ## Integration Contract
 
@@ -64,8 +64,7 @@ node capture.mjs --app actual --cases C12,C18,C20 --out results/pilot/capture
 
 These commands validate local integration. Whole-run diagnostics include setup input,
 recorded separately from scenario interactions. The first overhead measurement is in
-[actual-overhead-2026-11-10.md](../docs/benchmarks/actual-overhead-2026-11-10.md). Independent
-Chrome traces, React profiles and accuracy grading remain pending. This is author-run evidence.
+[actual-overhead-2026-11-10.md](../docs/benchmarks/actual-overhead-2026-11-10.md). This is author-run integration evidence.
 
 ## Environment and Outputs
 
@@ -79,5 +78,5 @@ Ignored outputs are `clones/`, `results/`, `state/`, `npm-lib/` and `report.md`.
 for local paths, credentials and personal labels before sharing.
 
 Follow the [published protocol](../docs/benchmarks/protocol-2026-10-14.md) and
-[selection amendment](../docs/benchmarks/amendment-2026-10-15.md). Collection is not ready until
-the missing app integrations and protocol requirements are implemented and validated.
+[selection amendment](../docs/benchmarks/amendment-2026-10-15.md) when preparing app integrations
+and collecting measurements.

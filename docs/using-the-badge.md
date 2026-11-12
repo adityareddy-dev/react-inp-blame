@@ -29,14 +29,13 @@ slow interactions, newest first, and click a row for the whole explanation. A cl
 40 ms or more gets a row (the `threshold` option), so a 150 ms click has one, though the badge stays green
 and the panel says Good: INP counts anything up to 200 ms as good. The demo above sets
 `position: 'bottom-left'`, which is why its badge sits on the left: its own explanation column has the
-right-hand side. From the demo's sign-in page, in development, this is `report.verdict`, which the row
+right-hand side. From the demo's sign-in page, in development, this is an excerpt from `report.verdict`, which the row
 spreads over its header and body:
 
     400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms
     after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them
-    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and
-    what started it can't be told.
+    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms).
 
 `overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a

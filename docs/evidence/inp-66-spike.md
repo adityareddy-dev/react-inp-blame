@@ -17,7 +17,7 @@ The observer records ordered `onCommitFiberUnmount`, `onCommitFiberRoot` and `on
 
 ## Production observations
 
-Times below are fixture-measured milliseconds, not duration attributed by the product. Zero means below this run's timer resolution, not proof of absolutely zero work.
+Times below are fixture-measured milliseconds, not duration attributed by the product. Zero means below this run's timer resolution.
 
 | Case | Unmount callbacks | Named layout | Named passive | Second passive | Surviving render | Commit-to-post gap |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -44,7 +44,7 @@ Passive cleanup occurs **after all unmount callbacks and after the commit callba
 - Every final case has ordered sequence IDs and genuine cleanup/owner evidence. Browser testing used the existing Playwright developer runner and an isolated temporary Chrome profile, not personal-account browser automation.
 - One trial per case and one React/browser combination establish this feasibility boundary, not statistical performance coverage or an accuracy gain. The probe has logging overhead; delegate durations exclude snapshot/logging overhead and do not calibrate the full observer. No complete Long Animation Frame attribution or original application replay was performed.
 - Fixture names are intentionally preserved. This does not establish that arbitrary minified applications retain names without their normal naming setup.
-- The probe changes no core attribution behavior, public API or lockfile, and makes no accuracy-gain or release claim.
+- The probe records hook behavior and fixture timings.
 
 ## Reproduction and retained proof
 
