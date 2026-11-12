@@ -1,7 +1,8 @@
 # Real-app benchmarks
 
 The current cohort contains exactly five everyday open-source apps. The machine-readable
-registry is [bench/apps.mjs](../../bench/apps.mjs).
+registry is [bench/apps.mjs](../../bench/apps.mjs). Actual has an
+[overhead measurement](actual-overhead-2026-11-10.md).
 Results are added here as each app's runs finish.
 
 | ID | App | Purpose | Integration work to verify |
@@ -12,7 +13,7 @@ Results are added here as each app's runs finish.
 | `manage-my-damn-life-nextjs` | [Manage My Damn Life](https://github.com/intri-in/manage-my-damn-life-nextjs) | Productivity and finance | Next.js; verify database setup through Sequelize and deterministic reset |
 | `reactive-resume` | [Reactive Resume](https://github.com/amruthpillai/reactive-resume) | Resume building | Verify current React/framework versions, production build and PostgreSQL requirements from upstream source |
 
-Actual has a verified author-run functional integration. The table lists the setup work for each app.
+Actual has a verified author-run functional integration and an overhead measurement. The table lists the setup work for each app.
 
 Selection came from a category shortlist, not a random sample. The departure from the original
 seeded selection is recorded in the [selection amendment](amendment-2026-10-15.md).
