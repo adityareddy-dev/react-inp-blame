@@ -10,14 +10,14 @@
     "@grafana/faro-web-sdk": "2.12.1",
     "@honeycombio/opentelemetry-web": "1.5.1",
     "@opentelemetry/api": "1.9.1",
-    "@opentelemetry/api-logs": "0.222.0",
-    "@opentelemetry/browser-instrumentation": "0.8.1",
-    "@opentelemetry/exporter-logs-otlp-http": "0.222.0",
-    "@opentelemetry/instrumentation": "0.222.0",
-    "@opentelemetry/sdk-logs": "0.222.0",
+    "@opentelemetry/api-logs": "0.223.0",
+    "@opentelemetry/browser-instrumentation": "0.11.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.223.1",
+    "@opentelemetry/instrumentation": "0.223.1",
+    "@opentelemetry/sdk-logs": "0.223.1",
     "@opentelemetry/sdk-trace-base": "2.11.0",
     "react-inp-blame": "^0.19.0",
-    "web-vitals": "6.2.2"
+    "web-vitals": "6.2.3"
   },
   "devDependencies": {
     "typescript": "~5.9.3"

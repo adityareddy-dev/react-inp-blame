@@ -210,8 +210,13 @@ async function openTelemetry(browser, { from = here, order = 'first', hook } = {
   const processors = hook ? [exporting] : order === 'first' ? [new InpBlameLogRecordProcessor(), exporting] : [exporting, new InpBlameLogRecordProcessor()];
   const provider = new LoggerProvider({ processors });
   const instrumentation = new WebVitalsInstrumentation({ enabled: false, ...(hook ? { applyCustomLogRecordData: hook } : {}) });
-  instrumentation.setLoggerProvider(provider);
-  instrumentation.enable();
+  // browser-instrumentation 0.11 dropped setLoggerProvider and takes the provider in enable() instead.
+  if (typeof instrumentation.setLoggerProvider === 'function') {
+    instrumentation.setLoggerProvider(provider);
+    instrumentation.enable();
+  } else {
+    instrumentation.enable({ loggerProvider: provider });
+  }
   const report = await installReport(clickEntries());
   await interact(browser);
   await provider.forceFlush();
