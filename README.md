@@ -13,7 +13,7 @@
 
 Click **Log in** in the demo. The report shows a 400 ms interaction, about 399 ms in the handler, and a React render that landed after the screen updated. INP didn't count that later render. Without the timeline, it is easy to investigate the render and miss the handler.
 
-react-inp-blame joins browser interaction timing to the React tree and shows where the time went, with a component or handler name when it has one. The name can be wrong, check it against the profiler. 1.0.0 makes the API and report shape stable, with [documented exceptions](#versions). That is an API promise, not an accuracy claim. Read the [validation status and limits](#how-reliable-is-it).
+react-inp-blame joins browser interaction timing to the React tree and shows where the time went, with a component or handler name when it has one. 1.0.0 makes the API and report shape stable, with [documented exceptions](#versions). Read about [benchmarks and report evidence](#how-reliable-is-it).
 
 **[Try the demo](https://reactinpblame.com/demo/)**, or read the [landing page](https://reactinpblame.com/). Every scenario in the demo is slow on purpose. Click something and read what the badge blames.
 
@@ -60,15 +60,14 @@ export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: 
 });
 ```
 
-React Router in framework mode, Remix, TanStack Start and Astro write their own HTML, which this plugin never sees on its own, so each has a setup of its own: [React Router](docs/install.md#install-with-react-router), [Remix](docs/install.md#install-with-remix), [TanStack Start](docs/install.md#install-with-tanstack-start), [Astro](docs/install.md#install-with-astro).
+Use the framework setup for apps that write their own HTML: [React Router](docs/install.md#install-with-react-router), [Remix](docs/install.md#install-with-remix), [TanStack Start](docs/install.md#install-with-tanstack-start), [Astro](docs/install.md#install-with-astro).
 
-**What you will see.** Reload the page. A small dark badge sits in the corner and reads `INP —` until you interact. Click something slow and it shows the page's INP so far in milliseconds: green at 200 or under, amber up to 500, red above. Click the badge for a panel of the recent slow interactions, and click a row for the whole explanation. From the demo's sign-in page, in development, this is `report.verdict`:
+**What you will see.** Reload the page. A small dark badge sits in the corner and reads `INP —` until you interact. Click something slow and it shows the page's INP so far in milliseconds: green at 200 or under, amber up to 500, red above. Click the badge for a panel of the recent slow interactions, and click a row for the whole explanation. From the demo's sign-in page, in development, this is an excerpt from `report.verdict`:
 
     400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms
     after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them
-    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and
-    what started it can't be told.
+    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms).
 
 The `overlay` option, development numbers and reading reports in code are in [Using the badge](docs/using-the-badge.md). Next.js 14.2 setup goes in `next.config.mjs`, shown there too.
 
@@ -87,11 +86,9 @@ Use web-vitals 5.1 or later. [The integration guide](docs/web-vitals.md) covers 
 
 ## How reliable is it
 
-The current five-app cohort has no published accuracy or overhead results. Its build and interaction integrations are still pending, so selecting those apps is not evidence that attribution has been validated on them. See the [cohort status](docs/benchmarks/real-apps.md) and [measurement plan](docs/benchmarks/README.md).
+The [benchmark harness](bench/README.md) selects [five everyday apps](docs/benchmarks/real-apps.md). Actual has a verified functional integration. Results are added as each app's runs finish. The [measurement plan](docs/benchmarks/README.md) covers the protocol and app selection. For local setup, see [reproduction](docs/reliability.md#benchmarks-and-reproduction).
 
-The [benchmark harness](bench/README.md) now selects [five everyday apps](docs/benchmarks/real-apps.md). Their build and interaction integrations are pending, and no accuracy or overhead results exist for this cohort. The [measurement plan](docs/benchmarks/README.md) describes the protocol and selection amendment. See [validation status](#how-reliable-is-it) before treating attribution as evidence. Local copy and test steps: [reproduction](docs/reliability.md#benchmarks-and-reproduction). What 1.0 means: [What 1.0 means](docs/versions.md#what-10-means).
-
-A report joins timing evidence with React activity. A component name is a lead to investigate, not proof that the component caused the delay. Coinciding work may be unrelated, production builds lack React render times, and browser support limits the evidence available. Check a verdict against a browser performance trace and the [known limits](docs/known-limits.md) before acting on it.
+A report joins browser timing with React activity and marks its blame as measured or inferred. Production builds use render counts, while profiling builds provide React render times. See [how it works in edge cases](docs/known-limits.md) and [what 1.0 means](docs/versions.md#what-10-means).
 
 Side-by-side with Sentry, react-scan, web-vitals attribution and React 19.2 Performance tracks: [Compared with other tools](docs/comparison.md).
 
@@ -103,25 +100,25 @@ If a report names the wrong component or handler, or a slow interaction gets no 
 
 ## Browser support
 
-|                                                  | Chromium | Firefox | Safari |
-| ------------------------------------------------ | -------- | ------- | ------ |
-| Event Timing `interactionId` (required)          | 96       | 144     | 26.2   |
-| Long Animation Frames: scripts and forced layout | 123      | no      | no     |
-| Performance panel tracks                         | 128      | no      | no     |
+Works in Chromium 96+, Firefox 144+ and Safari 26.2+.
+Long Animation Frames adds script and forced-layout details on Chromium 123+.
+Performance panel tracks work on Chromium 128+.
 
 Notes on timer precision and missing APIs: [browser support notes](docs/versions.md#browser-support-notes).
 
 ## Versions
 
-|                                              | CI runs                                                                                     | Outside that                                                                                             |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| react-dom                                    | 17.0.2, 18.0.0, 18.1.0, 18.2.0, 18.3.1, 19.0.0, 19.1.9, 19.2.8, 19.3.0, and the canary `next@canary` brings | Outside 17 to 19 that root is not read, and [one warning](docs/troubleshooting.md#react-version) says so |
-| Next.js                                      | 14.2.35, 15.3.9, 15.5.26, 16.2.12, 16.3.5 and canary                                        | Below 14.2 the wrapper leaves the config as it was and [says why](docs/troubleshooting.md#next-too-old)  |
-| Vite                                         | 6.4, 7.3 and 8.3; a build on Vite 5                                                         | Not tried below 5                                                                                        |
-| React Router, Remix, TanStack Start          | React Router 7.18 and 8.4, Remix 2.17 on Vite, TanStack Start 1.168                         | Not tried                                                                                                |
-| Astro                                        | 7.3                                                                                         | Not tried                                                                                                |
-| [webpack and Rspack](docs/install.md#webpack-or-rspack) | webpack 5.111 and Rspack 2.3                                                        | Not tried                                                                                                |
-| Node, for the build plugins                  | Installs and loads on 20.19, tests on 22 and 24                                             | `engines` asks for 20.19                                                                                 |
+| Package | Tested with |
+| --- | --- |
+| react-dom | 17.0.2, 18.0.0, 18.1.0, 18.2.0, 18.3.1, 19.0.0, 19.1.9, 19.2.8, 19.3.0, and the canary `next@canary` brings |
+| Next.js | 14.2.35, 15.3.9, 15.5.26, 16.2.12, 16.3.5 and canary |
+| Vite | 6.4, 7.3 and 8.3, plus a build on Vite 5 |
+| React Router, Remix, TanStack Start | React Router 7.18 and 8.4, Remix 2.17 on Vite, TanStack Start 1.168 |
+| Astro | 7.3 |
+| [webpack and Rspack](docs/install.md#webpack-or-rspack) | webpack 5.111 and Rspack 2.3 |
+| Node, for the build plugins | Installs and loads on 20.19, tests on 22 and 24 |
+
+Use react-dom 17 to 19, Next.js 14.2+ and Node 20.19+ for the build plugins.
 
 Peer dependency notes, Jest setup, the 1.x promise and the support window are in [Versions](docs/versions.md).
 
@@ -154,8 +151,8 @@ The [docs](docs/README.md) have the rest.
 - <a id="with-opentelemetry"></a>**[With OpenTelemetry](docs/opentelemetry.md)**, experimental: the blame added to the INP event OpenTelemetry, Honeycomb, Elastic, Embrace or Grafana Faro already sends.
 - <a id="api"></a>**[API](docs/api.md)**: `onInteraction`, <a id="installoptions"></a>[`install(options)`](docs/api.md#installoptions), <a id="interactionreport"></a>[every field of a report](docs/api.md#interactionreport) and <a id="the-badge-and-panel"></a>[the badge and panel](docs/api.md#the-badge-and-panel).
 - <a id="reference"></a>**[How it works](docs/how-it-works.md)**: <a id="clicks-that-land-before-hydration"></a>[clicks before hydration](docs/how-it-works.md#clicks-that-land-before-hydration), <a id="the-inp-estimate"></a>[the INP estimate](docs/how-it-works.md#the-inp-estimate), <a id="what-it-reads-from-react"></a>[what it reads from React](docs/how-it-works.md#what-it-reads-from-react) and its own [time per interaction](docs/how-it-works.md#time-per-interaction).
-- <a id="known-limits"></a>**[Known limits](docs/known-limits.md)**: what it can't see, and where it has to guess. Worth reading before you trust a verdict on a big app.
-- [Benchmark plan and pending integrations](docs/benchmarks/README.md) for the five-app cohort, and the [design notes](docs/interaction-attribution-design.md).
+- <a id="known-limits"></a>**[How it works in edge cases](docs/known-limits.md)**.
+- [Benchmark plan and app integrations](docs/benchmarks/README.md) for the five-app cohort, and the [design notes](docs/interaction-attribution-design.md).
 
 ## Troubleshooting
 

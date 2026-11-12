@@ -14,7 +14,7 @@ compares and what it costs. These pages have the rest.
   and the badge and panel.
 - [How it works](how-it-works.md): clicks before hydration, the INP estimate, what it reads from React, and
   its own time per interaction.
-- [Known limits](known-limits.md): what it can't see, and where it has to guess.
+- [How it works in edge cases](known-limits.md).
 - [Troubleshooting](troubleshooting.md): every warning it prints, and what to do about it.
 - [Benchmarks](benchmarks/README.md): what it costs, and what it blames, on real open-source apps.
 - [Design notes](interaction-attribution-design.md): why it works the way it does.

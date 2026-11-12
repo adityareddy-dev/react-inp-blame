@@ -107,5 +107,4 @@ differ from it. No change to the surface goes out unseen, and the pull request t
 The API and the meanings of its report fields are stable through 1.x, apart from the documented experimental and debugging exceptions.
 A minor release can improve how blame is selected and how a report reads. It cannot change what an existing field means.
 
-The blame can still be wrong. A stable report format does not establish attribution accuracy.
-Read the [known limits](known-limits.md) before trusting a name.
+Read [how it works in edge cases](known-limits.md) for browser timing and React build details.

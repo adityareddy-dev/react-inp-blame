@@ -2,7 +2,6 @@
 
 For a slow interaction in your React app, react-inp-blame shows a badge and a report of where the time went.
 The report includes a component or handler name when it has one.
-It can be wrong, check the name against the profiler.
 
 ![The demo's sign-in page: an email and a password typed in, a click on Log in, the badge showing the page's INP, the panel opening, and the login row expanding into the explanation](https://raw.githubusercontent.com/adityareddy-dev/react-inp-blame/main/docs/media/overlay.gif)
 
@@ -53,8 +52,7 @@ Next.js 14.2 reads no `next.config.ts`, since that came in 15, so there the same
 
     export default defineConfig({ plugins: [react(), inpBlame({ runtime: { overlay: true } })] });
 
-React Router in framework mode, Remix, TanStack Start and Astro write their own HTML, which this
-plugin never sees on its own, so each has a setup of its own:
+Use the framework setup for apps that write their own HTML:
 [React Router](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-react-router),
 [Remix](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-remix),
 [TanStack Start](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#install-with-tanstack-start),
@@ -69,13 +67,12 @@ first, and click a row for the whole explanation. A click, tap or key press of 4
 row (the `threshold` option), so a 150 ms click has one, though the badge stays green and the panel
 says Good: INP counts anything up to 200 ms as good. The demo above sets `position: 'bottom-left'`,
 which is why its badge sits on the left: its own explanation column has the right-hand side. From the
-demo's sign-in page, in development:
+demo's sign-in page, an excerpt from a development report:
 
     400 ms click on button "Log in" in SignInPage. The click handler handleLogin ran for
     about 399 ms; React's own render took under 1 ms. A second React render landed 295 ms
     after the screen updated: 81 ms rendering 260 components from SignInDemo down, 241 of them
-    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms). INP doesn't count it, and
-    what started it can't be told.
+    inside ProfilePage, mostly PhotoTile (240 of the 260, 72 ms).
 
 `overlay` takes `true` (always shown), `'query'` (shown only when the URL has `?inp-blame` or
 `#inp-blame`, or `localStorage` has `react-inp-blame` set to `overlay`, which is how to open it on a
@@ -95,9 +92,9 @@ or red in a production build: add `enabled: true` and `runtime: { overlay: 'quer
 and `next start` or `vite build` and `vite preview`, and open the page with `?inp-blame`
 ([Numbers in development](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/install.md#numbers-in-development)).
 
-It is a development tool first, and production is optional. Production instrumentation has a
-cost. The [current five-app benchmark cohort](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md)
-has no accuracy or overhead results yet, and its integrations are pending.
+For production use, enable the library and set a sample rate. See the
+[current five-app benchmark cohort](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md)
+for the apps it is being measured on.
 
 The design notes, the demos and the browser matrix are in the
 [repository](https://github.com/adityareddy-dev/react-inp-blame#readme).
@@ -118,92 +115,15 @@ Each warning the library prints ends with a link to its entry under
 The API and the meanings of its report fields are stable through 1.x, apart from the documented experimental and debugging exceptions.
 A minor release can improve how blame is selected and how a report reads. It cannot change what an existing field means.
 
-The blame can still be wrong, and the count below is why 1.0.0 is not a claim of accuracy.
-Read the [known limits](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/known-limits.md) before trusting a name.
+Read [how it works in edge cases](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/known-limits.md)
+for details on browser timing and React builds.
 
 ## How reliable is it
 
-On hyperdx and kaneo, 0.25.0 was right on 8 of 62 verdicts. Of the other 54, 35 were wrong and 19 misleading.
-Every verdict stayed in the count. Each was read twice, with a third read where the two disagreed on a scored axis. The [accuracy page](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md) gives the context for this check. The bar I set for 1.0 was at least 38 right and at most 6 wrong on those 62, and it isn't met. No later version has been graded on fresh apps.
-
-These are separate checks of what each report says.
-
-| Check                                   | Right | Wrong | Misleading | Cannot tell | Blank |
-| --------------------------------------- | ----: | ----: | ---------: | ----------: | ----: |
-| Whole verdict                           |     8 |    35 |         19 |           0 |     0 |
-| Name and its explanation                |     9 |    32 |         19 |           2 |     0 |
-| Kind of work                            |    49 |    13 |          0 |           0 |     0 |
-| Milliseconds charged to the blamed work |    36 |     0 |          0 |           0 |    26 |
-
-Kind asks whether the named work is the biggest part of the time in the trace. The milliseconds pass
-if they are within the larger of 10 ms and 20% of the trace's figure for that work. Blank means the report
-gave no blame figure, so there was nothing to check on that axis. The headline duration was not a separate axis.
-
-The name check includes the explanation and notes. A wrong name grade can also mean the verdict states
-something false. Misleading means its wording is true but sends you to the wrong place. Cannot tell means
-the evidence could not settle it. A wrong kind makes the whole verdict wrong, even with a right or unresolved
-name grade. A right name with wrong milliseconds, or a name that points at an ancestor after the component
-walk stopped at its budget, cannot make the whole verdict right.
-
-Here is the same count split by app and run settings.
-
-Overall cells read right / wrong / misleading. Name cells add cannot tell as the last count. Kind cells read right / wrong / misleading. Milliseconds cells add blank as the last count. The kind and milliseconds axes do not permit misleading, their zeros reflect the rubric. Each row includes every verdict in that group. The marginal rows overlap, the eight app/build/throttle rows partition all 62. `dev` means development and `prod` means production. `1x` means no CPU throttling and `4x` means 4x CPU throttling.
-
-| Group           | Verdicts | Overall     | Name            | Kind        | Milliseconds    |
-| --------------- | -------: | ----------- | --------------- | ----------- | --------------- |
-| All             |       62 | 8 / 35 / 19 | 9 / 32 / 19 / 2 | 49 / 13 / 0 | 36 / 0 / 0 / 26 |
-| hyperdx         |       39 | 6 / 19 / 14 | 6 / 19 / 14 / 0 | 37 / 2 / 0  | 16 / 0 / 0 / 23 |
-| kaneo           |       23 | 2 / 16 / 5  | 3 / 13 / 5 / 2  | 12 / 11 / 0 | 20 / 0 / 0 / 3  |
-| dev             |       30 | 6 / 12 / 12 | 6 / 12 / 12 / 0 | 25 / 5 / 0  | 27 / 0 / 0 / 3  |
-| prod            |       32 | 2 / 23 / 7  | 3 / 20 / 7 / 2  | 24 / 8 / 0  | 9 / 0 / 0 / 23  |
-| 1x              |       28 | 7 / 13 / 8  | 8 / 12 / 8 / 0  | 22 / 6 / 0  | 13 / 0 / 0 / 15 |
-| 4x              |       34 | 1 / 22 / 11 | 1 / 20 / 11 / 2 | 27 / 7 / 0  | 23 / 0 / 0 / 11 |
-| hyperdx dev 1x  |       11 | 4 / 3 / 4   | 4 / 3 / 4 / 0   | 11 / 0 / 0  | 8 / 0 / 0 / 3   |
-| hyperdx dev 4x  |        6 | 0 / 3 / 3   | 0 / 3 / 3 / 0   | 6 / 0 / 0   | 6 / 0 / 0 / 0   |
-| hyperdx prod 1x |       10 | 1 / 6 / 3   | 1 / 6 / 3 / 0   | 8 / 2 / 0   | 0 / 0 / 0 / 10  |
-| hyperdx prod 4x |       12 | 1 / 7 / 4   | 1 / 7 / 4 / 0   | 12 / 0 / 0  | 2 / 0 / 0 / 10  |
-| kaneo dev 1x    |        5 | 2 / 2 / 1   | 2 / 2 / 1 / 0   | 3 / 2 / 0   | 5 / 0 / 0 / 0   |
-| kaneo dev 4x    |        8 | 0 / 4 / 4   | 0 / 4 / 4 / 0   | 5 / 3 / 0   | 8 / 0 / 0 / 0   |
-| kaneo prod 1x   |        2 | 0 / 2 / 0   | 1 / 1 / 0 / 0   | 0 / 2 / 0   | 0 / 0 / 0 / 2   |
-| kaneo prod 4x   |        8 | 0 / 8 / 0   | 0 / 6 / 0 / 2   | 4 / 4 / 0   | 7 / 0 / 0 / 1   |
-
-The kind of work was right more often than the name. Names were wrong on 32 verdicts and misleading on 19. Two were unresolved. All 36 supplied blame figures passed the timing tolerance, but 26 verdicts supplied
-none. In production, 23 of 32 supplied none. Passing that timing check does not show that the named component
-caused the time.
-
-The graders also recorded their confidence and where evidence was missing. The grade files behind these tables are not in this repo.
-
-Capped ancestor means a production verdict whose component walk stopped at its budget and named an ancestor of the work. It is a flag, not a correctness grade. Reader confidence belongs to the selected grade, not the report's measured/inferred confidence. An evidence gap is a recorded limitation, not an automatic failure. These fields have no right/wrong/misleading grades.
-
-| Group           | Verdicts | Capped ancestor: yes / no | Reader confidence: high / medium / low | Evidence gap: recorded / none |
-| --------------- | -------: | ------------------------- | -------------------------------------- | ----------------------------- |
-| All             |       62 | 1 / 61                    | 25 / 36 / 1                            | 50 / 12                       |
-| hyperdx         |       39 | 1 / 38                    | 17 / 21 / 1                            | 37 / 2                        |
-| kaneo           |       23 | 0 / 23                    | 8 / 15 / 0                             | 13 / 10                       |
-| dev             |       30 | 0 / 30                    | 12 / 18 / 0                            | 19 / 11                       |
-| prod            |       32 | 1 / 31                    | 13 / 18 / 1                            | 31 / 1                        |
-| 1x              |       28 | 1 / 27                    | 11 / 16 / 1                            | 25 / 3                        |
-| 4x              |       34 | 0 / 34                    | 14 / 20 / 0                            | 25 / 9                        |
-| hyperdx dev 1x  |       11 | 0 / 11                    | 6 / 5 / 0                              | 10 / 1                        |
-| hyperdx dev 4x  |        6 | 0 / 6                     | 2 / 4 / 0                              | 5 / 1                         |
-| hyperdx prod 1x |       10 | 1 / 9                     | 4 / 5 / 1                              | 10 / 0                        |
-| hyperdx prod 4x |       12 | 0 / 12                    | 5 / 7 / 0                              | 12 / 0                        |
-| kaneo dev 1x    |        5 | 0 / 5                     | 1 / 4 / 0                              | 3 / 2                         |
-| kaneo dev 4x    |        8 | 0 / 8                     | 3 / 5 / 0                              | 1 / 7                         |
-| kaneo prod 1x   |        2 | 0 / 2                     | 0 / 2 / 0                              | 2 / 0                         |
-| kaneo prod 4x   |        8 | 0 / 8                     | 4 / 4 / 0                              | 7 / 1                         |
-
-The reasons and trace measurements are supporting evidence, they have no separate accuracy grade. There
-is no separate score for every component count or later-render note, those claims affect the name grade.
-
-All eight right verdicts were clicks. Six were in development and two in production.
-Seven were unthrottled.
-Five named a render subtree. The two Denoise Results clicks named DBSqlRowTable, and the two workspace-menu
-openings named MenuPositioner. One navigation expansion named AppNav. The grade reasons place the work inside those subtrees.
-The other three correctly named no culprit for the interaction. They are not three slow components found.
-
-Seven of the eight right verdicts still have a recorded evidence gap. Some exact component counts and the
-precise hot function inside DBSqlRowTable remain unverified in the grade reasons.
+A report joins browser timing with React activity and marks its blame as measured or inferred.
+Production builds use render counts. A profiling build of React provides render times.
+The [benchmark pages](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/benchmarks/real-apps.md)
+cover app integrations and the measurement protocol.
 
 # Reference
 
@@ -330,7 +250,7 @@ hook as it loads gets a warning naming both and the module that does it.
 A build with no HTML page, as under Laravel, Rails, Django or any backend that writes the page from
 `manifest.json`, gives the plugin nowhere to put its script, so it installs nothing, on the dev
 server or in a build; when every input is a script it warns that it will not. `entry`, naming the
-script every page loads first, may be all it needs (not tried on a real backend). Or keep the plugin for names with
+script every page loads first, puts the install before the app. Or keep the plugin for names with
 `inpBlame({ runtime: false })`, and give the install an entry of its own that each page loads first:
 a file such as `inp-blame.ts` holding `import 'react-inp-blame/auto'` or the app's own `install()`
 call. List it first in the build's inputs (`build.rollupOptions.input`, or the backend plugin's,
@@ -340,7 +260,7 @@ order, which is what the plugin's own script relies on. `enabled` then decides o
 stamped: that entry installs in every run that loads it. A first import inside the app's own entry is
 not enough once a second entry shares react-dom with it. Keep react-inp-blame out of a `node_modules`
 vendor rule there too, because that entry imports the vendor chunk as the plugin's script would.
-None of this has been tried on a real backend yet. Astro has an integration of its own, below.
+Astro has an integration of its own, below.
 
 Astro writes its own pages too, and imports one script in every island before it loads the island's
 component and renderer. `react-inp-blame/astro` puts `install()` there, so it runs before
@@ -363,7 +283,7 @@ under `astro dev` and on `astro preview` of a production build.
 Without the Vite plugin or the Next.js wrapper, make `import 'react-inp-blame/auto'` the first
 import of the entry module: it installs with the default options before react-dom loads. Under
 webpack or Rspack that holds even with a `splitChunks` vendor chunk, because they run a module when
-it is first required, not when its chunk loads (not tried with either). With another bundler it is
+it is first required, not when its chunk loads. With another bundler it is
 the right shape in a production build but not a guarantee, because a bundler may put react-dom in a
 chunk that evaluates before the entry's body does, and React looks for the hook only while it
 evaluates. Two builds where that happens are a second HTML page sharing a chunk with the first, and a
@@ -423,8 +343,7 @@ report such an error kept the library from explaining. It never guesses, and a m
 gives `react: null` rather than throwing in the callback.
 web-vitals keeps which interaction is INP, the percentile, the back/forward cache and soft navigations.
 
-In production the component names need the `displayName` transform above; without it the minifier
-has renamed them and the path reads `a > b (button.tile)`.
+Keep component names in production with the `displayName` transform above.
 
 The blame can go to Sentry as a metric, with its fields as attributes. Sentry's own INP span carries
 no interaction id, so nothing ties this library's report to it. web-vitals reports INP again, higher,

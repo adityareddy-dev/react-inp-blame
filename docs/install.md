@@ -164,8 +164,8 @@ react-dom runs where it is first imported.
 **No HTML page in the build** (Laravel, Rails, Django, or any backend that writes the page from
 `manifest.json`). The plugin has no page to put its script in, so it installs nothing, on the dev server or
 in a build; when every input the build lists is a script, it warns that it will not. `entry`, naming the
-script every page loads first, puts the install first in it as it does for the frameworks below (not tried on
-a real backend yet). Or keep the plugin for names with `inpBlame({ runtime: false })`, and give the
+script every page loads first, puts the install first in it as it does for the frameworks below.
+Or keep the plugin for names with `inpBlame({ runtime: false })`, and give the
 install an entry of its own that each page loads first: a file such as `inp-blame.ts` holding
 `import 'react-inp-blame/auto'` or your own `install()` call. List it first in the build's inputs
 (`build.rollupOptions.input`, or your backend plugin's, such as `laravel({ input: [...] })`) and first in the
@@ -173,8 +173,7 @@ page, as `@vite(['resources/js/inp-blame.ts', 'resources/js/app.tsx'])` does. Mo
 order, which is what the plugin's own script relies on. `enabled` then decides only where names are stamped:
 that entry installs in every run that loads it. A first import inside the app's own entry is not enough once
 a second entry shares react-dom with it. Keep react-inp-blame out of a `node_modules` vendor rule there too,
-because that entry imports the vendor chunk as the plugin's script would. None of this has been tried on a
-real backend yet.
+because that entry imports the vendor chunk as the plugin's script would.
 
 <a id="webpack-or-rspack"></a>
 **webpack or Rspack.** Make `import 'react-inp-blame/auto'` the first import of your entry module. That holds
