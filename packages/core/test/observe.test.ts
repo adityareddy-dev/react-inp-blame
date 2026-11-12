@@ -101,6 +101,42 @@ test('a first click that also cleared the 16 ms floor is handed over once, not t
   );
 });
 
+// A finger held 250 ms on a first tap: the pointerdown painted under the 16 ms floor, so it has no event
+// entry, while the click it ended in ran its handler for 120 ms. The first-input copy is the press's only
+// entry, and holdMs spans from it.
+const heldTap = () => [
+  timing('event', 'pointerdown', 8, 1001.3, 1001.6),
+  { ...timing('event', 'click', 136, 1265, 1386), startTime: 1250 },
+  timing('first-input', 'pointerdown', 8, 1001.3, 1001.6),
+];
+
+test("a first tap's pointerdown under the 16 ms floor is handed over beside the click that cleared it", () => {
+  const handed: any[][] = [];
+  inBrowser((paint) => {
+    observeEventTiming((entries) => handed.push(entries));
+    paint(heldTap());
+  });
+  assert.deepEqual(
+    handed.map((batch) => batch.map((e) => `${e.entryType} ${e.name}`)),
+    [['event click', 'first-input pointerdown']],
+  );
+  assert.ok(buildReport(handed[0]!, [], []).holdMs >= 240);
+});
+
+test("a first tap's pointerdown under the 16 ms floor is handed over when its copy comes after the click", () => {
+  const handed: any[][] = [];
+  inBrowser((paint) => {
+    observeEventTiming((entries) => handed.push(entries));
+    const [down, clicked, copy] = heldTap();
+    paint([down, clicked]);
+    paint([copy]);
+  });
+  assert.deepEqual(
+    handed.map((batch) => batch.map((e) => `${e.entryType} ${e.name}`)),
+    [['event click'], ['first-input pointerdown']],
+  );
+});
+
 test('a first input replayed to an install() that ran after it is handed over when its event entry never comes', () => {
   const handed: any[][] = [];
   inBrowser((paint) => {
