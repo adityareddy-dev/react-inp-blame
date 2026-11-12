@@ -20,7 +20,7 @@ const hostedHeader = {
       : html.replace(
           '<div id="root"></div>',
           `<header class="hosted-header">
-      <p><a class="home" href="/">react-inp-blame</a> shows where the time went in a slow click, tap or key press, and names a component or handler when it has one. It can be wrong.
+      <p><a class="home" href="/">react-inp-blame</a> shows where the time went in a slow click, tap or key press, and names a component or handler when it has one.
         <span><a href="https://github.com/adityareddy-dev/react-inp-blame">GitHub</a> <code>npm i react-inp-blame</code></span></p>
       <p>Everything here is slow on purpose, so click something and read what the badge in the corner blames.
         Nothing you type on this page leaves it: the sign-in is simulated and sends no request.</p>

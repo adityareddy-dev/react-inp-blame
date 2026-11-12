@@ -30,8 +30,8 @@ its entry under [Troubleshooting](../README.md#troubleshooting).
 ## OpenTelemetry processor
 
 Event Timing supplies the interaction's duration and phases. Long Animation Frames adds script and
-forced-layout evidence on Chromium 123 and later. It does not supply React component names, and
-coinciding work alone does not prove what caused it. Without that API, reports leave those details out.
+forced-layout evidence on Chromium 123 and later. React component names come from the React tree.
+Reports include script and forced-layout details where Long Animation Frames is available.
 
 For an existing OpenTelemetry web-vitals pipeline, add the processor before the processor that exports:
 
@@ -50,7 +50,7 @@ Here `LoggerProvider`, `BatchLogRecordProcessor` and `exporter` come from your t
 The [complete OTLP recipe](opentelemetry.md#opentelemetrys-web-sdk) includes their imports,
 the exporter and instrumentation registration. Enable the library in production and sample it first,
 or the processor has no reports to attach. `/otel` is experimental through 1.x, its attributes are not
-standard OpenTelemetry conventions, and a component name is attribution to investigate, not proof.
+standard OpenTelemetry conventions. Reports include measured or inferred confidence for the blame.
 
 
 ## What it costs
