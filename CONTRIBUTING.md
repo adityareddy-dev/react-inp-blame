@@ -80,6 +80,7 @@ From the repository root:
     npm run test:pack                             # the packed tarball, installed into throwaway apps
     npm run test:vite-app -- --fixture datadog     # the published Datadog recipe, production build and local RUM payload
     npm run test:vite-app                         # a create-vite app with @vitejs/plugin-react, from the packed tarball
+    npm run test:otel                             # OpenTelemetry contract checks and doc examples, from the packed tarball
 
 The Vite demo runs its specs in Chromium, and `cross-browser.spec.ts` in Firefox and WebKit as well.
 It imports the library's source, so it needs no build. The Next.js app uses the package as built, so
@@ -182,6 +183,14 @@ lockfile. The runner reads the Datadog TypeScript block from `docs/web-vitals.md
 building it, so CI checks the code users paste. Its Chromium test sends one slow click through the
 production build and captures the RUM transport locally, checking the vital's blame, duration and view.
 It uses port 5222, waits for the SDK’s normal batch and saves the payload under `test-results/datadog`.
+
+`npm run test:otel` checks the packed package against the web SDK setups in `fixtures/otel`, as well as compiling the TypeScript blocks in `docs/opentelemetry.md` that start with a `// src/...` path comment. The script copies `fixtures/otel` to a temporary directory, installs the packed tarball, and runs `contract.mjs` in Node (no browser required) to verify that recorded INP spans and logs carry the expected blame attribution.
+
+    npm run test:otel
+    npm run test:otel -- --fresh
+    npm run test:otel -- --tarball /path/to/react-inp-blame-1.0.0.tgz
+
+The normal run uses the fixture lockfile. `--fresh` requests the latest browser SDK releases while keeping shared OpenTelemetry dependencies on the compatible 2.x / 0.2xx family. `--tarball` uses an existing package tarball (as CI does in its `otel` and `otel-fresh` jobs). The suite needs the npm registry, runs in Node without a browser, and prints the retained temporary copy's path if a check fails.
 
 Two things the demo's suite leaves out of a normal run:
 
