@@ -117,10 +117,10 @@ server left over from another suite would be tested in place of the right one, s
 next suite starts. The fixtures never reuse one, so a server still on one of their ports fails
 their run.
 
-`npm run test:pack` and `npm run test:vite-app` are the two checks that see the package as npm publishes
-it; the other suites above reach it through the workspace link. `test:pack` packs `packages/core` and
-installs the tarball, with one `npm install` each, into throwaway apps in the temp directory: one with no
-peers, one with Next.js 15, one with the Next.js that `apps/next-demo` pins, one with Vite 5, one with
+`npm run test:pack`, `npm run test:vite-app` and `npm run test:otel` are the three checks that see the
+package as npm publishes it; the other suites above reach it through the workspace link. `test:pack` packs
+`packages/core` and installs the tarball, with one `npm install` each, into throwaway apps in the temp directory:
+one with no peers, one with Next.js 15, one with the Next.js that `apps/next-demo` pins, one with Vite 5, one with
 TypeScript 5 and one with Jest 30. In each it checks that every file `package.json` points at is in the
 package, imports and requires every subpath, each of which has to give the names the READMEs document and
 no others, and loads the browser entries again under the `react-server` condition. In the Next.js 15 app
@@ -184,13 +184,19 @@ building it, so CI checks the code users paste. Its Chromium test sends one slow
 production build and captures the RUM transport locally, checking the vital's blame, duration and view.
 It uses port 5222, waits for the SDK’s normal batch and saves the payload under `test-results/datadog`.
 
-`npm run test:otel` checks the packed package against the web SDK setups in `fixtures/otel`, as well as compiling the TypeScript blocks in `docs/opentelemetry.md` that start with a `// src/...` path comment. The script copies `fixtures/otel` to a temporary directory, installs the packed tarball, and runs `contract.mjs` in Node (no browser required) to verify that recorded INP spans and logs carry the expected blame attribution.
+`npm run test:otel` checks the packed package against the web SDK setups in `fixtures/otel` and compiles
+the TypeScript blocks in `docs/opentelemetry.md` that start with a `// src/...` path comment. The script
+copies `fixtures/otel` to a temporary directory, installs the packed tarball, and runs `contract.mjs` in
+Node to verify that recorded INP spans and logs carry the expected blame attribution.
 
     npm run test:otel
     npm run test:otel -- --fresh
     npm run test:otel -- --tarball /path/to/react-inp-blame-1.0.0.tgz
 
-The normal run uses the fixture lockfile. `--fresh` requests the latest browser SDK releases while keeping shared OpenTelemetry dependencies on the compatible 2.x / 0.2xx family. `--tarball` uses an existing package tarball (as CI does in its `otel` and `otel-fresh` jobs). The suite needs the npm registry, runs in Node without a browser, and prints the retained temporary copy's path if a check fails.
+The normal run uses the fixture lockfile. `--fresh` requests the latest browser SDK releases while keeping
+shared OpenTelemetry dependencies on the compatible 2.x / 0.2xx family. `--tarball` uses an existing
+package tarball (as CI does in its `otel` and `otel-fresh` jobs). The suite needs the npm registry, runs
+in Node without a browser, and prints the retained temporary copy's path if a check fails.
 
 Two things the demo's suite leaves out of a normal run:
 
