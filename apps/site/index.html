@@ -3,16 +3,50 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>react-inp-blame</title>
-<meta name="description" content="For a slow click, tap or key press in a React app, react-inp-blame shows where the time went and names the component or handler behind it. Send it with web-vitals to Sentry or GA4, or with OpenTelemetry (experimental) to Honeycomb or Elastic.">
-<meta name="color-scheme" content="dark light">
+<title>react-inp-blame | Interaction to Next Paint, for React</title>
+<meta name="description" content="When a click, tap or key press in your React app is slow, this names the component or the handler behind it and says where the time went.">
+<link rel="canonical" href="https://reactinpblame.com/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="react-inp-blame">
+<meta property="og:title" content="react-inp-blame | Interaction to Next Paint, for React">
 <meta property="og:description" content="When a click, tap or key press in your React app is slow, this names the component or the handler behind it and says where the time went.">
 <meta property="og:url" content="https://reactinpblame.com/">
-<meta property="og:image" content="https://reactinpblame.com/media/social-preview.png">
+<meta property="og:site_name" content="react-inp-blame">
+<meta property="og:image" content="https://reactinpblame.com/media/share-preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="react-inp-blame with the demo panel showing a slow click on login.">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23f5a524'/%3E%3C/svg%3E">
+<meta name="twitter:title" content="react-inp-blame | Interaction to Next Paint, for React">
+<meta name="twitter:description" content="When a click, tap or key press in your React app is slow, this names the component or the handler behind it and says where the time went.">
+<meta name="twitter:image" content="https://reactinpblame.com/media/share-preview.png">
+<meta name="twitter:image:alt" content="react-inp-blame with the demo panel showing a slow click on login.">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://reactinpblame.com/#website",
+      "url": "https://reactinpblame.com/",
+      "name": "react-inp-blame",
+      "description": "When a click, tap or key press in your React app is slow, this names the component or the handler behind it and says where the time went."
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://reactinpblame.com/#software",
+      "name": "react-inp-blame",
+      "url": "https://reactinpblame.com/",
+      "description": "When a click, tap or key press in your React app is slow, this names the component or the handler behind it and says where the time went.",
+      "codeRepository": "https://github.com/adityareddy-dev/react-inp-blame"
+    }
+  ]
+}
+</script>
+
+<meta name="color-scheme" content="dark light">
+
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon.png">
 <script>
   /* Restore a theme the visitor chose before first paint. No stored choice means the system's. */
   try { var t = localStorage.getItem('rib-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
