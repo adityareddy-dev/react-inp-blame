@@ -70,21 +70,25 @@ export function supportsLongAnimationFrames(): boolean {
  * The page's first input is the exception: it also comes as a `first-input` entry at any
  * duration, carrying its interactionId, so that type is observed too (web-vitals' onINP does
  * the same). When its `event` entry has been handed over, the copy adds nothing and is dropped.
+ * That is the entry it copies, the same event at the same time: another entry of the interaction
+ * says nothing about it. A first tap whose pointerdown painted under the floor has a click that
+ * cleared it, and the copy is that press's only entry.
  */
 export function observeEventTiming(onBatch: (entries: InteractionTiming[]) => void): Observing {
   if (typeof PerformanceObserver === 'undefined') return NOT_OBSERVING;
   const firstInput = supportedEntryTypes().includes('first-input');
-  // The interactionIds of `event` entries handed over, kept until the page's first-input entry comes.
-  // Deciding on the copy's duration is not enough: `buffered: true` replays `event` entries to a late
-  // install() only from 104 ms, and `first-input` at any duration, so a 56 ms first input has no other entry.
-  let handedOver: Set<number> | null = firstInput ? new Set() : null;
+  // The `event` entries handed over, by interactionId, name and startTime, kept until the page's first-input
+  // entry comes. Deciding on the copy's duration is not enough: `buffered: true` replays `event` entries to a
+  // late install() only from 104 ms, and `first-input` at any duration, so a 56 ms first input has no other entry.
+  let handedOver: Set<string> | null = firstInput ? new Set() : null;
+  const key = (e: InteractionTiming) => `${e.interactionId} ${e.name} ${e.startTime}`;
   // Delivered entries and flushed ones both come through here, so the first input is dropped the same way.
   const take = (entries: InteractionTiming[]) => {
-    if (handedOver) for (const e of entries) if (e.entryType === 'event' && e.interactionId) handedOver.add(e.interactionId);
+    if (handedOver) for (const e of entries) if (e.entryType === 'event' && e.interactionId) handedOver.add(key(e));
     const batch = entries.filter((e) => {
       if (!e.interactionId) return false;
       if (e.entryType !== 'first-input') return true;
-      const copy = handedOver?.has(e.interactionId) ?? false;
+      const copy = handedOver?.has(key(e)) ?? false;
       handedOver = null;
       return !copy;
     });
