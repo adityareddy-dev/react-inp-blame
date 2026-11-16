@@ -197,7 +197,9 @@ test(`a finger held down ${HOLD_MS} ms is kept out of the headline, in holdMs`, 
   });
   const click = r.entries.find((e) => e.name === 'click');
   expect(click, r.entries.map((e) => e.name).join(', ')).toBeTruthy();
-  expect(r.entries[0].name).toBe('pointerdown');
+  // The press's entry is in the report, so holdMs spans from it. A first tap's pointerdown can paint under
+  // the 16 ms floor and come only as its first-input copy, which can arrive with the click or after it.
+  expect(r.entries.map((e) => e.name)).toContain('pointerdown');
   // The headline is the click's own time, and the finger's rest is beside it rather than in it.
   expect(r.type).toBe('click');
   expect(r.duration).toBe(click!.duration);
