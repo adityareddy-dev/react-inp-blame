@@ -37,12 +37,14 @@ export function parseTable(readme) {
   return rows;
 }
 
-/** `readme` with the table between the markers replaced by `table`. */
+/** `readme` with the table between the markers replaced by `table`, keeping the block's LF or CRLF line endings. */
 export function replaceTable(readme, table) {
   const start = readme.indexOf(START);
   const end = readme.indexOf(END);
   if (start < 0 || end < start) throw new Error(`README.md has no ${START} ... ${END} block for the size table`);
-  return readme.slice(0, start) + table + readme.slice(end + END.length);
+  const crlf = readme.slice(start, end + END.length).includes('\r\n');
+  const replacement = crlf ? table.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n') : table.replaceAll('\r\n', '\n');
+  return readme.slice(0, start) + replacement + readme.slice(end + END.length);
 }
 
 /** The table between the markers in `readme`, markers included, as written; null without them. */
