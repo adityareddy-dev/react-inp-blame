@@ -49,6 +49,7 @@ const REPORTED = [
 // The browser setups use OTel 2.x, whose SDK peers exclude API 1.10. OTel 3.x also moves
 // experimental packages to 0.3xx and sdk-logs to 3.x. Resolve the newest release within this family.
 const FRESH_RANGES = {
+  '@opentelemetry/browser-instrumentation': '>=0.11.0 <0.12.0',
   '@opentelemetry/api': '>=1.9.1 <1.10.0',
   '@opentelemetry/api-logs': '>=0.200.0 <0.300.0',
   '@opentelemetry/exporter-logs-otlp-http': '>=0.200.0 <0.300.0',
