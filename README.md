@@ -133,7 +133,7 @@ It is a development tool first, and running it in production is optional: this i
 | The badge and panel, a chunk loaded by `import()` only when shown | 18.1 KB | 7.1 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.3 KB | 11.7 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.6 KB | 0.9 KB |
-| `react-inp-blame/otel`, on top of `/auto` | 3.5 KB | 1.6 KB |
+| `react-inp-blame/otel`, on top of `/auto` | 3.9 KB | 1.7 KB |
 <!-- size:end -->
 
 How the bundle table is kept current: [What it costs](docs/reliability.md#what-it-costs).

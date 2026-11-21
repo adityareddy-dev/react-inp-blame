@@ -6,6 +6,19 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ## [Unreleased]
 
+### Changed
+
+- **`react-inp-blame/otel` sends no component, handler or script names unless the app approves them.** By default
+  `inpBlameAttributes` and `InpBlameLogRecordProcessor` now send timings, counts and fixed categories only:
+  `status`, `blame.kind`, `blame.confidence`, `blame.ms`, `react_status`, `react_build` and the commit and
+  follow-up counts and ms. `blame.name`, `blame.detail`, `handler`, `target.components` and `hot_path` go out
+  only for names the new `labels` option approves, a list of names or a function handed each name and the
+  attribute it would go in. Before, a script's name could carry an element id or a URL path the page built
+  from user data. A dashboard that groups by those names passes `labels` when it upgrades, and
+  `labels: () => true` sends every name as 1.0 did
+  ([With OpenTelemetry](https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/opentelemetry.md#names)).
+  The reports in the browser keep every name.
+
 ### Testing
 
 - Run the React compatibility suites on 18.0.0 and 18.1.0, in development and production builds

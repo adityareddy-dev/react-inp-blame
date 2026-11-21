@@ -425,6 +425,11 @@ exports as the record is emitted would send it without them:
       processors: [new InpBlameLogRecordProcessor(), new BatchLogRecordProcessor({ exporter })],
     });
 
+By default it sends timings, counts and fixed categories such as `blame.kind`. Component, handler and
+script names go out only where the app approves them, as a list or a function:
+
+    new InpBlameLogRecordProcessor({ labels: ['OrderSummary', 'LineItem', 'onRemove'] });
+
 It sends what the library measured, so it needs the library in production: with `enabled` left at its
 default every record says `react_inp_blame.status: not-installed`. The setup for each SDK, what each
 attribute holds and what it costs are in
@@ -603,7 +608,7 @@ current:
 | The badge and panel, a chunk loaded by `import()` only when shown | 18.1 KB | 7.1 KB |
 | Of `/auto`, what has to run before react-dom: the hook, the fiber reading, the observers | 32.3 KB | 11.7 KB |
 | `react-inp-blame/web-vitals`, on top of `/auto` | 1.6 KB | 0.9 KB |
-| `react-inp-blame/otel`, on top of `/auto` | 3.5 KB | 1.6 KB |
+| `react-inp-blame/otel`, on top of `/auto` | 3.9 KB | 1.7 KB |
 <!-- size:end -->
 
 `react-inp-blame/web-vitals` pulls in none of the hook, the observers or the badge: an app that only wants

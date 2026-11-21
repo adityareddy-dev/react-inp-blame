@@ -17,7 +17,9 @@ type Attributes = Record<string, unknown>;
 /**
  * INP as the SDKs report it: once, as the page hides. Each report goes through the entry at that moment,
  * shaped the way each SDK hands it over, since the demo installs none of them: the SDK's own log record,
- * the record the instrumentation's hook sees, Embrace's, Honeycomb's span and Faro's interaction_time.
+ * the record the instrumentation's hook sees, Embrace's, Honeycomb's span and Faro's interaction_time. Those
+ * send no names, as the entry's default is. The SDK's record and the hook's go through once more with every
+ * name approved, as an app that opts in to names has them.
  */
 function watchInp(): void {
   type Otel = NonNullable<Window['__REACT_INP_BLAME_OTEL__']>;
@@ -62,7 +64,12 @@ function watchInp(): void {
       span.setAttributes(otel.inpBlameAttributes(metric));
       // Faro's measurement, whose context takes strings.
       const faro = Object.fromEntries(Object.entries(otel.inpBlameAttributes(time)).map(([name, value]) => [name, String(value)]));
-      w.__otelSeen.push({ metric, routes: { sdk: sdk.attributes, hook: hooked.attributes, embrace: embrace.attributes, honeycomb: span.attributes, faro } });
+      // The same SDK record and hook, with every name approved.
+      const everyName = { labels: () => true };
+      const sdkNamed = withSetAttributes({ hrTime, attributes: vital() as Attributes });
+      new otel.InpBlameLogRecordProcessor(everyName).onEmit(sdkNamed);
+      const hookNamed = { attributes: { ...vital(), ...otel.inpBlameAttributes({ attributes: vital(), timestamp: time }, everyName) } };
+      w.__otelSeen.push({ metric, routes: { sdk: sdk.attributes, hook: hooked.attributes, embrace: embrace.attributes, honeycomb: span.attributes, faro, 'sdk-named': sdkNamed.attributes, 'hook-named': hookNamed.attributes } });
     },
     // The library observes at the browser's floor too, so both see the same interactions.
     { durationThreshold: 16 },
@@ -108,7 +115,8 @@ test('react-inp-blame/otel puts the report\'s blame on the INP record or span ea
     const ours = Object.fromEntries(Object.entries(attributes).filter(([name]) => name.startsWith('react_inp_blame.')));
     expect(ours['react_inp_blame.status'], route).toBe('matched');
     expect(ours['react_inp_blame.blame.kind'], route).toBe(report!.blame.kind);
-    expect(ours['react_inp_blame.blame.name'], route).toBe(report!.blame.name);
+    if (route.endsWith('-named')) expect(ours['react_inp_blame.blame.name'], route).toBe(report!.blame.name);
+    else for (const name of ['blame.name', 'blame.detail', 'handler', 'target.components', 'hot_path']) expect(ours, route).not.toHaveProperty([`react_inp_blame.${name}`]);
     for (const value of Object.values(ours)) expect(String(value), route).not.toContain(labelText);
   }
 });

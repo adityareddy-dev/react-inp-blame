@@ -124,12 +124,13 @@ shared state, as it can reach the page itself.
 handed it reads the web vital's name, value and time, or the `interactionId` of a metric's entries,
 to find the report for that interaction. `inpBlameAttributes` returns `react_inp_blame.*` attributes
 for the app's hook to add, and the processor sets them on the INP log record it was handed:
-`react_inp_blame.status`, and where a report matched, that report's blame, handler, the components
-around its target, its hot path, `reactStatus`, `reactBuild` and the counts and render times of its
-commits and follow-ups. The app's setup sends them. It never gives the target's label or selector,
-the headline, verdict or notes, or a URL's query, fragment or password, though a script's URL in the
-blame's name keeps its path, as in a report. It changes no other record, adds no listener and sends
-nothing itself.
+`react_inp_blame.status`, and where a report matched, that report's blame kind, confidence and
+milliseconds, `reactStatus`, `reactBuild` and the counts and render times of its commits and
+follow-ups. The blame's name and detail, the handler, the components around its target and its hot
+path go out only where the app approves each name through the `labels` option. The app's setup sends
+them. It never gives the target's label or selector, the headline, verdict or notes, or a URL's query,
+fragment or password, though a script's URL in the blame's name keeps its path, as in a report. It
+changes no other record, adds no listener and sends nothing itself.
 
 Two things reach other code on the page without the app asking:
 

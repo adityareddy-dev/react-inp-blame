@@ -37,6 +37,21 @@ export interface InpLogRecordLike {
   setAttributes?(attributes: InpBlameAttributes): unknown;
 }
 
+/**
+ * What `inpBlameAttributes` and `InpBlameLogRecordProcessor` send beyond timings, counts and fixed
+ * categories. Without it no name the app wrote goes out.
+ */
+export interface InpBlameOptions {
+  /**
+   * The names the app approves for export, in `blame.name`, `blame.detail`, `handler`,
+   * `target.components` and `hot_path`: a list of the names themselves, or a function handed each name
+   * and the attribute it would go in, which approves it by returning `true`. In a path each component is
+   * approved on its own, and the ones left out are skipped. A name not approved stays on the page, and so
+   * does every name where the function throws. `() => true` sends every name, as 1.0 did.
+   */
+  readonly labels?: readonly string[] | ((label: string, attribute: `react_inp_blame.${string}`) => boolean);
+}
+
 const PREFIX = 'react_inp_blame.';
 const EMPTY: InpBlameAttributes = Object.freeze({});
 /**
@@ -72,16 +87,19 @@ const SEPARATOR = ' > ';
  * the `sampleRate` roll, `no-report` where no report fits, or `library-error` where the library could
  * not explain the report or could not read the source. Nothing else is added unless it matched.
  *
- * Only component, handler and script names and numbers: never the element's label, text or selector,
- * a sentence, or a URL's query. A script's name is the browser's for its listener, element id included
+ * By default only timings, counts and fixed categories: the blame's kind, confidence and ms, the React
+ * status and build, and the commits' and follow-ups' counts and ms. Component, handler and script names
+ * go out only where `options.labels` approves them. Never the element's label, text or selector, a
+ * sentence, or a URL's query. A script's name is the browser's for its listener, element id included
  * (`DIV#root.onclick`) or, with no id, its `src` (`IMG[src="/avatars/jane.png"].onload`), or a
  * script's URL. A URL loses its password, query and fragment, as the report gives it, but keeps its
- * path, so an id or a path built from user data goes out as the page wrote it. It never throws.
+ * path, so an id or a path built from user data goes out as the page wrote it once approved. It never
+ * throws.
  *
  * Experimental: the names can change in any minor release, 1.x included, until OpenTelemetry names
  * these fields.
  */
-export function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | number | null | undefined): InpBlameAttributes {
+export function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | number | null | undefined, options?: InpBlameOptions): InpBlameAttributes {
   let inp = false;
   try {
     // A metric named INP is INP's before its entries are read, so one whose entries throw is the library's error.
@@ -97,16 +115,19 @@ export function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | nu
     const react = attributeINP({ entries: [{ interactionId: report.interactionId }] }).react;
     if (!react) return status('library-error');
     const { blame, commits, followUps } = react;
+    const approves = approval(options?.labels);
+    const named = (name: string, label: string | null) => (label != null && approves(label, name) ? label : null);
+    const each = (name: string, labels: readonly string[]) => labels.filter((label) => approves(label, name));
     const all: Record<string, string | number | null> = {
       status: 'matched',
       'blame.kind': blame.kind,
-      'blame.name': blame.name,
-      'blame.detail': blame.detail,
+      'blame.name': named('blame.name', blame.name),
+      'blame.detail': named('blame.detail', blame.detail),
       'blame.ms': blame.ms,
       'blame.confidence': blame.confidence,
-      handler: react.handler,
-      'target.components': capped(componentPath(report.target?.owners ?? [])),
-      hot_path: capped([...react.hotPath]),
+      handler: named('handler', react.handler),
+      'target.components': capped(componentPath(each('target.components', report.target?.owners ?? []))),
+      hot_path: capped(each('hot_path', react.hotPath)),
       react_status: report.reactStatus,
       react_build: react.reactBuild,
       'commits.count': commits.count,
@@ -135,13 +156,21 @@ export function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | nu
  * `SimpleLogRecordProcessor`, has sent it by the time a later one runs. It never throws, since a throw
  * would keep the record from every processor after it, the exporter included.
  *
+ * Names go out only where `options.labels` approves them, as for `inpBlameAttributes`.
+ *
  * Experimental: the names can change in any minor release, 1.x included, until OpenTelemetry names
  * these fields.
  */
 export class InpBlameLogRecordProcessor {
+  private readonly options: InpBlameOptions | undefined;
+
+  constructor(options?: InpBlameOptions) {
+    this.options = options;
+  }
+
   onEmit(record: InpLogRecordLike): void {
     try {
-      const attributes = inpBlameAttributes(record);
+      const attributes = inpBlameAttributes(record, this.options);
       if (!Object.keys(attributes).length) return;
       if (typeof record.setAttributes === 'function') record.setAttributes(attributes);
       else Object.assign(record.attributes as object, attributes);
@@ -160,6 +189,25 @@ export class InpBlameLogRecordProcessor {
 }
 
 const status = (value: string): InpBlameAttributes => Object.freeze({ [`${PREFIX}status`]: value });
+
+/**
+ * Whether the app approves a name for the attribute it would go in. Only a list or a function the app
+ * passed approves anything, and a function only by returning `true`: a throw approves nothing.
+ */
+function approval(labels: InpBlameOptions['labels']): (label: string, name: string) => boolean {
+  if (typeof labels === 'function') {
+    return (label, name) => {
+      try {
+        return labels(label, `${PREFIX}${name}`) === true;
+      } catch {
+        return false;
+      }
+    };
+  }
+  if (!Array.isArray(labels) || !labels.length) return () => false;
+  const approved = new Set<unknown>(labels);
+  return (label) => approved.has(label);
+}
 
 /** A metric named anything but INP, a record for another web vital, and anything neither an object nor a number, are not INP. */
 function isInp(source: unknown): boolean {

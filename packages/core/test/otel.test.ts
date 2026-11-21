@@ -84,9 +84,15 @@ const unreadable = {
 
 const statusOf = (attributes: InpBlameAttributes) => attributes['react_inp_blame.status'];
 
+/** Every name approved, for the tests about which name goes out rather than whether one does. */
+const EVERY_NAME = { labels: () => true };
+
+/** The attributes that carry a name the app wrote, and go out only where the app approves the name. */
+const NAMED = ['blame.name', 'blame.detail', 'handler', 'target.components', 'hot_path'].map((name) => `react_inp_blame.${name}`);
+
 test('a record is matched on its time and value, read back from the HrTime the SDK stores', (t) => {
   t.after(installed([clicked(['LineItem', 'OrderSummary', 'Page'])]));
-  const attributes = inpBlameAttributes(record({ hrTime: hrTime(100) }));
+  const attributes = inpBlameAttributes(record({ hrTime: hrTime(100) }), EVERY_NAME);
   assert.equal(statusOf(attributes), 'matched');
   assert.equal(attributes['react_inp_blame.blame.kind'], 'render');
   assert.equal(attributes['react_inp_blame.blame.name'], attributeINP({ entries: CLICK }).react?.blame.name);
@@ -138,7 +144,7 @@ test('a metric joins on its entries\' interactionId, and the newest report wins 
   const older = clicked(['Older'], { hotPath: ['Older'] });
   const newer = clicked(['Newer'], { hotPath: ['Newer'] });
   t.after(installed([older, newer]));
-  const attributes = inpBlameAttributes({ name: 'INP', entries: CLICK });
+  const attributes = inpBlameAttributes({ name: 'INP', entries: CLICK }, EVERY_NAME);
   assert.equal(statusOf(attributes), 'matched');
   assert.equal(attributes['react_inp_blame.hot_path'], 'Newer');
   assert.equal(attributes['react_inp_blame.target.components'], 'Newer');
@@ -244,7 +250,7 @@ test('the processor uses setAttributes where the record has it, and assigns to a
 
 test('every attribute name, pinned, so a rename shows up in review', (t) => {
   t.after(installed([reportOf(CLICK, [commit(), commit({ at: 500, sinceInput: 400, total: 30 })], [], [input(100, { target: button(), owners: ['LineItem', 'OrderSummary'], handler: 'onClick' })], 'attributes', [], undefined, 'reading', undefined, 'development')]));
-  const attributes = inpBlameAttributes(record({ timestamp: 100 }));
+  const attributes = inpBlameAttributes(record({ timestamp: 100 }), EVERY_NAME);
   assert.deepEqual(Object.keys(attributes).sort(), [
     'react_inp_blame.blame.confidence',
     'react_inp_blame.blame.detail',
@@ -273,7 +279,7 @@ test('every attribute name, pinned, so a rename shows up in review', (t) => {
 
 test('what is null or empty is left out, and a production render blame sends no durations', (t) => {
   t.after(installed([reportOf(CLICK, [commit({ hasDurations: false, total: 0, hotPath: [] })], [])]));
-  const attributes = inpBlameAttributes(record({ timestamp: 100 }));
+  const attributes = inpBlameAttributes(record({ timestamp: 100 }), EVERY_NAME);
   assert.equal(attributes['react_inp_blame.blame.kind'], 'render');
   assert.equal(attributes['react_inp_blame.blame.confidence'], 'inferred');
   for (const name of ['blame.ms', 'commits.ms', 'follow_ups.ms', 'handler', 'target.components', 'hot_path', 'react_build']) {
@@ -287,7 +293,7 @@ test('target.components skips unreadable names, keeps the four nearest, reads ou
   const components = (owners: string[]) => {
     const restore = installed([clicked(owners)]);
     try {
-      return inpBlameAttributes(record({ timestamp: 100 }))['react_inp_blame.target.components'];
+      return inpBlameAttributes(record({ timestamp: 100 }), EVERY_NAME)['react_inp_blame.target.components'];
     } finally {
       restore();
     }
@@ -319,20 +325,117 @@ test('a label, a selector, a sentence and the URL never go out, even where label
   assert.equal(report.target?.label, 'button "Jane Doe"');
   assert.equal(report.navigationURL, url);
   t.after(installed([report]));
-  const attributes = inpBlameAttributes(record({ timestamp: 100 }));
+  // Every name approved, so the check covers all a name could carry.
+  const attributes = inpBlameAttributes(record({ timestamp: 100 }), EVERY_NAME);
   assert.equal(statusOf(attributes), 'matched');
   for (const value of Object.values(attributes)) {
     assert.doesNotMatch(String(value), /Jane|jane@|#profile|button|\?email/);
   }
 });
 
-test('a script blame keeps the listener\'s element id in blame.name, as react-inp-blame/web-vitals gives it', (t) => {
+test('a script blame keeps the listener\'s element id in blame.name, as react-inp-blame/web-vitals gives it, once the app approves it', (t) => {
   const frames: FrameSummary[] = [
     { start: 100, duration: 240, blocking: 190, forcedLayout: 0, styleAndLayoutStart: null, scripts: [{ invoker: 'DIV#user-42.onclick', name: '', source: 'app.js', start: 105, duration: 220, forcedLayout: 0 }] },
   ];
   const report = reportOf(CLICK, [], frames);
   t.after(installed([report]));
-  const attributes = inpBlameAttributes(record({ timestamp: 100 }));
+  const attributes = inpBlameAttributes(record({ timestamp: 100 }), { labels: ['DIV#user-42.onclick'] });
   assert.equal(attributes['react_inp_blame.blame.name'], 'DIV#user-42.onclick');
   assert.equal(attributes['react_inp_blame.blame.name'], attributeINP({ entries: CLICK }).react?.blame.name);
+  // By default the id the page wrote stays on the page, and the kind still goes out.
+  const plain = inpBlameAttributes(record({ timestamp: 100 }));
+  assert.equal(plain['react_inp_blame.blame.kind'], 'script');
+  assert.equal('react_inp_blame.blame.name' in plain, false);
+  for (const value of Object.values(plain)) assert.doesNotMatch(String(value), /user-42/);
+});
+
+test('by default only timings, counts and fixed categories go out, never a name the app wrote', (t) => {
+  t.after(installed([reportOf(CLICK, [commit(), commit({ at: 500, sinceInput: 400, total: 30 })], [], [input(100, { target: button(), owners: ['LineItem', 'OrderSummary'], handler: 'onClick' })], 'attributes', [], undefined, 'reading', undefined, 'development')]));
+  for (const attributes of [inpBlameAttributes(record({ timestamp: 100 })), inpBlameAttributes(record({ timestamp: 100 }), {}), inpBlameAttributes(record({ timestamp: 100 }), { labels: [] })]) {
+    assert.deepEqual(Object.keys(attributes).sort(), [
+      'react_inp_blame.blame.confidence',
+      'react_inp_blame.blame.kind',
+      'react_inp_blame.blame.ms',
+      'react_inp_blame.commits.count',
+      'react_inp_blame.commits.ms',
+      'react_inp_blame.commits.rendered',
+      'react_inp_blame.follow_ups.count',
+      'react_inp_blame.follow_ups.ms',
+      'react_inp_blame.react_build',
+      'react_inp_blame.react_status',
+      'react_inp_blame.status',
+    ]);
+    assert.equal(attributes['react_inp_blame.blame.kind'], 'render');
+    for (const value of Object.values(attributes)) assert.doesNotMatch(String(value), /LineItem|OrderSummary|onClick/);
+  }
+});
+
+test('a list of labels lets out only the names on it, each component of a path on its own', (t) => {
+  t.after(installed([clicked(['LineItem', 'Secret', 'OrderSummary', 'Page'], { hotPath: ['OrderSummary', 'Secret', 'LineItem'] })]));
+  const all = inpBlameAttributes(record({ timestamp: 100 }), EVERY_NAME);
+  assert.equal(all['react_inp_blame.blame.name'], 'LineItem');
+  assert.equal(all['react_inp_blame.blame.detail'], '801 components');
+  assert.equal(all['react_inp_blame.target.components'], 'Page > OrderSummary > Secret > LineItem');
+
+  const attributes = inpBlameAttributes(record({ timestamp: 100 }), { labels: ['OrderSummary', 'LineItem', 'Page', 'onClick'] });
+  assert.equal(attributes['react_inp_blame.blame.name'], 'LineItem');
+  assert.equal(attributes['react_inp_blame.handler'], 'onClick');
+  assert.equal(attributes['react_inp_blame.target.components'], 'Page > OrderSummary > LineItem');
+  assert.equal(attributes['react_inp_blame.hot_path'], 'OrderSummary > LineItem');
+  // Display text is not on the list, so it stays on the page.
+  assert.equal('react_inp_blame.blame.detail' in attributes, false);
+  for (const value of Object.values(attributes)) assert.doesNotMatch(String(value), /Secret/);
+
+  // A path with no approved name is left out, rather than sent empty.
+  const handlerOnly = inpBlameAttributes(record({ timestamp: 100 }), { labels: ['onClick'] });
+  assert.equal(handlerOnly['react_inp_blame.handler'], 'onClick');
+  for (const name of NAMED.filter((n) => n !== 'react_inp_blame.handler')) assert.equal(name in handlerOnly, false, name);
+});
+
+test('a function approves each name with the attribute it would go in, and a throw or anything but true keeps it back', (t) => {
+  t.after(installed([clicked(['LineItem', 'OrderSummary', 'Page'])]));
+  const asked: [string, string][] = [];
+  const attributes = inpBlameAttributes(record({ timestamp: 100 }), {
+    labels: (label, attribute) => {
+      asked.push([attribute, label]);
+      return attribute === 'react_inp_blame.target.components' && label !== 'OrderSummary';
+    },
+  });
+  assert.equal(statusOf(attributes), 'matched');
+  assert.equal(attributes['react_inp_blame.target.components'], 'Page > LineItem');
+  for (const name of NAMED.filter((n) => n !== 'react_inp_blame.target.components')) assert.equal(name in attributes, false, name);
+  assert.deepEqual([...new Set(asked.map(([attribute]) => attribute))].sort(), [...NAMED].sort());
+  assert.ok(asked.some(([attribute, label]) => attribute === 'react_inp_blame.handler' && label === 'onClick'));
+
+  const thrown = inpBlameAttributes(record({ timestamp: 100 }), {
+    labels: () => {
+      throw new Error('an approval that throws');
+    },
+  });
+  assert.equal(statusOf(thrown), 'matched');
+  assert.equal(thrown['react_inp_blame.blame.kind'], 'render');
+  for (const name of NAMED) assert.equal(name in thrown, false, name);
+
+  const truthy = inpBlameAttributes(record({ timestamp: 100 }), { labels: (() => 'yes') as unknown as () => boolean });
+  for (const name of NAMED) assert.equal(name in truthy, false, name);
+});
+
+test('the processor sends no names by default, and the ones its labels approve', (t) => {
+  t.after(installed([clicked(['LineItem', 'OrderSummary', 'Page'])]));
+  const plain = record({ timestamp: 100 });
+  new InpBlameLogRecordProcessor().onEmit(plain);
+  assert.equal(plain.attributes?.['react_inp_blame.status'], 'matched');
+  assert.equal(plain.attributes?.['react_inp_blame.blame.kind'], 'render');
+  for (const name of NAMED) assert.equal(name in (plain.attributes ?? {}), false, name);
+
+  const approved = record({ timestamp: 100 });
+  new InpBlameLogRecordProcessor({ labels: ['LineItem', 'onClick'] }).onEmit(approved);
+  assert.equal(approved.attributes?.['react_inp_blame.blame.name'], 'LineItem');
+  assert.equal(approved.attributes?.['react_inp_blame.handler'], 'onClick');
+  assert.equal(approved.attributes?.['react_inp_blame.target.components'], 'LineItem');
+  assert.equal(approved.attributes?.['react_inp_blame.hot_path'], 'LineItem');
+
+  const set: InpBlameAttributes[] = [];
+  new InpBlameLogRecordProcessor(EVERY_NAME).onEmit({ ...record({ hrTime: hrTime(100) }), setAttributes: (attributes: InpBlameAttributes) => set.push(attributes) });
+  assert.equal(set[0]?.['react_inp_blame.target.components'], 'Page > OrderSummary > LineItem');
 });
