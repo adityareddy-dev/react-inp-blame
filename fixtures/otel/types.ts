@@ -4,7 +4,7 @@ import { onINP } from 'web-vitals/attribution';
 import type { Metric as AttributionMetric } from 'web-vitals/attribution';
 import { HoneycombWebSDK } from '@honeycombio/opentelemetry-web';
 import { attributeINP } from 'react-inp-blame/web-vitals';
-import { InpBlameLogRecordProcessor, inpBlameAttributes, type InpBlameAttributes } from 'react-inp-blame/otel';
+import { InpBlameLogRecordProcessor, inpBlameAttributes, type InpBlameAttributes, type InpBlameOptions } from 'react-inp-blame/otel';
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs';
 
 // attributeINP takes web-vitals' plain Metric, whose entries are PerformanceEntry[], as Honeycomb's hook hands it over.
@@ -25,3 +25,8 @@ new HoneycombWebSDK({
 // The processor is one OpenTelemetry's own LoggerProvider takes, and the attributes are what setAttributes takes.
 export const processor: LogRecordProcessor = new InpBlameLogRecordProcessor();
 export const time: InpBlameAttributes = inpBlameAttributes(1234.5);
+
+// Names go out only where the app approves them: a list, or a function handed each name and its attribute.
+const approved: InpBlameOptions = { labels: ['CheckoutPage', 'onRemove'] };
+export const named: LogRecordProcessor = new InpBlameLogRecordProcessor(approved);
+export const pathOnly: InpBlameAttributes = inpBlameAttributes(1234.5, { labels: (label, attribute) => attribute === 'react_inp_blame.hot_path' && label.length > 0 });

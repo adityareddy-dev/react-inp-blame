@@ -253,7 +253,7 @@ sdk.<span class="tok-f">start</span>();</code></pre></figure><figure class="code
 });</code></pre></figure></div>
     <div class="prose">
       <p>Enable the library in production and set a sample rate. Install it before the telemetry setup, and put the processor first in the list.</p>
-      <p>Embrace and Grafana Faro have setups too. The entry sends component, handler and script names and numbers, never an element's text, <code>target.label</code> or a verdict sentence.</p>
+      <p>Embrace and Grafana Faro have setups too. By default the entry sends timings, counts and fixed categories, and names only where your app approves them, never an element's text, <code>target.label</code> or a verdict sentence.</p>
       <p><a href="https://github.com/adityareddy-dev/react-inp-blame/blob/main/docs/opentelemetry.md">Read the OpenTelemetry guide</a></p>
     </div>
   </div>
@@ -336,7 +336,7 @@ sdk.<span class="tok-f">start</span>();</code></pre></figure><figure class="code
     <details><summary>Does it change my app?</summary><p>The Vite plugin and the Next.js wrapper add an install script that runs before React, and a transform that keeps component names in production. Your components are not edited. With <code>enabled</code> left at its default, neither plugin adds anything to a production build.</p></details>
     <details><summary>Should I use the web-vitals route or the OpenTelemetry one?</summary><p>If you already send web-vitals to Sentry or GA4, use web-vitals: it is one option on <code>onINP</code>. If your INP event goes through OpenTelemetry's web vitals instrumentation, Honeycomb, Elastic, Embrace or Grafana Faro, use OpenTelemetry. That route is experimental, so its names can change in a minor release.</p></details>
     <details><summary>Can I run it in production?</summary><p>It is a development tool first, and production is optional. Turn it on with <code>enabled: true</code> and sample it with <code>sampleRate</code>. Its own time was 1.3 to 3.4 ms per interaction at the median on two demo scenarios, and what loads with the page is 35.8 KB gzip.</p></details>
-    <details><summary>Does it send what people type?</summary><p>No. <code>target.label</code> never reads a form field's value. The OpenTelemetry entry sends component, handler and script names and numbers only. A label that your own code builds from user data would go out as written, so check the ids and test ids you set.</p></details>
+    <details><summary>Does it send what people type?</summary><p>No. <code>target.label</code> never reads a form field's value. By default the OpenTelemetry entry sends timings, counts and fixed categories only, and component, handler and script names only where your app approves them. A label that your own code builds from user data would go out as written, so check the ids and test ids you set.</p></details>
     <details><summary>Which browsers and versions does it support?</summary><p>Works in Chromium 96+, Firefox 144+ and Safari 26.2+, using Event Timing's <code>interactionId</code>. It reads react-dom 17, 18 and 19, runs with Next.js 14.2 or later, and its CI covers Vite 6.4, 7.3 and 8.3 and a build on Vite 5.</p></details>
   </div>
 </div></section>

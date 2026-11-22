@@ -3,7 +3,9 @@
 // Node lacks is stood in for: Event Timing's PerformanceObserver and the page's visibility. Each SDK's own
 // web-vitals builds the INP metric from the entries fed here, the SDK's own code turns it into a record or a
 // span, and the report it is matched against is built from the same entries by the packed library's own
-// join. Every route expects status matched, the report's blame.name, and none of the label's text.
+// join. Every route expects status matched, the report's blame.kind, no name by default, and none of the
+// label's text. Two routes approve the click's names, through the processor and through the hook, and expect
+// the report's blame.name.
 //
 //   node contract.mjs            # every route, each in a process of its own
 //   node contract.mjs <route>    # one of them
@@ -167,17 +169,27 @@ async function interact(browser) {
 
 const ours = (attributes) => Object.fromEntries(Object.entries(attributes ?? {}).filter(([name]) => name.startsWith('react_inp_blame.')));
 
-/** What every route has to show: the blame of the report for that click, and not a word of its label. */
-function assertBlamed(route, attributes, report) {
+/** The click's names, as an app approves them for export. */
+const LABELS = ['CheckoutPage', 'OrderSummary', 'LineItemRow', 'LineItem', 'onRemove'];
+
+/** The attributes that carry a name the app wrote, which go out only where the app approves it. */
+const NAMED = ['blame.name', 'blame.detail', 'handler', 'target.components', 'hot_path'].map((name) => `react_inp_blame.${name}`);
+
+/**
+ * What every route has to show: the blame of the report for that click, and not a word of its label. With
+ * `named`, the setup approved the click's names and blame.name is the report's; without, no name went out.
+ */
+function assertBlamed(route, attributes, report, { named = false } = {}) {
   const sent = ours(attributes);
   const status = sent['react_inp_blame.status'];
   assert.ok(status === 'matched', `${route}: react_inp_blame.status is ${status ?? 'missing'}, not matched. Did the SDK change what it stamps an INP record or span with? ${JSON.stringify(sent)}`);
-  assert.equal(sent['react_inp_blame.blame.name'], report.explanation.blame.name, `${route}: blame.name is not the report's`);
   assert.equal(sent['react_inp_blame.blame.kind'], report.explanation.blame.kind, `${route}: blame.kind is not the report's`);
+  if (named) assert.equal(sent['react_inp_blame.blame.name'], report.explanation.blame.name, `${route}: blame.name is not the report's`);
+  else for (const name of NAMED) assert.ok(!(name in sent), `${route}: ${name} went out without the app approving it: ${sent[name]}`);
   for (const [name, value] of Object.entries(sent)) {
     assert.ok(!String(value).includes(PRIVATE_TEXT), `${route}: ${name} holds the label's text: ${value}`);
   }
-  console.log(`${route}: matched, blame.name ${sent['react_inp_blame.blame.name']}, ${Object.keys(sent).length} attributes`);
+  console.log(`${route}: matched, blame.kind ${sent['react_inp_blame.blame.kind']}, ${named ? `blame.name ${sent['react_inp_blame.blame.name']}` : 'no names'}, ${Object.keys(sent).length} attributes`);
 }
 
 /** An exporter that copies each record's attributes when export() is called, as serializing for OTLP does. */
@@ -198,7 +210,7 @@ function copyingExporter() {
  * OpenTelemetry's web vitals instrumentation, through the real LoggerProvider with `processors` in the order
  * given. `hook` is the instrumentation's applyCustomLogRecordData, for the routes without a processor slot.
  */
-async function openTelemetry(browser, { from = here, order = 'first', hook } = {}) {
+async function openTelemetry(browser, { from = here, order = 'first', hook, labels } = {}) {
   const load = createRequire(path.join(from, 'package.json'));
   const url = (specifier) => pathToFileURL(load.resolve(specifier)).href;
   const { LoggerProvider, SimpleLogRecordProcessor } = await import(url('@opentelemetry/sdk-logs'));
@@ -207,7 +219,8 @@ async function openTelemetry(browser, { from = here, order = 'first', hook } = {
   const exporter = copyingExporter();
   // sdk-logs 0.219, which Elastic brings, takes the exporter itself, and 0.222 an object holding it. This is both.
   const exporting = new SimpleLogRecordProcessor(Object.assign(exporter, { exporter }));
-  const processors = hook ? [exporting] : order === 'first' ? [new InpBlameLogRecordProcessor(), exporting] : [exporting, new InpBlameLogRecordProcessor()];
+  const blaming = new InpBlameLogRecordProcessor(labels ? { labels } : undefined);
+  const processors = hook ? [exporting] : order === 'first' ? [blaming, exporting] : [exporting, blaming];
   const provider = new LoggerProvider({ processors });
   const instrumentation = new WebVitalsInstrumentation({ enabled: false, ...(hook ? { applyCustomLogRecordData: hook } : {}) });
   // browser-instrumentation 0.11 dropped setLoggerProvider and takes the provider in enable() instead.
@@ -229,8 +242,8 @@ async function openTelemetry(browser, { from = here, order = 'first', hook } = {
 }
 
 /** The hook as docs/opentelemetry.md gives it for Elastic, for a record before the SDK has it. */
-const hook = (inpBlameAttributes) => (record) => {
-  record.attributes = { ...record.attributes, ...inpBlameAttributes(record) };
+const hook = (inpBlameAttributes, options) => (record) => {
+  record.attributes = { ...record.attributes, ...inpBlameAttributes(record, options) };
 };
 
 const ROUTES = {
@@ -238,6 +251,12 @@ const ROUTES = {
   async 'opentelemetry-processor'(browser) {
     const { attributes, report } = await openTelemetry(browser);
     assertBlamed('OpenTelemetry, processor first', attributes, report);
+  },
+
+  /** The processor with the click's names approved, as the page's opt-in gives it. */
+  async 'opentelemetry-processor-labels'(browser) {
+    const { attributes, report } = await openTelemetry(browser, { labels: LABELS });
+    assertBlamed('OpenTelemetry, processor first, names approved', attributes, report, { named: true });
   },
 
   /** Behind a SimpleLogRecordProcessor, the record is exported before the processor runs: the reason for the order. */
@@ -252,6 +271,13 @@ const ROUTES = {
     const { inpBlameAttributes } = await import('react-inp-blame/otel');
     const { attributes, report } = await openTelemetry(browser, { hook: hook(inpBlameAttributes) });
     assertBlamed('OpenTelemetry, applyCustomLogRecordData', attributes, report);
+  },
+
+  /** The same hook, with the click's names approved. */
+  async 'opentelemetry-hook-labels'(browser) {
+    const { inpBlameAttributes } = await import('react-inp-blame/otel');
+    const { attributes, report } = await openTelemetry(browser, { hook: hook(inpBlameAttributes, { labels: LABELS }) });
+    assertBlamed('OpenTelemetry, applyCustomLogRecordData, names approved', attributes, report, { named: true });
   },
 
   /**

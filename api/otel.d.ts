@@ -14,8 +14,13 @@ export interface InpLogRecordLike {
     readonly timestamp?: unknown;
     setAttributes?(attributes: InpBlameAttributes): unknown;
 }
-export declare function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | number | null | undefined): InpBlameAttributes;
+export interface InpBlameOptions {
+    readonly labels?: readonly string[] | ((label: string, attribute: `react_inp_blame.${string}`) => boolean);
+}
+export declare function inpBlameAttributes(source: InpMetricLike | InpLogRecordLike | number | null | undefined, options?: InpBlameOptions): InpBlameAttributes;
 export declare class InpBlameLogRecordProcessor {
+    private readonly options;
+    constructor(options?: InpBlameOptions);
     onEmit(record: InpLogRecordLike): void;
     forceFlush(): Promise<void>;
     shutdown(): Promise<void>;
