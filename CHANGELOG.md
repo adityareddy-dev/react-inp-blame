@@ -8,7 +8,7 @@ it changes when a field is removed or changes meaning, which from 1.0.0 only a m
 
 ### Changed
 
-- **`react-inp-blame/otel` sends no component, handler or script names unless the app approves them.** By default
+- **Breaking: `react-inp-blame/otel` requires opt-in for component, handler and script names.** By default
   `inpBlameAttributes` and `InpBlameLogRecordProcessor` now send timings, counts and fixed categories only:
   `status`, `blame.kind`, `blame.confidence`, `blame.ms`, `react_status`, `react_build` and the commit and
   follow-up counts and ms. `blame.name`, `blame.detail`, `handler`, `target.components` and `hot_path` go out

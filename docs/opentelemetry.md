@@ -259,6 +259,11 @@ export const blameFor = (record: Parameters<typeof inpBlameAttributes>[0]) =>
   });
 ```
 
+### Upgrading from 1.x
+
+In 2.0, use an allowlist for the names your dashboard groups by. Pass it as `labels` to
+`inpBlameAttributes` or `InpBlameLogRecordProcessor`, as shown above.
+
 `labels: () => true` sends every name, as 1.0 did. A dashboard that groups by `blame.name`, `handler`,
 `target.components` or `hot_path` gets nothing in those columns after the upgrade until the setup passes
 `labels`. The detailed report in the browser keeps every name either way: the panel, `onInteraction` and
